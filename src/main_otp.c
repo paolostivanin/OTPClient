@@ -53,7 +53,7 @@ main (void)
 
 
 char
-*read_file (char *account_name)
+*read_file (const char *account_name)
 {
     size_t i;
     char *ac_nm;

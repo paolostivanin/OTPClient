@@ -4,8 +4,8 @@
 #define FILE_PATH ""
 #define SALT_LEN 32
 
-char *read_file (char *);
+char *read_file (const char *);
+char *encrypt_token (const char *, char *);
 char *decrypt_skey (const char *, const char *);
-char *encrypt_skey (const char *, const char *);
 
 #endif
