@@ -4,6 +4,7 @@
 #include <string.h>
 #include <gcrypt.h>
 #include <ctype.h>
+#include <glib.h>
 #include <cotp.h>
 #include "otpclient.h"
 
@@ -108,6 +109,9 @@ char
     unsigned char *salt;
     unsigned char *iv;
     unsigned char *derived_crypto_key;
+    unsigned char *out_enc_text;
+    unsigned char *concat_salt_iv_enc;
+    char *b64_enc_key;
     
     salt = gcry_malloc (SALT_LEN);
     if (salt == NULL)
@@ -130,35 +134,46 @@ char
 	if (((derived_crypto_key = gcry_malloc_secure (keyLength)) == NULL))
     {
 		fprintf (stderr, "encrypt_file: memory allocation error\n");
-        gcry_free (salt);
-        gcry_free (iv);
+        multi_free (salt, iv, NULL);
 		return NULL;
 	}
 
 	if (gcry_kdf_derive (pwd, strlen (pwd), GCRY_KDF_PBKDF2, GCRY_MD_SHA512, salt, SALT_LEN, 50000, keyLength, derived_crypto_key) != 0)
     {
 		fprintf (stderr, "encrypt_token: key derivation error\n");
-        gcry_free (salt);
-        gcry_free (iv);
-        gcry_free (derived_crypto_key);
+        multi_free (salt, iv, derived_crypto_key);
 		return NULL;
 	}
     
 	gcry_cipher_setkey (hd, derived_crypto_key, keyLength);
     gcry_cipher_setctr (hd, iv, blkLength);
     
-    gcry_cipher_encrypt (hd, ...);
-       
-    /* 1) encrypt e_key
-     * 2) concat (salt,iv,enc)
-     * 3) b64(4)
-     */
-     
-     gcry_free (salt);
-     gcry_free (iv);
-     gcry_free (derived_crypto_key);
-     
-     return b64_enc_key
+    out_enc_text = gcry_malloc (strlen (plain_token));
+    if (out_enc_text == NULL)
+    {
+        multi_free (salt, iv, derived_crypto_key);
+        return NULL;
+    }
+    gcry_cipher_encrypt (hd, out_enc_text, strlen (plain_token), plain_token, strlen (plain_token)); //check if CTR MODE out_enc_len is equal to in_enc_len
+    
+    concat_salt_iv_enc = gcry_malloc (SALT_LEN + blkLength + strlen (plain_token));
+    if (concat_salt_iv_enc == NULL)
+    {
+        multi_free (salt, iv, derived_crypto_key);
+        return NULL;
+    }
+    memcpy (concat_salt_iv_enc, salt, SALT_LEN);
+    memcpy (concat_salt_iv_enc+SALT_LEN, iv, blkLength);
+    memcpy (concat_salt_iv_enc+SALT_LEN+blkLength, out_enc_text, strlen (plain_token));
+      
+    multi_free (salt, iv, derived_crypto_key);
+    gcry_free (out_enc_text);
+    
+    b64_enc_key = b64_encode (concat_salt_iv_enc, SALT_LEN + blkLength + strlen (plain_token));
+    
+    gcry_free (concat_salt_iv_enc);
+
+    return b64_enc_key; // FREE AFTER USE
 }
 
 
@@ -168,5 +183,36 @@ char
     /* 1) b64 decode e_key
      * 2) split key (salt+iv+key)
      * 3) use pwd to decrypt e_key
-     */ 
+     */
+    return dec_key;
+}
+
+
+char
+*b64_encode (unsigned char *in, size_t in_len)
+{
+    size_t encoded_text_len = (((in_len/3)+1)*4)+4;
+    size_t out_len;
+    int state = 0, save = 0;
+
+    char *out = gcry_malloc (encoded_text_len);
+
+    out_len = g_base64_encode_step (in, in_len, FALSE, out, &state, &save);
+    g_base64_encode_close (FALSE, out+out_len, &state, &save);
+
+    return out;
+}
+
+
+void
+multi_free (void *buf1, void *buf2, void *buf3)
+{
+    if (buf1 != NULL)
+        gcry_free (buf1);
+        
+    if (buf2 != NULL)
+        gcry_free (buf2);
+        
+    if (buf3 != NULL)
+        gcry_free (buf3);
 }
