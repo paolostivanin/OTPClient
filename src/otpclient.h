@@ -1,15 +1,10 @@
-#ifndef OTPCLIENT_H_INCLUDED
-#define OTPCLIENT_H_INCLUDED
+#pragma once
 
-#define FILE_PATH ""
-#define SALT_LEN 32
+#define APP_NAME "OTPClient"
+#define APP_VERSION "1.0.0-alpha"
 
-char *read_file (const char *, const char *);
-char *encrypt_token (const char *, char *);
-char *decrypt_token (const char *, const char *);
-void create_enc_file();
-char *b64_encode (unsigned char *, size_t);
-struct _b64OutData *b64_decode (const char *);
-void multi_free (void *, void *, void *);
+#define KF_NAME "otpclient-db.enc"
+#define KF_GROUP "data"
 
-#endif
+void activate (GtkApplication *app, gpointer user_data);
+void show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type);

@@ -1,39 +1,13 @@
-#define _GNU_SOURCE
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <gcrypt.h>
-#include <ctype.h>
-#include <glib.h>
-//#include <cotp.h>
 #include "otpclient.h"
-
 
 struct _b64OutData {
     unsigned char *out;
     size_t enc_len;
 };
-
-
-int
-main (void)
-{
-    if (!gcry_check_version ("1.5.0"))
-    {
-        printf ("libgcrypt required version is 1.5.0 and above\n");
-        return -2;
-    }
-    gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
-    gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
-    
-    
-    /* 1) callback add_account (gcry_free (encrypt_token(pwd, plain_token)));
-     * 2) callback delete_account ();
-     * 3) callback view_token (gcry_free (decrypt_token(pwd, encoded_token)));
-     */
-   
-    return 0;
-}
 
 
 char
