@@ -1,0 +1,18 @@
+language: c
+
+branches:
+    only:
+        - master
+
+compiler:
+    - gcc
+    - clang
+
+install:
+    - sudo apt install cmake libgtk-3-dev libgcrypt20-dev
+
+# setup also libcotp and libbaseencode
+script:
+    mkdir build && cd $_
+    cmake ../
+    make -j2

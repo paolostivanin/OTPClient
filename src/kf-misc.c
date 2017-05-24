@@ -3,6 +3,10 @@
 #include "kf-misc.h"
 #include "otpclient.h"
 
+static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
+
+static gboolean create_kf (const gchar *path);
+
 static void cleanup_enc (guchar *, gchar *, guchar *);
 
 static void cleanup (GFile *, gpointer, HeaderData *, GError *);
@@ -30,12 +34,56 @@ load_kf (const gchar *plain_key)
         g_clear_error (&err);
         return NULL;
     }
-    // TODO "gcry_free (in_memory_kf)" when closing the program
+
     return in_memory_kf;
 }
 
 
-gboolean
+void
+update_kf (GtkWidget *btn, gpointer user_data)
+{
+    // TODO here we assume that the kf is already decrypted and put into memory (struct below)
+    // if btn name is add then add, else remove
+    /*
+     * user_data = in_memory_kf + key + data_to_add
+     */
+    UpdateData *data = (UpdateData *) user_data;
+    gchar *kf_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
+    gboolean btn_is_add;
+    if (g_strcmp0 (gtk_widget_get_name (btn), "add_data") == 0) {
+        btn_is_add = TRUE;
+    } else {
+        btn_is_add = FALSE;
+    }
+
+    if (g_hash_table_size (data->data_to_add) > 0) {
+        GError *err = NULL;
+        GKeyFile *kf = g_key_file_new ();
+        g_key_file_load_from_data (kf, data->in_memory_kf, (gsize) -1, G_KEY_FILE_NONE, &err);
+        // TODO check err
+
+        // TODO iterate over hash table. Add or remove depending on the btn name
+        if (btn_is_add) {
+            g_key_file_set_string (kf, KF_GROUP, "account", "secret");
+        } else {
+            g_key_file_remove_key (kf, KF_GROUP, "account", &err);
+            // TODO chek err
+        }
+
+        g_key_file_save_to_file (kf, kf_path, &err);
+        // TODO check err
+
+        g_key_file_free (kf);
+    }
+
+    encrypt_kf (kf_path, data->key);
+    // TODO check ret val
+
+    g_free (kf_path);
+}
+
+
+static gboolean
 create_kf (const gchar *path)
 {
     GError *err = NULL;
@@ -75,6 +123,10 @@ encrypt_kf (const gchar *path, const gchar *plain_key)
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
 
     goffset input_file_size = get_file_size (path);
+    if (input_file_size > MAX_FILE_SIZE) {
+        g_printerr ("Input file is too big: %ld when the max allowed size is %d", input_file_size, MAX_FILE_SIZE);
+        return FILE_TOO_BIG;
+    }
 
     GFile *in_file = g_file_new_for_path (path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
@@ -233,7 +285,7 @@ decrypt_kf (const gchar *path, const gchar *plain_key)
 }
 
 
-guchar *
+static guchar *
 get_derived_key (const gchar *pwd, HeaderData *header_data)
 {
     gsize key_len = gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256);

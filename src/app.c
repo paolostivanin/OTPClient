@@ -1,8 +1,14 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include "otpclient.h"
+#include "kf-misc.h"
 
 static GtkWidget *create_main_window (GtkApplication *app, GdkPixbuf *logo);
+
+static gchar *prompt_for_password (GtkWidget *main_window);
+
+static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *, gpointer);
+
 
 void
 activate (GtkApplication *app, gpointer user_data)
@@ -19,8 +25,18 @@ activate (GtkApplication *app, gpointer user_data)
     gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
-    //TODO load db
-    //TODO create treeview
+    gchar *pwd = prompt_for_password (main_window);
+    gchar *dec_kf = load_kf (pwd);
+    if (dec_kf == FILE_EMPTY) {
+        show_message_dialog (main_window, "There is no data inside the file.\n"
+                "You should add some data by using the menu on the top left of the main window.", GTK_MESSAGE_INFO);
+    }
+
+    create_scrolled_window_with_treeview (main_window, dec_kf, pwd);
+
+    // TODO do the following before exiting
+    gcry_free (dec_kf);
+    gcry_free (pwd);
 
     gtk_widget_show_all (main_window);
 }
@@ -29,7 +45,7 @@ activate (GtkApplication *app, gpointer user_data)
 static GtkWidget *
 create_main_window (GtkApplication *app, GdkPixbuf *logo)
 {
-    // TODO add menu icon on header bar
+    // TODO add gtk label with countdown
     GtkWidget *window = gtk_application_window_new (app);
     gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
     gtk_window_set_resizable (GTK_WINDOW (window), FALSE);
@@ -51,9 +67,51 @@ create_main_window (GtkApplication *app, GdkPixbuf *logo)
     gtk_header_bar_set_has_subtitle (GTK_HEADER_BAR (header_bar), FALSE);
 
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_style_context_add_class (gtk_widget_get_style_context(box), "linked");
+    gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
 
     gtk_window_set_titlebar (GTK_WINDOW (window), header_bar);
 
     return window;
+}
+
+
+static gchar *
+prompt_for_password (GtkWidget *mw)
+{
+    GtkDialogFlags flags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
+    GtkWidget *dialog = gtk_dialog_new_with_buttons ("Password", GTK_WINDOW (mw), flags, "OK", GTK_RESPONSE_ACCEPT,
+                                                     "Cancel", GTK_RESPONSE_CLOSE, NULL);
+
+    GIcon *gicon = g_themed_icon_new_with_default_fallbacks ("dialog-password-symbolic");
+
+    GtkWidget *entry = gtk_entry_new ();
+    gtk_entry_set_icon_from_gicon (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, gicon);
+    gtk_entry_set_icon_activatable (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, TRUE);
+    gtk_entry_set_icon_tooltip_text (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, "Show password");
+    gtk_entry_set_visibility (GTK_ENTRY (entry), FALSE);
+
+    gchar *pwd = NULL;
+    const gchar *text = NULL;
+    gint ret = gtk_dialog_run (GTK_DIALOG (dialog));
+    switch (ret) {
+        case GTK_RESPONSE_ACCEPT:
+            text = gtk_entry_get_text (GTK_ENTRY (entry));
+            pwd = gcry_malloc_secure (strlen (text) + 1);
+            strncpy (pwd, text, strlen (text) + 1);
+            break;
+        case GTK_RESPONSE_CLOSE:
+            break;
+        default:
+            break;
+    }
+    gtk_widget_destroy (dialog);
+
+    return pwd;
+}
+
+
+static void
+icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event, gpointer data)
+{
+    gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
 }
