@@ -28,8 +28,7 @@ activate (GtkApplication *app, gpointer user_data)
     gchar *pwd = prompt_for_password (main_window);
     gchar *dec_kf = load_kf (pwd);
     if (dec_kf == FILE_EMPTY) {
-        show_message_dialog (main_window, "There is no data inside the file.\n"
-                "You should add some data by using the menu on the top left of the main window.", GTK_MESSAGE_INFO);
+        show_message_dialog (main_window, "There is no data inside the file.\n", GTK_MESSAGE_INFO);
     }
 
     create_scrolled_window_with_treeview (main_window, dec_kf, pwd);
@@ -82,6 +81,8 @@ prompt_for_password (GtkWidget *mw)
     GtkWidget *dialog = gtk_dialog_new_with_buttons ("Password", GTK_WINDOW (mw), flags, "OK", GTK_RESPONSE_ACCEPT,
                                                      "Cancel", GTK_RESPONSE_CLOSE, NULL);
 
+    gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
+
     GIcon *gicon = g_themed_icon_new_with_default_fallbacks ("dialog-password-symbolic");
 
     GtkWidget *entry = gtk_entry_new ();
@@ -89,6 +90,12 @@ prompt_for_password (GtkWidget *mw)
     gtk_entry_set_icon_activatable (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, TRUE);
     gtk_entry_set_icon_tooltip_text (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, "Show password");
     gtk_entry_set_visibility (GTK_ENTRY (entry), FALSE);
+    g_signal_connect(entry, "icon-press", G_CALLBACK (icon_press_cb), NULL);
+
+    GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
+    gtk_container_add (GTK_CONTAINER (content_area), entry);
+
+    gtk_widget_show_all (dialog);
 
     gchar *pwd = NULL;
     const gchar *text = NULL;

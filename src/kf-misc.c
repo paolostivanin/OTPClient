@@ -39,14 +39,10 @@ load_kf (const gchar *plain_key)
 }
 
 
-void
+int
 update_kf (GtkWidget *btn, gpointer user_data)
 {
-    // TODO here we assume that the kf is already decrypted and put into memory (struct below)
-    // if btn name is add then add, else remove
-    /*
-     * user_data = in_memory_kf + key + data_to_add
-     */
+    // the file is decrypted when the program boots
     UpdateData *data = (UpdateData *) user_data;
     gchar *kf_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
     gboolean btn_is_add;
@@ -60,26 +56,40 @@ update_kf (GtkWidget *btn, gpointer user_data)
         GError *err = NULL;
         GKeyFile *kf = g_key_file_new ();
         g_key_file_load_from_data (kf, data->in_memory_kf, (gsize) -1, G_KEY_FILE_NONE, &err);
-        // TODO check err
-
-        // TODO iterate over hash table. Add or remove depending on the btn name
-        if (btn_is_add) {
-            g_key_file_set_string (kf, KF_GROUP, "account", "secret");
-        } else {
-            g_key_file_remove_key (kf, KF_GROUP, "account", &err);
-            // TODO chek err
+        if (err != NULL) {
+            g_printerr ("Couldn't load key file: %s\n", err->message);
+            g_free (kf_path);
+            g_clear_error (&err);
+            return KF_UPDATE_FAILED;
         }
 
-        g_key_file_save_to_file (kf, kf_path, &err);
-        // TODO check err
+        GHashTableIter iter;
+        gpointer key, value;
+        g_hash_table_iter_init (&iter, data->data_to_add);
+        while (g_hash_table_iter_next (&iter, &key, &value)) {
+            if (btn_is_add) {
+                g_key_file_set_string (kf, KF_GROUP, (gchar *)key, (gchar *)value);
+            } else {
+                g_key_file_remove_key (kf, KF_GROUP, (gchar *)key, NULL);
+            }
+        }
+
+        // TODO create backup before saving
+        if (!g_key_file_save_to_file (kf, kf_path, &err)) {
+            g_printerr ("Error while saving file: %s\n", err->message);
+            g_clear_error (&err);
+        }
 
         g_key_file_free (kf);
     }
 
-    encrypt_kf (kf_path, data->key);
-    // TODO check ret val
+    if (encrypt_kf (kf_path, data->key) != NULL) {
+        //  TODO restore backup and report failed update
+    }
 
     g_free (kf_path);
+
+    return KF_UPDATE_OK;
 }
 
 
@@ -91,7 +101,7 @@ create_kf (const gchar *path)
 
     GKeyFile *kf = g_key_file_new ();
 
-    //workaround to write only the group name to the file
+    // workaround to write only the group name to the file
     g_key_file_set_string (kf, KF_GROUP, "test", "test");
     g_key_file_remove_key (kf, KF_GROUP, "test", &err);
     if (err != NULL) {

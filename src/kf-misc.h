@@ -7,6 +7,9 @@
 #define KEY_DERIV_ERR (gpointer) 5
 #define FILE_TOO_BIG (gpointer) 6
 
+#define KF_UPDATE_OK 20
+#define KF_UPDATE_FAILED 21
+
 #define IV_SIZE 16
 #define KDF_ITERATIONS 100000
 #define KDF_SALT_SIZE 32
