@@ -5,9 +5,13 @@
 
 static GtkWidget *create_main_window (GtkApplication *app, GdkPixbuf *logo);
 
+static GtkWidget *create_scrolled_window_with_treeview (GtkWidget *main_window, UpdateData *kf_update_data);
+
 static gchar *prompt_for_password (GtkWidget *main_window);
 
 static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *, gpointer);
+
+static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
 void
@@ -25,17 +29,19 @@ activate (GtkApplication *app, gpointer user_data)
     gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
-    gchar *pwd = prompt_for_password (main_window);
-    gchar *dec_kf = load_kf (pwd);
-    if (dec_kf == FILE_EMPTY) {
-        show_message_dialog (main_window, "There is no data inside the file.\n", GTK_MESSAGE_INFO);
+    UpdateData *kf_update_data = g_new0 (UpdateData, 1);
+    kf_update_data->key = prompt_for_password (main_window);
+    kf_update_data->in_memory_kf = load_kf (kf_update_data->key);
+    if (kf_update_data->in_memory_kf == FILE_EMPTY) {
+        show_message_dialog (main_window, "The file is empty, please add new data.\n", GTK_MESSAGE_INFO);
+        add_data_dialog (main_window, kf_update_data);
     }
 
-    create_scrolled_window_with_treeview (main_window, dec_kf, pwd);
+    g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), kf_update_data);
 
-    // TODO do the following before exiting
-    gcry_free (dec_kf);
-    gcry_free (pwd);
+    create_scrolled_window_with_treeview (main_window, kf_update_data);
+
+    // TODO connect CTRL-Q to destroy_cb
 
     gtk_widget_show_all (main_window);
 }
@@ -83,14 +89,9 @@ prompt_for_password (GtkWidget *mw)
 
     gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
 
-    GIcon *gicon = g_themed_icon_new_with_default_fallbacks ("dialog-password-symbolic");
-
     GtkWidget *entry = gtk_entry_new ();
-    gtk_entry_set_icon_from_gicon (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, gicon);
-    gtk_entry_set_icon_activatable (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, TRUE);
-    gtk_entry_set_icon_tooltip_text (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, "Show password");
-    gtk_entry_set_visibility (GTK_ENTRY (entry), FALSE);
-    g_signal_connect(entry, "icon-press", G_CALLBACK (icon_press_cb), NULL);
+
+    set_icon_to_entry (entry, "dialog-password-symbolic", "Show password");
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
     gtk_container_add (GTK_CONTAINER (content_area), entry);
@@ -118,7 +119,11 @@ prompt_for_password (GtkWidget *mw)
 
 
 static void
-icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event, gpointer data)
+destroy_cb (GtkWidget *win __attribute__((__unused__)),
+            gpointer user_data)
 {
-    gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
+    UpdateData *kf_update_data = user_data;
+    gcry_free (kf_update_data->key);
+    gcry_free (kf_update_data->in_memory_kf);
+    g_free (kf_update_data);
 }

@@ -39,18 +39,12 @@ load_kf (const gchar *plain_key)
 }
 
 
-int
-update_kf (GtkWidget *btn, gpointer user_data)
+gint
+update_kf (gboolean is_add, gpointer user_data)
 {
     // the file is decrypted when the program boots
     UpdateData *data = (UpdateData *) user_data;
     gchar *kf_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
-    gboolean btn_is_add;
-    if (g_strcmp0 (gtk_widget_get_name (btn), "add_data") == 0) {
-        btn_is_add = TRUE;
-    } else {
-        btn_is_add = FALSE;
-    }
 
     if (g_hash_table_size (data->data_to_add) > 0) {
         GError *err = NULL;
@@ -62,24 +56,21 @@ update_kf (GtkWidget *btn, gpointer user_data)
             g_clear_error (&err);
             return KF_UPDATE_FAILED;
         }
-
         GHashTableIter iter;
         gpointer key, value;
         g_hash_table_iter_init (&iter, data->data_to_add);
         while (g_hash_table_iter_next (&iter, &key, &value)) {
-            if (btn_is_add) {
+            if (is_add) {
                 g_key_file_set_string (kf, KF_GROUP, (gchar *)key, (gchar *)value);
             } else {
                 g_key_file_remove_key (kf, KF_GROUP, (gchar *)key, NULL);
             }
         }
-
         // TODO create backup before saving
         if (!g_key_file_save_to_file (kf, kf_path, &err)) {
             g_printerr ("Error while saving file: %s\n", err->message);
             g_clear_error (&err);
         }
-
         g_key_file_free (kf);
     }
 
