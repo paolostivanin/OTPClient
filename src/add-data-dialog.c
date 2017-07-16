@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include "kf-misc.h"
 #include "otpclient.h"
+#include "common.h"
 
 typedef struct _widgets_data {
     gint grid_top;
@@ -15,9 +16,9 @@ typedef struct _widgets {
     WidgetsData *data;
 } Widgets;
 
-static GtkWidget *create_scrolled_window (GtkWidget *dialog, GtkWidget *content_area);
+static GtkWidget *create_scrolled_window (GtkWidget *content_area);
 
-static void create_header_bar (GtkWidget *dialog);
+static void setup_header_bar (GtkWidget *dialog);
 
 static void parse_user_data (Widgets *widgets, UpdateData *kf_data);
 
@@ -34,7 +35,7 @@ static void del_entry_cb (GtkWidget *btn, gpointer user_data);
 static void cleanup_widgets (Widgets *widgets);
 
 
-void
+int
 add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
 {
     Widgets *widgets = g_new0 (Widgets, 1);
@@ -42,11 +43,15 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
     widgets->data->counter = 0;
     widgets->data->grid_top = 0;
 
+    gint ret_val = -1;
+
     widgets->dialog = gtk_dialog_new_with_buttons ("Add Data to Database",
                                                    GTK_WINDOW (main_win),
                                                    GTK_DIALOG_DESTROY_WITH_PARENT, "OK",
                                                    GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL,
                                                    NULL);
+
+    gtk_widget_set_size_request (widgets->dialog, 400, 400);
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (widgets->dialog));
 
@@ -56,12 +61,12 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
     if (!realloc_widgets (widgets, 1)) {
         gtk_widget_destroy (widgets->dialog);
         cleanup_widgets (widgets);
-        return; //TODO error message
+        return ret_val; //TODO error message
     }
 
-    GtkWidget *scrolled_win = create_scrolled_window (widgets->dialog, content_area);
+    GtkWidget *scrolled_win = create_scrolled_window (content_area);
 
-    create_header_bar (widgets->dialog);
+    setup_header_bar (widgets->dialog);
 
     widgets->grid = gtk_grid_new ();
     gtk_grid_set_column_spacing (GTK_GRID (widgets->grid), 3);
@@ -81,6 +86,7 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
             update_kf (kf_data, TRUE);
             g_hash_table_remove_all (kf_data->data_to_add);
             g_hash_table_unref (kf_data->data_to_add);
+            ret_val = 0;
             break;
         case GTK_RESPONSE_CANCEL:
         default:
@@ -88,11 +94,13 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
     }
     gtk_widget_destroy (widgets->dialog);
     cleanup_widgets (widgets);
+
+    return ret_val;
 }
 
 
 static GtkWidget *
-create_scrolled_window (GtkWidget *dialog, GtkWidget *content_area)
+create_scrolled_window (GtkWidget *content_area)
 {
     GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add (GTK_CONTAINER (content_area), vbox);
@@ -102,33 +110,21 @@ create_scrolled_window (GtkWidget *dialog, GtkWidget *content_area)
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
 
+    g_object_set (sw, "expand", TRUE, NULL);
+
     return sw;
 }
 
 
 static void
-create_header_bar (GtkWidget *dialog)
+setup_header_bar (GtkWidget *dialog)
 {
-    GtkWidget *header = gtk_header_bar_new ();
-    gtk_header_bar_set_show_close_button (GTK_HEADER_BAR (header), TRUE);
-    gtk_header_bar_set_title (GTK_HEADER_BAR (header), "Add a new account");
-    gtk_header_bar_set_has_subtitle (GTK_HEADER_BAR (header), FALSE);
-
-    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
-    GtkWidget *add_button = gtk_button_new ();
-    gtk_container_add (GTK_CONTAINER (add_button), gtk_image_new_from_icon_name ("list-add-symbolic", GTK_ICON_SIZE_BUTTON));
-    gtk_container_add (GTK_CONTAINER (box), add_button);
-    GtkWidget *del_button = gtk_button_new ();
-    gtk_container_add (GTK_CONTAINER (del_button), gtk_image_new_from_icon_name ("list-remove-symbolic", GTK_ICON_SIZE_BUTTON));
-    gtk_container_add (GTK_CONTAINER (box), del_button);
-
-    g_signal_connect (add_button, "clicked", G_CALLBACK (add_entry_cb), NULL);
-    g_signal_connect (del_button, "clicked", G_CALLBACK (del_entry_cb), NULL);
-
-    gtk_header_bar_pack_start (GTK_HEADER_BAR (header), box);
-
-    gtk_window_set_titlebar (GTK_WINDOW (dialog), header);
+    GtkWidget *header_bar = create_header_bar ("Add a new account");
+    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
+    gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
+    gtk_window_set_titlebar (GTK_WINDOW (dialog), header_bar);
+    g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_entry_cb), NULL);
+    g_signal_connect (find_widget (box, "del_btn_dialog"), "clicked", G_CALLBACK (del_entry_cb), NULL);
 }
 
 

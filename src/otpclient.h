@@ -10,8 +10,6 @@
 
 goffset get_file_size (const gchar *path);
 
-void set_icon_to_entry (GtkWidget *entry, const gchar *icon_name, const gchar *tooltip_text);
-
 void show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type);
 
-void add_data_dialog (GtkWidget *main_window, UpdateData *kf_data);
+int add_data_dialog (GtkWidget *main_window, UpdateData *kf_data);

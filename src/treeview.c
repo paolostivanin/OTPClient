@@ -1,8 +1,5 @@
 #include <gtk/gtk.h>
 #include "otpclient.h"
-#include "kf-misc.h"
-
-static GtkWidget *get_button_box (void);
 
 static gchar **get_account_names (const gchar *dec_kf);
 
@@ -29,9 +26,6 @@ create_scrolled_window_with_treeview (GtkWidget *main_win, UpdateData *kf_update
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
 
-    GtkWidget *button_box = get_button_box ();
-    gtk_box_pack_end (GTK_BOX(vbox), button_box, FALSE, FALSE, 0);
-
     gchar **account_names = get_account_names (kf_update_data->in_memory_kf);
     GtkTreeModel *model = create_model (account_names);
     g_strfreev (account_names);
@@ -46,26 +40,6 @@ create_scrolled_window_with_treeview (GtkWidget *main_win, UpdateData *kf_update
     add_columns (GTK_TREE_VIEW (treeview));
 
     return sw;
-}
-
-
-static GtkWidget *
-get_button_box()
-{
-    GtkWidget *button_box = gtk_button_box_new (GTK_ORIENTATION_HORIZONTAL);
-    gtk_button_box_set_layout (GTK_BUTTON_BOX (button_box), GTK_BUTTONBOX_END);
-    GtkWidget *add_button = gtk_button_new_with_label ("Add");
-    gtk_widget_set_name(add_button, "add_btn");
-    GtkWidget *remove_button = gtk_button_new_with_label ("Remove");
-    gtk_widget_set_name(add_button, "remove_btn");
-    // TODO connect to add-data-dialog
-    g_signal_connect (add_button, "clicked", G_CALLBACK (), NULL); //TODO struct instead of null
-    // TODO get the active ticks from treeview and send to update_kf with delete
-    g_signal_connect (remove_button, "clicked", G_CALLBACK (), NULL); //TODO struct instead of null
-    gtk_container_add (GTK_CONTAINER (button_box), add_button);
-    gtk_container_add (GTK_CONTAINER (button_box), remove_button);
-
-    return button_box;
 }
 
 
@@ -92,7 +66,7 @@ create_model (gchar **account_names)
     store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING);
 
     gint i = 0;
-    while (g_strcmp0 (account_names[i], NULL) != 0) {
+    while (account_names[i] != NULL) {
         gtk_list_store_append (store, &iter);
         gtk_list_store_set (store, &iter, COLUMN_BOOLEAN, FALSE, COLUMN_ACNM, account_names[i], COLUMN_OTP, "", -1);
         i++;
@@ -110,7 +84,7 @@ fixed_toggled (GtkCellRendererToggle *cell, gchar *path_str, gpointer data)
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
 
-    // set TOTP/HOTP if toggle is active, otherwise remove it
+    // set TOTP/HOTP if toggle is active, otherwise remove the tick and hide otp
 
     gtk_tree_path_free (path);
 }

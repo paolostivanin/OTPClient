@@ -2,12 +2,17 @@
 #include <gcrypt.h>
 #include "otpclient.h"
 #include "treeview.h"
+#include "common.h"
 
-static GtkWidget *create_main_window (GtkApplication *app, GdkPixbuf *logo);
+static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo);
 
 static gchar *prompt_for_password (GtkWidget *main_window);
 
-static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *, gpointer);
+static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event_button, gpointer);
+
+static void add_data_cb (GtkWidget *widget, gpointer user_data);
+
+static void del_data_cb (GtkWidget *widget, gpointer user_data);
 
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
@@ -16,7 +21,7 @@ void
 activate (GtkApplication *app, gpointer user_data)
 {
     GdkPixbuf *logo = (GdkPixbuf *)user_data;
-    GtkWidget *main_window = create_main_window (app, logo);
+    GtkWidget *main_window = create_main_window_with_header_bar (app, logo);
     gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
 
     if (!gcry_check_version ("1.6.0")) {
@@ -30,23 +35,19 @@ activate (GtkApplication *app, gpointer user_data)
     UpdateData *kf_update_data = g_new0 (UpdateData, 1);
     kf_update_data->key = prompt_for_password (main_window);
     kf_update_data->in_memory_kf = load_kf (kf_update_data->key);
-    if (kf_update_data->in_memory_kf == FILE_EMPTY) {
-        show_message_dialog (main_window, "The file is empty, please add new data.\n", GTK_MESSAGE_INFO);
-        add_data_dialog (main_window, kf_update_data);
-    }
 
+    g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), kf_update_data);
+    g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), kf_update_data);
     g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), kf_update_data);
 
     create_scrolled_window_with_treeview (main_window, kf_update_data);
-
-    // TODO connect CTRL-Q to destroy_cb
 
     gtk_widget_show_all (main_window);
 }
 
 
 static GtkWidget *
-create_main_window (GtkApplication *app, GdkPixbuf *logo)
+create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo)
 {
     // TODO add gtk label with countdown
     GtkWidget *window = gtk_application_window_new (app);
@@ -64,14 +65,9 @@ create_main_window (GtkApplication *app, GdkPixbuf *logo)
     g_snprintf (header_bar_text, strlen (APP_NAME) + 1 + strlen (APP_VERSION) + 1, "%s %s", APP_NAME, APP_VERSION);
     header_bar_text[strlen(header_bar_text)] = '\0';
 
-    GtkWidget *header_bar = gtk_header_bar_new ();
-    gtk_header_bar_set_show_close_button (GTK_HEADER_BAR (header_bar), TRUE);
-    gtk_header_bar_set_title (GTK_HEADER_BAR (header_bar), header_bar_text);
-    gtk_header_bar_set_has_subtitle (GTK_HEADER_BAR (header_bar), FALSE);
-
-    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
-
+    GtkWidget *header_bar = create_header_bar (header_bar_text);
+    GtkWidget *box = create_box_with_buttons ("add_btn_app", "del_btn_app");
+    gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (window), header_bar);
 
     return window;
@@ -113,6 +109,26 @@ prompt_for_password (GtkWidget *mw)
     gtk_widget_destroy (dialog);
 
     return pwd;
+}
+
+
+static void
+add_data_cb (GtkWidget *btn,
+            gpointer user_data)
+{
+    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
+    UpdateData *kf_data = (UpdateData *)user_data;
+    add_data_dialog (top_level, kf_data);
+}
+
+
+static void
+del_data_cb (GtkWidget *btn,
+            gpointer user_data)
+{
+    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
+    UpdateData *kf_data = (UpdateData *)user_data;
+    // TODO complete me
 }
 
 

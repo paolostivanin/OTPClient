@@ -21,13 +21,12 @@ load_kf (const gchar *plain_key)
     if (!g_file_test (kf_path, G_FILE_TEST_EXISTS)) {
         create_kf (kf_path);
         encrypt_kf (kf_path, plain_key);
-        return FILE_EMPTY; // kf just created so it's empty
     }
 
     gchar *in_memory_kf = decrypt_kf (kf_path, plain_key);
     g_free (kf_path);
 
-    GKeyFile *kf = NULL;
+    GKeyFile *kf = g_key_file_new ();
     g_key_file_load_from_data (kf, in_memory_kf, (gsize)-1, G_KEY_FILE_NONE, &err);
     if (err != NULL) {
         g_printerr ("%s\n", err->message);
