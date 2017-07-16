@@ -1,11 +1,9 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include "otpclient.h"
-#include "kf-misc.h"
+#include "treeview.h"
 
 static GtkWidget *create_main_window (GtkApplication *app, GdkPixbuf *logo);
-
-static GtkWidget *create_scrolled_window_with_treeview (GtkWidget *main_window, UpdateData *kf_update_data);
 
 static gchar *prompt_for_password (GtkWidget *main_window);
 

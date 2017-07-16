@@ -34,4 +34,4 @@ gpointer encrypt_kf (const gchar *path, const gchar *password);
 
 gchar *decrypt_kf (const gchar *path, const gchar *password);
 
-gint update_kf (gboolean is_add, gpointer user_data);
+gint update_kf (UpdateData *data, gboolean is_add);

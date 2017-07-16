@@ -3,8 +3,11 @@
 #include "kf-misc.h"
 
 static GtkWidget *get_button_box (void);
+
 static gchar **get_account_names (const gchar *dec_kf);
+
 static GtkTreeModel *create_model (gchar **account_names);
+
 static void add_columns (GtkTreeView *treeview);
 
 enum {
@@ -55,7 +58,7 @@ get_button_box()
     gtk_widget_set_name(add_button, "add_btn");
     GtkWidget *remove_button = gtk_button_new_with_label ("Remove");
     gtk_widget_set_name(add_button, "remove_btn");
-    // TODO here I need a dialog with dynamic entries "account name" and "key". Then I pass all the data into the struct update and send to update_kf
+    // TODO connect to add-data-dialog
     g_signal_connect (add_button, "clicked", G_CALLBACK (), NULL); //TODO struct instead of null
     // TODO get the active ticks from treeview and send to update_kf with delete
     g_signal_connect (remove_button, "clicked", G_CALLBACK (), NULL); //TODO struct instead of null

@@ -15,9 +15,13 @@ typedef struct _widgets {
     WidgetsData *data;
 } Widgets;
 
-static gboolean realloc_widgets (Widgets *widgets, gsize num_of_resources_to_realloc);
+static GtkWidget *create_scrolled_window (GtkWidget *dialog, GtkWidget *content_area);
 
 static void create_header_bar (GtkWidget *dialog);
+
+static void parse_user_data (Widgets *widgets, UpdateData *kf_data);
+
+static gboolean realloc_widgets (Widgets *widgets, gsize num_of_resources_to_realloc);
 
 static void add_entry_cb (GtkWidget *btn, gpointer user_data);
 
@@ -50,51 +54,55 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
     GtkWidget *key_label = gtk_label_new ("Secret Key");
 
     if (!realloc_widgets (widgets, 1)) {
+        gtk_widget_destroy (widgets->dialog);
         cleanup_widgets (widgets);
         return; //TODO error message
     }
 
-    add_entry_and_set_icon (widgets);
+    GtkWidget *scrolled_win = create_scrolled_window (widgets->dialog, content_area);
 
     create_header_bar (widgets->dialog);
 
     widgets->grid = gtk_grid_new ();
-    gtk_container_add (GTK_CONTAINER (content_area), widgets->grid);
+    gtk_grid_set_column_spacing (GTK_GRID (widgets->grid), 3);
+    gtk_grid_set_row_spacing (GTK_GRID (widgets->grid), 3);
+    gtk_container_add (GTK_CONTAINER (scrolled_win), widgets->grid);
     gtk_grid_attach (GTK_GRID (widgets->grid), acc_label, 0, widgets->data->grid_top++, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_label, acc_label, GTK_POS_RIGHT, 4, 1);
-    gtk_grid_attach (GTK_GRID (widgets->grid), widgets->acc_entry[0], 0, widgets->data->grid_top++, 4, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), widgets->key_entry[0], widgets->acc_entry[0], GTK_POS_RIGHT, 4, 1);
+
+    add_entry_and_set_icon (widgets);
 
     gtk_widget_show_all (widgets->dialog);
 
     gint result = gtk_dialog_run (GTK_DIALOG (widgets->dialog));
     switch (result) {
-        case GTK_RESPONSE_CANCEL:
+        case GTK_RESPONSE_OK:
+            parse_user_data (widgets, kf_data);
+            update_kf (kf_data, TRUE);
+            g_hash_table_remove_all (kf_data->data_to_add);
+            g_hash_table_unref (kf_data->data_to_add);
             break;
+        case GTK_RESPONSE_CANCEL:
         default:
             break;
     }
+    gtk_widget_destroy (widgets->dialog);
+    cleanup_widgets (widgets);
 }
 
 
-static gboolean
-realloc_widgets (Widgets *widgets, gsize num_of_resources_to_realloc)
+static GtkWidget *
+create_scrolled_window (GtkWidget *dialog, GtkWidget *content_area)
 {
-    gsize realloc_size = widgets->data->counter + num_of_resources_to_realloc;
-    GtkWidget **acc_tmp = g_realloc_n (widgets->acc_entry, realloc_size, sizeof (GtkWidget));
-    if (acc_tmp == NULL) {
-        return FALSE;
-    }
-    GtkWidget **key_tmp = g_realloc_n (widgets->key_entry, realloc_size, sizeof (GtkWidget));
-    if (key_tmp == NULL) {
-        return FALSE;
-    }
-    widgets->acc_entry = acc_tmp;
-    widgets->key_entry = key_tmp;
+    GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_add (GTK_CONTAINER (content_area), vbox);
 
-    widgets->data->counter++;
+    GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
+    gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sw), GTK_SHADOW_ETCHED_IN);
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
 
-    return TRUE;
+    return sw;
 }
 
 
@@ -121,6 +129,27 @@ create_header_bar (GtkWidget *dialog)
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header), box);
 
     gtk_window_set_titlebar (GTK_WINDOW (dialog), header);
+}
+
+
+static gboolean
+realloc_widgets (Widgets *widgets, gsize num_of_resources_to_realloc)
+{
+    gsize realloc_size = widgets->data->counter + num_of_resources_to_realloc;
+    GtkWidget **acc_tmp = g_realloc_n (widgets->acc_entry, realloc_size, sizeof (GtkWidget));
+    if (acc_tmp == NULL) {
+        return FALSE;
+    }
+    GtkWidget **key_tmp = g_realloc_n (widgets->key_entry, realloc_size, sizeof (GtkWidget));
+    if (key_tmp == NULL) {
+        return FALSE;
+    }
+    widgets->acc_entry = acc_tmp;
+    widgets->key_entry = key_tmp;
+
+    widgets->data->counter++;
+
+    return TRUE;
 }
 
 
@@ -163,12 +192,36 @@ del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
 {
     Widgets *widgets = (Widgets *)user_data;
     gint current_position = widgets->data->counter - 1;
+    if (current_position == 0) //at least one row has to remain
+        return
     gtk_widget_destroy (widgets->key_entry[current_position]);
     gtk_widget_destroy (widgets->acc_entry[current_position]);
     g_free (widgets->key_entry[current_position]);
     g_free (widgets->acc_entry[current_position]);
     widgets->data->counter--;
     widgets->data->grid_top--;
+}
+
+
+static void
+parse_user_data (Widgets *widgets, UpdateData *kf_data)
+{
+    kf_data->data_to_add = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    gint i = 0;
+    while (i < widgets->data->counter) {
+        const gchar *acc_name = gtk_entry_get_text (GTK_ENTRY (widgets->acc_entry[i]));
+        const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (widgets->key_entry[i]));
+        if (!g_str_is_ascii (acc_name)) {
+            show_message_dialog (widgets->dialog, "Only ASCII strings are supported", GTK_MESSAGE_ERROR);
+            return; // TODO error message
+        }
+        if (!g_str_is_ascii (acc_key)) {
+            show_message_dialog (widgets->dialog, "Only ASCII strings are supported", GTK_MESSAGE_ERROR);
+            return; // TODO error message
+        }
+        g_hash_table_insert (kf_data->data_to_add, g_strdup (acc_name), g_strdup (acc_key));
+        i++;
+    }
 }
 
 

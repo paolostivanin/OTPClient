@@ -40,10 +40,9 @@ load_kf (const gchar *plain_key)
 
 
 gint
-update_kf (gboolean is_add, gpointer user_data)
+update_kf (UpdateData *data, gboolean is_add)
 {
     // the file is decrypted when the program boots
-    UpdateData *data = (UpdateData *) user_data;
     gchar *kf_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
 
     if (g_hash_table_size (data->data_to_add) > 0) {

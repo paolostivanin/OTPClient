@@ -3,7 +3,7 @@
 #include "kf-misc.h"
 
 #define APP_NAME "OTPClient"
-#define APP_VERSION "1.0.0-alpha"
+#define APP_VERSION "0.99.1 (1.0-alpha1)"
 
 #define KF_NAME "otpclient-db.enc"
 #define KF_GROUP "data"

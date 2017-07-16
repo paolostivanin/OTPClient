@@ -4,7 +4,8 @@ static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event
 
 
 void
-set_icon_to_entry (GtkWidget *entry, const gchar *icon_name, const gchar *tooltip_text) {
+set_icon_to_entry (GtkWidget *entry, const gchar *icon_name, const gchar *tooltip_text)
+{
     GIcon *gicon = g_themed_icon_new_with_default_fallbacks (icon_name);
     gtk_entry_set_icon_from_gicon (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, gicon);
     gtk_entry_set_icon_activatable (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, TRUE);
