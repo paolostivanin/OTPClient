@@ -6,8 +6,6 @@
  * g_print ("%d - %s\n", (s < 30) ? s+1 : s-29, get_totp("base32secret3232", 6));
  */
 
-static void activate (GtkApplication *app, gpointer user_data);
-
 static GdkPixbuf *create_logo (void);
 
 gint

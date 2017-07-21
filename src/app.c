@@ -8,8 +8,6 @@ static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPi
 
 static gchar *prompt_for_password (GtkWidget *main_window);
 
-static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event_button, gpointer);
-
 static void add_data_cb (GtkWidget *widget, gpointer user_data);
 
 static void del_data_cb (GtkWidget *widget, gpointer user_data);
@@ -114,7 +112,7 @@ prompt_for_password (GtkWidget *mw)
 
 static void
 add_data_cb (GtkWidget *btn,
-            gpointer user_data)
+             gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     UpdateData *kf_data = (UpdateData *)user_data;
@@ -124,7 +122,7 @@ add_data_cb (GtkWidget *btn,
 
 static void
 del_data_cb (GtkWidget *btn,
-            gpointer user_data)
+             gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     UpdateData *kf_data = (UpdateData *)user_data;

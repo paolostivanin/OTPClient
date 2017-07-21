@@ -8,6 +8,8 @@
 #define KF_NAME "otpclient-db.enc"
 #define KF_GROUP "data"
 
+void activate (GtkApplication *app, gpointer user_data);
+
 goffset get_file_size (const gchar *path);
 
 void show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type);
