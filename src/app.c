@@ -34,11 +34,12 @@ activate (GtkApplication *app, gpointer user_data)
     kf_update_data->key = prompt_for_password (main_window);
     kf_update_data->in_memory_kf = load_kf (kf_update_data->key);
 
+    GtkListStore *list_store = create_treeview (main_window, kf_update_data);
+    g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
+
     g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), kf_update_data);
     g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), kf_update_data);
     g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), kf_update_data);
-
-    create_scrolled_window_with_treeview (main_window, kf_update_data);
 
     gtk_widget_show_all (main_window);
 }
@@ -116,7 +117,8 @@ add_data_cb (GtkWidget *btn,
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     UpdateData *kf_data = (UpdateData *)user_data;
-    add_data_dialog (top_level, kf_data);
+    GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
+    add_data_dialog (top_level, kf_data, list_store);
 }
 
 
@@ -131,7 +133,7 @@ del_data_cb (GtkWidget *btn,
 
 
 static void
-destroy_cb (GtkWidget *win __attribute__((__unused__)),
+destroy_cb (GtkWidget *win,
             gpointer user_data)
 {
     UpdateData *kf_update_data = user_data;

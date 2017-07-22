@@ -1,3 +1,5 @@
 #pragma once
 
-GtkWidget *create_scrolled_window_with_treeview (GtkWidget *main_window, UpdateData *kf_update_data);
+GtkListStore *create_treeview (GtkWidget *main_window, UpdateData *kf_update_data);
+
+void update_model (UpdateData *kf_data, GtkListStore *store);

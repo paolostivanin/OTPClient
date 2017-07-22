@@ -27,7 +27,7 @@ static void cleanup_widgets (Widgets *widgets);
 
 
 int
-add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
+add_data_dialog (GtkWidget *main_win, UpdateData *kf_data, GtkListStore *list_store)
 {
     Widgets *widgets = g_new0 (Widgets, 1);
     widgets->acc_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
@@ -65,6 +65,8 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data)
         case GTK_RESPONSE_OK:
             parse_user_data (widgets, kf_data);
             update_kf (kf_data, TRUE);
+            reload_kf (kf_data);
+            update_model (kf_data, list_store);
             g_hash_table_remove_all (kf_data->data_to_add);
             g_hash_table_unref (kf_data->data_to_add);
             break;

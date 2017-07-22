@@ -38,6 +38,14 @@ load_kf (const gchar *plain_key)
 }
 
 
+void
+reload_kf (UpdateData *kf_data)
+{
+    gcry_free (kf_data->in_memory_kf);
+    kf_data->in_memory_kf = load_kf (kf_data->key);
+}
+
+
 gint
 update_kf (UpdateData *data, gboolean is_add)
 {
@@ -73,6 +81,7 @@ update_kf (UpdateData *data, gboolean is_add)
     }
 
     if (encrypt_kf (kf_path, data->key) != NULL) {
+        g_printerr ("Failed to encrypt the file\n");
         //  TODO restore backup and report failed update
     }
 
@@ -265,7 +274,7 @@ decrypt_kf (const gchar *path, const gchar *plain_key)
     gcry_cipher_setiv (hd, header_data->iv, IV_SIZE);
     gcry_cipher_authenticate (hd, header_data, sizeof (HeaderData));
 
-    gchar *dec_buf = gcry_malloc_secure (enc_buf_size);
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
     gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size);
     if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
         gcry_cipher_close (hd);
