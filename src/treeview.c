@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include "otpclient.h"
-#include "treeview.h"
+#include "timer.h"
 
 static gchar **get_account_names (const gchar *dec_kf);
 
@@ -21,6 +21,10 @@ create_treeview (GtkWidget *main_win, UpdateData *kf_update_data)
 {
     GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
     gtk_container_add (GTK_CONTAINER (main_win), vbox);
+
+    GtkWidget *timer_label = gtk_label_new (NULL);
+    gtk_box_pack_start (GTK_BOX (vbox), timer_label, FALSE, FALSE, 5);
+    g_timeout_add_seconds (1, label_update, timer_label);
 
     GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
     gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sw), GTK_SHADOW_ETCHED_IN);
@@ -82,8 +86,20 @@ fixed_toggled (GtkCellRendererToggle *cell, gchar *path_str, gpointer data)
     GtkTreeModel *model = (GtkTreeModel *)data;
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
+    gboolean fixed;
 
-    // set TOTP/HOTP if toggle is active, otherwise remove the tick and hide otp
+    gtk_tree_model_get_iter (model, &iter, path);
+    gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, -1);
+
+    /* do something with the value */
+    if (fixed) {
+        //TODO tick removed, clear TOTP
+    } else {
+        //TODO tick added, set TOTP
+    }
+    fixed ^= 1;
+
+    gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_BOOLEAN, fixed, -1);
 
     gtk_tree_path_free (path);
 }
