@@ -15,6 +15,12 @@ static void del_data_cb (GtkWidget *widget, gpointer user_data);
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
+// TODO rework code to support per account digits (6 or 8)
+// TODO check secret to be alpha+digits only
+// TODO check account name to be valid utf8
+// TODO otp sha algo, how?
+// TODO enter with password
+
 void
 activate (GtkApplication *app, gpointer user_data)
 {
@@ -48,7 +54,6 @@ activate (GtkApplication *app, gpointer user_data)
 static GtkWidget *
 create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo)
 {
-    // TODO add gtk label with countdown
     GtkWidget *window = gtk_application_window_new (app);
     gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
     gtk_window_set_resizable (GTK_WINDOW (window), FALSE);
@@ -112,8 +117,7 @@ prompt_for_password (GtkWidget *mw)
 
 
 static void
-add_data_cb (GtkWidget *btn,
-             gpointer user_data)
+add_data_cb (GtkWidget *btn, gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     UpdateData *kf_data = (UpdateData *)user_data;
@@ -123,8 +127,7 @@ add_data_cb (GtkWidget *btn,
 
 
 static void
-del_data_cb (GtkWidget *btn,
-             gpointer user_data)
+del_data_cb (GtkWidget *btn, gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     UpdateData *kf_data = (UpdateData *)user_data;
@@ -133,10 +136,10 @@ del_data_cb (GtkWidget *btn,
 
 
 static void
-destroy_cb (GtkWidget *win,
+destroy_cb (GtkWidget *win __attribute__((__unused__)),
             gpointer user_data)
 {
-    UpdateData *kf_update_data = user_data;
+    UpdateData *kf_update_data = (UpdateData *)user_data;
     gcry_free (kf_update_data->key);
     gcry_free (kf_update_data->in_memory_kf);
     g_free (kf_update_data);

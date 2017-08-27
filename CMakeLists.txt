@@ -17,7 +17,17 @@ link_directories(${GTK3_LIBRARY_DIRS})
 
 add_definitions(${GTK3_CFLAGS_OTHER})
 
-set(SOURCE_FILES src/treeview.c src/main.c src/app.c src/message-dialog.c src/kf-misc.c src/get-file-size.c src/add-data-dialog.c src/common.c src/timer.c)
+set(SOURCE_FILES
+        src/treeview.c
+        src/main.c
+        src/app.c
+        src/message-dialog.c
+        src/kf-misc.c
+        src/get-file-size.c
+        src/add-data-dialog.c
+        src/common.c
+        src/timer.c
+        src/liststore-misc.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} -lgcrypt -lcotp)
+target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} -lgcrypt -lcotp -lbaseencode)

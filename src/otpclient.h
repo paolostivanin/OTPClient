@@ -4,7 +4,7 @@
 #include "treeview.h"
 
 #define APP_NAME "OTPClient"
-#define APP_VERSION "0.99.2 (1.0-alpha2)"
+#define APP_VERSION "0.99.3 (1.0-alpha3)"
 
 #define KF_NAME "otpclient-db.enc"
 #define KF_GROUP "data"

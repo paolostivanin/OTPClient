@@ -24,7 +24,7 @@ typedef struct _header_data {
 typedef struct _update_data {
     gchar *in_memory_kf;
     gchar *key;
-    GHashTable *data_to_add;    // {account: secret, accoun2: secret2, ecc}
+    GHashTable *data_to_add;    // {account_name: secret,digits; account_name2: secret2,digits2 ecc}
 } UpdateData;
 
 gchar *load_kf (const gchar *plain_key);

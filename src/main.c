@@ -1,12 +1,8 @@
 #include <gtk/gtk.h>
 #include "otpclient.h"
 
-/*
- * gint s = g_date_time_get_second (g_date_time_new_now_local ());
- * g_print ("%d - %s\n", (s < 30) ? s+1 : s-29, get_totp("base32secret3232", 6));
- */
-
 static GdkPixbuf *create_logo (void);
+
 
 gint
 main (gint argc, gchar **argv)
