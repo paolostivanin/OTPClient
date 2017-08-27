@@ -8,6 +8,8 @@ static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPi
 
 static gchar *prompt_for_password (GtkWidget *main_window);
 
+void password_cb (GtkWidget *entry, gpointer *pwd);
+
 static void add_data_cb (GtkWidget *widget, gpointer user_data);
 
 static void del_data_cb (GtkWidget *widget, gpointer user_data);
@@ -15,11 +17,9 @@ static void del_data_cb (GtkWidget *widget, gpointer user_data);
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
-// TODO rework code to support per account digits (6 or 8)
+// TODO rework code to support per account digits (6 or 8) and sha
 // TODO check secret to be alpha+digits only
 // TODO check account name to be valid utf8
-// TODO otp sha algo, how?
-// TODO enter with password
 
 void
 activate (GtkApplication *app, gpointer user_data)
@@ -87,7 +87,9 @@ prompt_for_password (GtkWidget *mw)
 
     gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
 
+    gchar *pwd = NULL;
     GtkWidget *entry = gtk_entry_new ();
+    g_signal_connect (entry, "activate", G_CALLBACK (password_cb), &pwd);
 
     set_icon_to_entry (entry, "dialog-password-symbolic", "Show password");
 
@@ -96,14 +98,10 @@ prompt_for_password (GtkWidget *mw)
 
     gtk_widget_show_all (dialog);
 
-    gchar *pwd = NULL;
-    const gchar *text = NULL;
     gint ret = gtk_dialog_run (GTK_DIALOG (dialog));
     switch (ret) {
         case GTK_RESPONSE_ACCEPT:
-            text = gtk_entry_get_text (GTK_ENTRY (entry));
-            pwd = gcry_malloc_secure (strlen (text) + 1);
-            strncpy (pwd, text, strlen (text) + 1);
+            password_cb (entry, (gpointer *)&pwd);
             break;
         case GTK_RESPONSE_CLOSE:
             break;
@@ -113,6 +111,17 @@ prompt_for_password (GtkWidget *mw)
     gtk_widget_destroy (dialog);
 
     return pwd;
+}
+
+
+void
+password_cb (GtkWidget *entry, gpointer *pwd)
+{
+    const gchar *text = gtk_entry_get_text (GTK_ENTRY (entry));
+    *pwd = gcry_malloc_secure (strlen (text) + 1);
+    strncpy (*pwd, text, strlen (text) + 1);
+    GtkWidget *top_level = gtk_widget_get_toplevel (entry);
+    gtk_dialog_response (GTK_DIALOG (top_level), GTK_RESPONSE_CLOSE);
 }
 
 
