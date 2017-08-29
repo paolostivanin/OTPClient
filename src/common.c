@@ -69,13 +69,13 @@ find_widget (GtkWidget *parent, const gchar *widget_name)
         children = gtk_container_get_children (GTK_CONTAINER (parent)); //children are the two buttons
     }
 
-    do {
+    for (children; children != NULL; children = g_list_next (children)) {
         // g_strcmp0 returns 0 if the strings are equal. 0 is false, thus the '!'
         if (!g_strcmp0 (gtk_widget_get_name (children->data), widget_name)) {
             found_widget = children->data;
             break;
         }
-    } while ((children = g_list_next (children)) != NULL);
+    }
 
     g_list_free (children);
 
