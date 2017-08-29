@@ -7,6 +7,10 @@ static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
 
 static gboolean create_kf (const gchar *path);
 
+static void backup_kf (const gchar *kf_path);
+
+static void restore_kf (const gchar *kf_path);
+
 static void cleanup_enc (guchar *, gchar *, guchar *);
 
 static void cleanup (GFile *, gpointer, HeaderData *, GError *);
@@ -72,17 +76,22 @@ update_kf (UpdateData *data, gboolean is_add)
                 g_key_file_remove_key (kf, KF_GROUP, (gchar *)key, NULL);
             }
         }
-        // TODO create backup before saving
+        backup_kf (kf_path);
         if (!g_key_file_save_to_file (kf, kf_path, &err)) {
             g_printerr ("Error while saving file: %s\n", err->message);
             g_clear_error (&err);
+            g_key_file_free (kf);
+            g_free (kf_path);
+            return KF_UPDATE_FAILED;
         }
         g_key_file_free (kf);
     }
 
     if (encrypt_kf (kf_path, data->key) != NULL) {
         g_printerr ("Failed to encrypt the file\n");
-        //  TODO restore backup and report failed update
+        restore_kf (kf_path);
+        g_free (kf_path);
+        return KF_UPDATE_FAILED;
     }
 
     g_free (kf_path);
@@ -312,6 +321,40 @@ get_derived_key (const gchar *pwd, HeaderData *header_data)
         return KEY_DERIV_ERR;
     }
     return derived_key;
+}
+
+
+static void
+backup_kf (const gchar *path)
+{
+    GError *err = NULL;
+    GFile *src = g_file_new_for_path (path);
+    gchar *dst_path = g_strconcat (path, ".bak", NULL);
+    GFile *dst = g_file_new_for_path (dst_path);
+    g_free (dst_path);
+    if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
+        g_printerr ("Couldn't create the backup file: %s\n", err->message);
+        g_clear_error (&err);
+    }
+    g_object_unref (src);
+    g_object_unref (dst);
+}
+
+
+static void
+restore_kf (const gchar *path)
+{
+    GError *err = NULL;
+    gchar *src_path = g_strconcat (path, ".bak", NULL);
+    GFile *src = g_file_new_for_path (src_path);
+    GFile *dst = g_file_new_for_path (path);
+    g_free (src_path);
+    if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
+        g_printerr ("Couldn't restore the backup file: %s\n", err->message);
+        g_clear_error (&err);
+    }
+    g_object_unref (src);
+    g_object_unref (dst);
 }
 
 
