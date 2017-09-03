@@ -8,6 +8,12 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 
 Please note that the software is currently in **ALPHA** version and is not meant to be used (yet).
 
+## Features
+- import encrypted Auth Plus backup
+- import encrypted andOTP backup
+- encrypt local file using AES256-GCM
+  - key is derived using PBKDF2 with SHA512 and 100k iterations
+
 ## License
 See license file.
  

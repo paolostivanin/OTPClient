@@ -27,7 +27,9 @@ set(SOURCE_FILES
         src/add-data-dialog.c
         src/common.c
         src/timer.c
-        src/liststore-misc.c)
+        src/liststore-misc.c
+        src/zip.c
+        src/json.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} -lgcrypt -lcotp -lbaseencode)
+target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} -lgcrypt -lcotp -lbaseencode -lzip)

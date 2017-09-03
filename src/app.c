@@ -17,9 +17,11 @@ static void del_data_cb (GtkWidget *widget, gpointer user_data);
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
-// TODO rework code to support per account digits (6 or 8) and sha
-// TODO check secret to be alpha+digits only
-// TODO check account name to be valid utf8
+// TODO rework code to support per account digits (6 or 8) and sha type
+/* TODO import:
+ * - from andOTP
+ * - from Auth Plus
+ */
 
 void
 activate (GtkApplication *app, gpointer user_data)

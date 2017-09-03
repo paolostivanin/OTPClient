@@ -1,7 +1,9 @@
 #include <gtk/gtk.h>
+#include <string.h>
 #include "kf-misc.h"
 #include "otpclient.h"
 #include "common.h"
+
 
 typedef struct _widgets {
     GtkWidget *dialog;
@@ -15,13 +17,19 @@ static GtkWidget *create_scrolled_window (GtkWidget *content_area);
 
 static void setup_header_bar (Widgets *widgets);
 
-static void parse_user_data (Widgets *widgets, UpdateData *kf_data);
+static gboolean parse_user_data (Widgets *widgets, UpdateData *kf_data);
 
 static void add_entry_cb (GtkWidget *btn, gpointer user_data);
 
 static void update_grid (Widgets *widgets);
 
 static void del_entry_cb (GtkWidget *btn, gpointer user_data);
+
+static inline GQuark invalid_single_input (void);
+
+static gboolean is_input_valid (GtkWidget *dialog, const gchar *acc_name, const gchar *secret, gint len, GError **err);
+
+static gboolean str_is_only_num_or_alpha (const gchar *secret);
 
 static void cleanup_widgets (Widgets *widgets);
 
@@ -63,10 +71,11 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data, GtkListStore *list_st
     gint result = gtk_dialog_run (GTK_DIALOG (widgets->dialog));
     switch (result) {
         case GTK_RESPONSE_OK:
-            parse_user_data (widgets, kf_data);
-            update_kf (kf_data, TRUE);
-            reload_kf (kf_data);
-            update_model (kf_data, list_store);
+            if (parse_user_data (widgets, kf_data)) {
+                update_kf (kf_data, TRUE);
+                reload_kf (kf_data);
+                update_model (kf_data, list_store);
+            }
             g_hash_table_remove_all (kf_data->data_to_add);
             g_hash_table_unref (kf_data->data_to_add);
             break;
@@ -152,25 +161,68 @@ del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
 }
 
 
-static void
+static gboolean
 parse_user_data (Widgets *widgets, UpdateData *kf_data)
 {
+    GError *err = NULL;
     kf_data->data_to_add = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     gint i = 0;
     while (i < widgets->acc_entry->len) {
-        const gchar *acc_name = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->acc_entry, GtkWidget *, i)));
-        const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->key_entry, GtkWidget *, i)));
-        if (!g_str_is_ascii (acc_name)) {
-            show_message_dialog (widgets->dialog, "Only ASCII strings are supported", GTK_MESSAGE_ERROR);
-            return; // TODO error message
+        const gchar *acc_name = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->acc_entry, GtkWidget * , i)));
+        const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->key_entry, GtkWidget * , i)));
+        if (is_input_valid (widgets->dialog, acc_name, acc_key, widgets->acc_entry->len, &err)) {
+            g_hash_table_insert (kf_data->data_to_add, g_strdup (acc_name), g_strdup (acc_key));
+        } else if (err != NULL) {
+            return FALSE;
         }
-        if (!g_str_is_ascii (acc_key)) {
-            show_message_dialog (widgets->dialog, "Only ASCII strings are supported", GTK_MESSAGE_ERROR);
-            return; // TODO error message
-        }
-        g_hash_table_insert (kf_data->data_to_add, g_strdup (acc_name), g_strdup (acc_key));
         i++;
     }
+    return TRUE;
+}
+
+
+static inline GQuark
+invalid_single_input (void)
+{
+    return g_quark_from_static_string ("invalid_single_input");
+}
+
+
+static gboolean
+is_input_valid (GtkWidget *dialog, const gchar *acc_name, const gchar *secret, gint len, GError **err)
+{
+    // TODO add which entry will not be added
+    if (!g_str_is_ascii (acc_name)) {
+        show_message_dialog (dialog,
+                             "Only ASCII characters are supported.\nThis entry will not be added",
+                             GTK_MESSAGE_ERROR);
+        if (len == 1) {
+            g_set_error (err, invalid_single_input (), -1, "No more entries to process");
+        }
+        return FALSE;
+    }
+    if (!str_is_only_num_or_alpha (secret)) {
+        show_message_dialog (dialog,
+                             "Secret can contain only characters from the english alphabet and numbers.\nThis entry will not be added",
+                             GTK_MESSAGE_ERROR);
+        if (len == 1) {
+            g_set_error (err, invalid_single_input (), -1, "No more entries to process");
+        }
+        return FALSE;
+    }
+    return TRUE;
+}
+
+
+static gboolean
+str_is_only_num_or_alpha (const gchar *secret)
+{
+    for (gint i = 0; i < strlen (secret); i++) {
+        if (!g_ascii_isalnum (secret[i]) && !g_ascii_isalpha (secret[i])) {
+            return FALSE;
+        }
+    }
+    return TRUE;
 }
 
 
