@@ -2,6 +2,7 @@
 #include <gcrypt.h>
 #include "kf-misc.h"
 #include "otpclient.h"
+#include "file-size.h"
 
 static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
 

@@ -11,11 +11,22 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_FILE_OFFSET_BITS=64 -U_FORTIFY_SOURCE -D_
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0)
 
-include_directories(${GTK3_INCLUDE_DIRS})
-link_directories(${GTK3_LIBRARY_DIRS})
+include_directories(${GTK3_INCLUDE_DIRS} ${JSON_GLIB_INCLUDE_DIRS})
+link_directories(${GTK3_LIBRARY_DIRS} ${JSON_GLIB_LIBRARY_DIRS})
 
-add_definitions(${GTK3_CFLAGS_OTHER})
+add_definitions(${GTK3_CFLAGS_OTHER} ${JSON_GLIB_CFLAGS_OTHER})
+
+set(HEADER_FILES
+        src/common.h
+        src/file-size.h
+        src/imports.h
+        src/kf-misc.h
+        src/liststore-misc.h
+        src/otpclient.h
+        src/timer.h
+        src/treeview.h)
 
 set(SOURCE_FILES
         src/treeview.c
@@ -23,13 +34,13 @@ set(SOURCE_FILES
         src/app.c
         src/message-dialog.c
         src/kf-misc.c
-        src/get-file-size.c
+        src/file-size.c
         src/add-data-dialog.c
         src/common.c
         src/timer.c
         src/liststore-misc.c
-        src/zip.c
-        src/json.c)
+        src/authplus.c
+        src/andotp.c)
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
-target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} -lgcrypt -lcotp -lbaseencode -lzip)
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
+target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} ${JSON_GLIB_LIBRARIES} -lgcrypt -lcotp -lbaseencode -lzip)

@@ -11,8 +11,6 @@
 
 void activate (GtkApplication *app, gpointer user_data);
 
-goffset get_file_size (const gchar *path);
-
 void show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type);
 
 int add_data_dialog (GtkWidget *main_window, UpdateData *kf_data, GtkListStore *list_store);
