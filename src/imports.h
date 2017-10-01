@@ -11,7 +11,7 @@
 typedef struct _otp_t {
     guint8 type;
     guint8 algo;
-    guint digits;
+    guint8 digits;
     union {
         guint8 period;
         guint8 counter;

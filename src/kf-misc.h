@@ -14,7 +14,7 @@
 #define KDF_SALT_SIZE 32
 #define TAG_SIZE 16
 
-#define MAX_FILE_SIZE 64*1024*1024  // 64 MB should be more than enough for such content.
+#define MAX_FILE_SIZE 67108864  // 64 MiB should be more than enough for such content.
 
 typedef struct _header_data {
     guint8 iv[IV_SIZE];
