@@ -37,7 +37,7 @@ set_otp (GtkListStore *list_store, GtkTreeIter iter, gchar *account_name, Update
 {
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
-    g_key_file_load_from_data (kf, kf_data->in_memory_kf, (gsize)-1, G_KEY_FILE_NONE, NULL);
+    g_key_file_load_from_data (kf, kf_data->in_memory_json, (gsize)-1, G_KEY_FILE_NONE, NULL);
     gchar *secret = g_key_file_get_string (kf, KF_GROUP, account_name, &err);
     cotp_error_t otp_err;
     gchar *totp = get_totp (secret, 6, SHA1, &otp_err);

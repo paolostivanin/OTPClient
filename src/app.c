@@ -38,16 +38,17 @@ activate (GtkApplication *app, gpointer user_data)
     gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
-    UpdateData *kf_update_data = g_new0 (UpdateData, 1);
-    kf_update_data->key = prompt_for_password (main_window);
-    kf_update_data->in_memory_kf = load_kf (kf_update_data->key);
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->objects_hash = NULL;
+    db_data->key = prompt_for_password (main_window);
+    load_db (db_data);
 
-    GtkListStore *list_store = create_treeview (main_window, kf_update_data);
+    GtkListStore *list_store = create_treeview (main_window, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
 
-    g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), kf_update_data);
-    g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), kf_update_data);
-    g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), kf_update_data);
+    g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), db_data);
+    g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), db_data);
+    g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), db_data);
 
     gtk_widget_show_all (main_window);
 }
@@ -131,7 +132,7 @@ static void
 add_data_cb (GtkWidget *btn, gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    UpdateData *kf_data = (UpdateData *)user_data;
+    DatabaseData *kf_data = (DatabaseData *)user_data;
     GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
     add_data_dialog (top_level, kf_data, list_store);
 }
@@ -141,7 +142,7 @@ static void
 del_data_cb (GtkWidget *btn, gpointer user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    UpdateData *kf_data = (UpdateData *)user_data;
+    DatabaseData *kf_data = (DatabaseData *)user_data;
     // TODO complete me
 }
 
@@ -150,8 +151,8 @@ static void
 destroy_cb (GtkWidget *win __attribute__((__unused__)),
             gpointer user_data)
 {
-    UpdateData *kf_update_data = (UpdateData *)user_data;
-    gcry_free (kf_update_data->key);
-    gcry_free (kf_update_data->in_memory_kf);
-    g_free (kf_update_data);
+    DatabaseData *db_data = (DatabaseData *)user_data;
+    gcry_free (db_data->key);
+    gcry_free (db_data->in_memory_json);
+    g_free (db_data);
 }

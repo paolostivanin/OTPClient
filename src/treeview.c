@@ -26,7 +26,7 @@ create_treeview (GtkWidget *main_win, UpdateData *kf_update_data)
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
 
-    gchar **account_names = get_account_names (kf_update_data->in_memory_kf);
+    gchar **account_names = get_account_names (kf_update_data->in_memory_json);
     GtkTreeModel *model = create_model (account_names);
     g_strfreev (account_names);
 
@@ -137,7 +137,7 @@ update_model (UpdateData *kf_data, GtkListStore *store)
 {
     GtkTreeIter iter;
     gtk_list_store_clear (store);
-    gchar **account_names = get_account_names (kf_data->in_memory_kf);
+    gchar **account_names = get_account_names (kf_data->in_memory_json);
     gint i = 0;
     while (account_names[i] != NULL) {
         gtk_list_store_append (store, &iter);
