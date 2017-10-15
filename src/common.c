@@ -4,7 +4,9 @@ static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event
 
 
 void
-set_icon_to_entry (GtkWidget *entry, const gchar *icon_name, const gchar *tooltip_text)
+set_icon_to_entry (GtkWidget    *entry,
+                   const gchar  *icon_name,
+                   const gchar  *tooltip_text)
 {
     GIcon *gicon = g_themed_icon_new_with_default_fallbacks (icon_name);
     gtk_entry_set_icon_from_gicon (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, gicon);
@@ -16,17 +18,18 @@ set_icon_to_entry (GtkWidget *entry, const gchar *icon_name, const gchar *toolti
 
 
 static void
-icon_press_cb (GtkEntry *entry,
-               gint position __attribute__((__unused__)),
-               GdkEventButton *event __attribute__((__unused__)),
-               gpointer data __attribute__((__unused__)))
+icon_press_cb (GtkEntry         *entry,
+               gint              position   __attribute__((__unused__)),
+               GdkEventButton   *event      __attribute__((__unused__)),
+               gpointer          data       __attribute__((__unused__)))
 {
     gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
 }
 
 
 GtkWidget *
-create_box_with_buttons (const gchar *add_btn_name, const gchar *del_btn_name)
+create_box_with_buttons (const gchar *add_btn_name,
+                         const gchar *del_btn_name)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
@@ -56,7 +59,8 @@ create_header_bar (const gchar *headerbar_title)
 
 
 GtkWidget *
-find_widget (GtkWidget *parent, const gchar *widget_name)
+find_widget (GtkWidget      *parent,
+             const gchar    *widget_name)
 {
     GtkWidget *found_widget = NULL;
     GList *children = NULL;

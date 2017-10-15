@@ -5,7 +5,8 @@ static GdkPixbuf *create_logo (void);
 
 
 gint
-main (gint argc, gchar **argv)
+main (gint    argc,
+      gchar **argv)
 {
     GtkApplication *app;
     gint status;

@@ -1,7 +1,9 @@
 #include <gtk/gtk.h>
 
 void
-show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type)
+show_message_dialog (GtkWidget      *parent,
+                     const gchar    *message,
+                     GtkMessageType  message_type)
 {
     static GtkWidget *dialog = NULL;
 

@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include <cotp.h>
-#include "kf-misc.h"
+#include "db-misc.h"
 #include "treeview.h"
 #include "otpclient.h"
 #include "liststore-misc.h"

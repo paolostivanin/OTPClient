@@ -1,7 +1,15 @@
 #pragma once
 
-#include "kf-misc.h"
+G_BEGIN_DECLS
 
-void traverse_liststore (GtkListStore *list_store, UpdateData *kf_data);
+#include "db-misc.h"
 
-void set_otp (GtkListStore *list_store, GtkTreeIter iter, gchar *account_name, UpdateData *kf_data);
+void traverse_liststore (GtkListStore *list_store,
+                         DatabaseData *db_data);
+
+void set_otp            (GtkListStore *list_store,
+                         GtkTreeIter iter,
+                         gchar *account_name,
+                         DatabaseData *db_data);
+
+G_END_DECLS

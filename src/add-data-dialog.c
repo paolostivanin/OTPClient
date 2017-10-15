@@ -1,59 +1,59 @@
 #include <gtk/gtk.h>
-#include <string.h>
-#include "kf-misc.h"
+#include "db-misc.h"
 #include "otpclient.h"
 #include "common.h"
+#include "add-data-dialog.h"
+#include "gquarks.h"
 
 
-typedef struct _widgets {
-    GtkWidget *dialog;
-    GtkWidget *grid;
-    GArray *acc_entry;
-    GArray *key_entry;
-    gint grid_top;
-} Widgets;
+static Widgets *init_widgets (void);
 
 static GtkWidget *create_scrolled_window (GtkWidget *content_area);
 
 static void setup_header_bar (Widgets *widgets);
 
-static gboolean parse_user_data (Widgets *widgets, UpdateData *kf_data);
+static void add_widgets_cb (GtkWidget *btn, gpointer user_data);
 
-static void add_entry_cb (GtkWidget *btn, gpointer user_data);
+static GtkWidget *get_cb_box (const gchar *id1, const gchar *id2, const gchar *id3,
+                              const gchar *text1, const gchar *text2, const gchar *text3,
+                              const gchar *active);
 
 static void update_grid (Widgets *widgets);
 
 static void del_entry_cb (GtkWidget *btn, gpointer user_data);
 
-static inline GQuark invalid_single_input (void);
+static void sensitive_cb (GtkWidget *cb, gpointer user_data);
 
-static gboolean is_input_valid (GtkWidget *dialog, const gchar *acc_name, const gchar *secret, gint len, GError **err);
-
-static gboolean str_is_only_num_or_alpha (const gchar *secret);
+static GtkWidget *create_integer_spin_button (void);
 
 static void cleanup_widgets (Widgets *widgets);
 
 
 int
-add_data_dialog (GtkWidget *main_win, UpdateData *kf_data, GtkListStore *list_store)
+add_data_dialog (GtkWidget      *main_win,
+                 DatabaseData   *db_data,
+                 GtkListStore   *list_store)
 {
-    Widgets *widgets = g_new0 (Widgets, 1);
-    widgets->acc_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
-    widgets->key_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
-    widgets->grid_top = 0;
+    Widgets *widgets = init_widgets ();
 
     widgets->dialog = gtk_dialog_new_with_buttons ("Add Data to Database",
                                                    GTK_WINDOW (main_win),
-                                                   GTK_DIALOG_DESTROY_WITH_PARENT, "OK",
-                                                   GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL,
+                                                   GTK_DIALOG_DESTROY_WITH_PARENT,
+                                                   "OK", GTK_RESPONSE_OK,
+                                                   "Cancel", GTK_RESPONSE_CANCEL,
                                                    NULL);
 
     gtk_widget_set_size_request (widgets->dialog, 400, 400);
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (widgets->dialog));
 
-    GtkWidget *acc_label = gtk_label_new ("Account Name");
-    GtkWidget *key_label = gtk_label_new ("Secret Key");
+    GtkWidget *type_label = gtk_label_new ("Type");
+    GtkWidget *acc_label = gtk_label_new ("Label");
+    GtkWidget *iss_label = gtk_label_new ("Issuer");
+    GtkWidget *key_label = gtk_label_new ("Secret");
+    GtkWidget *dig_label = gtk_label_new ("Digits");
+    GtkWidget *alg_label = gtk_label_new ("Algo");
+    GtkWidget *ctr_label = gtk_label_new ("Counter");
 
     GtkWidget *scrolled_win = create_scrolled_window (content_area);
 
@@ -63,21 +63,31 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data, GtkListStore *list_st
     gtk_grid_set_column_spacing (GTK_GRID (widgets->grid), 3);
     gtk_grid_set_row_spacing (GTK_GRID (widgets->grid), 3);
     gtk_container_add (GTK_CONTAINER (scrolled_win), widgets->grid);
-    gtk_grid_attach (GTK_GRID (widgets->grid), acc_label, 0, widgets->grid_top++, 4, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_label, acc_label, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach (GTK_GRID (widgets->grid), type_label, 0, widgets->grid_top++, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), acc_label, type_label, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), iss_label, acc_label, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_label, iss_label, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_label, key_label, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_label, dig_label, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), ctr_label, alg_label, GTK_POS_RIGHT, 2, 1);
 
-    add_entry_cb (NULL, widgets);
+    add_widgets_cb (NULL, widgets);
 
+    GError *err = NULL;
     gint result = gtk_dialog_run (GTK_DIALOG (widgets->dialog));
     switch (result) {
         case GTK_RESPONSE_OK:
-            if (parse_user_data (widgets, kf_data)) {
-                update_kf (kf_data, TRUE);
-                reload_kf (kf_data);
-                update_model (kf_data, list_store);
+            if (parse_user_data (widgets, db_data)) {
+                update_db (db_data);
+                reload_db (db_data, &err);
+                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+                    show_message_dialog (main_win, err->message, GTK_MESSAGE_ERROR);
+                } else {
+                    update_model (db_data, list_store);
+                }
             }
-            g_hash_table_remove_all (kf_data->data_to_add);
-            g_hash_table_unref (kf_data->data_to_add);
+            g_slist_foreach (db_data->data_to_add, jn_unref, NULL);
+            g_slist_free (db_data->data_to_add);
             break;
         case GTK_RESPONSE_CANCEL:
         default:
@@ -87,6 +97,23 @@ add_data_dialog (GtkWidget *main_win, UpdateData *kf_data, GtkListStore *list_st
     cleanup_widgets (widgets);
 
     return 0;
+}
+
+
+static Widgets *init_widgets ()
+{
+    Widgets *w = g_new0 (Widgets, 1);
+    w->type_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->acc_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->iss_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->key_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->dig_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->alg_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->spin_btn = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+
+    w->grid_top = 0;
+
+    return w;
 }
 
 
@@ -114,39 +141,84 @@ setup_header_bar (Widgets *widgets)
     GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (widgets->dialog), header_bar);
-    g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_entry_cb), widgets);
+    g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_widgets_cb), widgets);
     g_signal_connect (find_widget (box, "del_btn_dialog"), "clicked", G_CALLBACK (del_entry_cb), widgets);
 }
 
 
 static void
-add_entry_cb (GtkWidget *btn __attribute__((__unused__)),
-              gpointer user_data)
+add_widgets_cb (GtkWidget *btn __attribute__((__unused__)),
+              gpointer   user_data)
 {
     Widgets *widgets = (Widgets *)user_data;
+
     GtkWidget *acc_entry = gtk_entry_new ();
+    GtkWidget *iss_entry = gtk_entry_new ();
     GtkWidget *key_entry = gtk_entry_new ();
+
+    GtkWidget *type_cb_box = get_cb_box ("totp", "hotp", NULL, "TOTP", "HOTP", NULL, "totp");
+    GtkWidget *dig_cb_box = get_cb_box ("6digits", "8digits", NULL, "6", "8", NULL, "6");
+    GtkWidget *alg_cb_box = get_cb_box ("sha1", "sha256", "sha512", "SHA1", "SHA256", "SHA512", "sha1");
+
+    GtkWidget *sb = create_integer_spin_button ();
+    g_signal_connect (type_cb_box, "changed", G_CALLBACK (sensitive_cb), sb);
+
+    g_array_append_val (widgets->type_cb_box, type_cb_box);
     g_array_append_val (widgets->acc_entry, acc_entry);
+    g_array_append_val (widgets->iss_entry, iss_entry);
     g_array_append_val (widgets->key_entry, key_entry);
-    set_icon_to_entry (g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1), "dialog-password-symbolic", "Show password");
+    g_array_append_val (widgets->dig_cb_box, dig_cb_box);
+    g_array_append_val (widgets->alg_cb_box, alg_cb_box);
+    g_array_append_val (widgets->spin_btn, sb);
+    set_icon_to_entry (g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1),
+                       "dialog-password-symbolic",
+                       "Show password");
+
     update_grid (widgets);
+}
+
+
+static GtkWidget *
+get_cb_box (const gchar *id1,   const gchar *id2,   const gchar *id3,
+            const gchar *text1, const gchar *text2, const gchar *text3,
+            const gchar *active)
+{
+    GtkWidget *cb = gtk_combo_box_text_new ();
+    gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (cb), id1, text1);
+    gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (cb), id2, text2);
+    if (id3 != NULL) {
+        gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (cb), id3, text3);
+    }
+    gtk_combo_box_set_active_id (GTK_COMBO_BOX (cb), active);
+
+    return cb;
 }
 
 
 static void
 update_grid (Widgets *widgets)
 {
+    GtkWidget *type_cb_to_add = g_array_index (widgets->type_cb_box, GtkWidget *, widgets->type_cb_box->len - 1);
     GtkWidget *acc_entry_to_add = g_array_index (widgets->acc_entry, GtkWidget *, widgets->acc_entry->len - 1);
+    GtkWidget *iss_entry_to_add = g_array_index (widgets->iss_entry, GtkWidget *, widgets->iss_entry->len - 1);
     GtkWidget *key_entry_to_add = g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1);
-    gtk_grid_attach (GTK_GRID (widgets->grid), acc_entry_to_add, 0, widgets->grid_top++, 4, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_entry_to_add, acc_entry_to_add, GTK_POS_RIGHT, 4, 1);
+    GtkWidget *dig_cb_to_add = g_array_index (widgets->dig_cb_box, GtkWidget *, widgets->dig_cb_box->len - 1);
+    GtkWidget *alg_cb_to_add = g_array_index (widgets->alg_cb_box, GtkWidget *, widgets->alg_cb_box->len - 1);
+    GtkWidget *spin_to_add = g_array_index (widgets->spin_btn, GtkWidget *, widgets->spin_btn->len - 1);
+    gtk_grid_attach (GTK_GRID (widgets->grid), type_cb_to_add, 0, widgets->grid_top++, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), acc_entry_to_add, type_cb_to_add, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), iss_entry_to_add, acc_entry_to_add, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_entry_to_add, iss_entry_to_add, GTK_POS_RIGHT, 4, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_cb_to_add, key_entry_to_add, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_cb_to_add, dig_cb_to_add, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), spin_to_add, alg_cb_to_add, GTK_POS_RIGHT, 2, 1);
     gtk_widget_show_all (widgets->dialog);
 }
 
 
 static void
 del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
-              gpointer user_data)
+              gpointer   user_data)
 {
     Widgets *widgets = (Widgets *)user_data;
     guint current_position = widgets->acc_entry->len - 1;
@@ -161,75 +233,39 @@ del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
 }
 
 
-static gboolean
-parse_user_data (Widgets *widgets, UpdateData *kf_data)
+static void
+sensitive_cb (GtkWidget *cb,
+              gpointer   user_data)
 {
-    GError *err = NULL;
-    kf_data->data_to_add = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
-    gint i = 0;
-    while (i < widgets->acc_entry->len) {
-        const gchar *acc_name = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->acc_entry, GtkWidget * , i)));
-        const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->key_entry, GtkWidget * , i)));
-        if (is_input_valid (widgets->dialog, acc_name, acc_key, widgets->acc_entry->len, &err)) {
-            g_hash_table_insert (kf_data->data_to_add, g_strdup (acc_name), g_strdup (acc_key));
-        } else if (err != NULL) {
-            return FALSE;
-        }
-        i++;
+    GtkWidget *sb = (GtkWidget *) user_data;
+    if (g_strcmp0 (gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (cb)), "HOTP") == 0) {
+        gtk_widget_set_sensitive (sb, TRUE);
+    } else {
+        gtk_widget_set_sensitive (sb, FALSE);
     }
-    return TRUE;
 }
 
 
-static inline GQuark
-invalid_single_input (void)
+static GtkWidget *
+create_integer_spin_button ()
 {
-    return g_quark_from_static_string ("invalid_single_input");
-}
+    GtkAdjustment *adjustment = gtk_adjustment_new (0.0, 0.0, G_MAXUINT32, 1.0, 5.0, 0.0);
+    GtkWidget *sb = gtk_spin_button_new (adjustment, 1.0, 0);
+    gtk_widget_set_sensitive (sb, FALSE);
 
-
-static gboolean
-is_input_valid (GtkWidget *dialog, const gchar *acc_name, const gchar *secret, gint len, GError **err)
-{
-    // TODO add which entry will not be added
-    if (!g_str_is_ascii (acc_name)) {
-        show_message_dialog (dialog,
-                             "Only ASCII characters are supported.\nThis entry will not be added",
-                             GTK_MESSAGE_ERROR);
-        if (len == 1) {
-            g_set_error (err, invalid_single_input (), -1, "No more entries to process");
-        }
-        return FALSE;
-    }
-    if (!str_is_only_num_or_alpha (secret)) {
-        show_message_dialog (dialog,
-                             "Secret can contain only characters from the english alphabet and numbers.\nThis entry will not be added",
-                             GTK_MESSAGE_ERROR);
-        if (len == 1) {
-            g_set_error (err, invalid_single_input (), -1, "No more entries to process");
-        }
-        return FALSE;
-    }
-    return TRUE;
-}
-
-
-static gboolean
-str_is_only_num_or_alpha (const gchar *secret)
-{
-    for (gint i = 0; i < strlen (secret); i++) {
-        if (!g_ascii_isalnum (secret[i]) && !g_ascii_isalpha (secret[i])) {
-            return FALSE;
-        }
-    }
-    return TRUE;
+    return sb;
 }
 
 
 static void
 cleanup_widgets (Widgets *widgets)
 {
+    g_array_free (widgets->type_cb_box, TRUE);
     g_array_free (widgets->acc_entry, TRUE);
+    g_array_free (widgets->iss_entry, TRUE);
     g_array_free (widgets->key_entry, TRUE);
+    g_array_free (widgets->dig_cb_box, TRUE);
+    g_array_free (widgets->alg_cb_box, TRUE);
+    g_array_free (widgets->spin_btn, TRUE);
     g_free (widgets);
 }

@@ -1,9 +1,16 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <json-glib/json-glib.h>
-#include "kf-misc.h"
+#include "db-misc.h"
 #include "otpclient.h"
 #include "file-size.h"
+#include "gquarks.h"
+
+static gpointer encrypt_db (const gchar *in_memory_json, const gchar *password);
+
+static inline void add_to_json (gpointer list_elem, gpointer json_array);
+
+static gchar *decrypt_db (const gchar *path, const gchar *password);
 
 static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
 
@@ -14,64 +21,94 @@ static void restore_db (const gchar *path);
 static void cleanup (GFile *, gpointer, HeaderData *, GError *);
 
 
-gpointer
-load_db (DatabaseData *db_data)
+void
+load_db (DatabaseData    *db_data,
+         GError         **err)
 {
     gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
     if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-        return NULL;
+        g_set_error (err, missing_file_gquark (), MISSING_FILE_CODE, "Missing database file");
+        return;
     }
 
     gchar *in_memory_json = decrypt_db (db_path, db_data->key);
     g_free (db_path);
 
-    GError *err = NULL;
-    db_data->json_data = json_from_string (in_memory_json, &err);
+    db_data->json_data = json_from_string (in_memory_json, err);
     gcry_free (in_memory_json);
-    if (err != NULL) {
-        g_printerr ("%s\n", err->message);
-        return GENERIC_ERROR;
+    if (db_data->json_data == NULL) {
+        return;
     }
 
     JsonArray *ja = json_node_get_array (db_data->json_data);
     for (guint i = 0; i < json_array_get_length (ja); i++) {
         guint hash = json_object_hash (json_array_get_object_element (ja, i));
-        db_data->objects_hash = g_list_append (db_data->objects_hash, GINT_TO_POINTER (hash));
+        db_data->objects_hash = g_slist_append (db_data->objects_hash, GINT_TO_POINTER (hash));
     }
-
-    return SUCCESS;
 }
 
 
 void
-reload_db (DatabaseData *db_data)
+reload_db (DatabaseData  *db_data,
+           GError       **err)
 {
     json_node_unref (db_data->json_data);
-    load_db (db_data);
+    load_db (db_data, err);
+}
+
+
+void
+update_db (DatabaseData *data)
+{
+    gboolean first_run = FALSE;
+    if (data->json_data == NULL) {
+        first_run = TRUE;
+    }
+    JsonArray *ja;
+    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
+    if (first_run) {
+        // this is the first run, array must be created. No need to backup an empty file
+        ja = json_array_new ();
+    } else {
+        backup_db (db_path);
+        ja = json_node_get_array (data->json_data);
+    }
+    g_slist_foreach (data->data_to_add, add_to_json, ja);
+    gchar *plain_data = json_to_string (data->json_data, FALSE);
+    if (encrypt_db (plain_data, data->key) != NULL) {
+        g_printerr ("Couldn't update the database, restoring the original copy...\n");
+        if (!first_run)
+            restore_db (db_path);
+    }
+    g_free (plain_data);
+    g_free (db_path);
 }
 
 
 gint
-update_db (DatabaseData *data)
+check_duplicate (gconstpointer data,
+                 gconstpointer user_data)
 {
-    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
-
-    backup_db (db_path);
-    gchar *plain_data = json_to_string (data->json_data, FALSE);
-    if (encrypt_db (plain_data, data->key) != NULL) {
-        g_printerr ("Couldn't update the database, restoring the original copy...\n");
-        restore_db (db_path);
+    guint list_elem = *(guint *) data;
+    if (list_elem == GPOINTER_TO_UINT (user_data)) {
+        return 0;
     }
-
-    g_free (plain_data);
-    g_free (db_path);
-
-    return DB_UPDATE_OK;
+    return -1;
 }
 
 
-gpointer
-encrypt_db (const gchar *in_memory_json, const gchar *plain_key)
+static inline void
+add_to_json (gpointer list_elem,
+             gpointer json_array)
+{
+
+    json_array_add_element (list_elem, json_array);
+}
+
+
+static gpointer
+encrypt_db (const gchar *in_memory_json,
+            const gchar *password)
 {
     GError *err = NULL;
     gcry_cipher_hd_t hd;
@@ -94,7 +131,7 @@ encrypt_db (const gchar *in_memory_json, const gchar *plain_key)
         return GENERIC_ERROR;
     }
 
-    guchar *derived_key = get_derived_key (plain_key, header_data);
+    guchar *derived_key = get_derived_key (password, header_data);
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
         cleanup (out_file, out_stream, header_data, err);
         g_free (header_data);
@@ -139,8 +176,9 @@ encrypt_db (const gchar *in_memory_json, const gchar *plain_key)
 }
 
 
-gchar *
-decrypt_db (const gchar *path, const gchar *plain_key)
+static gchar *
+decrypt_db (const gchar *path,
+            const gchar *password)
 {
     GError *err = NULL;
     gcry_cipher_hd_t hd;
@@ -191,7 +229,7 @@ decrypt_db (const gchar *path, const gchar *plain_key)
     g_object_unref (in_stream);
     g_object_unref (in_file);
 
-    guchar *derived_key = get_derived_key (plain_key, header_data);
+    guchar *derived_key = get_derived_key (password, header_data);
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
         g_free (header_data);
         g_free (enc_buf);
@@ -223,7 +261,8 @@ decrypt_db (const gchar *path, const gchar *plain_key)
 
 
 static guchar *
-get_derived_key (const gchar *pwd, HeaderData *header_data)
+get_derived_key (const gchar    *pwd,
+                 HeaderData     *header_data)
 {
     gsize key_len = gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256);
     gsize pwd_len = strlen (pwd) + 1;
@@ -279,7 +318,10 @@ restore_db (const gchar *path)
 
 
 static void
-cleanup (GFile *in_file, gpointer in_stream, HeaderData *header_data, GError *err)
+cleanup (GFile      *in_file,
+         gpointer    in_stream,
+         HeaderData *header_data,
+         GError     *err)
 {
     g_object_unref (in_file);
     if (in_stream != NULL)

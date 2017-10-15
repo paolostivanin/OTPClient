@@ -1,8 +1,8 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include "otpclient.h"
-#include "treeview.h"
 #include "common.h"
+#include "gquarks.h"
 
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo);
 
@@ -10,21 +10,22 @@ static gchar *prompt_for_password (GtkWidget *main_window);
 
 void password_cb (GtkWidget *entry, gpointer *pwd);
 
-static void add_data_cb (GtkWidget *widget, gpointer user_data);
+static void add_data_cb (GtkWidget *btn, gpointer user_data);
 
-static void del_data_cb (GtkWidget *widget, gpointer user_data);
+static void del_data_cb (GtkWidget *btn, gpointer user_data);
 
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
-// TODO rework code to support per account digits (6 or 8) and sha type
+// TODO every time hotp is called the counter MUST BE INCREMENTED!!!
 /* TODO import:
  * - from andOTP
  * - from Auth Plus
  */
 
 void
-activate (GtkApplication *app, gpointer user_data)
+activate (GtkApplication    *app,
+          gpointer           user_data)
 {
     GdkPixbuf *logo = (GdkPixbuf *)user_data;
     GtkWidget *main_window = create_main_window_with_header_bar (app, logo);
@@ -35,13 +36,22 @@ activate (GtkApplication *app, gpointer user_data)
         return;
     }
 
-    gcry_control (GCRYCTL_INIT_SECMEM, 16384, 0);
+    gcry_control (GCRYCTL_INIT_SECMEM, MAX_FILE_SIZE, 0);
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->objects_hash = NULL;
+    db_data->data_to_add = NULL;
     db_data->key = prompt_for_password (main_window);
-    load_db (db_data);
+
+    GError *err = NULL;
+    load_db (db_data, &err);
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        show_message_dialog (main_window, err->message, GTK_MESSAGE_ERROR);
+        gcry_free (db_data->key);
+        g_free (db_data);
+        return;
+    }
 
     GtkListStore *list_store = create_treeview (main_window, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
@@ -55,7 +65,8 @@ activate (GtkApplication *app, gpointer user_data)
 
 
 static GtkWidget *
-create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo)
+create_main_window_with_header_bar (GtkApplication  *app,
+                                    GdkPixbuf       *logo)
 {
     GtkWidget *window = gtk_application_window_new (app);
     gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
@@ -82,10 +93,10 @@ create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo)
 
 
 static gchar *
-prompt_for_password (GtkWidget *mw)
+prompt_for_password (GtkWidget *main_window)
 {
     GtkDialogFlags flags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
-    GtkWidget *dialog = gtk_dialog_new_with_buttons ("Password", GTK_WINDOW (mw), flags, "OK", GTK_RESPONSE_ACCEPT,
+    GtkWidget *dialog = gtk_dialog_new_with_buttons ("Password", GTK_WINDOW (main_window), flags, "OK", GTK_RESPONSE_ACCEPT,
                                                      "Cancel", GTK_RESPONSE_CLOSE, NULL);
 
     gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
@@ -118,7 +129,8 @@ prompt_for_password (GtkWidget *mw)
 
 
 void
-password_cb (GtkWidget *entry, gpointer *pwd)
+password_cb (GtkWidget  *entry,
+             gpointer   *pwd)
 {
     const gchar *text = gtk_entry_get_text (GTK_ENTRY (entry));
     *pwd = gcry_malloc_secure (strlen (text) + 1);
@@ -129,17 +141,19 @@ password_cb (GtkWidget *entry, gpointer *pwd)
 
 
 static void
-add_data_cb (GtkWidget *btn, gpointer user_data)
+add_data_cb (GtkWidget *btn,
+             gpointer   user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    DatabaseData *kf_data = (DatabaseData *)user_data;
+    DatabaseData *db_data = (DatabaseData *)user_data;
     GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
-    add_data_dialog (top_level, kf_data, list_store);
+    add_data_dialog (top_level, db_data, list_store);
 }
 
 
 static void
-del_data_cb (GtkWidget *btn, gpointer user_data)
+del_data_cb (GtkWidget *btn,
+             gpointer   user_data)
 {
     GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     DatabaseData *kf_data = (DatabaseData *)user_data;
@@ -148,11 +162,11 @@ del_data_cb (GtkWidget *btn, gpointer user_data)
 
 
 static void
-destroy_cb (GtkWidget *win __attribute__((__unused__)),
-            gpointer user_data)
+destroy_cb (GtkWidget   *window __attribute__((__unused__)),
+            gpointer     user_data)
 {
     DatabaseData *db_data = (DatabaseData *)user_data;
     gcry_free (db_data->key);
-    gcry_free (db_data->in_memory_json);
+    g_slist_free_full (db_data->objects_hash, g_free);
     g_free (db_data);
 }

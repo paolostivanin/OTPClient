@@ -1,5 +1,7 @@
 #pragma once
 
+G_BEGIN_DECLS
+
 #define TYPE_TOTP   0x00
 #define TYPE_HOTP   0x01
 
@@ -16,10 +18,12 @@ typedef struct _otp_t {
         guint8 period;
         guint8 counter;
     };
-    gchar *issuer;
     gchar *label;
+    gchar *issuer;
     gchar *secret;
 } otp_t;
 
 
-static void free_slist (GSList *otps);
+void free_gslist (GSList *otps);
+
+G_END_DECLS

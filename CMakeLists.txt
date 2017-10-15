@@ -22,25 +22,29 @@ set(HEADER_FILES
         src/common.h
         src/file-size.h
         src/imports.h
-        src/kf-misc.h
+        src/db-misc.h
         src/liststore-misc.h
         src/otpclient.h
         src/timer.h
-        src/treeview.h)
+        src/treeview.h
+        src/add-data-dialog.h
+        src/gquarks.h)
 
 set(SOURCE_FILES
         src/treeview.c
         src/main.c
         src/app.c
         src/message-dialog.c
-        src/kf-misc.c
+        src/db-misc.c
         src/file-size.c
         src/add-data-dialog.c
         src/common.c
         src/timer.c
         src/liststore-misc.c
         src/authplus.c
-        src/andotp.c)
+        src/andotp.c
+        src/parse-data.c
+        src/gquarks.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME} ${GTK3_LIBRARIES} ${JSON_GLIB_LIBRARIES} -lgcrypt -lcotp -lbaseencode -lzip)
