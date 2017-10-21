@@ -64,6 +64,13 @@ is_input_valid (GtkWidget    *dialog,
                 gint          len,
                 GError      **err)
 {
+    if (g_utf8_strlen (acc_label, -1) == 0) {
+        show_message_dialog (dialog, "Account label can't be empty", GTK_MESSAGE_ERROR);
+        if (len == 1) {
+            g_set_error (err, invalid_input_gquark (), -1, "No more entries to process");
+        }
+        return FALSE;
+    }
     if (!g_str_is_ascii (acc_label) || !g_str_is_ascii (acc_iss)) {
         gchar *msg = g_strconcat ("Only ASCII characters are supported. Entry with label '",
                                   acc_label, "' will not be added.", NULL);
@@ -110,8 +117,8 @@ get_json_node (Widgets *widgets,
     gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->type_cb_box, GtkWidget * , i)));
     gchar *digits = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->dig_cb_box, GtkWidget * , i)));
     gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
-    gint64 ctr = (gint64) gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
-    JsonNode *jn = build_json_node (type, acc_label, acc_iss, acc_key, digits, algo, ctr);
+    gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
+    JsonNode *jn = build_json_node (type, acc_label, acc_iss, acc_key, digits, algo, (gint64) ctr);
     g_free (type);
     g_free (digits);
     g_free (algo);

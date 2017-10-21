@@ -1,5 +1,7 @@
 #pragma once
 
+#include <json-glib/json-glib.h>
+
 G_BEGIN_DECLS
 
 #define GENERIC_ERROR           (gpointer) 1

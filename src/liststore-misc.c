@@ -1,17 +1,28 @@
 #include <gtk/gtk.h>
 #include <cotp.h>
+#include <json-glib/json-glib.h>
 #include "db-misc.h"
 #include "treeview.h"
-#include "otpclient.h"
 #include "liststore-misc.h"
 
 
+typedef struct _otp_data {
+    gchar *secret;
+    gchar *algo;
+    gint digits;
+} OtpData;
+
+static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, gint row_number);
+
+static void clean_otp_data (OtpData *otp_data);
+
+
 void
-traverse_liststore (GtkListStore *liststore, UpdateData *kf_data)
+traverse_liststore (GtkListStore *liststore,
+                    DatabaseData *db_data)
 {
     GtkTreeIter iter;
     gboolean valid, is_active;
-    gchar *acc_name;
 
     g_return_if_fail (liststore != NULL);
 
@@ -19,13 +30,12 @@ traverse_liststore (GtkListStore *liststore, UpdateData *kf_data)
 
     while (valid) {
         gtk_tree_model_get (GTK_TREE_MODEL (liststore), &iter,
-                            COLUMN_BOOLEAN, &is_active, COLUMN_ACNM, &acc_name, -1);
+                            COLUMN_BOOLEAN, &is_active,
+                            -1);
 
         if (is_active) {
-            set_otp (liststore, iter, acc_name, kf_data);
+            set_otp (liststore, iter, db_data);
         }
-
-        g_free (acc_name);
 
         valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (liststore), &iter);
     }
@@ -33,19 +43,57 @@ traverse_liststore (GtkListStore *liststore, UpdateData *kf_data)
 
 
 void
-set_otp (GtkListStore *list_store, GtkTreeIter iter, gchar *account_name, UpdateData *kf_data)
+set_otp (GtkListStore   *list_store,
+         GtkTreeIter     iter,
+         DatabaseData   *db_data)
 {
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    g_key_file_load_from_data (kf, kf_data->in_memory_json, (gsize)-1, G_KEY_FILE_NONE, NULL);
-    gchar *secret = g_key_file_get_string (kf, KF_GROUP, account_name, &err);
+    OtpData *otp_data = g_new0 (OtpData, 1);
+
+    GtkTreePath *path = gtk_tree_model_get_path (GTK_TREE_MODEL (list_store), &iter);
+    gint *row_number = gtk_tree_path_get_indices (path); // starts from 0
+
+    // TODO can be also HOTP (increase the counter after it has been used)
+    set_otp_data (otp_data, db_data, row_number[0]);
+
+    gint algo;
+    if (g_strcmp0 (otp_data->algo, "SHA1")) {
+        algo = SHA1;
+    } else if (g_strcmp0 (otp_data->algo, "SHA256")) {
+        algo = SHA256;
+    } else {
+        algo = SHA512;
+    }
+
     cotp_error_t otp_err;
-    gchar *totp = get_totp (secret, 6, SHA1, &otp_err);
+    gchar *totp = get_totp (otp_data->secret, otp_data->digits, algo, &otp_err);
     if (otp_err == INVALID_B32_INPUT) {
+        clean_otp_data (otp_data);
         return;
     }
     gtk_list_store_set (list_store, &iter, COLUMN_OTP, totp, -1);
+
     g_free (totp);
-    g_free (secret);
-    g_key_file_free (kf);
+    clean_otp_data (otp_data);
+}
+
+
+static void
+set_otp_data (OtpData       *otp_data,
+              DatabaseData  *db_data,
+              gint           row_number)
+{
+    JsonArray *ja = json_node_get_array (db_data->json_data);
+    JsonObject *jo = json_array_get_object_element (ja, (guint) row_number);
+    otp_data->secret = g_strdup (json_object_get_string_member (jo, "secret"));
+    otp_data->algo = g_strdup (json_object_get_string_member (jo, "algo"));
+    otp_data->digits = (gint) json_object_get_int_member (jo, "digits");
+}
+
+
+static void
+clean_otp_data (OtpData *otp_data)
+{
+    g_free (otp_data->secret);
+    g_free (otp_data->algo);
+    g_free (otp_data);
 }

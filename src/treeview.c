@@ -2,14 +2,25 @@
 #include "otpclient.h"
 #include "timer.h"
 #include <cotp.h>
+#include <json-glib/json-types.h>
 #include "liststore-misc.h"
 
 
-static gchar **get_account_names (const gchar *dec_kf);
+typedef struct _parsed_json_data {
+    gchar **types;
+    gchar **labels;
+    gchar **issuers;
+} ParsedData;
 
-static GtkTreeModel *create_model (const gchar **types, const gchar **labels, const gchar **issuers);
+static void set_json_data (JsonNode *root_json_node, ParsedData *pjd);
+
+static void add_data_to_model (DatabaseData *db_data, GtkListStore *store);
+
+static GtkTreeModel *create_model (DatabaseData *db_data);
 
 static void add_columns (GtkTreeView *treeview, DatabaseData *db_data);
+
+static void free_parsed_json_data (ParsedData *pjd);
 
 
 GtkListStore *
@@ -27,12 +38,10 @@ create_treeview (GtkWidget      *main_win,
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
     gtk_box_pack_start (GTK_BOX (vbox), sw, TRUE, TRUE, 0);
 
-    gchar **account_names = get_account_names (db_data->in_memory_json);
-    GtkTreeModel *model = create_model (account_names);
-    g_strfreev (account_names);
+    GtkTreeModel *model = create_model (db_data);
 
     GtkWidget *treeview = gtk_tree_view_new_with_model (model);
-    gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACNM);
+    gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACC_LABEL);
 
     g_object_unref (model);
 
@@ -48,47 +57,73 @@ create_treeview (GtkWidget      *main_win,
 }
 
 
-static gchar **
-get_account_names (const gchar *dec_kf)
+void
+update_model (DatabaseData *db_data,
+              GtkListStore *store)
 {
-    GKeyFile * kf = g_key_file_new ();
-    g_key_file_load_from_data (kf, dec_kf, (gsize)-1, G_KEY_FILE_NONE, NULL);
+    gtk_list_store_clear (store);
 
-    gchar **account_names = g_key_file_get_keys (kf, KF_GROUP, NULL, NULL);
-
-    g_key_file_free (kf);
-
-    return account_names;
+    add_data_to_model (db_data, store);
 }
 
 
-static GtkTreeModel *
-create_model (const gchar **types,
-              const gchar **labels,
-              const gchar **issuers)
+static void
+set_json_data (JsonNode     *root_json_node,
+               ParsedData   *pjd)
+{
+    JsonArray *ja = json_node_get_array (root_json_node);
+    guint ja_len = json_array_get_length (ja);
+    JsonObject *jo;
+    for (guint i = 0; i < ja_len; i++) {
+        jo = json_array_get_object_element (ja, i);
+        pjd->types[i] = g_strdup (json_object_get_string_member (jo, "otp"));
+        pjd->labels[i] = g_strdup (json_object_get_string_member (jo, "label"));
+        pjd->issuers[i] = g_strdup (json_object_get_string_member (jo, "issuer"));
+    }
+    pjd->types[ja_len] = NULL;
+    pjd->labels[ja_len] = NULL;
+    pjd->issuers[ja_len] = NULL;
+}
+
+
+static void
+add_data_to_model (DatabaseData *db_data,
+                   GtkListStore *store)
 {
     GtkTreeIter iter;
-    GtkListStore *store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    ParsedData *pjd = g_new0 (ParsedData, 1);
+
+    set_json_data (db_data->json_data, pjd);
 
     gint i = 0;
-    while (types[i] != NULL) {
+    while (pjd->types[i] != NULL) {
         gtk_list_store_append (store, &iter);
         gtk_list_store_set (store, &iter,
                             COLUMN_BOOLEAN, FALSE,
-                            COLUMN_TYPE, types[i],
-                            COLUMN_ACC_LABEL, labels[i],
-                            COLUMN_ACC_ISSUER, issuers[i],
+                            COLUMN_TYPE, pjd->types[i],
+                            COLUMN_ACC_LABEL, pjd->labels[i],
+                            COLUMN_ACC_ISSUER, pjd->issuers[i],
                             COLUMN_OTP, "",
                             -1);
         i++;
     }
+    free_parsed_json_data (pjd);
+}
+
+
+static GtkTreeModel *
+create_model (DatabaseData *db_data)
+{
+    GtkListStore *store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+
+    add_data_to_model (db_data, store);
 
     return GTK_TREE_MODEL (store);
 }
 
 
 static void
-fixed_toggled (GtkCellRendererToggle    *cell,
+fixed_toggled (GtkCellRendererToggle    *cell __attribute__((__unused__)),
                gchar                    *path_str,
                gpointer                  data)
 {
@@ -96,21 +131,22 @@ fixed_toggled (GtkCellRendererToggle    *cell,
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
     gboolean fixed;
-    gchar *account_name;
+    gchar *acc_label;
 
     gtk_tree_model_get_iter (model, &iter, path);
-    gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, COLUMN_ACNM, &account_name, -1);
+    gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, COLUMN_ACC_LABEL, &acc_label, -1);
 
     if (fixed) {
         gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
     } else {
+        // TODO implement rate-limiting for HOTP (like 1 every 5s)
         DatabaseData *db_data = g_object_get_data (G_OBJECT (model), "data");
-        set_otp (GTK_LIST_STORE (model), iter, account_name, db_data);
+        set_otp (GTK_LIST_STORE (model), iter, db_data);
     }
     fixed ^= 1;
     gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_BOOLEAN, fixed, -1);
 
-    g_free (account_name);
+    g_free (acc_label);
 
     gtk_tree_path_free (path);
 }
@@ -134,8 +170,18 @@ add_columns (GtkTreeView    *treeview,
     gtk_tree_view_append_column (treeview, column);
 
     renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Account Name", renderer, "text", COLUMN_ACNM, NULL);
-    gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACNM);
+    column = gtk_tree_view_column_new_with_attributes ("Type", renderer, "text", COLUMN_ACC_LABEL, NULL);
+    gtk_tree_view_column_set_sort_column_id (column, COLUMN_TYPE);
+    gtk_tree_view_append_column (treeview, column);
+
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Label", renderer, "text", COLUMN_ACC_LABEL, NULL);
+    gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACC_LABEL);
+    gtk_tree_view_append_column (treeview, column);
+
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
+    gtk_tree_view_column_set_sort_column_id (column, COLUMN_ACC_LABEL);
     gtk_tree_view_append_column (treeview, column);
 
     renderer = gtk_cell_renderer_text_new ();
@@ -144,19 +190,11 @@ add_columns (GtkTreeView    *treeview,
 }
 
 
-void
-update_model (DatabaseData *db_data,
-              GtkListStore *store)
+static void
+free_parsed_json_data (ParsedData *pjd)
 {
-    GtkTreeIter iter;
-    gtk_list_store_clear (store);
-    gchar **account_names = get_account_names (db_data->in_memory_json);
-    gint i = 0;
-    while (account_names[i] != NULL) {
-        gtk_list_store_append (store, &iter);
-        gtk_list_store_set (store, &iter, COLUMN_BOOLEAN, FALSE, COLUMN_ACNM, account_names[i],
-                            COLUMN_OTP, "", -1);
-        i++;
-    }
-    g_strfreev (account_names);
+    g_strfreev (pjd->types);
+    g_strfreev (pjd->labels);
+    g_strfreev (pjd->issuers);
+    g_free (pjd);
 }

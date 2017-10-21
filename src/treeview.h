@@ -12,9 +12,9 @@ enum {
 };
 
 GtkListStore    *create_treeview    (GtkWidget    *main_window,
-                                     DatabaseData *kf_update_data);
+                                     DatabaseData *db_data);
 
-void             update_model       (DatabaseData *kf_data,
+void             update_model       (DatabaseData *db_data,
                                      GtkListStore *store);
 
 G_END_DECLS

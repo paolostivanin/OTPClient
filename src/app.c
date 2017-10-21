@@ -17,7 +17,6 @@ static void del_data_cb (GtkWidget *btn, gpointer user_data);
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
-// TODO every time hotp is called the counter MUST BE INCREMENTED!!!
 /* TODO import:
  * - from andOTP
  * - from Auth Plus
@@ -53,6 +52,7 @@ activate (GtkApplication    *app,
         return;
     }
 
+    // TODO if first start, this will fail. Check for NULL when creating treeview.
     GtkListStore *list_store = create_treeview (main_window, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
 
@@ -152,11 +152,11 @@ add_data_cb (GtkWidget *btn,
 
 
 static void
-del_data_cb (GtkWidget *btn,
-             gpointer   user_data)
+del_data_cb (GtkWidget *btn __attribute__((__unused__)),
+             gpointer   user_data __attribute__((__unused__)))
 {
-    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    DatabaseData *kf_data = (DatabaseData *)user_data;
+    //GtkWidget *top_level = gtk_widget_get_toplevel (btn);
+    //DatabaseData *db_data = (DatabaseData *) user_data;
     // TODO complete me
 }
 

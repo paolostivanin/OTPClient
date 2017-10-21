@@ -39,7 +39,6 @@ get_encrypted_zip_content (const gchar *zip_path, const gchar *password)
         return NULL;
     }
 
-    GError *err = NULL;
     zf = zip_fopen (zip_file, "Accounts.txt", 0);
     if (zf == NULL) {
         g_printerr ("zip_fopen failed\n");

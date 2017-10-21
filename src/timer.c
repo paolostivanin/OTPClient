@@ -1,6 +1,5 @@
 #include <gtk/gtk.h>
 #include "liststore-misc.h"
-#include "db-misc.h"
 
 
 gboolean
@@ -12,9 +11,9 @@ label_update (gpointer data)
     gchar *label_text = g_strdup_printf ("Token validity: %ds", token_validity);
     gtk_label_set_label (GTK_LABEL (label), label_text);
     if (token_validity == 29) {
-        UpdateData *kf_data = g_object_get_data (G_OBJECT (label), "kf_data");
+        DatabaseData *db_data = g_object_get_data (G_OBJECT (label), "db_data");
         GtkListStore *list_store = g_object_get_data (G_OBJECT (label), "lstore");
-        traverse_liststore (list_store, kf_data);
+        traverse_liststore (list_store, db_data);
     }
     g_free (label_text);
 
