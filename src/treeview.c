@@ -116,7 +116,9 @@ create_model (DatabaseData *db_data)
 {
     GtkListStore *store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
 
-    add_data_to_model (db_data, store);
+    if (db_data->json_data != NULL) {
+        add_data_to_model (db_data, store);
+    }
 
     return GTK_TREE_MODEL (store);
 }

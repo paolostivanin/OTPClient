@@ -43,7 +43,7 @@ add_data_dialog (GtkWidget      *main_win,
                                                    "Cancel", GTK_RESPONSE_CANCEL,
                                                    NULL);
 
-    gtk_widget_set_size_request (widgets->dialog, 400, 400);
+    gtk_widget_set_size_request (widgets->dialog, 942, 400);
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (widgets->dialog));
 
@@ -150,14 +150,14 @@ static void
 add_widgets_cb (GtkWidget *btn __attribute__((__unused__)),
               gpointer   user_data)
 {
-    Widgets *widgets = (Widgets *)user_data;
+    Widgets *widgets = (Widgets *) user_data;
 
     GtkWidget *acc_entry = gtk_entry_new ();
     GtkWidget *iss_entry = gtk_entry_new ();
     GtkWidget *key_entry = gtk_entry_new ();
 
     GtkWidget *type_cb_box = get_cb_box ("totp", "hotp", NULL, "TOTP", "HOTP", NULL, "totp");
-    GtkWidget *dig_cb_box = get_cb_box ("6digits", "8digits", NULL, "6", "8", NULL, "6");
+    GtkWidget *dig_cb_box = get_cb_box ("6digits", "8digits", NULL, "6", "8", NULL, "6digits");
     GtkWidget *alg_cb_box = get_cb_box ("sha1", "sha256", "sha512", "SHA1", "SHA256", "SHA512", "sha1");
 
     GtkWidget *sb = create_integer_spin_button ();
@@ -205,6 +205,7 @@ update_grid (Widgets *widgets)
     GtkWidget *dig_cb_to_add = g_array_index (widgets->dig_cb_box, GtkWidget *, widgets->dig_cb_box->len - 1);
     GtkWidget *alg_cb_to_add = g_array_index (widgets->alg_cb_box, GtkWidget *, widgets->alg_cb_box->len - 1);
     GtkWidget *spin_to_add = g_array_index (widgets->spin_btn, GtkWidget *, widgets->spin_btn->len - 1);
+
     gtk_grid_attach (GTK_GRID (widgets->grid), type_cb_to_add, 0, widgets->grid_top++, 2, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), acc_entry_to_add, type_cb_to_add, GTK_POS_RIGHT, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), iss_entry_to_add, acc_entry_to_add, GTK_POS_RIGHT, 4, 1);
@@ -212,6 +213,7 @@ update_grid (Widgets *widgets)
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_cb_to_add, key_entry_to_add, GTK_POS_RIGHT, 2, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_cb_to_add, dig_cb_to_add, GTK_POS_RIGHT, 2, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), spin_to_add, alg_cb_to_add, GTK_POS_RIGHT, 2, 1);
+
     gtk_widget_show_all (widgets->dialog);
 }
 
@@ -220,16 +222,20 @@ static void
 del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
               gpointer   user_data)
 {
-    Widgets *widgets = (Widgets *)user_data;
+    Widgets *widgets = (Widgets *) user_data;
     guint current_position = widgets->acc_entry->len - 1;
     if (current_position == 0) //at least one row has to remain
         return;
 
-    gtk_widget_destroy (g_array_index (widgets->acc_entry, GtkWidget *, current_position));
-    gtk_widget_destroy (g_array_index (widgets->key_entry, GtkWidget *, current_position));
+    gtk_grid_remove_row (GTK_GRID (widgets->grid), --widgets->grid_top);
+
+    g_array_remove_index (widgets->type_cb_box, current_position);
     g_array_remove_index (widgets->acc_entry, current_position);
+    g_array_remove_index (widgets->iss_entry, current_position);
     g_array_remove_index (widgets->key_entry, current_position);
-    widgets->grid_top--;
+    g_array_remove_index (widgets->dig_cb_box, current_position);
+    g_array_remove_index (widgets->alg_cb_box, current_position);
+    g_array_remove_index (widgets->spin_btn, current_position);
 }
 
 

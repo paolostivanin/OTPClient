@@ -28,6 +28,7 @@ load_db (DatabaseData    *db_data,
     gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", KF_NAME, NULL);
     if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
         g_set_error (err, missing_file_gquark (), MISSING_FILE_CODE, "Missing database file");
+        db_data->json_data = NULL;
         return;
     }
 
