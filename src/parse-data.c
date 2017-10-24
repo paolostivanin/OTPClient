@@ -36,7 +36,7 @@ parse_user_data (Widgets        *widgets,
                 db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
                 db_data->data_to_add = g_slist_append (db_data->data_to_add, jn);
             } else {
-                g_print ("[INFO] Duplicate element not added");
+                g_print ("[INFO] Duplicate element not added\n");
             }
         } else if (err != NULL) {
             return FALSE;

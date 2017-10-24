@@ -26,7 +26,7 @@ static void sensitive_cb (GtkWidget *cb, gpointer user_data);
 
 static GtkWidget *create_integer_spin_button (void);
 
-static inline void jn_unref (gpointer data);
+static inline void jn_free (gpointer data);
 
 static void cleanup_widgets (Widgets *widgets);
 
@@ -88,8 +88,7 @@ add_data_dialog (GtkWidget      *main_win,
                     update_model (db_data, list_store);
                 }
             }
-            //g_slist_free_full (db_data->data_to_add, jn_unref);
-            g_slist_free (db_data->data_to_add);
+            g_slist_free_full (db_data->data_to_add, jn_free);
             db_data->data_to_add = NULL;
             break;
         case GTK_RESPONSE_CANCEL:
@@ -267,9 +266,9 @@ create_integer_spin_button ()
 
 
 static inline void
-jn_unref (gpointer data)
+jn_free (gpointer data)
 {
-    json_node_unref (data);
+    json_node_free (data);
 }
 
 

@@ -76,6 +76,7 @@ update_db (DatabaseData *data)
         backup_db (db_path);
         ja = json_node_get_array (data->json_data);
     }
+
     g_slist_foreach (data->data_to_add, add_to_json, ja);
 
     gchar *plain_data;
@@ -116,7 +117,8 @@ static inline void
 add_to_json (gpointer list_elem,
              gpointer json_array)
 {
-    json_array_add_element (json_array, list_elem);
+    // array will take ownership of the json node, thus the copy
+    json_array_add_element (json_array, json_node_copy (list_elem));
 }
 
 
