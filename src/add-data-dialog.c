@@ -26,6 +26,8 @@ static void sensitive_cb (GtkWidget *cb, gpointer user_data);
 
 static GtkWidget *create_integer_spin_button (void);
 
+static inline void jn_unref (gpointer data);
+
 static void cleanup_widgets (Widgets *widgets);
 
 
@@ -78,16 +80,17 @@ add_data_dialog (GtkWidget      *main_win,
     switch (result) {
         case GTK_RESPONSE_OK:
             if (parse_user_data (widgets, db_data)) {
-                update_db (db_data); // FIXME json_node_get_node_type: assertion 'JSON_NODE_IS_VALID (node)'
-                reload_db (db_data, &err); // FIXME  json_node_get_node_type: assertion 'JSON_NODE_IS_VALID (node)'
+                update_db (db_data);
+                reload_db (db_data, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (main_win, err->message, GTK_MESSAGE_ERROR);
                 } else {
                     update_model (db_data, list_store);
                 }
             }
-            g_slist_foreach (db_data->data_to_add, jn_unref, NULL);
+            //g_slist_free_full (db_data->data_to_add, jn_unref);
             g_slist_free (db_data->data_to_add);
+            db_data->data_to_add = NULL;
             break;
         case GTK_RESPONSE_CANCEL:
         default:
@@ -260,6 +263,13 @@ create_integer_spin_button ()
     gtk_widget_set_sensitive (sb, FALSE);
 
     return sb;
+}
+
+
+static inline void
+jn_unref (gpointer data)
+{
+    json_node_unref (data);
 }
 
 

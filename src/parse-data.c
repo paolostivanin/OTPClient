@@ -18,19 +18,10 @@ static JsonNode *build_json_node (const gchar *type, const gchar *acc_label, con
                                   const gchar *acc_key, const gchar *digits_str, const gchar *algo, gint64 ctr);
 
 
-void
-jn_unref (gpointer data,
-          gpointer user_data __attribute__((__unused__)))
-{
-    json_node_unref (data);
-}
-
-
 gboolean
 parse_user_data (Widgets        *widgets,
                  DatabaseData   *db_data)
 {
-    // TODO jn must be freed
     GError *err = NULL;
     JsonNode *jn;
     gint i = 0;

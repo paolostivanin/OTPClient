@@ -20,6 +20,3 @@ typedef struct _widgets {
 
 gboolean    parse_user_data (Widgets       *widgets,
                              DatabaseData  *db_data);
-
-void        jn_unref        (gpointer       data,
-                             gpointer       user_data);

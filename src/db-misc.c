@@ -75,11 +75,9 @@ update_db (DatabaseData *data)
     } else {
         backup_db (db_path);
         ja = json_node_get_array (data->json_data);
-        g_print ("1 ==> %u - %p\n", json_array_get_length (ja), ja);
     }
     g_slist_foreach (data->data_to_add, add_to_json, ja);
-    g_print ("2 ==> %u - %p\n", json_array_get_length (ja), ja);
-    //g_print("%s\n", json_to_string (data->json_data, TRUE));
+
     gchar *plain_data;
     if (first_run) {
         JsonNode *jn = json_node_alloc ();
