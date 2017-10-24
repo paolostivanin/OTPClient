@@ -75,7 +75,7 @@ find_widget (GtkWidget      *parent,
 
     for (; children != NULL; children = g_list_next (children)) {
         // g_strcmp0 returns 0 if the strings are equal. 0 is false, thus the '!'
-        if (!g_strcmp0 (gtk_widget_get_name (children->data), widget_name)) {
+        if (g_strcmp0 (gtk_widget_get_name (children->data), widget_name) == 0) {
             found_widget = children->data;
             break;
         }
