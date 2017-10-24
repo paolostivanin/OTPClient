@@ -78,8 +78,8 @@ add_data_dialog (GtkWidget      *main_win,
     switch (result) {
         case GTK_RESPONSE_OK:
             if (parse_user_data (widgets, db_data)) {
-                update_db (db_data);
-                reload_db (db_data, &err);
+                update_db (db_data); // FIXME json_node_get_node_type: assertion 'JSON_NODE_IS_VALID (node)'
+                reload_db (db_data, &err); // FIXME  json_node_get_node_type: assertion 'JSON_NODE_IS_VALID (node)'
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (main_win, err->message, GTK_MESSAGE_ERROR);
                 } else {

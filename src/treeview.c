@@ -1,8 +1,7 @@
 #include <gtk/gtk.h>
+#include <cotp.h>
 #include "otpclient.h"
 #include "timer.h"
-#include <cotp.h>
-#include <json-glib/json-types.h>
 #include "liststore-misc.h"
 
 
@@ -74,6 +73,9 @@ set_json_data (JsonNode     *root_json_node,
     JsonArray *ja = json_node_get_array (root_json_node);
     guint ja_len = json_array_get_length (ja);
     JsonObject *jo;
+    pjd->types = (gchar **) g_malloc0 ((ja_len + 1)  * sizeof (gchar *));
+    pjd->labels = (gchar **) g_malloc0 ((ja_len + 1) * sizeof (gchar *));
+    pjd->issuers = (gchar **) g_malloc0 ((ja_len + 1) * sizeof (gchar *));
     for (guint i = 0; i < ja_len; i++) {
         jo = json_array_get_object_element (ja, i);
         pjd->types[i] = g_strdup (json_object_get_string_member (jo, "otp"));
@@ -133,10 +135,9 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((__unused__)),
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
     gboolean fixed;
-    gchar *acc_label;
 
     gtk_tree_model_get_iter (model, &iter, path);
-    gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, COLUMN_ACC_LABEL, &acc_label, -1);
+    gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, -1);
 
     if (fixed) {
         gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
@@ -147,8 +148,6 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((__unused__)),
     }
     fixed ^= 1;
     gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_BOOLEAN, fixed, -1);
-
-    g_free (acc_label);
 
     gtk_tree_path_free (path);
 }
@@ -172,7 +171,7 @@ add_columns (GtkTreeView    *treeview,
     gtk_tree_view_append_column (treeview, column);
 
     renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Type", renderer, "text", COLUMN_ACC_LABEL, NULL);
+    column = gtk_tree_view_column_new_with_attributes ("Type", renderer, "text", COLUMN_TYPE, NULL);
     gtk_tree_view_column_set_sort_column_id (column, COLUMN_TYPE);
     gtk_tree_view_append_column (treeview, column);
 

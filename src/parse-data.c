@@ -12,8 +12,7 @@ static gboolean is_input_valid (GtkWidget *dialog,
 
 static gboolean str_is_only_num_or_alpha (const gchar *secret);
 
-static JsonNode *
-get_json_node (Widgets *widgets, const gchar *acc_label, const gchar *acc_iss, const gchar *acc_key, gint i);
+static JsonNode *get_json_node (Widgets *widgets, const gchar *acc_label, const gchar *acc_iss, const gchar *acc_key, gint i);
 
 static JsonNode *build_json_node (const gchar *type, const gchar *acc_label, const gchar *acc_iss,
                                   const gchar *acc_key, const gchar *digits_str, const gchar *algo, gint64 ctr);
@@ -31,6 +30,7 @@ gboolean
 parse_user_data (Widgets        *widgets,
                  DatabaseData   *db_data)
 {
+    // TODO jn must be freed
     GError *err = NULL;
     JsonNode *jn;
     gint i = 0;
@@ -41,9 +41,10 @@ parse_user_data (Widgets        *widgets,
         if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, widgets->acc_entry->len, &err)) {
             jn = get_json_node (widgets, acc_label, acc_iss, acc_key, i);
             guint hash = json_object_hash (json_node_get_object (jn));
-            if (g_slist_find_custom (db_data->objects_hash, check_duplicate, GUINT_TO_POINTER (hash)) == NULL) {
-                db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup(&hash, sizeof(guint)));
+            if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
+                db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
                 db_data->data_to_add = g_slist_append (db_data->data_to_add, jn);
+            } else {
                 g_print ("[INFO] Duplicate element not added");
             }
         } else if (err != NULL) {
@@ -117,7 +118,7 @@ get_json_node (Widgets *widgets,
     gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->type_cb_box, GtkWidget * , i)));
     gchar *digits = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->dig_cb_box, GtkWidget * , i)));
     gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
-    gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
+    gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->spin_btn, GtkWidget * , i)));
     JsonNode *jn = build_json_node (type, acc_label, acc_iss, acc_key, digits, algo, (gint64) ctr);
     g_free (type);
     g_free (digits);
@@ -153,7 +154,7 @@ build_json_node (const gchar *type,
     jb = json_builder_add_int_value (jb, digits);
     jb = json_builder_set_member_name (jb, "algo");
     jb = json_builder_add_string_value (jb, algo);
-    if (g_strcmp0 (type, "TOTP")) {
+    if (g_strcmp0 (type, "TOTP") == 0) {
         jb = json_builder_set_member_name (jb, "period");
         json_builder_add_int_value (jb, 30);
     } else {

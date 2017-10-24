@@ -52,7 +52,6 @@ activate (GtkApplication    *app,
         return;
     }
 
-    // TODO if first start, this will fail. Check for NULL when creating treeview.
     GtkListStore *list_store = create_treeview (main_window, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
 
@@ -165,7 +164,7 @@ static void
 destroy_cb (GtkWidget   *window __attribute__((__unused__)),
             gpointer     user_data)
 {
-    DatabaseData *db_data = (DatabaseData *)user_data;
+    DatabaseData *db_data = (DatabaseData *) user_data;
     gcry_free (db_data->key);
     g_slist_free_full (db_data->objects_hash, g_free);
     g_free (db_data);

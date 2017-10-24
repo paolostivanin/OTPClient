@@ -44,7 +44,7 @@ load_db (DatabaseData    *db_data,
     JsonArray *ja = json_node_get_array (db_data->json_data);
     for (guint i = 0; i < json_array_get_length (ja); i++) {
         guint hash = json_object_hash (json_array_get_object_element (ja, i));
-        db_data->objects_hash = g_slist_append (db_data->objects_hash, GINT_TO_POINTER (hash));
+        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
     }
 }
 
@@ -53,7 +53,9 @@ void
 reload_db (DatabaseData  *db_data,
            GError       **err)
 {
-    json_node_unref (db_data->json_data);
+    if (db_data->json_data != NULL) {
+        json_node_unref (db_data->json_data);
+    }
     load_db (db_data, err);
 }
 
@@ -73,13 +75,26 @@ update_db (DatabaseData *data)
     } else {
         backup_db (db_path);
         ja = json_node_get_array (data->json_data);
+        g_print ("1 ==> %u - %p\n", json_array_get_length (ja), ja);
     }
     g_slist_foreach (data->data_to_add, add_to_json, ja);
-    gchar *plain_data = json_to_string (data->json_data, FALSE);
+    g_print ("2 ==> %u - %p\n", json_array_get_length (ja), ja);
+    //g_print("%s\n", json_to_string (data->json_data, TRUE));
+    gchar *plain_data;
+    if (first_run) {
+        JsonNode *jn = json_node_alloc ();
+        jn = json_node_init_array (jn, ja);
+        plain_data = json_to_string (jn, FALSE);
+        json_node_free (jn);
+    } else {
+        plain_data = json_to_string (data->json_data, FALSE);
+    }
     if (encrypt_db (plain_data, data->key) != NULL) {
-        g_printerr ("Couldn't update the database, restoring the original copy...\n");
-        if (!first_run)
+        g_printerr ("Couldn't update the database.\n");
+        if (!first_run) {
+            g_print ("Restoring original database..\n");
             restore_db (db_path);
+        }
     }
     g_free (plain_data);
     g_free (db_path);
@@ -102,8 +117,7 @@ static inline void
 add_to_json (gpointer list_elem,
              gpointer json_array)
 {
-
-    json_array_add_element (list_elem, json_array);
+    json_array_add_element (json_array, list_elem);
 }
 
 
