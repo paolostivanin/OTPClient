@@ -87,6 +87,8 @@ create_main_window_with_header_bar (GtkApplication  *app,
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (window), header_bar);
 
+    g_free (header_bar_text);
+
     return window;
 }
 
