@@ -171,6 +171,7 @@ encrypt_db (const gchar *in_memory_json,
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
+        g_free (header_data);
         return GENERIC_ERROR;
     }
     if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), tag, TAG_SIZE, NULL, &err) == -1) {
@@ -178,15 +179,16 @@ encrypt_db (const gchar *in_memory_json,
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
+        g_free (header_data);
         return GENERIC_ERROR;
     }
     g_object_unref (out_file);
     g_object_unref (out_stream);
 
     gcry_cipher_close (hd);
-
-    g_free (enc_buffer);
     gcry_free (derived_key);
+    g_free (enc_buffer);
+    g_free (header_data);
 
     return NULL;
 }
