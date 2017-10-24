@@ -86,6 +86,7 @@ update_db (DatabaseData *data)
         jn = json_node_init_array (jn, ja);
         plain_data = json_to_string (jn, FALSE);
         json_node_free (jn);
+        json_array_unref (ja);
     } else {
         plain_data = json_to_string (data->json_data, FALSE);
     }
