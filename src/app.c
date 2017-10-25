@@ -17,11 +17,6 @@ static void del_data_cb (GtkWidget *btn, gpointer user_data);
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 
-/* TODO import:
- * - from andOTP
- * - from Auth Plus
- */
-
 void
 activate (GtkApplication    *app,
           gpointer           user_data)
@@ -156,9 +151,9 @@ static void
 del_data_cb (GtkWidget *btn __attribute__((__unused__)),
              gpointer   user_data __attribute__((__unused__)))
 {
+    // TODO complete me
     //GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     //DatabaseData *db_data = (DatabaseData *) user_data;
-    // TODO complete me
 }
 
 
