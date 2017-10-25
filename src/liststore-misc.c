@@ -56,9 +56,9 @@ set_otp (GtkListStore   *list_store,
     set_otp_data (otp_data, db_data, row_number[0]);
 
     gint algo;
-    if (g_strcmp0 (otp_data->algo, "SHA1")) {
+    if (g_strcmp0 (otp_data->algo, "SHA1") == 0) {
         algo = SHA1;
-    } else if (g_strcmp0 (otp_data->algo, "SHA256")) {
+    } else if (g_strcmp0 (otp_data->algo, "SHA256") == 0) {
         algo = SHA256;
     } else {
         algo = SHA512;
