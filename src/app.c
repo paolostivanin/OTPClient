@@ -169,5 +169,6 @@ destroy_cb (GtkWidget   *window __attribute__((__unused__)),
     DatabaseData *db_data = (DatabaseData *) user_data;
     gcry_free (db_data->key);
     g_slist_free_full (db_data->objects_hash, g_free);
+    json_node_free (db_data->json_data);
     g_free (db_data);
 }

@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <sys/mman.h>
 #include "otpclient.h"
 
 static GdkPixbuf *create_logo (void);
@@ -8,6 +9,8 @@ gint
 main (gint    argc,
       gchar **argv)
 {
+    mlockall (MCL_CURRENT | MCL_FUTURE);
+
     GtkApplication *app;
     gint status;
 

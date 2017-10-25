@@ -16,7 +16,7 @@ G_BEGIN_DECLS
 #define KDF_SALT_SIZE           32
 #define TAG_SIZE                16
 
-#define MAX_FILE_SIZE           5242880  // 5 MiB should be more than enough for such content.
+#define MAX_FILE_SIZE           1048576  // 1 MiB should be more than enough for such content.
 
 
 typedef struct _header_data {

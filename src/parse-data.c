@@ -56,8 +56,8 @@ is_input_valid (GtkWidget    *dialog,
                 gint          len,
                 GError      **err)
 {
-    if (g_utf8_strlen (acc_label, -1) == 0) {
-        show_message_dialog (dialog, "Account label can't be empty", GTK_MESSAGE_ERROR);
+    if (g_utf8_strlen (acc_label, -1) == 0 || g_utf8_strlen (secret, -1) == 0) {
+        show_message_dialog (dialog, "Label and/or secret can't be empty", GTK_MESSAGE_ERROR);
         if (len == 1) {
             g_set_error (err, invalid_input_gquark (), -1, "No more entries to process");
         }

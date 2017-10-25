@@ -8,7 +8,7 @@ G_BEGIN_DECLS
 #define APP_NAME    "OTPClient"
 #define APP_VERSION "0.99.5 (1.0-alpha5)"
 
-#define KF_NAME     "otpclient-db.enc"
+#define DB_FILE_NAME     "otpclient-db.enc"
 
 void activate               (GtkApplication *app,
                              gpointer user_data);
