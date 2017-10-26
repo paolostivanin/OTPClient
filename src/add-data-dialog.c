@@ -45,8 +45,6 @@ add_data_dialog (GtkWidget      *main_win,
                                                    "Cancel", GTK_RESPONSE_CANCEL,
                                                    NULL);
 
-    gtk_widget_set_size_request (widgets->dialog, 942, 400);
-
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (widgets->dialog));
 
     GtkWidget *type_label = gtk_label_new ("Type");
@@ -58,6 +56,7 @@ add_data_dialog (GtkWidget      *main_win,
     GtkWidget *ctr_label = gtk_label_new ("Counter");
 
     GtkWidget *scrolled_win = create_scrolled_window (content_area);
+    gtk_scrolled_window_set_propagate_natural_width (GTK_SCROLLED_WINDOW (scrolled_win), TRUE);
 
     setup_header_bar (widgets);
 
