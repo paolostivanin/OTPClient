@@ -56,7 +56,6 @@ add_data_dialog (GtkWidget      *main_win,
     GtkWidget *ctr_label = gtk_label_new ("Counter");
 
     GtkWidget *scrolled_win = create_scrolled_window (content_area);
-    gtk_scrolled_window_set_propagate_natural_width (GTK_SCROLLED_WINDOW (scrolled_win), TRUE);
 
     setup_header_bar (widgets);
 
@@ -124,6 +123,8 @@ create_scrolled_window (GtkWidget *content_area)
     GtkWidget *sw = gtk_scrolled_window_new (NULL, NULL);
     gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sw), GTK_SHADOW_ETCHED_IN);
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_width (GTK_SCROLLED_WINDOW (sw), TRUE);
+    gtk_scrolled_window_set_min_content_height (GTK_SCROLLED_WINDOW (sw), 200);
     gtk_container_add (GTK_CONTAINER (content_area), sw);
 
     g_object_set (sw, "expand", TRUE, NULL);
@@ -135,7 +136,7 @@ create_scrolled_window (GtkWidget *content_area)
 static void
 setup_header_bar (Widgets *widgets)
 {
-    GtkWidget *header_bar = create_header_bar ("Add a new account");
+    GtkWidget *header_bar = create_header_bar ("Add New Account(s)");
     GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (widgets->dialog), header_bar);

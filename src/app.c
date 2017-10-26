@@ -37,6 +37,9 @@ activate (GtkApplication    *app,
     db_data->objects_hash = NULL;
     db_data->data_to_add = NULL;
     db_data->key = prompt_for_password (main_window);
+    if (db_data->key == NULL) {
+        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+    }
 
     GError *err = NULL;
     load_db (db_data, &err);
