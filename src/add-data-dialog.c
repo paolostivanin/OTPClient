@@ -202,8 +202,11 @@ update_grid (Widgets *widgets)
 {
     GtkWidget *type_cb_to_add = g_array_index (widgets->type_cb_box, GtkWidget *, widgets->type_cb_box->len - 1);
     GtkWidget *acc_entry_to_add = g_array_index (widgets->acc_entry, GtkWidget *, widgets->acc_entry->len - 1);
+    gtk_widget_set_hexpand (acc_entry_to_add, TRUE);
     GtkWidget *iss_entry_to_add = g_array_index (widgets->iss_entry, GtkWidget *, widgets->iss_entry->len - 1);
+    gtk_widget_set_hexpand (iss_entry_to_add, TRUE);
     GtkWidget *key_entry_to_add = g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1);
+    gtk_widget_set_hexpand (key_entry_to_add, TRUE);
     GtkWidget *dig_cb_to_add = g_array_index (widgets->dig_cb_box, GtkWidget *, widgets->dig_cb_box->len - 1);
     GtkWidget *alg_cb_to_add = g_array_index (widgets->alg_cb_box, GtkWidget *, widgets->alg_cb_box->len - 1);
     GtkWidget *spin_to_add = g_array_index (widgets->spin_btn, GtkWidget *, widgets->spin_btn->len - 1);
