@@ -8,6 +8,12 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 
 Please note that the software is currently in **ALPHA** version and is not meant to be used (yet).
 
+## Requirements
+- GTK+      >= 3.22
+- json-glib >= 1.2.0
+- libgcrypt >= 1.6.0
+- libzip
+
 ## Features
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
 - import encrypted [andOTP](https://github.com/flocke/andOTP) backup
