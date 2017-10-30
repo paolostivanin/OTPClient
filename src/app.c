@@ -30,7 +30,10 @@ activate (GtkApplication    *app,
         return;
     }
 
-    gcry_control (GCRYCTL_INIT_SECMEM, MAX_FILE_SIZE, 0);
+    if (gcry_control (GCRYCTL_INIT_SECMEM, MAX_FILE_SIZE, 0)) {
+        g_printerr ("Couldn't initialize secure memory, exiting...\n");
+        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+    }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
@@ -47,7 +50,7 @@ activate (GtkApplication    *app,
         show_message_dialog (main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (db_data->key);
         g_free (db_data);
-        return;
+        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
     }
 
     GtkListStore *list_store = create_treeview (main_window, db_data);
