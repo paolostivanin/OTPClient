@@ -10,6 +10,7 @@ Please note that the software is currently in **ALPHA** version and is not meant
 
 ## Requirements
 - GTK+      >= 3.22
+- Glib      >= 2.54.0
 - json-glib >= 1.2.0
 - libgcrypt >= 1.6.0
 - libzip
@@ -19,6 +20,10 @@ Please note that the software is currently in **ALPHA** version and is not meant
 - import encrypted [andOTP](https://github.com/flocke/andOTP) backup
 - encrypt local file using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
+
+## Tested Distros
+- Archlinux (stable, GNOME)
+- Ubuntu 17.10
 
 ## License
 See license file.
