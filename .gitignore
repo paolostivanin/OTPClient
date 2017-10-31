@@ -1,5 +1,7 @@
 .idea/
 cmake-build-debug/
+build/
+STATUS
 
 # Object files
 *.o

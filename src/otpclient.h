@@ -1,10 +1,24 @@
 #pragma once
 
-#define APP_NAME "OTPClient"
-#define APP_VERSION "1.0.0-alpha"
+#include "db-misc.h"
+#include "treeview.h"
 
-#define KF_NAME "otpclient-db.enc"
-#define KF_GROUP "data"
+G_BEGIN_DECLS
 
-void activate (GtkApplication *app, gpointer user_data);
-void show_message_dialog (GtkWidget *parent, const gchar *message, GtkMessageType message_type);
+#define APP_NAME    "OTPClient"
+#define APP_VERSION "0.99.6 (1.0-alpha6)"
+
+#define DB_FILE_NAME     "otpclient-db.enc"
+
+void activate               (GtkApplication *app,
+                             gpointer user_data);
+
+void show_message_dialog    (GtkWidget *parent,
+                             const gchar *message,
+                             GtkMessageType message_type);
+
+int add_data_dialog         (GtkWidget *main_window,
+                             DatabaseData *db_data,
+                             GtkListStore *list_store);
+
+G_END_DECLS
