@@ -27,12 +27,14 @@ activate (GtkApplication    *app,
 
     if (!gcry_check_version ("1.6.0")) {
         show_message_dialog (main_window, "The required version of GCrypt is 1.6.0 or greater.", GTK_MESSAGE_ERROR);
+        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
         return;
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, MAX_FILE_SIZE, 0)) {
-        g_printerr ("Couldn't initialize secure memory, exiting...\n");
+        show_message_dialog (main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        return;
     }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
@@ -42,6 +44,7 @@ activate (GtkApplication    *app,
     db_data->key = prompt_for_password (main_window);
     if (db_data->key == NULL) {
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        return;
     }
 
     GError *err = NULL;
@@ -51,6 +54,7 @@ activate (GtkApplication    *app,
         gcry_free (db_data->key);
         g_free (db_data);
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        return;
     }
 
     GtkListStore *list_store = create_treeview (main_window, db_data);
