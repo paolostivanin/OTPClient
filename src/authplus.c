@@ -26,7 +26,7 @@ get_encrypted_zip_content (const gchar *zip_path, const gchar *password)
     }
     int zip_err;
     if ((zip_file = zip_open (zip_path, ZIP_RDONLY, &zip_err)) == NULL) {
-        zip_error_to_str (buf, sizeof (buf), zip_err, errno);
+        zip_error_to_str (buf, BUF_SIZE, zip_err, errno);
         g_printerr ("couldn't open zip file '%s': %s\n", zip_path, buf);
         return NULL;
     }
