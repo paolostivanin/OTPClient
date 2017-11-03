@@ -21,11 +21,14 @@ Please note that the software is currently in **ALPHA** version and is not meant
 - encrypt local file using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
 
-## Tested Distros
-- Archlinux (stable, GNOME)
-- Ubuntu 17.10
-- Debian (testing, GNOME)
-- Solus (stable, Budgie)
+## Tested OS
+|OS|Version|Branch|DE|Notes|
+|:-:|:----:|:----:|:-:|:--:|
+|Archlinux|-|stable|GNOME|-|
+|Ubuntu|17.10|-|GNOME|-|
+|Debian|-|testing|GNOME|-|
+|Solus|-|stable|Budgie|-|
+|macOS|10.13|High Sierra|-|Install with brew: `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`. Then `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/` |
 
 ## License
 See license file.
