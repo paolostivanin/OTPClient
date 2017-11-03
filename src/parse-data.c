@@ -129,8 +129,7 @@ build_json_node (const gchar *type,
                  gint64       ctr)
 {
     JsonBuilder *jb = json_builder_new ();
-    gint64 digits;
-    g_ascii_string_to_signed (digits_str, 10, 5, 9, &digits, NULL);
+    gint64 digits = g_ascii_strtoll (digits_str, NULL, 10);
 
     jb = json_builder_begin_object (jb);
     jb = json_builder_set_member_name (jb, "otp");
