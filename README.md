@@ -24,6 +24,8 @@ Please note that the software is currently in **ALPHA** version and is not meant
 ## Tested Distros
 - Archlinux (stable, GNOME)
 - Ubuntu 17.10
+- Debian (testing, GNOME)
+- Solus (stable, Budgie)
 
 ## License
 See license file.
