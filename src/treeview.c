@@ -78,7 +78,7 @@ set_json_data (JsonNode     *root_json_node,
     pjd->issuers = (gchar **) g_malloc0 ((ja_len + 1) * sizeof (gchar *));
     for (guint i = 0; i < ja_len; i++) {
         jo = json_array_get_object_element (ja, i);
-        pjd->types[i] = g_strdup (json_object_get_string_member (jo, "otp"));
+        pjd->types[i] = g_strdup (json_object_get_string_member (jo, "type"));
         pjd->labels[i] = g_strdup (json_object_get_string_member (jo, "label"));
         pjd->issuers[i] = g_strdup (json_object_get_string_member (jo, "issuer"));
     }
