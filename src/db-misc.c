@@ -35,7 +35,13 @@ load_db (DatabaseData    *db_data,
     gchar *in_memory_json = decrypt_db (db_path, db_data->key);
     g_free (db_path);
     if (in_memory_json == TAG_MISMATCH) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG, "Either the file is corrupted or the password is wrong");
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
+        return;
+    } else if (in_memory_json == KEY_DERIV_ERR) {
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error during key derivation");
+        return;
+    } else if (in_memory_json == GENERIC_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "An error occurred, please check stderr");
         return;
     }
 

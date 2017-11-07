@@ -10,7 +10,9 @@ G_BEGIN_DECLS
 #define KEY_DERIV_ERR           (gpointer) 4
 
 #define MISSING_FILE_CODE       10
-#define BAD_TAG                 11
+#define BAD_TAG_ERRCODE         11
+#define KEY_DERIVATION_ERRCODE  12
+#define GENERIC_ERRCODE         13
 
 #define IV_SIZE                 16
 #define KDF_ITERATIONS          100000
