@@ -5,11 +5,12 @@
 G_BEGIN_DECLS
 
 #define GENERIC_ERROR           (gpointer) 1
-#define FILE_CORRUPTED          (gpointer) 2
+#define TAG_MISMATCH            (gpointer) 2
 #define SECURE_MEMORY_ALLOC_ERR (gpointer) 3
 #define KEY_DERIV_ERR           (gpointer) 4
 
 #define MISSING_FILE_CODE       10
+#define BAD_TAG                 11
 
 #define IV_SIZE                 16
 #define KDF_ITERATIONS          100000

@@ -8,4 +8,6 @@ GQuark missing_file_gquark  (void);
 
 GQuark invalid_input_gquark (void);
 
+GQuark bad_tag_gquark (void);
+
 G_END_DECLS

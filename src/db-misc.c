@@ -34,6 +34,10 @@ load_db (DatabaseData    *db_data,
 
     gchar *in_memory_json = decrypt_db (db_path, db_data->key);
     g_free (db_path);
+    if (in_memory_json == TAG_MISMATCH) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG, "Either the file is corrupted or the password is wrong");
+        return;
+    }
 
     db_data->json_data = json_from_string (in_memory_json, err);
     gcry_free (in_memory_json);
@@ -266,7 +270,7 @@ decrypt_db (const gchar *path,
         gcry_free (derived_key);
         g_free (header_data);
         g_free (enc_buf);
-        return FILE_CORRUPTED;
+        return TAG_MISMATCH;
     }
 
     gcry_cipher_close (hd);

@@ -13,3 +13,10 @@ invalid_input_gquark (void)
 {
     return g_quark_from_static_string ("invalid_input");
 }
+
+
+GQuark
+bad_tag_gquark (void)
+{
+    return g_quark_from_static_string ("bad_tag");
+}
