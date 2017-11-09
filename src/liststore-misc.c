@@ -72,7 +72,14 @@ set_otp (GtkListStore   *list_store,
     if (g_strcmp0 (otp_data->type, "TOTP") == 0) {
         otp = get_totp (otp_data->secret, otp_data->digits, algo, &otp_err);
     } else {
+        // clean previous HOTP info
+        g_free (db_data->last_hotp);
+        g_date_time_unref (db_data->last_hotp_update);
+
         otp = get_hotp (otp_data->secret, otp_data->counter, otp_data->digits, algo, &otp_err);
+
+        db_data->last_hotp = g_strdup (otp);
+        db_data->last_hotp_update = g_date_time_new_now_local ();
     }
     if (otp_err == INVALID_B32_INPUT) {
         clean_otp_data (otp_data);

@@ -131,24 +131,35 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((__unused__)),
                gchar                    *path_str,
                gpointer                  data)
 {
-    GtkTreeModel *model = (GtkTreeModel *)data;
+    GtkTreeModel *model = (GtkTreeModel *) data;
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
-    gboolean fixed;
 
     gtk_tree_model_get_iter (model, &iter, path);
+
+    gboolean fixed;
     gtk_tree_model_get (model, &iter, COLUMN_BOOLEAN, &fixed, -1);
+
+    gchar *otp_type;
+    gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
 
     if (fixed) {
         gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
     } else {
-        // TODO implement rate-limiting for HOTP (like 1 every 5s)
         DatabaseData *db_data = g_object_get_data (G_OBJECT (model), "data");
-        set_otp (GTK_LIST_STORE (model), iter, db_data);
+        GDateTime *now = g_date_time_new_now_local ();
+        GTimeSpan diff = g_date_time_difference (now, db_data->last_hotp_update);
+        if (g_strcmp0 (otp_type, "HOTP") == 0 && diff < G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
+            gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, db_data->last_hotp, -1);
+        } else {
+            set_otp (GTK_LIST_STORE (model), iter, db_data);
+        }
+        g_date_time_unref (now);
     }
     fixed ^= 1;
     gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_BOOLEAN, fixed, -1);
 
+    g_free (otp_type);
     gtk_tree_path_free (path);
 }
 

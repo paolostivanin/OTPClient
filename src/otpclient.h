@@ -5,10 +5,12 @@
 
 G_BEGIN_DECLS
 
-#define APP_NAME    "OTPClient"
-#define APP_VERSION "0.99.6 (1.0-alpha6)"
+#define APP_NAME                "OTPClient"
+#define APP_VERSION             "0.99.6 (1.0-alpha6)"
 
-#define DB_FILE_NAME     "otpclient-db.enc"
+#define DB_FILE_NAME            "otpclient-db.enc"
+
+#define HOTP_RATE_LIMIT_IN_SEC  3
 
 void activate               (GtkApplication *app,
                              gpointer user_data);

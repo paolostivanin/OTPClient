@@ -35,6 +35,9 @@ typedef struct _db_data {
     GSList *objects_hash;
 
     GSList *data_to_add;
+
+    gchar *last_hotp;
+    GDateTime *last_hotp_update;
 } DatabaseData;
 
 
