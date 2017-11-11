@@ -3,6 +3,7 @@
 #include "otpclient.h"
 #include "timer.h"
 #include "liststore-misc.h"
+#include "common.h"
 
 
 typedef struct _parsed_json_data {
@@ -63,6 +64,38 @@ update_model (DatabaseData *db_data,
     gtk_list_store_clear (store);
 
     add_data_to_model (db_data, store);
+}
+
+
+void
+remove_selected_entries (DatabaseData *db_data,
+                         GtkListStore *list_store)
+{
+    GtkTreeIter iter;
+    gboolean valid, is_active;
+    GError *err = NULL;
+    JsonArray *ja = json_node_get_array (db_data->json_data);
+
+    g_return_if_fail (list_store != NULL);
+
+    valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL (list_store), &iter);
+
+    while (valid) {
+        gtk_tree_model_get (GTK_TREE_MODEL (list_store), &iter, COLUMN_BOOLEAN, &is_active, -1);
+        if (is_active) {
+            guint row_number = get_row_number_from_iter (list_store, iter);
+            json_array_remove_element (ja, row_number);
+            gtk_list_store_remove (list_store, &iter);
+            valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL (list_store), &iter);
+        } else {
+            valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (list_store), &iter);
+        }
+    }
+    update_db (db_data);
+    reload_db (db_data, &err);
+    if (err != NULL) {
+        g_printerr ("%s\n", err->message);
+    }
 }
 
 

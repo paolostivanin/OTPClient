@@ -6,7 +6,7 @@
 G_BEGIN_DECLS
 
 #define APP_NAME                "OTPClient"
-#define APP_VERSION             "0.99.6 (1.0-alpha6)"
+#define APP_VERSION             "0.99.91 (1.0-beta1)"
 
 #define DB_FILE_NAME            "otpclient-db.enc"
 
@@ -14,10 +14,6 @@ G_BEGIN_DECLS
 
 void activate               (GtkApplication *app,
                              gpointer user_data);
-
-void show_message_dialog    (GtkWidget *parent,
-                             const gchar *message,
-                             GtkMessageType message_type);
 
 int add_data_dialog         (GtkWidget *main_window,
                              DatabaseData *db_data,

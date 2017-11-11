@@ -5,6 +5,7 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "gquarks.h"
+#include "common.h"
 
 
 typedef struct _otp_data {
@@ -15,7 +16,7 @@ typedef struct _otp_data {
     gint64 counter;
 } OtpData;
 
-static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, gint row_number);
+static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, guint row_number);
 
 static void clean_otp_data (OtpData *otp_data);
 
@@ -53,10 +54,9 @@ set_otp (GtkListStore   *list_store,
 {
     OtpData *otp_data = g_new0 (OtpData, 1);
 
-    GtkTreePath *path = gtk_tree_model_get_path (GTK_TREE_MODEL (list_store), &iter);
-    gint *row_number = gtk_tree_path_get_indices (path); // starts from 0
+    guint row_number = get_row_number_from_iter (list_store, iter);
 
-    set_otp_data (otp_data, db_data, row_number[0]);
+    set_otp_data (otp_data, db_data, row_number);
 
     gint algo;
     if (g_strcmp0 (otp_data->algo, "SHA1") == 0) {
@@ -95,7 +95,7 @@ set_otp (GtkListStore   *list_store,
 static void
 set_otp_data (OtpData       *otp_data,
               DatabaseData  *db_data,
-              gint           row_number)
+              guint          row_number)
 {
     JsonArray *ja = json_node_get_array (db_data->json_data);
     JsonObject *jo = json_array_get_object_element (ja, (guint) row_number);

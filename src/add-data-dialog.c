@@ -4,6 +4,7 @@
 #include "common.h"
 #include "add-data-dialog.h"
 #include "gquarks.h"
+#include "message-dialogs.h"
 
 
 static Widgets *init_widgets (void);
@@ -137,7 +138,7 @@ static void
 setup_header_bar (Widgets *widgets)
 {
     GtkWidget *header_bar = create_header_bar ("Add New Account(s)");
-    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
+    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog", NULL);
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (widgets->dialog), header_bar);
     g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_widgets_cb), widgets);

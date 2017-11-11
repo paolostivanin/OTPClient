@@ -3,6 +3,8 @@
 #include "otpclient.h"
 #include "common.h"
 #include "gquarks.h"
+#include "treeview.h"
+#include "message-dialogs.h"
 
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo);
 
@@ -13,6 +15,8 @@ void password_cb (GtkWidget *entry, gpointer *pwd);
 static void add_data_cb (GtkWidget *btn, gpointer user_data);
 
 static void del_data_cb (GtkWidget *btn, gpointer user_data);
+
+static void import_cb (GtkWidget *btn, gpointer user_data);
 
 static void destroy_cb (GtkWidget *window, gpointer user_data);
 
@@ -41,6 +45,8 @@ activate (GtkApplication    *app,
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->objects_hash = NULL;
     db_data->data_to_add = NULL;
+    // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
+    db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
     db_data->key = prompt_for_password (main_window);
     if (db_data->key == NULL) {
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
@@ -62,6 +68,7 @@ activate (GtkApplication    *app,
 
     g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), db_data);
     g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), db_data);
+    g_signal_connect (find_widget (main_window, "imp_btn_app"), "clicked", G_CALLBACK (import_cb), db_data);
     g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), db_data);
 
     gtk_widget_show_all (main_window);
@@ -88,7 +95,7 @@ create_main_window_with_header_bar (GtkApplication  *app,
     header_bar_text[strlen(header_bar_text)] = '\0';
 
     GtkWidget *header_bar = create_header_bar (header_bar_text);
-    GtkWidget *box = create_box_with_buttons ("add_btn_app", "del_btn_app");
+    GtkWidget *box = create_box_with_buttons ("add_btn_app", "del_btn_app", "imp_btn_app");
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (window), header_bar);
 
@@ -158,12 +165,29 @@ add_data_cb (GtkWidget *btn,
 
 
 static void
-del_data_cb (GtkWidget *btn __attribute__((__unused__)),
+del_data_cb (GtkWidget *btn,
+             gpointer   user_data)
+{
+    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
+    DatabaseData *db_data = (DatabaseData *) user_data;
+    GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
+    const gchar *msg = "Do you really want to delete the selected entries?\n"
+            "This will <b>permanently</b> delete these entries from the database";
+
+    if (get_confirmation_from_dialog (top_level, msg)) {
+        remove_selected_entries (db_data, list_store);
+    }
+}
+
+
+static void
+import_cb   (GtkWidget *btn __attribute__((__unused__)),
              gpointer   user_data __attribute__((__unused__)))
 {
-    // TODO complete me
+    // TODO create popover with choices
     //GtkWidget *top_level = gtk_widget_get_toplevel (btn);
     //DatabaseData *db_data = (DatabaseData *) user_data;
+    //GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
 }
 
 

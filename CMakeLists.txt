@@ -28,13 +28,13 @@ set(HEADER_FILES
         src/timer.h
         src/treeview.h
         src/add-data-dialog.h
-        src/gquarks.h)
+        src/gquarks.h src/message-dialogs.h)
 
 set(SOURCE_FILES
         src/treeview.c
         src/main.c
         src/app.c
-        src/message-dialog.c
+        src/message-dialogs.c
         src/db-misc.c
         src/file-size.c
         src/add-data-dialog.c

@@ -29,18 +29,31 @@ icon_press_cb (GtkEntry         *entry,
 
 GtkWidget *
 create_box_with_buttons (const gchar *add_btn_name,
-                         const gchar *del_btn_name)
+                         const gchar *del_btn_name,
+                         const gchar *imp_btn_name)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
+
     GtkWidget *add_button = gtk_button_new ();
     gtk_widget_set_name (add_button, add_btn_name);
     gtk_container_add (GTK_CONTAINER (add_button), gtk_image_new_from_icon_name ("list-add-symbolic", GTK_ICON_SIZE_BUTTON));
     gtk_container_add (GTK_CONTAINER (box), add_button);
+    gtk_widget_set_tooltip_text (add_button, "Add");
+
     GtkWidget *del_button = gtk_button_new ();
     gtk_widget_set_name (del_button, del_btn_name);
     gtk_container_add (GTK_CONTAINER (del_button), gtk_image_new_from_icon_name ("list-remove-symbolic", GTK_ICON_SIZE_BUTTON));
     gtk_container_add (GTK_CONTAINER (box), del_button);
+    gtk_widget_set_tooltip_text (del_button, "Remove");
+
+    if (imp_btn_name != NULL) {
+        GtkWidget *import_btn = gtk_button_new ();
+        gtk_widget_set_name (import_btn, imp_btn_name);
+        gtk_container_add (GTK_CONTAINER (import_btn), gtk_image_new_from_icon_name ("go-jump-symbolic", GTK_ICON_SIZE_BUTTON));
+        gtk_container_add (GTK_CONTAINER (box), import_btn);
+        gtk_widget_set_tooltip_text (import_btn, "Import");
+    }
 
     return box;
 }
@@ -84,4 +97,17 @@ find_widget (GtkWidget      *parent,
     g_list_free (children);
 
     return found_widget;
+}
+
+
+guint
+get_row_number_from_iter (GtkListStore *list_store,
+                          GtkTreeIter iter)
+{
+    GtkTreePath *path = gtk_tree_model_get_path (GTK_TREE_MODEL (list_store), &iter);
+    gint *row_number = gtk_tree_path_get_indices (path); // starts from 0
+    guint row = (guint) row_number[0];
+    gtk_tree_path_free (path);
+
+    return row;
 }
