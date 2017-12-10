@@ -1,5 +1,7 @@
 #pragma once
 
+#include <gtk/gtk.h>
+
 G_BEGIN_DECLS
 
 void         set_icon_to_entry          (GtkWidget      *entry,
@@ -18,4 +20,5 @@ GtkWidget   *find_widget                (GtkWidget      *parent,
 guint        get_row_number_from_iter   (GtkListStore   *list_store,
                                          GtkTreeIter     iter);
 
+gchar       *secure_strdup              (const gchar    *src);
 G_END_DECLS

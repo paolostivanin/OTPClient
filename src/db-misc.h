@@ -9,11 +9,6 @@ G_BEGIN_DECLS
 #define SECURE_MEMORY_ALLOC_ERR (gpointer) 3
 #define KEY_DERIV_ERR           (gpointer) 4
 
-#define MISSING_FILE_CODE       10
-#define BAD_TAG_ERRCODE         11
-#define KEY_DERIVATION_ERRCODE  12
-#define GENERIC_ERRCODE         13
-
 #define IV_SIZE                 16
 #define KDF_ITERATIONS          100000
 #define KDF_SALT_SIZE           32
@@ -41,15 +36,15 @@ typedef struct _db_data {
 } DatabaseData;
 
 
-void load_db            (DatabaseData   *db_data,
-                         GError        **error);
+void load_db                (DatabaseData   *db_data,
+                             GError        **error);
 
-void reload_db          (DatabaseData   *db_data,
-                         GError        **err);
+void update_and_reload_db   (DatabaseData   *db_data,
+                             GtkListStore   *list_store,
+                             gboolean        regenerate_model,
+                             GError        **err);
 
-void update_db          (DatabaseData   *data);
-
-gint check_duplicate    (gconstpointer data,
-                         gconstpointer user_data);
+gint check_duplicate        (gconstpointer data,
+                             gconstpointer user_data);
 
 G_END_DECLS

@@ -91,8 +91,7 @@ remove_selected_entries (DatabaseData *db_data,
             valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (list_store), &iter);
         }
     }
-    update_db (db_data);
-    reload_db (db_data, &err);
+    update_and_reload_db (db_data, list_store, FALSE, &err);
     if (err != NULL) {
         g_printerr ("%s\n", err->message);
     }

@@ -3,14 +3,11 @@
 #include "otpclient.h"
 #include "common.h"
 #include "gquarks.h"
-#include "treeview.h"
+#include "imports.h"
 #include "message-dialogs.h"
+#include "password-cb.h"
 
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo);
-
-static gchar *prompt_for_password (GtkWidget *main_window);
-
-void password_cb (GtkWidget *entry, gpointer *pwd);
 
 static void add_data_cb (GtkWidget *btn, gpointer user_data);
 
@@ -88,7 +85,9 @@ create_main_window_with_header_bar (GtkApplication  *app,
 
     gtk_container_set_border_width (GTK_CONTAINER (window), 10);
 
+    // TODO automatically resize window when label is loooong (but not too much)
     gtk_widget_set_size_request (GTK_WIDGET (window), 475, 360);
+    gtk_window_set_resizable (GTK_WINDOW (window), TRUE);
 
     gchar *header_bar_text = g_malloc (strlen (APP_NAME ) + 1 + strlen (APP_VERSION) + 1);
     g_snprintf (header_bar_text, strlen (APP_NAME) + 1 + strlen (APP_VERSION) + 1, "%s %s", APP_NAME, APP_VERSION);
@@ -102,54 +101,6 @@ create_main_window_with_header_bar (GtkApplication  *app,
     g_free (header_bar_text);
 
     return window;
-}
-
-
-static gchar *
-prompt_for_password (GtkWidget *main_window)
-{
-    GtkDialogFlags flags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
-    GtkWidget *dialog = gtk_dialog_new_with_buttons ("Password", GTK_WINDOW (main_window), flags, "OK", GTK_RESPONSE_ACCEPT,
-                                                     "Cancel", GTK_RESPONSE_CLOSE, NULL);
-
-    gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_CENTER);
-
-    gchar *pwd = NULL;
-    GtkWidget *entry = gtk_entry_new ();
-    g_signal_connect (entry, "activate", G_CALLBACK (password_cb), &pwd);
-
-    set_icon_to_entry (entry, "dialog-password-symbolic", "Show password");
-
-    GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
-    gtk_container_add (GTK_CONTAINER (content_area), entry);
-
-    gtk_widget_show_all (dialog);
-
-    gint ret = gtk_dialog_run (GTK_DIALOG (dialog));
-    switch (ret) {
-        case GTK_RESPONSE_ACCEPT:
-            password_cb (entry, (gpointer *)&pwd);
-            break;
-        case GTK_RESPONSE_CLOSE:
-            break;
-        default:
-            break;
-    }
-    gtk_widget_destroy (dialog);
-
-    return pwd;
-}
-
-
-void
-password_cb (GtkWidget  *entry,
-             gpointer   *pwd)
-{
-    const gchar *text = gtk_entry_get_text (GTK_ENTRY (entry));
-    *pwd = gcry_malloc_secure (strlen (text) + 1);
-    strncpy (*pwd, text, strlen (text) + 1);
-    GtkWidget *top_level = gtk_widget_get_toplevel (entry);
-    gtk_dialog_response (GTK_DIALOG (top_level), GTK_RESPONSE_CLOSE);
 }
 
 
@@ -181,13 +132,28 @@ del_data_cb (GtkWidget *btn,
 
 
 static void
-import_cb   (GtkWidget *btn __attribute__((__unused__)),
-             gpointer   user_data __attribute__((__unused__)))
+import_cb   (GtkWidget *btn,
+             gpointer   user_data)
 {
-    // TODO create popover with choices
-    //GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    //DatabaseData *db_data = (DatabaseData *) user_data;
-    //GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
+    DatabaseData *db_data = (DatabaseData *) user_data;
+
+    GtkWidget *popover = gtk_popover_new (btn);
+    gtk_popover_set_position (GTK_POPOVER (popover), GTK_POS_TOP);
+
+    GtkWidget *button_box = gtk_button_box_new (GTK_ORIENTATION_VERTICAL);
+    gtk_container_add (GTK_CONTAINER (popover), button_box);
+
+    GtkWidget *bt1 = gtk_button_new_with_label ("andOTP");
+    gtk_widget_set_name (bt1, ANDOTP_BTN_NAME);
+    gtk_container_add(GTK_CONTAINER (button_box), bt1);
+    g_signal_connect (bt1, "clicked", G_CALLBACK (select_file_cb), db_data);
+
+    GtkWidget *bt2 = gtk_button_new_with_label ("Authenticator Plus");
+    gtk_widget_set_name (bt2, AUTHPLUS_BTN_NAME);
+    gtk_container_add(GTK_CONTAINER (button_box), bt2);
+    g_signal_connect (bt2, "clicked", G_CALLBACK (select_file_cb), db_data);
+
+    gtk_widget_show_all (popover);
 }
 
 

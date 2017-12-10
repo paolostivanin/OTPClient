@@ -4,6 +4,11 @@
 
 G_BEGIN_DECLS
 
+#define MISSING_FILE_CODE       10
+#define BAD_TAG_ERRCODE         11
+#define KEY_DERIVATION_ERRCODE  12
+#define GENERIC_ERRCODE         13
+
 GQuark missing_file_gquark  (void);
 
 GQuark invalid_input_gquark (void);

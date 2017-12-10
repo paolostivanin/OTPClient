@@ -108,8 +108,7 @@ set_otp_data (OtpData       *otp_data,
         otp_data->counter = json_object_get_int_member (jo, "counter");
         // every time HOTP is accessed, counter must be increased
         json_object_set_int_member (jo, "counter", otp_data->counter + 1);
-        update_db (db_data);
-        reload_db (db_data, &err);
+        update_and_reload_db (db_data, NULL, FALSE, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
             g_printerr ("%s\n", err->message);
         }

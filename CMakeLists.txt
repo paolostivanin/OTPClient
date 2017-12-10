@@ -9,10 +9,10 @@ set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "-Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef")
+set(CMAKE_C_FLAGS "-Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef -Wmissing-format-attribute")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pie -fPIE -fdiagnostics-color=always -Wstrict-prototypes -Wunreachable-code")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-field-initializers -Wno-return-type -Wno-cast-qual -Wno-sign-compare")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wchar-subscripts -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -62,7 +62,7 @@ set(HEADER_FILES
         src/treeview.h
         src/add-data-dialog.h
         src/gquarks.h
-        src/message-dialogs.h)
+        src/message-dialogs.h src/password-cb.h)
 
 set(SOURCE_FILES
         src/treeview.c
@@ -79,7 +79,7 @@ set(SOURCE_FILES
         src/andotp.c
         src/parse-data.c
         src/gquarks.c
-        src/imports.c)
+        src/imports.c src/password-cb.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}

@@ -6,7 +6,7 @@
 G_BEGIN_DECLS
 
 #define APP_NAME                "OTPClient"
-#define APP_VERSION             "0.99.91 (1.0-beta1)"
+#define APP_VERSION             "0.99.92 (1.0-beta2)"
 
 #define DB_FILE_NAME            "otpclient-db.enc"
 
