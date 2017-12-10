@@ -6,6 +6,11 @@
 #include "file-size.h"
 #include "gquarks.h"
 
+
+static void reload_db (DatabaseData *db_data, GError **err);
+
+static void update_db (DatabaseData *data);
+
 static gpointer encrypt_db (const gchar *in_memory_json, const gchar *password);
 
 static inline void add_to_json (gpointer list_elem, gpointer json_array);
@@ -17,6 +22,8 @@ static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
 static void backup_db (const gchar *path);
 
 static void restore_db (const gchar *path);
+
+static inline void jn_free (gpointer data);
 
 static void cleanup (GFile *, gpointer, HeaderData *, GError *);
 
@@ -34,6 +41,16 @@ load_db (DatabaseData    *db_data,
 
     gchar *in_memory_json = decrypt_db (db_path, db_data->key);
     g_free (db_path);
+    if (in_memory_json == TAG_MISMATCH) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
+        return;
+    } else if (in_memory_json == KEY_DERIV_ERR) {
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error during key derivation");
+        return;
+    } else if (in_memory_json == GENERIC_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "An error occurred, please check stderr");
+        return;
+    }
 
     db_data->json_data = json_from_string (in_memory_json, err);
     gcry_free (in_memory_json);
@@ -50,6 +67,38 @@ load_db (DatabaseData    *db_data,
 
 
 void
+update_and_reload_db (DatabaseData   *db_data,
+                      GtkListStore   *list_store,
+                      gboolean        regenerate_model,
+                      GError        **err)
+{
+    update_db (db_data);
+    reload_db (db_data, err);
+    if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        g_printerr("%s\n", (*err)->message);
+        return;
+    }
+    if (regenerate_model) {
+        update_model (db_data, list_store);
+        g_slist_free_full (db_data->data_to_add, jn_free);
+        db_data->data_to_add = NULL;
+    }
+}
+
+
+gint
+check_duplicate (gconstpointer data,
+                 gconstpointer user_data)
+{
+    guint list_elem = *(guint *) data;
+    if (list_elem == GPOINTER_TO_UINT (user_data)) {
+        return 0;
+    }
+    return -1;
+}
+
+
+static void
 reload_db (DatabaseData  *db_data,
            GError       **err)
 {
@@ -60,7 +109,7 @@ reload_db (DatabaseData  *db_data,
 }
 
 
-void
+static void
 update_db (DatabaseData *data)
 {
     gboolean first_run = FALSE;
@@ -98,18 +147,6 @@ update_db (DatabaseData *data)
     }
     g_free (plain_data);
     g_free (db_path);
-}
-
-
-gint
-check_duplicate (gconstpointer data,
-                 gconstpointer user_data)
-{
-    guint list_elem = *(guint *) data;
-    if (list_elem == GPOINTER_TO_UINT (user_data)) {
-        return 0;
-    }
-    return -1;
 }
 
 
@@ -266,7 +303,7 @@ decrypt_db (const gchar *path,
         gcry_free (derived_key);
         g_free (header_data);
         g_free (enc_buf);
-        return FILE_CORRUPTED;
+        return TAG_MISMATCH;
     }
 
     gcry_cipher_close (hd);
@@ -332,6 +369,13 @@ restore_db (const gchar *path)
     }
     g_object_unref (src);
     g_object_unref (dst);
+}
+
+
+static inline void
+jn_free (gpointer data)
+{
+    json_node_free (data);
 }
 
 

@@ -4,48 +4,51 @@
 #include <json-glib/json-glib.h>
 #include "file-size.h"
 #include "imports.h"
+#include "common.h"
+#include "gquarks.h"
 
 #define IV_SIZE 12
 #define TAG_SIZE 16
 
-guchar *get_sha256 (const gchar *password);
+static guchar *get_sha256 (const gchar *password);
 
-GSList *parse_json_data (const gchar *data);
+static GSList *parse_json_data (const gchar *data, GError **err);
 
 
 GSList *
-decrypt_json (const gchar *path, const gchar *password)
+get_andotp_data (const gchar     *path,
+                 const gchar     *password,
+                 GError         **err)
 {
-    GError *err = NULL;
     gcry_cipher_hd_t hd;
 
     goffset input_file_size = get_file_size (path);
 
     GFile *in_file = g_file_new_for_path (path);
-    GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
-    if (err != NULL) {
-        g_printerr ("%s\n", err->message);
+    GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
+    if (*err != NULL) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_file);
         return NULL;
     }
 
     guchar iv[IV_SIZE];
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, IV_SIZE, NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, IV_SIZE, NULL, err) == -1) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
 
     guchar tag[TAG_SIZE];
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, &err)) {
-        g_printerr ("%s\n", err->message);
+    if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, err)) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, TAG_SIZE, NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, TAG_SIZE, NULL, err) == -1) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
@@ -54,15 +57,15 @@ decrypt_json (const gchar *path, const gchar *password)
     gsize enc_buf_size = (gsize) input_file_size - IV_SIZE - TAG_SIZE;
     guchar *enc_buf = g_malloc0 (enc_buf_size);
 
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), IV_SIZE, G_SEEK_SET, NULL, &err)) {
-        g_printerr ("%s\n", err->message);
+    if (!g_seekable_seek (G_SEEKABLE (in_stream), IV_SIZE, G_SEEK_SET, NULL, err)) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
         return NULL;
     }
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, err) == -1) {
+        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
@@ -80,7 +83,7 @@ decrypt_json (const gchar *path, const gchar *password)
     gchar *decrypted_json = gcry_calloc_secure (enc_buf_size, 1);
     gcry_cipher_decrypt (hd, decrypted_json, enc_buf_size, enc_buf, enc_buf_size);
     if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
-        g_printerr ("Invalid tag. Either the password is wrong or the file is corrupted\n");
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
         gcry_cipher_close (hd);
         gcry_free (hashed_key);
         g_free (enc_buf);
@@ -91,13 +94,14 @@ decrypt_json (const gchar *path, const gchar *password)
     gcry_free (hashed_key);
     g_free (enc_buf);
 
-    GSList *otps = parse_json_data (decrypted_json);
+    GSList *otps = parse_json_data (decrypted_json, err);
     gcry_free (decrypted_json);
+
     return otps;
 }
 
 
-guchar *
+static guchar *
 get_sha256 (const gchar *password)
 {
     gcry_md_hd_t hd;
@@ -116,33 +120,31 @@ get_sha256 (const gchar *password)
 }
 
 
-GSList *
-parse_json_data (const gchar *data)
+static GSList *
+parse_json_data (const gchar *data,
+                 GError     **err)
 {
-    GError *err = NULL;
-
     JsonParser *parser = json_parser_new ();
-    if (!json_parser_load_from_data (parser, data, -1, &err)) {
-        g_print ("Unable to parse data: %s\n", err->message);
-        g_clear_error (&err);
+    if (!json_parser_load_from_data (parser, data, -1, err)) {
         g_object_unref (parser);
-        return NULL; // TODO this is an error
+        return NULL;
     }
 
     JsonNode *root = json_parser_get_root (parser);
-    g_assert (JSON_NODE_HOLDS_ARRAY (root));
+    g_return_val_if_fail (JSON_NODE_HOLDS_ARRAY (root), NULL);
     JsonArray *arr = json_node_get_array (root);
-
-    // [{"a": 1, "b": 2}, {}, ...] this is an Array of Objects containing Nodes
 
     GSList *otps = NULL;
     for (guint i = 0; i < json_array_get_length (arr); i++) {
         JsonNode *node = json_array_get_element (arr, i);
-        g_assert (JSON_NODE_HOLDS_OBJECT (node));
         JsonObject *object = json_node_get_object (node);
+        if (object == NULL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Expected to find a json object");
+            return NULL;
+        }
 
-        otp_t *otp = g_new0(otp_t, 1);
-        otp->secret = g_strdup (json_object_get_string_member (object, "secret"));
+        otp_t *otp = g_new0 (otp_t, 1);
+        otp->secret = secure_strdup (json_object_get_string_member (object, "secret"));
 
         const gchar *label_with_issuer = json_object_get_string_member (object, "label");
         gchar **tokens = g_strsplit (label_with_issuer, "-", -1);
@@ -159,23 +161,27 @@ parse_json_data (const gchar *data)
 
         const gchar *type = json_object_get_string_member (object, "type");
         if (g_ascii_strcasecmp (type, "TOTP") == 0) {
-            otp->type = TYPE_TOTP;
+            otp->type = g_strdup (type);
             otp->period = 30;
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
-            otp->type = TYPE_HOTP;
+            otp->type = g_strdup (type);
+            // TODO read this property from the loaded file when andOTP will implement HOTP
             otp->counter = 0;
         } else {
-            return NULL; //TODO handle memory and exit gracefully
+            g_printerr ("otp type is neither TOTP nor HOTP\n");
+            gcry_free (otp->secret);
+            return NULL;
         }
 
-        // TODO andOTP does not support HOTP at the moment
         const gchar *algo = json_object_get_string_member (object, "algorithm");
-        if (g_ascii_strcasecmp (algo, "SHA256") == 0) {
-            otp->algo = ALGO_SHA256;
-        } else if (g_ascii_strcasecmp (algo, "SHA512") == 0) {
-            otp->algo = ALGO_SHA512;
+        if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
+            g_ascii_strcasecmp (algo, "SHA256") == 0 ||
+            g_ascii_strcasecmp (algo, "SHA512") == 0) {
+                otp->algo = g_ascii_strup (algo, -1);
         } else {
-            otp->algo = ALGO_SHA1;
+            g_printerr ("algo not supported (must be either one of: sha1, sha256 or sha512\n");
+            gcry_free (otp->secret);
+            return NULL;
         }
 
         otps = g_slist_append (otps, g_memdup (otp, sizeof (otp_t)));
@@ -183,6 +189,5 @@ parse_json_data (const gchar *data)
     }
     g_object_unref (parser);
 
-    // TODO before calling slist_free_full, secret, label and issuer must be freed
     return otps;
 }

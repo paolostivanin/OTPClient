@@ -5,11 +5,9 @@
 G_BEGIN_DECLS
 
 #define GENERIC_ERROR           (gpointer) 1
-#define FILE_CORRUPTED          (gpointer) 2
+#define TAG_MISMATCH            (gpointer) 2
 #define SECURE_MEMORY_ALLOC_ERR (gpointer) 3
 #define KEY_DERIV_ERR           (gpointer) 4
-
-#define MISSING_FILE_CODE       10
 
 #define IV_SIZE                 16
 #define KDF_ITERATIONS          100000
@@ -32,18 +30,21 @@ typedef struct _db_data {
     GSList *objects_hash;
 
     GSList *data_to_add;
+
+    gchar *last_hotp;
+    GDateTime *last_hotp_update;
 } DatabaseData;
 
 
-void load_db            (DatabaseData   *db_data,
-                         GError        **error);
+void load_db                (DatabaseData   *db_data,
+                             GError        **error);
 
-void reload_db          (DatabaseData   *db_data,
-                         GError        **err);
+void update_and_reload_db   (DatabaseData   *db_data,
+                             GtkListStore   *list_store,
+                             gboolean        regenerate_model,
+                             GError        **err);
 
-void update_db          (DatabaseData   *data);
-
-gint check_duplicate    (gconstpointer data,
-                         gconstpointer user_data);
+gint check_duplicate        (gconstpointer data,
+                             gconstpointer user_data);
 
 G_END_DECLS

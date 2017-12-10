@@ -4,6 +4,7 @@
 #include "otpclient.h"
 #include "add-data-dialog.h"
 #include "gquarks.h"
+#include "message-dialogs.h"
 
 
 static gboolean is_input_valid (GtkWidget *dialog,
@@ -132,7 +133,7 @@ build_json_node (const gchar *type,
     gint64 digits = g_ascii_strtoll (digits_str, NULL, 10);
 
     jb = json_builder_begin_object (jb);
-    jb = json_builder_set_member_name (jb, "otp");
+    jb = json_builder_set_member_name (jb, "type");
     jb = json_builder_add_string_value (jb, type);
     jb = json_builder_set_member_name (jb, "label");
     jb = json_builder_add_string_value (jb, acc_label);

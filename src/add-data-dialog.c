@@ -4,6 +4,7 @@
 #include "common.h"
 #include "add-data-dialog.h"
 #include "gquarks.h"
+#include "message-dialogs.h"
 
 
 static Widgets *init_widgets (void);
@@ -25,8 +26,6 @@ static void del_entry_cb (GtkWidget *btn, gpointer user_data);
 static void sensitive_cb (GtkWidget *cb, gpointer user_data);
 
 static GtkWidget *create_integer_spin_button (void);
-
-static inline void jn_free (gpointer data);
 
 static void cleanup_widgets (Widgets *widgets);
 
@@ -78,16 +77,11 @@ add_data_dialog (GtkWidget      *main_win,
     switch (result) {
         case GTK_RESPONSE_OK:
             if (parse_user_data (widgets, db_data)) {
-                update_db (db_data);
-                reload_db (db_data, &err);
+                update_and_reload_db (db_data, list_store, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (main_win, err->message, GTK_MESSAGE_ERROR);
-                } else {
-                    update_model (db_data, list_store);
                 }
             }
-            g_slist_free_full (db_data->data_to_add, jn_free);
-            db_data->data_to_add = NULL;
             break;
         case GTK_RESPONSE_CANCEL:
         default:
@@ -100,7 +94,8 @@ add_data_dialog (GtkWidget      *main_win,
 }
 
 
-static Widgets *init_widgets ()
+static Widgets *
+init_widgets ()
 {
     Widgets *w = g_new0 (Widgets, 1);
     w->type_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
@@ -137,7 +132,7 @@ static void
 setup_header_bar (Widgets *widgets)
 {
     GtkWidget *header_bar = create_header_bar ("Add New Account(s)");
-    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
+    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog", NULL);
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (widgets->dialog), header_bar);
     g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_widgets_cb), widgets);
@@ -262,13 +257,6 @@ create_integer_spin_button ()
     gtk_widget_set_sensitive (sb, FALSE);
 
     return sb;
-}
-
-
-static inline void
-jn_free (gpointer data)
-{
-    json_node_free (data);
 }
 
 

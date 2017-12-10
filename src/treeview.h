@@ -11,10 +11,13 @@ enum {
     NUM_COLUMNS
 };
 
-GtkListStore    *create_treeview    (GtkWidget    *main_window,
-                                     DatabaseData *db_data);
+GtkListStore    *create_treeview            (GtkWidget    *main_window,
+                                             DatabaseData *db_data);
 
-void             update_model       (DatabaseData *db_data,
-                                     GtkListStore *store);
+void             update_model               (DatabaseData *db_data,
+                                             GtkListStore *store);
+
+void             remove_selected_entries    (DatabaseData *db_data,
+                                             GtkListStore *list_store);
 
 G_END_DECLS
