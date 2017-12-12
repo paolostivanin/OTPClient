@@ -1,11 +1,11 @@
 #include <glib.h>
 #include <errno.h>
 #include <zip.h>
+#include <gcrypt.h>
 #include "imports.h"
 #include "common.h"
 #include "gquarks.h"
-
-#define BUF_SIZE 2097152  // 2 MiB
+#include "otpclient.h"
 
 static void parse_content (const gchar *buf, GSList **otps);
 
@@ -23,15 +23,10 @@ get_authplus_data (const gchar   *zip_path,
     struct zip_file *zf;
     struct zip_stat sb;
 
-    gchar *buf = g_malloc0 (BUF_SIZE);
-    if (buf == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't allocate memory");
-        return NULL;
-    }
-
+    gchar buf[128];
     int zip_err;
     if ((zip_file = zip_open (zip_path, ZIP_RDONLY, &zip_err)) == NULL) {
-        zip_error_to_str (buf, BUF_SIZE, zip_err, errno);
+        zip_error_to_str (buf, MAX_FILE_SIZE, zip_err, errno);
         gchar *msg = g_strdup_printf ("Couldn't open zip file '%s': %s", zip_path, buf);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", msg);
         g_free (msg);
@@ -46,6 +41,11 @@ get_authplus_data (const gchar   *zip_path,
         return NULL;
     }
 
+    gchar *sec_buf = gcry_malloc_secure (sb.size);
+    if (sec_buf == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't allocate secure memory");
+        return NULL;
+    }
     zf = zip_fopen (zip_file, "Accounts.txt", 0);
     if (zf == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", "zip_fopen failed");
@@ -53,7 +53,7 @@ get_authplus_data (const gchar   *zip_path,
         return NULL;
     }
 
-    zip_int64_t len = zip_fread (zf, buf, BUF_SIZE);
+    zip_int64_t len = zip_fread (zf, sec_buf, sb.size);
     if (len < 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", "zip_fread failed");
         zip_fclose (zf);
@@ -62,13 +62,13 @@ get_authplus_data (const gchar   *zip_path,
     }
 
     GSList *otps = NULL;
-    parse_content (buf, &otps);
+    parse_content (sec_buf, &otps);
 
     zip_fclose (zf);
 
     zip_discard (zip_file);
 
-    g_free (buf);
+    gcry_free (sec_buf);
 
     return otps;
 }
@@ -81,7 +81,6 @@ parse_content (const gchar   *buf,
     gchar **uris = g_strsplit (buf, "\n", -1);
     gint i = 0;
     while (g_strrstr (uris[i], "otpauth") != NULL) {
-        g_print("line 84: %s\n", uris[i]);
         parse_uri (uris[i], &(*otps));
         i++;
     }

@@ -85,7 +85,6 @@ create_main_window_with_header_bar (GtkApplication  *app,
 
     gtk_container_set_border_width (GTK_CONTAINER (window), 10);
 
-    // TODO automatically resize window when label is loooong (but not too much)
     gtk_widget_set_size_request (GTK_WIDGET (window), 475, 360);
     gtk_window_set_resizable (GTK_WINDOW (window), TRUE);
 

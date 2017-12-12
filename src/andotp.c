@@ -6,8 +6,9 @@
 #include "imports.h"
 #include "common.h"
 #include "gquarks.h"
+#include "otpclient.h"
 
-#define IV_SIZE 12
+#define ANDOTP_IV_SIZE 12
 #define TAG_SIZE 16
 
 static guchar *get_sha256 (const gchar *password);
@@ -23,18 +24,20 @@ get_andotp_data (const gchar     *path,
     gcry_cipher_hd_t hd;
 
     goffset input_file_size = get_file_size (path);
+    if (input_file_size > MAX_FILE_SIZE) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
+        return NULL;
+    }
 
     GFile *in_file = g_file_new_for_path (path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
     if (*err != NULL) {
-        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_file);
         return NULL;
     }
 
-    guchar iv[IV_SIZE];
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, IV_SIZE, NULL, err) == -1) {
-        g_printerr ("%s\n", (*err)->message);
+    guchar iv[ANDOTP_IV_SIZE];
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, ANDOTP_IV_SIZE, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
@@ -42,30 +45,32 @@ get_andotp_data (const gchar     *path,
 
     guchar tag[TAG_SIZE];
     if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, err)) {
-        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, TAG_SIZE, NULL, err) == -1) {
-        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
 
-    gsize enc_buf_size = (gsize) input_file_size - IV_SIZE - TAG_SIZE;
+    gsize enc_buf_size = (gsize) input_file_size - ANDOTP_IV_SIZE - TAG_SIZE;
+    if (enc_buf_size < 1) {
+        g_printerr ("A non-encrypted file has been selected\n");
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
     guchar *enc_buf = g_malloc0 (enc_buf_size);
 
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), IV_SIZE, G_SEEK_SET, NULL, err)) {
-        g_printerr ("%s\n", (*err)->message);
+    if (!g_seekable_seek (G_SEEKABLE (in_stream), ANDOTP_IV_SIZE, G_SEEK_SET, NULL, err)) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
         return NULL;
     }
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, err) == -1) {
-        g_printerr ("%s\n", (*err)->message);
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
@@ -76,9 +81,9 @@ get_andotp_data (const gchar     *path,
 
     guchar *hashed_key = get_sha256 (password);
 
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
+    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
     gcry_cipher_setkey (hd, hashed_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-    gcry_cipher_setiv (hd, iv, IV_SIZE);
+    gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
 
     gchar *decrypted_json = gcry_calloc_secure (enc_buf_size, 1);
     gcry_cipher_decrypt (hd, decrypted_json, enc_buf_size, enc_buf, enc_buf_size);

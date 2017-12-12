@@ -30,6 +30,13 @@ key_deriv_gquark (void)
 
 
 GQuark
+file_too_big_gquark (void)
+{
+    return g_quark_from_static_string ("file_too_big");
+}
+
+
+GQuark
 generic_error_gquark (void)
 {
     return g_quark_from_static_string ("generic_error");

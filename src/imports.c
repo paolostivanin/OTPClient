@@ -59,6 +59,9 @@ parse_data_and_update_db (GtkWidget     *main_window,
     GError *err = NULL;
     GSList *content = NULL;
     gchar *pwd = prompt_for_password (main_window);
+    if (pwd == NULL) {
+        return FALSE;
+    }
 
     if (g_strcmp0 (widget_name, ANDOTP_BTN_NAME) == 0) {
         content = get_andotp_data (filename, pwd, &err);
