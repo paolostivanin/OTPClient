@@ -7,13 +7,15 @@
 Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
 
 ## Requirements
-- GTK+          >= 3.22
-- Glib          >= 2.50.0
-- json-glib     >= 1.2.0
-- libgcrypt     >= 1.6.0
-- libzip
-- libcotp       >= 1.0.10
-- libbaseencde  >= 1.0.4
+|Name|Min Version|
+|----|-----------|
+|GTK+|3.22|
+|Glib|2.50.0|
+|json-glib|1.2.0|
+|libgcrypt|1.6.0|
+|libzip|-|
+|[libbaseencode](https://github.com/paolostivanin/libbaseencode)|1.0.4|
+|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
 
 ## Features
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
@@ -21,26 +23,35 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 - encrypt local file using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
 
-## Compile
-To compile this software you need all the dependencies specified above. The last two (libcotp and libbasenecode) will be downloaded and compiled by the script [install.sh](install.sh).
+## Installation
+1. install all the needed libraries listed under [requirements](#requirements)
+2. clone and install OTPClient:
 ```
-wget https://raw.githubusercontent.com/paolostivanin/OTPClient/master/install.sh > /tmp/install.sh
-chmod +x /tmp/install.sh
-./tmp/install.sh
+$ git clone https://github.com/paolostivanin/otpclient OTPClient
+$ cd OTPClient
+$ mkdir build && cd $_
+$ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
+$ make
+# make install 
 ```
 
 ## Tested OS
-Last update: 08/Nov/2017
 
-|OS|Version|Branch|DE|Notes|
+|OS|Version|Branch|DE|Tested On|
 |:-:|:----:|:----:|:-:|:--:|
-|Archlinux|-|stable|GNOME|-|
-|Ubuntu|17.10|-|GNOME|-|
-|Debian|9|stable|GNOME|-|
-|Debian|-|testing|GNOME|-|
-|Solus|-|stable|Budgie|-|
-|macOS|10.13|High Sierra|-|Install with brew: `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`. Then `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/` |
+|Archlinux|-|stable|GNOME|13/Dec/2017|
+|Ubuntu|17.10|-|GNOME|08/Nov/2017|
+|Debian|9|stable|GNOME|08/Nov/2017|
+|Debian|-|testing|GNOME|08/Nov/2017|
+|Solus|-|stable|Budgie|08/Nov/2017|
+|macOS*|10.13|High Sierra|-|08/Nov/2017|
 
+[*] For MacOS you need to:
+- install brew
+- install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
+- create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
+- install `libbaseencode` and `libcotp`
+ 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
  
