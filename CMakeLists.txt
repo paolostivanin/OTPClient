@@ -26,9 +26,10 @@ find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
 find_package(Baseencode 1.0.4 REQUIRED)
 find_package(Cotp 1.0.10 REQUIRED)
+find_package(Libzip 1.1.0 REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0)
-pkg_check_modules(LIBZIP REQUIRED libzip)
+#pkg_check_modules(LIBZIP REQUIRED libzip)
 
 include_directories(${GTK3_INCLUDE_DIRS}
         ${JSON_GLIB_INCLUDE_DIRS}
