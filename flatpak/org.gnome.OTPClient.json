@@ -1,0 +1,64 @@
+{
+  "app-id": "org.gnome.OTPClient",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "3.24",
+  "sdk": "org.gnome.Sdk",
+  "command": "OTPClient",
+  "rename-desktop-file": "otpclient.desktop",
+  "rename-icon": "otpclient",
+  "finish-args": [
+    "--device=all",
+    "--filesystem=home",
+    "--share=ipc",
+    "--socket=x11",
+    "--socket=wayland"
+  ],
+  "modules": [
+    {
+      "name": "libzip",
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://libzip.org/download/libzip-1.3.2.tar.xz",
+          "sha256": "6277845010dbc20e281a77e637c97765c1323d67df4d456fd942f525ea86e185"
+        }
+      ]
+    },
+    {
+      "name": "libbaseencode",
+      "no-autogen": true,
+      "cmake": true,
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/paolostivanin/libbaseencode.git",
+          "branch": "master"
+        }
+      ]
+    },
+    {
+      "name": "libcotp",
+      "no-autogen": true,
+      "cmake": true,
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/paolostivanin/libcotp.git",
+          "branch": "master"
+        }
+      ]
+    },
+    {
+      "name": "OTPClient",
+      "no-autogen": true,
+      "cmake": true,
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/paolostivanin/otpclient.git",
+          "branch": "master"
+        }
+      ]
+    }
+  ]
+}

@@ -90,3 +90,5 @@ target_link_libraries(${PROJECT_NAME}
         ${BASEENCODE_LIBRARIES}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES})
+
+install(TARGETS OTPClient DESTINATION bin)
