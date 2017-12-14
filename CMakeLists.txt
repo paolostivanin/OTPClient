@@ -92,3 +92,5 @@ target_link_libraries(${PROJECT_NAME}
         ${LIBZIP_LIBRARIES})
 
 install(TARGETS OTPClient DESTINATION bin)
+install(FILES otpclient.desktop DESTINATION share/applications)
+#install(FILES resources/logo/icon_x128.png DESTINATION share/icons/hicolor/128x128/apps RENAME otpclient.png)
