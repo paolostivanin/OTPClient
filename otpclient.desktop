@@ -1,7 +1,6 @@
 [Desktop Entry]
 Type=Application
 Exec=OTPClient
-MimeType=application/x-your-mime-type;
 Icon=otpclient
 Keywords=otp;totp;hotp
 Terminal=false
