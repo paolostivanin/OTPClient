@@ -58,7 +58,7 @@ parse_data_and_update_db (GtkWidget     *main_window,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (main_window);
+    gchar *pwd = prompt_for_password (main_window, FALSE);
     if (pwd == NULL) {
         return FALSE;
     }

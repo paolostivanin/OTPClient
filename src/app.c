@@ -22,7 +22,7 @@ void
 activate (GtkApplication    *app,
           gpointer           user_data)
 {
-    GdkPixbuf *logo = (GdkPixbuf *)user_data;
+    GdkPixbuf *logo = (GdkPixbuf *) user_data;
     GtkWidget *main_window = create_main_window_with_header_bar (app, logo);
     gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
 
@@ -44,7 +44,9 @@ activate (GtkApplication    *app,
     db_data->data_to_add = NULL;
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
-    db_data->key = prompt_for_password (main_window);
+    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", DB_FILE_NAME, NULL);
+    db_data->key = prompt_for_password (main_window, g_file_test (db_path, G_FILE_TEST_EXISTS));
+    g_free (db_path);
     if (db_data->key == NULL) {
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
         return;

@@ -43,6 +43,9 @@ create_treeview (GtkWidget      *main_win,
     GtkWidget *treeview = gtk_tree_view_new_with_model (model);
     gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACC_LABEL);
 
+    // signal sent when selected row is double clicked
+    //g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), NULL);
+
     g_object_unref (model);
 
     g_object_set_data (G_OBJECT (timer_label), "lstore", GTK_LIST_STORE (model));

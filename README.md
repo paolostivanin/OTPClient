@@ -13,8 +13,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 |Glib|2.50.0|
 |json-glib|1.2.0|
 |libgcrypt|1.6.0|
-|libzip|-|
-|[libbaseencode](https://github.com/paolostivanin/libbaseencode)|1.0.4|
+|libzip|1.1.0|
 |[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
 
 ## Features
@@ -39,7 +38,7 @@ $ make
 
 |OS|Version|Branch|DE|Tested On|
 |:-:|:----:|:----:|:-:|:--:|
-|Archlinux|-|stable|GNOME|13/Dec/2017|
+|Archlinux|-|stable|GNOME|17/Dec/2017|
 |Ubuntu|17.10|-|GNOME|08/Nov/2017|
 |Debian|9|stable|GNOME|08/Nov/2017|
 |Debian|-|testing|GNOME|08/Nov/2017|
