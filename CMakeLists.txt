@@ -10,12 +10,13 @@ set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${O
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "-Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef -Wmissing-format-attribute")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pie -fPIE -fdiagnostics-color=always -Wstrict-prototypes -Wunreachable-code")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always -Wstrict-prototypes -Wunreachable-code")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wchar-subscripts -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pie -fPIE")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-add-needed -Wl,--as-needed -Wl,--no-undefined")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,relro,-z,now")
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,--no-add-needed -Wl,--as-needed")
@@ -24,31 +25,26 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
-find_package(Baseencode 1.0.4 REQUIRED)
 find_package(Cotp 1.0.10 REQUIRED)
 find_package(Libzip 1.1.0 REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0)
-#pkg_check_modules(LIBZIP REQUIRED libzip)
 
 include_directories(${GTK3_INCLUDE_DIRS}
         ${JSON_GLIB_INCLUDE_DIRS}
         ${GCRYPT_INCLUDE_DIR}
-        ${BASEENCODE_INCLUDE_DIR}
         ${COTP_INCLUDE_DIR}
         ${LIBZIP_INCLUDE_DIRS})
 
 link_directories(${GTK3_LIBRARY_DIRS}
         ${JSON_GLIB_LIBRARY_DIRS}
         ${GCRYPT_LIBRARY_DIRS}
-        ${BASEENCODE_LIBRARY_DIRS}
         ${COTP_LIBRARY_DIRS}
         ${LIBZIP_LIBRARY_DIRS})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
         ${JSON_GLIB_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
-        ${BASEENCODE_CFLAGS_OTHER}
         ${COTP_CFLAGS_OTHER}
         ${LIBZIP_CFLAGS_OTHER})
 
@@ -87,7 +83,6 @@ target_link_libraries(${PROJECT_NAME}
         ${GTK3_LIBRARIES}
         ${JSON_GLIB_LIBRARIES}
         ${GCRYPT_LIBRARIES}
-        ${BASEENCODE_LIBRARIES}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES})
 

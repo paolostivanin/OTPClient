@@ -50,7 +50,7 @@ $ make
 - install brew
 - install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
 - create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
-- install `libbaseencode` and `libcotp`
+- install `libcotp`
  
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
