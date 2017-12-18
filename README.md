@@ -43,6 +43,7 @@ $ make
 |Debian|9|stable|GNOME|08/Nov/2017|
 |Debian|-|testing|GNOME|08/Nov/2017|
 |Solus|-|stable|Budgie|08/Nov/2017|
+|Fedora|26|stable|GNOME|18/Dec/2017|
 |macOS*|10.13|High Sierra|-|08/Nov/2017|
 
 [*] For MacOS you need to:
