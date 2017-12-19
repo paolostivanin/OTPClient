@@ -36,15 +36,15 @@ $ make
 
 ## Tested OS
 
-|OS|Version|Branch|DE|Tested On|
+|OS|Version|Branch|DE|
 |:-:|:----:|:----:|:-:|:--:|
-|Archlinux|-|stable|GNOME|17/Dec/2017|
-|Ubuntu|17.10|-|GNOME|08/Nov/2017|
-|Debian|9|stable|GNOME|08/Nov/2017|
-|Debian|-|testing|GNOME|08/Nov/2017|
-|Solus|-|stable|Budgie|08/Nov/2017|
-|Fedora|26|stable|GNOME|18/Dec/2017|
-|macOS*|10.13|High Sierra|-|08/Nov/2017|
+|Archlinux|-|stable|GNOME|
+|Ubuntu|17.10|-|GNOME|
+|Debian|9|stable|GNOME|
+|Debian|-|testing (08/nov/2017)|GNOME|
+|Solus|-|stable|Budgie|
+|Fedora|26|stable|GNOME|
+|macOS*|10.13|High Sierra|-|
 
 [*] For MacOS you need to:
 - install brew
