@@ -37,7 +37,7 @@ $ make
 ## Tested OS
 
 |OS|Version|Branch|DE|
-|:-:|:----:|:----:|:-:|:--:|
+|:-:|:----:|:----:|:-:|
 |Archlinux|-|stable|GNOME|
 |Ubuntu|17.10|-|GNOME|
 |Debian|9|stable|GNOME|
