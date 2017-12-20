@@ -39,11 +39,11 @@ $ make
 |OS|Version|Branch|DE|
 |:-:|:----:|:----:|:-:|
 |Archlinux|-|stable|GNOME|
-|Ubuntu|17.10|-|GNOME|
+|Ubuntu|17.04, 17.10|-|GNOME|
 |Debian|9|stable|GNOME|
 |Debian|-|testing (08/nov/2017)|GNOME|
 |Solus|-|stable|Budgie|
-|Fedora|26|stable|GNOME|
+|Fedora|26, 27|-|GNOME|
 |macOS*|10.13|High Sierra|-|
 
 [*] For MacOS you need to:
