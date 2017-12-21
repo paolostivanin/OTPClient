@@ -17,11 +17,15 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 |[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
 
 ## Features
+- support for TOTP and HOTP
+- support 6 and 8 digits
+- support SHA1, SHA256 and SHA2512 algorithms
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
 - import encrypted [andOTP](https://github.com/flocke/andOTP) backup
 - encrypt local file using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt 
+- auto-refresh TOTP every 30 seconds
 
 ## Installation
 1. install all the needed libraries listed under [requirements](#requirements)
