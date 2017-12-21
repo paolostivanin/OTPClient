@@ -1,11 +1,10 @@
 [Desktop Entry]
 Type=Application
-Exec=OTPClient
+Exec=otpclient
 Icon=otpclient
 Keywords=otp;totp;hotp
 Terminal=false
 Name=OTPClient
-GenericName=OTPClient
 Comment=GTK+ TOTP and HOTP client
 Categories=GTK;GNOME;Utility;
 

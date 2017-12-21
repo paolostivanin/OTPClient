@@ -7,7 +7,7 @@
 #include "message-dialogs.h"
 #include "password-cb.h"
 
-static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, GdkPixbuf *logo);
+static GtkWidget *create_main_window_with_header_bar (GtkApplication *app);
 
 static void add_data_cb (GtkWidget *btn, gpointer user_data);
 
@@ -20,10 +20,9 @@ static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 void
 activate (GtkApplication    *app,
-          gpointer           user_data)
+          gpointer           user_data __attribute__((unused)))
 {
-    GdkPixbuf *logo = (GdkPixbuf *) user_data;
-    GtkWidget *main_window = create_main_window_with_header_bar (app, logo);
+    GtkWidget *main_window = create_main_window_with_header_bar (app);
     gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
 
     if (!gcry_check_version ("1.6.0")) {
@@ -75,16 +74,14 @@ activate (GtkApplication    *app,
 
 
 static GtkWidget *
-create_main_window_with_header_bar (GtkApplication  *app,
-                                    GdkPixbuf       *logo)
+create_main_window_with_header_bar (GtkApplication  *app)
 {
     GtkWidget *window = gtk_application_window_new (app);
     gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
     gtk_window_set_resizable (GTK_WINDOW (window), FALSE);
 
-    if (logo != NULL)
-        gtk_window_set_icon (GTK_WINDOW (window), logo);
-
+    gtk_window_set_icon_name (GTK_WINDOW (window), "otpclient");
+    
     gtk_container_set_border_width (GTK_CONTAINER (window), 10);
 
     gtk_widget_set_size_request (GTK_WIDGET (window), 475, 360);

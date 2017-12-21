@@ -3,9 +3,8 @@
   "runtime": "org.gnome.Platform",
   "runtime-version": "3.24",
   "sdk": "org.gnome.Sdk",
-  "command": "OTPClient",
+  "command": "otpclient",
   "rename-desktop-file": "otpclient.desktop",
-  "rename-icon": "otpclient",
   "finish-args": [
     "--device=all",
     "--filesystem=home",
@@ -75,7 +74,7 @@
       "sources": [
         {
           "type": "git",
-          "url": "https://github.com/paolostivanin/otpclient.git",
+          "url": "https://github.com/paolostivanin/OTPClient.git",
           "branch": "master"
         }
       ]

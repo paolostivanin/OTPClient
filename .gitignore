@@ -2,6 +2,7 @@
 cmake-build-debug/
 build/
 tests/
+.flatpak-builder/
 
 # Object files
 *.o

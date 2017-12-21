@@ -86,6 +86,17 @@ target_link_libraries(${PROJECT_NAME}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES})
 
-install(TARGETS OTPClient DESTINATION bin)
-install(FILES otpclient.desktop DESTINATION share/applications)
-#install(FILES resources/logo/icon_x128.png DESTINATION share/icons/hicolor/128x128/apps RENAME otpclient.png)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
+
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(FILES data/otpclient.desktop DESTINATION share/applications)
+
+install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x48.png DESTINATION share/icons/hicolor/48x48/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x64.png DESTINATION share/icons/hicolor/64x64/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x128.png DESTINATION share/icons/hicolor/128x128/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x256.png DESTINATION share/icons/hicolor/256x256/apps RENAME otpclient.png)
+install(FILES data/icons/icon_x512.png DESTINATION share/icons/hicolor/512x512/apps RENAME otpclient.png)
+install(FILES data/icons/otpclient.svg DESTINATION share/icons/hicolor/scalable/apps RENAME otpclient.svg)
