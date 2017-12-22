@@ -12,7 +12,7 @@ main (gint    argc,
     GtkApplication *app;
     gint status;
 
-    app = gtk_application_new ("org.gnome.OTPClient", G_APPLICATION_FLAGS_NONE);
+    app = gtk_application_new ("com.github.paolostivanin.OTPClient", G_APPLICATION_FLAGS_NONE);
     g_set_application_name (APP_NAME);
     g_set_prgname (APP_NAME);
     g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);

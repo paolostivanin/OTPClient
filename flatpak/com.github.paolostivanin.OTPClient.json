@@ -1,14 +1,13 @@
 {
-  "app-id": "org.gnome.OTPClient",
+  "app-id": "com.github.paolostivanin.OTPClient",
   "runtime": "org.gnome.Platform",
-  "runtime-version": "3.24",
+  "runtime-version": "3.26",
   "sdk": "org.gnome.Sdk",
   "command": "otpclient",
-  "rename-desktop-file": "otpclient.desktop",
   "finish-args": [
-    "--device=all",
-    "--filesystem=home",
+    "--filesystem=~/.config",
     "--share=ipc",
+    "--socket=session-bus",
     "--socket=x11",
     "--socket=wayland"
   ],

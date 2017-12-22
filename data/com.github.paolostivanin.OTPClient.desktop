@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Exec=otpclient
-Icon=otpclient
+Icon=com.github.paolostivanin.OTPClient
 Keywords=otp;totp;hotp
 Terminal=false
 Name=OTPClient

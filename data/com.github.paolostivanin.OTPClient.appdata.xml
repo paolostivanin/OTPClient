@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+​<!-- Copyright 2017 Paolo Stivanin <info@paolostivanin.com> -->
+​<component type="desktop-application">
+​  <id>com.paolostivanin.OTPClient</id>
+​  <metadata_license>CC-BY-4.0</metadata_license>
+​  <project_license>GPL-3.0+</project_license>
+​  <name>OTPClient</name>
+​  <summary>Manage TOTP and HOTP tokens in a secure way</summary>
+​
+  <keywords>
+    <keyword>otp</keyword>
+    <keyword>totp</keyword>
+    <keyword>hotp</keyword>
+  </keywords>
+
+​  <description>
+​    <p>
+​      Easy to use GTK+ application for securely managing TOTP and HOTP tokens.
+The content is encrypted on the disk using AES256-GCM and the master password is derived using PBKDF2 with 100k iterations and SHA512 as hash algorithm.
+It's also possible to import encrypted backups from andOTP and Authenticator+.
+​    </p>
+​  </description>
+​
+​  <launchable type="desktop-id">com.paolostivanin.OTPClient.desktop</launchable>
+​
+​  <screenshots>
+​    <screenshot type="default">
+​      <caption>Main window</caption>
+​      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/mainwin.png</image>
+​    </screenshot>
+​    <screenshot type="default">
+​      <caption>Add tokens</caption>
+​      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/addtokens.png</image>
+​    </screenshot>
+​  </screenshots>
+​
+​  <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
+  <updatecontact>info@paolostivanin.com</updatecontact>
+​
+​  <provides>
+​    <binary>otpclient</binary>
+​  </provides>
+
+  <content_rating type="oars-1.0">
+    <content_attribute id="violence-cartoon">none</content_attribute>
+    <content_attribute id="violence-fantasy">none</content_attribute>
+    <content_attribute id="violence-realistic">none</content_attribute>
+    <content_attribute id="violence-bloodshed">none</content_attribute>
+    <content_attribute id="violence-sexual">none</content_attribute>
+    <content_attribute id="drugs-alcohol">none</content_attribute>
+    <content_attribute id="drugs-narcotics">none</content_attribute>
+    <content_attribute id="drugs-tobacco">none</content_attribute>
+    <content_attribute id="sex-nudity">none</content_attribute>
+    <content_attribute id="sex-themes">none</content_attribute>
+    <content_attribute id="language-profanity">none</content_attribute>
+    <content_attribute id="language-humor">none</content_attribute>
+    <content_attribute id="language-discrimination">none</content_attribute>
+    <content_attribute id="social-chat">none</content_attribute>
+    <content_attribute id="social-info">none</content_attribute>
+    <content_attribute id="social-audio">none</content_attribute>
+    <content_attribute id="social-location">none</content_attribute>
+    <content_attribute id="social-contacts">none</content_attribute>
+    <content_attribute id="money-purchasing">none</content_attribute>
+    <content_attribute id="money-gambling">none</content_attribute>
+  </content_rating>
+​
+​  <releases>
+​    <release version="1.0.1" date="2017-12-21">
+​      <description>
+​        <p>Improve flatpak support</p>
+​      </description>
+​    </release>
+​    <release version="1.0.0" date="2017-12-21">
+​      <description>
+​        <p>First release</p>
+​      </description>
+​    </release>
+​  </releases>
+​</component>

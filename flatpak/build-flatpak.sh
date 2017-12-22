@@ -6,5 +6,5 @@ flatpak-builder \
   --require-changes \
   --repo=repo \
   --arch=$(flatpak --default-arch) \
-  --subject="build of org.gnome.OTPClient, $(date)" \
-  build org.gnome.OTPClient.json
+  --subject="build of com.github.paolostivanin.OTPClient, $(date)" \
+  build com.github.paolostivanin.OTPClient.json
