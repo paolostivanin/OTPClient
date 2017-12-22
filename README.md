@@ -39,19 +39,38 @@ $ make
 # make install 
 ```
 
+## Known Issues
+On Ubuntu 16.04, the `memlock` value is set to max `64KB` (you can check with `ulimit -l`). If you want to use OTPClient, you have to increase this value.
+Create a file called `memlock.conf`:
+```
+sudo vim /etc/security/limits.d/memlock.conf
+```
+and add the following text in it:
+```
+* soft memlock 1048576
+* hard memlock unlimited
+```
+If you prefer, you can directly set both values to `unlimited`
+
 ## Tested OS
 
 |OS|Version|Branch|DE|
 |:-:|:----:|:----:|:-:|
 |Archlinux|-|stable|GNOME|
-|Ubuntu|17.04, 17.10|-|GNOME|
+|Ubuntu|16.04[1], 17.10|-|GNOME|
 |Debian|9|stable|GNOME|
 |Debian|-|testing (08/nov/2017)|GNOME|
 |Solus|-|stable|Budgie|
 |Fedora|26, 27|-|GNOME|
-|macOS*|10.13|High Sierra|-|
+|macOS[2]|10.13|High Sierra|-|
 
-[*] For MacOS you need to:
+[1] OTPClient can be run on Ubuntu 16.04 only with Flatpak. To install Flatpak, follow the [official guide](https://flatpak.org/getting.html) and the execute:
+```
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install flathub com.github.paolostivanin.OTPClient
+```
+
+[2] For MacOS you need to:
 - install brew
 - install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
 - create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`

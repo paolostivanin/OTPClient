@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <sys/mman.h>
+#include <errno.h>
 #include "otpclient.h"
 
 
@@ -7,7 +8,10 @@ gint
 main (gint    argc,
       gchar **argv)
 {
-    mlockall (MCL_CURRENT | MCL_FUTURE);
+    if (mlockall (MCL_CURRENT | MCL_FUTURE) < 0) {
+        g_printerr ("%s\n", g_strerror (errno));
+        return -1;
+    }
 
     GtkApplication *app;
     gint status;
