@@ -7,7 +7,6 @@
   "finish-args": [
     "--filesystem=~/.config",
     "--share=ipc",
-    "--socket=session-bus",
     "--socket=x11",
     "--socket=wayland"
   ],

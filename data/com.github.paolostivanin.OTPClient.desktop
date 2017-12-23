@@ -2,7 +2,7 @@
 Type=Application
 Exec=otpclient
 Icon=com.github.paolostivanin.OTPClient
-Keywords=otp;totp;hotp
+Keywords=otp;totp;hotp;
 Terminal=false
 Name=OTPClient
 Comment=GTK+ TOTP and HOTP client

@@ -1,45 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
-​<!-- Copyright 2017 Paolo Stivanin <info@paolostivanin.com> -->
-​<component type="desktop-application">
-​  <id>com.paolostivanin.OTPClient</id>
-​  <metadata_license>CC-BY-4.0</metadata_license>
-​  <project_license>GPL-3.0+</project_license>
-​  <name>OTPClient</name>
-​  <summary>Manage TOTP and HOTP tokens in a secure way</summary>
-​
+<!-- Copyright 2017 Paolo Stivanin <info@paolostivanin.com> -->
+<component type="desktop-application">
+  <id>com.paolostivanin.OTPClient</id>
+  <metadata_license>CC-BY-4.0</metadata_license>
+  <project_license>GPL-3.0+</project_license>
+  <name>OTPClient</name>
+  <summary>Manage TOTP and HOTP tokens in a secure way</summary>
+
   <keywords>
     <keyword>otp</keyword>
     <keyword>totp</keyword>
     <keyword>hotp</keyword>
   </keywords>
 
-​  <description>
-​    <p>
-​      Easy to use GTK+ application for securely managing TOTP and HOTP tokens.
+  <description>
+    <p>
+      Easy to use GTK+ application for securely managing TOTP and HOTP tokens.
 The content is encrypted on the disk using AES256-GCM and the master password is derived using PBKDF2 with 100k iterations and SHA512 as hash algorithm.
 It's also possible to import encrypted backups from andOTP and Authenticator+.
-​    </p>
-​  </description>
-​
-​  <launchable type="desktop-id">com.paolostivanin.OTPClient.desktop</launchable>
-​
-​  <screenshots>
-​    <screenshot type="default">
-​      <caption>Main window</caption>
-​      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/mainwin.png</image>
-​    </screenshot>
-​    <screenshot type="default">
-​      <caption>Add tokens</caption>
-​      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/addtokens.png</image>
-​    </screenshot>
-​  </screenshots>
-​
-​  <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
-  <updatecontact>info@paolostivanin.com</updatecontact>
-​
-​  <provides>
-​    <binary>otpclient</binary>
-​  </provides>
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.paolostivanin.OTPClient.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main window</caption>
+      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/mainwin.png</image>
+    </screenshot>
+    <screenshot type="default">
+      <caption>Add tokens</caption>
+      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/addtokens.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
+  <update_contact>info@paolostivanin.com</update_contact>
+
+  <provides>
+    <binary>otpclient</binary>
+  </provides>
 
   <content_rating type="oars-1.0">
     <content_attribute id="violence-cartoon">none</content_attribute>
@@ -63,17 +63,22 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
     <content_attribute id="money-purchasing">none</content_attribute>
     <content_attribute id="money-gambling">none</content_attribute>
   </content_rating>
-​
-​  <releases>
-​    <release version="1.0.1" date="2017-12-21">
-​      <description>
-​        <p>Improve flatpak support</p>
-​      </description>
-​    </release>
-​    <release version="1.0.0" date="2017-12-21">
-​      <description>
-​        <p>First release</p>
-​      </description>
-​    </release>
-​  </releases>
-​</component>
+
+  <releases>
+    <release version="1.0.2" date="2017-12-23">
+      <description>
+        <p>Flatpak fixes.</p>
+      </description>
+    </release>
+    <release version="1.0.1" date="2017-12-22">
+      <description>
+        <p>Improve flatpak support.</p>
+      </description>
+    </release>
+    <release version="1.0.0" date="2017-12-21">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

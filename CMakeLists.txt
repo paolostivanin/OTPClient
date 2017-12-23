@@ -90,6 +90,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
+install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
