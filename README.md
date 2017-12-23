@@ -47,7 +47,7 @@ sudo vim /etc/security/limits.d/memlock.conf
 ```
 and add the following text in it:
 ```
-* soft memlock 1048576
+* soft memlock unlimited
 * hard memlock unlimited
 ```
 If you prefer, you can directly set both values to `unlimited`
