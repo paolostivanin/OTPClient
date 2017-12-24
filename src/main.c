@@ -9,7 +9,7 @@ main (gint    argc,
       gchar **argv)
 {
     if (mlockall (MCL_CURRENT | MCL_FUTURE) < 0) {
-        g_printerr ("%s\n", g_strerror (errno));
+        g_printerr ("%s\n. It's very likely that your OS's memlock limit is too low. Please have a look at https://github.com/paolostivanin/OTPClient#known-issues to read how to solve this.\n", g_strerror (errno));
         return -1;
     }
 
