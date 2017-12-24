@@ -6,7 +6,7 @@
 G_BEGIN_DECLS
 
 #define APP_NAME                "OTPClient"
-#define APP_VERSION             "1.0.2"
+#define APP_VERSION             "1.0.3"
 
 #define HOTP_RATE_LIMIT_IN_SEC  3
 #define MAX_FILE_SIZE           262144  // 256 KiB should be more than enough for such content.

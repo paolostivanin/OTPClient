@@ -32,7 +32,7 @@ void
 load_db (DatabaseData    *db_data,
          GError         **err)
 {
-    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", DB_FILE_NAME, NULL);
+    gchar *db_path = g_strconcat (g_get_user_config_dir (), "/", DB_FILE_NAME, NULL);
     if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
         g_set_error (err, missing_file_gquark (), MISSING_FILE_CODE, "Missing database file");
         db_data->json_data = NULL;
@@ -117,7 +117,7 @@ update_db (DatabaseData *data)
         first_run = TRUE;
     }
     JsonArray *ja;
-    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", DB_FILE_NAME, NULL);
+    gchar *db_path = g_strconcat (g_get_user_config_dir (), "/", DB_FILE_NAME, NULL);
     if (first_run) {
         // this is the first run, array must be created. No need to backup an empty file
         ja = json_array_new ();
@@ -170,7 +170,7 @@ encrypt_db (const gchar *in_memory_json,
     gcry_create_nonce (header_data->iv, IV_SIZE);
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
 
-    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", DB_FILE_NAME, NULL);
+    gchar *db_path = g_strconcat (g_get_user_config_dir (), "/", DB_FILE_NAME, NULL);
     GFile *out_file = g_file_new_for_path (db_path);
     GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
     if (err != NULL) {

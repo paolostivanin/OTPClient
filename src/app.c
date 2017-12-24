@@ -43,7 +43,8 @@ activate (GtkApplication    *app,
     db_data->data_to_add = NULL;
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
-    gchar *db_path = g_strconcat (g_get_home_dir (), "/.config/", DB_FILE_NAME, NULL);
+    gchar *db_path = g_strconcat (g_get_user_config_dir (), "/", DB_FILE_NAME, NULL);
+    g_print ("%s\n", db_path);
     db_data->key = prompt_for_password (main_window, g_file_test (db_path, G_FILE_TEST_EXISTS));
     g_free (db_path);
     if (db_data->key == NULL) {
