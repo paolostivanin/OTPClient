@@ -40,17 +40,17 @@ $ make
 ```
 
 ## Known Issues
-On Ubuntu 16.04, the `memlock` value is set to max `64KB` (you can check with `ulimit -l`). If you want to use OTPClient, you have to increase this value.
-Create a file called `memlock.conf`:
-```
-sudo vim /etc/security/limits.d/memlock.conf
-```
-and add the following text in it:
+On Ubuntu 16.04 (and maybe other distros), the `memlock` default value is too low (you can check with `ulimit -l`). If you want to use OTPClient, you most likely will have to increase this value.
+* create a file called, for example, `/etc/security/limits.d/memlock.conf` and add the following text:
 ```
 * soft memlock unlimited
 * hard memlock unlimited
 ```
-If you prefer, you can directly set both values to `unlimited`
+* edit the file `/etc/pam.d/common-session` and add at the end of the file:
+```
+session required pam_limits.so
+```
+reboot the system.
 
 ## Tested OS
 
