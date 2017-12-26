@@ -20,8 +20,20 @@ static void destroy_cb (GtkWidget *window, gpointer user_data);
 
 void
 activate (GtkApplication    *app,
-          gpointer           user_data __attribute__((unused)))
+          gpointer           user_data)
 {
+    gint64 memlock_limit = (gint64) user_data;
+    gint32 max_file_size;
+    if (memlock_limit == -1 || memlock_limit > 256000) {
+        max_file_size = 256000; // memlock is either unlimited or bigger than what we need
+    } else if (memlock_limit == -5) {
+        max_file_size = 64000; // couldn't get memlock limit, so falling back to a default, low value
+        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n.");
+    } else {
+        max_file_size = (gint32) memlock_limit; // memlock is less than 256 KB
+        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n.");
+    }
+
     GtkWidget *main_window = create_main_window_with_header_bar (app);
     gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
 
@@ -31,7 +43,7 @@ activate (GtkApplication    *app,
         return;
     }
 
-    if (gcry_control (GCRYCTL_INIT_SECMEM, MAX_FILE_SIZE, 0)) {
+    if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
         show_message_dialog (main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
         return;
@@ -39,12 +51,12 @@ activate (GtkApplication    *app,
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->max_file_size_from_memlock = max_file_size;
     db_data->objects_hash = NULL;
     db_data->data_to_add = NULL;
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
     gchar *db_path = g_strconcat (g_get_user_config_dir (), "/", DB_FILE_NAME, NULL);
-    g_print ("%s\n", db_path);
     db_data->key = prompt_for_password (main_window, g_file_test (db_path, G_FILE_TEST_EXISTS));
     g_free (db_path);
     if (db_data->key == NULL) {

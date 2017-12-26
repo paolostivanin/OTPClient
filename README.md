@@ -39,14 +39,17 @@ $ make
 # make install 
 ```
 
-## Known Issues
-On Ubuntu 16.04 (and maybe other distros), the `memlock` default value is too low (you can check with `ulimit -l`). If you want to use OTPClient, you most likely will have to increase this value.
+## Limitations
+On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
+
+If you are going to store more than ~130 tokens, each one using very long label and issuer (128 chars) and a long secret (64 chars), then you must have to increase that limit.
+To do that, please follow these steps:
 * create a file called, for example, `/etc/security/limits.d/memlock.conf` and add the following text:
 ```
 * soft memlock unlimited
 * hard memlock unlimited
 ```
-* edit the file `/etc/pam.d/common-session` and add at the end of the file:
+* append to the file `/etc/pam.d/common-session` (could be another file on another distro):
 ```
 session required pam_limits.so
 ```
