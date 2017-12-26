@@ -64,9 +64,9 @@ parse_data_and_update_db (GtkWidget     *main_window,
     }
 
     if (g_strcmp0 (widget_name, ANDOTP_BTN_NAME) == 0) {
-        content = get_andotp_data (filename, pwd, &err);
+        content = get_andotp_data (filename, pwd, db_data->max_file_size_from_memlock, &err);
     } else {
-        content = get_authplus_data (filename, pwd, &err);
+        content = get_authplus_data (filename, pwd, db_data->max_file_size_from_memlock, &err);
     }
 
     if (content == NULL && err != NULL) {

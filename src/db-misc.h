@@ -31,6 +31,8 @@ typedef struct _db_data {
 
     GSList *data_to_add;
 
+    gint32 max_file_size_from_memlock;
+
     gchar *last_hotp;
     GDateTime *last_hotp_update;
 } DatabaseData;

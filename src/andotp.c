@@ -19,15 +19,10 @@ static GSList *parse_json_data (const gchar *data, GError **err);
 GSList *
 get_andotp_data (const gchar     *path,
                  const gchar     *password,
+                 gint32           max_file_size,
                  GError         **err)
 {
     gcry_cipher_hd_t hd;
-
-    goffset input_file_size = get_file_size (path);
-    if (input_file_size > MAX_FILE_SIZE) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
-        return NULL;
-    }
 
     GFile *in_file = g_file_new_for_path (path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
@@ -43,6 +38,7 @@ get_andotp_data (const gchar     *path,
         return NULL;
     }
 
+    goffset input_file_size = get_file_size (path);
     guchar tag[TAG_SIZE];
     if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, err)) {
         g_object_unref (in_stream);
@@ -60,6 +56,11 @@ get_andotp_data (const gchar     *path,
         g_printerr ("A non-encrypted file has been selected\n");
         g_object_unref (in_stream);
         g_object_unref (in_file);
+        return NULL;
+    } else if (enc_buf_size > max_file_size) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
         return NULL;
     }
     guchar *enc_buf = g_malloc0 (enc_buf_size);

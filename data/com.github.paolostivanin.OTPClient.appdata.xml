@@ -65,9 +65,9 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
-    <release version="1.0.3" date="2017-12-24">
+    <release version="1.0.3" date="2017-12-26">
       <description>
-        <p>Use g_get_user_config_dir instead of hard-coding the "config" path.</p>
+        <p>multiple fixes, please have a look at the github release page for more details.</p>
       </description>
     </release>
     <release version="1.0.2" date="2017-12-23">

@@ -1,29 +1,41 @@
 #include <gtk/gtk.h>
-#include <sys/mman.h>
-#include <errno.h>
+#include <sys/resource.h>
 #include "otpclient.h"
+
+
+gint64 get_current_memlock_limit (void);
 
 
 gint
 main (gint    argc,
       gchar **argv)
 {
-    if (mlockall (MCL_CURRENT | MCL_FUTURE) < 0) {
-        g_printerr ("%s\n. It's very likely that your OS's memlock limit is too low. Please have a look at https://github.com/paolostivanin/OTPClient#known-issues to read how to solve this.\n", g_strerror (errno));
-        return -1;
-    }
-
     GtkApplication *app;
     gint status;
 
     app = gtk_application_new ("com.github.paolostivanin.OTPClient", G_APPLICATION_FLAGS_NONE);
     g_set_application_name (APP_NAME);
     g_set_prgname (APP_NAME);
-    g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
+
+    gint64 limit = get_current_memlock_limit ();
+    g_signal_connect (app, "activate", G_CALLBACK (activate), (gpointer) limit);
 
     status = g_application_run (G_APPLICATION (app), argc, argv);
 
     g_object_unref (app);
 
     return status;
+}
+
+
+gint64
+get_current_memlock_limit ()
+{
+    struct rlimit r;
+    if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
+        g_printerr ("Couldn't get memlock limits.\n");
+        return -5;
+    } else {
+        return r.rlim_cur;
+    }
 }
