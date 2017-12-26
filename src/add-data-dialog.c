@@ -6,6 +6,9 @@
 #include "gquarks.h"
 #include "message-dialogs.h"
 
+#define MAX_ENTRY_ACC_LENGTH 128
+#define MAX_ENTRY_ISS_LENGTH MAX_ENTRY_ACC_LENGTH
+#define MAX_ENTRY_KEY_LENGTH 64
 
 static Widgets *init_widgets (void);
 
@@ -147,8 +150,11 @@ add_widgets_cb (GtkWidget *btn __attribute__((__unused__)),
     Widgets *widgets = (Widgets *) user_data;
 
     GtkWidget *acc_entry = gtk_entry_new ();
+    gtk_entry_set_max_length (GTK_ENTRY (acc_entry), MAX_ENTRY_ACC_LENGTH);
     GtkWidget *iss_entry = gtk_entry_new ();
+    gtk_entry_set_max_length (GTK_ENTRY (iss_entry), MAX_ENTRY_ISS_LENGTH);
     GtkWidget *key_entry = gtk_entry_new ();
+    gtk_entry_set_max_length (GTK_ENTRY (key_entry), MAX_ENTRY_KEY_LENGTH);
 
     GtkWidget *type_cb_box = get_cb_box ("totp", "hotp", NULL, "TOTP", "HOTP", NULL, "totp");
     GtkWidget *dig_cb_box = get_cb_box ("6digits", "8digits", NULL, "6", "8", NULL, "6digits");
