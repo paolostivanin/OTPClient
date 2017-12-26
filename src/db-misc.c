@@ -11,11 +11,11 @@ static void reload_db (DatabaseData *db_data, GError **err);
 
 static void update_db (DatabaseData *data);
 
-static gpointer encrypt_db (const gchar *in_memory_json, const gchar *password);
+static gpointer encrypt_db (const gchar *db_path, const gchar *in_memory_json, const gchar *password);
 
 static inline void add_to_json (gpointer list_elem, gpointer json_array);
 
-static gchar *decrypt_db (const gchar *path, const gchar *password);
+static gchar *decrypt_db (const gchar *db_path, const gchar *password);
 
 static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
 
@@ -32,15 +32,13 @@ void
 load_db (DatabaseData    *db_data,
          GError         **err)
 {
-    gchar *db_path = g_build_filename (g_get_user_config_dir (), DB_FILE_NAME, NULL);
-    if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
+    if (!g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         g_set_error (err, missing_file_gquark (), MISSING_FILE_CODE, "Missing database file");
         db_data->json_data = NULL;
         return;
     }
 
-    gchar *in_memory_json = decrypt_db (db_path, db_data->key);
-    g_free (db_path);
+    gchar *in_memory_json = decrypt_db (db_data->db_path, db_data->key);
     if (in_memory_json == TAG_MISMATCH) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
         return;
@@ -117,12 +115,11 @@ update_db (DatabaseData *data)
         first_run = TRUE;
     }
     JsonArray *ja;
-    gchar *db_path = g_build_filename (g_get_user_config_dir (), DB_FILE_NAME, NULL);
     if (first_run) {
         // this is the first run, array must be created. No need to backup an empty file
         ja = json_array_new ();
     } else {
-        backup_db (db_path);
+        backup_db (data->db_path);
         ja = json_node_get_array (data->json_data);
     }
 
@@ -138,15 +135,14 @@ update_db (DatabaseData *data)
     } else {
         plain_data = json_to_string (data->json_data, FALSE);
     }
-    if (encrypt_db (plain_data, data->key) != NULL) {
+    if (encrypt_db (data->db_path, plain_data, data->key) != NULL) {
         g_printerr ("Couldn't update the database.\n");
         if (!first_run) {
             g_print ("Restoring original database..\n");
-            restore_db (db_path);
+            restore_db (data->db_path);
         }
     }
     g_free (plain_data);
-    g_free (db_path);
 }
 
 
@@ -160,7 +156,8 @@ add_to_json (gpointer list_elem,
 
 
 static gpointer
-encrypt_db (const gchar *in_memory_json,
+encrypt_db (const gchar *db_path,
+            const gchar *in_memory_json,
             const gchar *password)
 {
     GError *err = NULL;
@@ -170,7 +167,6 @@ encrypt_db (const gchar *in_memory_json,
     gcry_create_nonce (header_data->iv, IV_SIZE);
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
 
-    gchar *db_path = g_build_filename (g_get_user_config_dir (), DB_FILE_NAME, NULL);
     GFile *out_file = g_file_new_for_path (db_path);
     GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
     if (err != NULL) {
@@ -232,16 +228,16 @@ encrypt_db (const gchar *in_memory_json,
 
 
 static gchar *
-decrypt_db (const gchar *path,
+decrypt_db (const gchar *db_path,
             const gchar *password)
 {
     GError *err = NULL;
     gcry_cipher_hd_t hd;
     HeaderData *header_data = g_new0 (HeaderData, 1);
 
-    goffset input_file_size = get_file_size (path);
+    goffset input_file_size = get_file_size (db_path);
 
-    GFile *in_file = g_file_new_for_path (path);
+    GFile *in_file = g_file_new_for_path (db_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
     if (err != NULL) {
         g_printerr ("%s\n", err->message);

@@ -14,18 +14,17 @@ G_BEGIN_DECLS
 #define KDF_SALT_SIZE           32
 #define TAG_SIZE                16
 
-#define DB_FILE_NAME            "otpclient-db.enc"
-
-
 typedef struct _header_data {
     guint8 iv[IV_SIZE];
     guint8 salt[KDF_SALT_SIZE];
 } HeaderData;
 
 typedef struct _db_data {
-    JsonNode *json_data;
+    gchar *db_path;
 
     gchar *key;
+
+    JsonNode *json_data;
 
     GSList *objects_hash;
 

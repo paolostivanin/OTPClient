@@ -7,15 +7,17 @@
 #include "message-dialogs.h"
 #include "password-cb.h"
 
+static gchar     *get_db_path                        (GtkWidget *window);
+
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app);
 
-static void add_data_cb (GtkWidget *btn, gpointer user_data);
+static void       add_data_cb                        (GtkWidget *btn, gpointer user_data);
 
-static void del_data_cb (GtkWidget *btn, gpointer user_data);
+static void       del_data_cb                        (GtkWidget *btn, gpointer user_data);
 
-static void import_cb (GtkWidget *btn, gpointer user_data);
+static void       import_cb                          (GtkWidget *btn, gpointer user_data);
 
-static void destroy_cb (GtkWidget *window, gpointer user_data);
+static void       destroy_cb                         (GtkWidget *window, gpointer user_data);
 
 
 void
@@ -51,14 +53,16 @@ activate (GtkApplication    *app,
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
+
+    db_data->db_path = get_db_path (main_window);
+
     db_data->max_file_size_from_memlock = max_file_size;
     db_data->objects_hash = NULL;
     db_data->data_to_add = NULL;
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
-    gchar *db_path = g_build_filename (g_get_user_config_dir (), DB_FILE_NAME, NULL);
-    db_data->key = prompt_for_password (main_window, g_file_test (db_path, G_FILE_TEST_EXISTS));
-    g_free (db_path);
+
+    db_data->key = prompt_for_password (main_window, g_file_test (db_data->db_path, G_FILE_TEST_EXISTS));
     if (db_data->key == NULL) {
         gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
         return;
@@ -112,6 +116,55 @@ create_main_window_with_header_bar (GtkApplication  *app)
     g_free (header_bar_text);
 
     return window;
+}
+
+
+static gchar *
+get_db_path (GtkWidget *window)
+{
+    gchar *db_path = NULL;
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+            g_key_file_free (kf);
+            return NULL;
+        }
+        db_path = g_key_file_get_string (kf, "config", "db_path", &err);
+        if (db_path == NULL) {
+            g_printerr ("%s\n", err->message);
+            g_key_file_free (kf);
+            return NULL;
+        }
+    } else {
+        GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
+                                                         GTK_WINDOW (window),
+                                                         GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                         "Cancel", GTK_RESPONSE_CANCEL,
+                                                         "OK", GTK_RESPONSE_ACCEPT,
+                                                         NULL);
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+        gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
+        gtk_file_chooser_set_select_multiple (chooser, FALSE);
+        gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
+        gint res = gtk_dialog_run (GTK_DIALOG (dialog));
+        if (res == GTK_RESPONSE_ACCEPT) {
+            db_path = gtk_file_chooser_get_filename (chooser);
+            g_key_file_set_string (kf, "config", "db_path", db_path);
+            g_key_file_save_to_file (kf, cfg_file_path, &err);
+            if (err != NULL) {
+                g_printerr ("%s\n", err->message);
+                g_key_file_free (kf);
+            }
+        }
+        gtk_widget_destroy (dialog);
+    }
+
+    g_free (cfg_file_path);
+
+    return db_path;
 }
 
 
@@ -174,6 +227,7 @@ destroy_cb (GtkWidget   *window __attribute__((__unused__)),
 {
     DatabaseData *db_data = (DatabaseData *) user_data;
     gcry_free (db_data->key);
+    g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);
     json_node_free (db_data->json_data);
     g_free (db_data);
