@@ -47,7 +47,7 @@ activate (GtkApplication    *app,
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
         show_message_dialog (main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
-        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        g_application_quit (G_APPLICATION (app));
         return;
     }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
@@ -55,6 +55,11 @@ activate (GtkApplication    *app,
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
 
     db_data->db_path = get_db_path (main_window);
+    if (db_data->db_path == NULL) {
+        g_free (db_data);
+        g_application_quit (G_APPLICATION (app));
+        return;
+    }
 
     db_data->max_file_size_from_memlock = max_file_size;
     db_data->objects_hash = NULL;
@@ -64,7 +69,8 @@ activate (GtkApplication    *app,
 
     db_data->key = prompt_for_password (main_window, g_file_test (db_data->db_path, G_FILE_TEST_EXISTS));
     if (db_data->key == NULL) {
-        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        g_free (db_data);
+        g_application_quit (G_APPLICATION (app));
         return;
     }
 
@@ -74,7 +80,7 @@ activate (GtkApplication    *app,
         show_message_dialog (main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (db_data->key);
         g_free (db_data);
-        gtk_application_remove_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+        g_application_quit (G_APPLICATION (app));
         return;
     }
 
