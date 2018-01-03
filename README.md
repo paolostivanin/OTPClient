@@ -36,7 +36,7 @@ $ cd OTPClient
 $ mkdir build && cd $_
 $ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
 $ make
-# make install 
+$ sudo make install
 ```
 
 ## Limitations
@@ -67,18 +67,23 @@ reboot the system.
 |Fedora|26, 27|-|GNOME|
 |macOS[2]|10.13|High Sierra|-|
 
-[1] OTPClient can be run on Ubuntu 16.04 only with Flatpak. To install Flatpak, follow the [official guide](https://flatpak.org/getting.html) and the execute:
-```
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install flathub com.github.paolostivanin.OTPClient
-```
+[1] OTPClient can be run on Ubuntu 16.04 only with [Flatpak](#flatpak).
 
 [2] For MacOS you need to:
 - install brew
 - install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
 - create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
 - install `libcotp`
- 
+
+## Flatpak
+To install Flatpak, follow the [official guide](https://flatpak.org/getting.html). To install OTPClient, open a terminal and the execute:
+```
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+flatpak install flathub com.github.paolostivanin.OTPClient
+```
+Please note that with the flatpak version you won't be asked where to store the database. Instead, the software will use the app's data directory (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`)
+This change was necessary in order to restrict the app's permissions to the filesystem (from the initial `filesystem=home` to nothing).
+
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
  
