@@ -7,7 +7,9 @@
 #include "message-dialogs.h"
 #include "password-cb.h"
 
+#ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path                        (GtkWidget *window);
+#endif
 
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app);
 
@@ -54,12 +56,16 @@ activate (GtkApplication    *app,
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
 
+#ifdef USE_FLATPAK_APP_FOLDER
+    db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
+#else
     db_data->db_path = get_db_path (main_window);
     if (db_data->db_path == NULL) {
         g_free (db_data);
         g_application_quit (G_APPLICATION (app));
         return;
     }
+#endif
 
     db_data->max_file_size_from_memlock = max_file_size;
     db_data->objects_hash = NULL;
@@ -125,6 +131,7 @@ create_main_window_with_header_bar (GtkApplication  *app)
 }
 
 
+#ifndef USE_FLATPAK_APP_FOLDER
 static gchar *
 get_db_path (GtkWidget *window)
 {
@@ -172,6 +179,7 @@ get_db_path (GtkWidget *window)
 
     return db_path;
 }
+#endif
 
 
 static void

@@ -5,14 +5,26 @@
   "sdk": "org.gnome.Sdk",
   "command": "otpclient",
   "finish-args": [
-    "--filesystem=home",
     "--share=ipc",
     "--socket=x11",
-    "--socket=wayland"
+    "--socket=wayland",
+    "--filesystem=xdg-run/dconf",
+    "--filesystem=~/.config/dconf:ro",
+    "--talk-name=ca.desrt.dconf",
+    "--env=DCONF_USER_CONFIG_DIR=.config/dconf"
   ],
+
   "modules": [
     {
       "name": "libzip",
+      "config-opts": ["--disable-static"],
+      "cleanup": [
+        "/include",
+        "/bin",
+        "/share",
+        "/lib/pkgconfig",
+        "/lib/*.la"
+      ],
       "sources": [
         {
           "type": "archive",
@@ -23,7 +35,11 @@
     },
     {
       "name": "libbaseencode",
-      "buildsystem": "cmake",
+      "buildsystem": "cmake-ninja",
+      "config-opts": ["-DCMAKE_BUILD_TYPE=Release"],
+      "cleanup": [
+        "/include"
+      ],
       "sources": [
         {
           "type": "archive",
@@ -34,7 +50,11 @@
     },
     {
       "name": "libcotp",
-      "buildsystem": "cmake",
+      "buildsystem": "cmake-ninja",
+      "config-opts": ["-DCMAKE_BUILD_TYPE=Release"],
+      "cleanup": [
+        "/include"
+      ],
       "sources": [
         {
           "type": "archive",
@@ -45,7 +65,8 @@
     },
     {
       "name": "OTPClient",
-      "buildsystem": "cmake",
+      "buildsystem": "cmake-ninja",
+      "config-opts": ["-DCMAKE_BUILD_TYPE=Release", "-DUSE_FLATPAK_APP_FOLDER=ON"],
       "sources": [
         {
           "type": "git",

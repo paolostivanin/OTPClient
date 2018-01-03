@@ -36,7 +36,7 @@ $ cd OTPClient
 $ mkdir build && cd $_
 $ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
 $ make
-# make install 
+$ sudo make install
 ```
 
 ## Limitations
