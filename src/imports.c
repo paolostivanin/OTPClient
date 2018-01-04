@@ -81,7 +81,13 @@ parse_data_and_update_db (GtkWidget     *main_window,
     guint list_len = g_slist_length (content);
     for (guint i = 0; i < list_len; i++) {
         jn = get_json_node (g_slist_nth_data (content, i));
-        db_data->data_to_add = g_slist_append (db_data->data_to_add, jn);
+        guint hash = json_object_hash (json_node_get_object (jn));
+        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
+            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+            db_data->data_to_add = g_slist_append (db_data->data_to_add, jn);
+        } else {
+            g_print ("[INFO] Duplicate element not added\n");
+        }
     }
 
     update_and_reload_db (db_data, list_store, TRUE, &err);
