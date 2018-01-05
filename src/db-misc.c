@@ -101,7 +101,7 @@ reload_db (DatabaseData  *db_data,
            GError       **err)
 {
     if (db_data->json_data != NULL) {
-        json_node_unref (db_data->json_data);
+        json_node_free (db_data->json_data);
     }
     load_db (db_data, err);
 }
