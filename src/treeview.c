@@ -20,6 +20,8 @@ static GtkTreeModel *create_model (DatabaseData *db_data);
 
 static void add_columns (GtkTreeView *treeview, DatabaseData *db_data);
 
+static void row_selected_cb (GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data);
+
 static void free_parsed_json_data (ParsedData *pjd);
 
 
@@ -44,7 +46,8 @@ create_treeview (GtkWidget      *main_win,
     gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACC_LABEL);
 
     // signal sent when selected row is double clicked
-    //g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), NULL);
+    GtkClipboard* clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
+    g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
 
     g_object_unref (model);
 
@@ -234,6 +237,27 @@ add_columns (GtkTreeView    *treeview,
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("OTP Value", renderer, "text", COLUMN_OTP, NULL);
     gtk_tree_view_append_column (treeview, column);
+}
+
+
+static void
+row_selected_cb (GtkTreeView        *tree_view,
+                 GtkTreePath        *path,
+                 GtkTreeViewColumn  *column,
+                 gpointer            user_data)
+{
+    GtkClipboard* clipboard = (GtkClipboard *)user_data;
+    GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
+
+    GtkTreeIter  iter;
+    gtk_tree_model_get_iter (model, &iter, path);
+
+    gchar *otp_value;
+    gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+
+    gtk_clipboard_set_text (clipboard, otp_value, -1);
+
+    g_free (otp_value);
 }
 
 
