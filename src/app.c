@@ -90,8 +90,10 @@ activate (GtkApplication    *app,
         return;
     }
 
-    GtkListStore *list_store = create_treeview (main_window, db_data);
+    GtkClipboard *clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
+    GtkListStore *list_store = create_treeview (main_window, clipboard, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
+    g_object_set_data (G_OBJECT (main_window), "clipboard", clipboard);
 
     g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), db_data);
     g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), db_data);
@@ -236,7 +238,7 @@ import_cb   (GtkWidget *btn,
 
 
 static void
-destroy_cb (GtkWidget   *window __attribute__((unused)),
+destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     DatabaseData *db_data = (DatabaseData *) user_data;
@@ -245,4 +247,6 @@ destroy_cb (GtkWidget   *window __attribute__((unused)),
     g_slist_free_full (db_data->objects_hash, g_free);
     json_node_free (db_data->json_data);
     g_free (db_data);
+    //GtkClipboard *clipboard = g_object_get_data (G_OBJECT(window), "clipboard");
+    gtk_clipboard_clear (g_object_get_data (G_OBJECT(window), "clipboard"));
 }
