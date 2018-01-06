@@ -26,6 +26,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt 
 - auto-refresh TOTP every 30 seconds
+- double click on a *ticked row* to copy the OTP value
 
 ## Installation
 1. install all the needed libraries listed under [requirements](#requirements)
