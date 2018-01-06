@@ -144,8 +144,8 @@ setup_header_bar (Widgets *widgets)
 
 
 static void
-add_widgets_cb (GtkWidget *btn __attribute__((__unused__)),
-              gpointer   user_data)
+add_widgets_cb (GtkWidget *btn __attribute__((unused)),
+                gpointer   user_data)
 {
     Widgets *widgets = (Widgets *) user_data;
 
@@ -222,7 +222,7 @@ update_grid (Widgets *widgets)
 
 
 static void
-del_entry_cb (GtkWidget *btn __attribute__((__unused__)),
+del_entry_cb (GtkWidget *btn __attribute__((unused)),
               gpointer   user_data)
 {
     Widgets *widgets = (Widgets *) user_data;

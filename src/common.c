@@ -20,9 +20,9 @@ set_icon_to_entry (GtkWidget    *entry,
 
 static void
 icon_press_cb (GtkEntry         *entry,
-               gint              position   __attribute__((__unused__)),
-               GdkEventButton   *event      __attribute__((__unused__)),
-               gpointer          data       __attribute__((__unused__)))
+               gint              position __attribute__((unused)),
+               GdkEventButton   *event    __attribute__((unused)),
+               gpointer          data     __attribute__((unused)))
 {
     gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
 }

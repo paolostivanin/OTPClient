@@ -236,7 +236,7 @@ import_cb   (GtkWidget *btn,
 
 
 static void
-destroy_cb (GtkWidget   *window __attribute__((__unused__)),
+destroy_cb (GtkWidget   *window __attribute__((unused)),
             gpointer     user_data)
 {
     DatabaseData *db_data = (DatabaseData *) user_data;

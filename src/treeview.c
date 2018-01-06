@@ -165,7 +165,7 @@ create_model (DatabaseData *db_data)
 
 
 static void
-fixed_toggled (GtkCellRendererToggle    *cell __attribute__((__unused__)),
+fixed_toggled (GtkCellRendererToggle    *cell __attribute__((unused)),
                gchar                    *path_str,
                gpointer                  data)
 {
@@ -243,7 +243,7 @@ add_columns (GtkTreeView    *treeview,
 static void
 row_selected_cb (GtkTreeView        *tree_view,
                  GtkTreePath        *path,
-                 GtkTreeViewColumn  *column,
+                 GtkTreeViewColumn  *column __attribute__((unused)),
                  gpointer            user_data)
 {
     GtkClipboard* clipboard = (GtkClipboard *)user_data;
