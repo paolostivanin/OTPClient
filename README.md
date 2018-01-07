@@ -6,6 +6,10 @@
 
 Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
 
+## Screenshots
+![Main window](/data/screenshots/mainwin.png?raw=true "Main window")
+![Add tokens](/data/screenshots/addtokens.png?raw=true "Add new tokens")
+
 ## Requirements
 |Name|Min Version|
 |----|-----------|
@@ -75,6 +79,13 @@ reboot the system.
 - install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
 - create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
 - install `libcotp`
+
+## Packages
+Personally, I prefer to spend time on development rather than packaging for the myriads of systems out there. If you want to maintain the package for your favourite/daily driver distro(s), feel free to drop me an email or open a PR with an update for this section :)
+
+|Distro|Link|
+|:-:|:---:|
+|Archlinux|https://aur.archlinux.org/packages/otpclient-git|
 
 ## Flatpak
 To install Flatpak, follow the [official guide](https://flatpak.org/getting.html). To install OTPClient, open a terminal and the execute:
