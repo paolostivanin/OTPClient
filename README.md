@@ -44,6 +44,17 @@ $ make
 $ sudo make install
 ```
 
+## How To Use
+On the first run, you will be asked:
+
+1. where to store the database file
+2. to type two times the encryption password for the database
+
+Please keep in mind that the **password can't be recovered**. This means that if the password is forgotten, **the data is lost**.
+
+After the first run, every time you start the program you will be asked to enter the password you have previously chosen.
+
+
 ## Limitations
 On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
 
