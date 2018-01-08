@@ -41,6 +41,7 @@ prompt_for_password (GtkWidget *main_window, gboolean file_exists)
     } else {
         widget = create_vbox (entry_widgets);
     }
+    gtk_widget_set_margin_bottom (widget, 10);
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
     gtk_container_add (GTK_CONTAINER (content_area), widget);
@@ -84,7 +85,6 @@ static GtkWidget *
 create_vbox (EntryWidgets *entry_widgets)
 {
     GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-
     entry_widgets->entry1 = gtk_entry_new ();
     gtk_entry_set_placeholder_text (GTK_ENTRY (entry_widgets->entry1), "Type password...");
     set_icon_to_entry (entry_widgets->entry1, "dialog-password-symbolic", "Show password");
