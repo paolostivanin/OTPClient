@@ -10,7 +10,7 @@ typedef struct _entrywidgets {
     gchar *pwd;
 } EntryWidgets;
 
-static GtkWidget *create_vbox (EntryWidgets *entry_widgets);
+static GtkWidget *get_vbox (EntryWidgets *entry_widgets, gboolean file_exists);
 
 static void check_pwd (GtkWidget *entry, gpointer user_data);
 
@@ -33,17 +33,11 @@ prompt_for_password (GtkWidget *main_window, gboolean file_exists)
     EntryWidgets *entry_widgets = g_new0 (EntryWidgets, 1);
     entry_widgets->retry = FALSE;
 
-    GtkWidget *widget;
-    if (file_exists) {
-        widget = gtk_entry_new ();
-        set_icon_to_entry (widget, "dialog-password-symbolic", "Show password");
-        g_signal_connect (widget, "activate", G_CALLBACK (password_cb), (gpointer *) &entry_widgets->pwd);
-    } else {
-        widget = create_vbox (entry_widgets);
-    }
+    GtkWidget *vbox = get_vbox (entry_widgets, file_exists);
+    gtk_widget_set_margin_bottom (vbox, 10);
 
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG (dialog));
-    gtk_container_add (GTK_CONTAINER (content_area), widget);
+    gtk_container_add (GTK_CONTAINER (content_area), vbox);
 
     gtk_widget_show_all (dialog);
 
@@ -51,7 +45,7 @@ prompt_for_password (GtkWidget *main_window, gboolean file_exists)
     switch (ret) {
         case GTK_RESPONSE_ACCEPT:
             if (file_exists) {
-                password_cb (widget, (gpointer *) &entry_widgets->pwd);
+                password_cb (entry_widgets->entry1, (gpointer *) &entry_widgets->pwd);
             } else {
                 check_pwd (entry_widgets->entry1, (gpointer) entry_widgets);
             }
@@ -81,22 +75,39 @@ prompt_for_password (GtkWidget *main_window, gboolean file_exists)
 
 
 static GtkWidget *
-create_vbox (EntryWidgets *entry_widgets)
+get_vbox (EntryWidgets *entry_widgets, gboolean file_exists)
 {
-    GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-
+    GtkWidget *vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 3);
     entry_widgets->entry1 = gtk_entry_new ();
     gtk_entry_set_placeholder_text (GTK_ENTRY (entry_widgets->entry1), "Type password...");
     set_icon_to_entry (entry_widgets->entry1, "dialog-password-symbolic", "Show password");
 
-    entry_widgets->entry2 = gtk_entry_new ();
-    gtk_entry_set_placeholder_text (GTK_ENTRY (entry_widgets->entry2), "Retype password...");
-    set_icon_to_entry (entry_widgets->entry2, "dialog-password-symbolic", "Show password");
+    GtkWidget *label = gtk_label_new (NULL);
+    gtk_label_set_use_markup (GTK_LABEL (label), TRUE);
+    gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_CENTER);
+    gtk_widget_set_margin_bottom (label, 5);
 
-    g_signal_connect (entry_widgets->entry2, "activate", G_CALLBACK (check_pwd), entry_widgets);
-
+    gtk_box_pack_start (GTK_BOX (vbox), label, TRUE, TRUE, 0);
     gtk_box_pack_start (GTK_BOX (vbox), entry_widgets->entry1, TRUE, TRUE, 0);
-    gtk_box_pack_end (GTK_BOX (vbox), entry_widgets->entry2, TRUE, TRUE, 0);
+
+    const gchar *str;
+    if (!file_exists) {
+        entry_widgets->entry2 = gtk_entry_new ();
+        gtk_entry_set_placeholder_text (GTK_ENTRY (entry_widgets->entry2), "Retype password...");
+        set_icon_to_entry (entry_widgets->entry2, "dialog-password-symbolic", "Show password");
+
+        g_signal_connect (entry_widgets->entry2, "activate", G_CALLBACK (check_pwd), entry_widgets);
+
+        str = "Choose an encryption password for the database.\n"
+                "Please note that if the password is lost or forgotten, <b>there will be no way to recover it</b>.";
+
+        gtk_box_pack_end (GTK_BOX (vbox), entry_widgets->entry2, TRUE, TRUE, 0);
+    } else {
+        str = "Enter the decryption password.";
+        g_signal_connect (entry_widgets->entry1, "activate", G_CALLBACK (password_cb), (gpointer *) &entry_widgets->pwd);
+    }
+
+    gtk_label_set_label (GTK_LABEL (label), str);
 
     return vbox;
 }
