@@ -65,7 +65,7 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
-    <release version="1.0.5" date="2018-01-08">
+    <release version="1.0.6" date="2018-01-08">
       <description>
         <p>https://github.com/paolostivanin/OTPClient/releases/tag/v1.0.6</p>
       </description>
