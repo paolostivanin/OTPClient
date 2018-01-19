@@ -11,13 +11,19 @@
 static gchar     *get_db_path                        (GtkWidget *window);
 #endif
 
-static GtkWidget *create_main_window_with_header_bar (GtkApplication *app);
+static void       get_saved_window_size              (gint *width, gint *height);
+
+static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, gint width, gint height);
+
+static void       get_window_size_cb                 (GtkWidget *window, GtkAllocation *allocation, gpointer user_data);
 
 static void       add_data_cb                        (GtkWidget *btn, gpointer user_data);
 
 static void       del_data_cb                        (GtkWidget *btn, gpointer user_data);
 
 static void       import_cb                          (GtkWidget *btn, gpointer user_data);
+
+static void       save_window_size                   (gint width, gint height);
 
 static void       destroy_cb                         (GtkWidget *window, gpointer user_data);
 
@@ -38,8 +44,12 @@ activate (GtkApplication    *app,
         g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n.");
     }
 
-    GtkWidget *main_window = create_main_window_with_header_bar (app);
+    gint widht, height;
+    get_saved_window_size (&widht, &height);
+
+    GtkWidget *main_window = create_main_window_with_header_bar (app, widht, height);
     gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (main_window));
+    g_signal_connect (main_window, "size-allocate", G_CALLBACK (get_window_size_cb), NULL);
 
     if (!gcry_check_version ("1.6.0")) {
         show_message_dialog (main_window, "The required version of GCrypt is 1.6.0 or greater.", GTK_MESSAGE_ERROR);
@@ -104,19 +114,46 @@ activate (GtkApplication    *app,
 }
 
 
+static void
+get_saved_window_size (gint *width, gint *height)
+{
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    *width = 0;
+    *height = 0;
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+        } else {
+            *width = g_key_file_get_integer (kf, "config", "window_width", NULL);
+            *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
+        }
+    }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
+}
+
+
 static GtkWidget *
-create_main_window_with_header_bar (GtkApplication  *app)
+create_main_window_with_header_bar (GtkApplication  *app, gint width, gint height)
 {
     GtkWidget *window = gtk_application_window_new (app);
     gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
-    gtk_window_set_resizable (GTK_WINDOW (window), FALSE);
-
     gtk_window_set_icon_name (GTK_WINDOW (window), "otpclient");
     
     gtk_container_set_border_width (GTK_CONTAINER (window), 10);
 
-    gtk_widget_set_size_request (GTK_WIDGET (window), 475, 360);
-    gtk_window_set_resizable (GTK_WINDOW (window), TRUE);
+    if (width > 0 && height > 0) {
+        gtk_window_set_default_size (GTK_WINDOW (window), width, height);
+    } else {
+        gtk_window_set_default_size (GTK_WINDOW (window), 500, 350);
+    }
 
     gchar *header_bar_text = g_malloc (strlen (APP_NAME ) + 1 + strlen (APP_VERSION) + 1);
     g_snprintf (header_bar_text, strlen (APP_NAME) + 1 + strlen (APP_VERSION) + 1, "%s %s", APP_NAME, APP_VERSION);
@@ -130,6 +167,18 @@ create_main_window_with_header_bar (GtkApplication  *app)
     g_free (header_bar_text);
 
     return window;
+}
+
+
+static void
+get_window_size_cb (GtkWidget      *window,
+                    GtkAllocation  *allocation __attribute__((unused)),
+                    gpointer        user_data  __attribute__((unused)))
+{
+    gint w, h;
+    gtk_window_get_size (GTK_WINDOW (window), &w, &h);
+    g_object_set_data (G_OBJECT (window), "width", GINT_TO_POINTER (w));
+    g_object_set_data (G_OBJECT (window), "height", GINT_TO_POINTER (h));
 }
 
 
@@ -247,6 +296,39 @@ destroy_cb (GtkWidget   *window,
     g_slist_free_full (db_data->objects_hash, g_free);
     json_node_free (db_data->json_data);
     g_free (db_data);
-    //GtkClipboard *clipboard = g_object_get_data (G_OBJECT(window), "clipboard");
-    gtk_clipboard_clear (g_object_get_data (G_OBJECT(window), "clipboard"));
+    gtk_clipboard_clear (g_object_get_data (G_OBJECT (window), "clipboard"));
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wbad-function-cast"
+    gint w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));
+    gint h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
+#pragma GCC diagnostic pop
+    save_window_size (w, h);
+}
+
+
+static void
+save_window_size (gint width,
+                  gint height)
+{
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+        } else {
+            g_key_file_set_integer (kf, "config", "window_width", width);
+            g_key_file_set_integer (kf, "config", "window_height", height);
+            if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+                g_printerr ("%s\n", err->message);
+            }
+        }
+    }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
 }
