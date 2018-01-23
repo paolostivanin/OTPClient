@@ -9,7 +9,7 @@
 
 static gboolean  parse_data_and_update_db    (GtkWidget     *main_window,
                                               const gchar   *filename,
-                                              const gchar   *widget_name,
+                                              const gchar   *action_name,
                                               DatabaseData  *db_data,
                                               GtkListStore  *list_store);
 
@@ -21,17 +21,16 @@ static void      free_gslist                 (GSList        *otps,
 
 
 void
-select_file_cb (GtkWidget   *btn,
-                gpointer     user_data)
+select_file_cb (GSimpleAction *simple,
+                GVariant      *parameter __attribute__((unused)),
+                gpointer       user_data)
 {
-    gtk_popover_popdown (GTK_POPOVER (gtk_widget_get_parent (gtk_widget_get_parent (btn))));
-
-    DatabaseData *db_data = (DatabaseData *) user_data;
-    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
+    const gchar *action_name = g_action_get_name (G_ACTION (simple));
+    ImportData *import_data = (ImportData *)user_data;
+    GtkListStore *list_store = g_object_get_data (G_OBJECT (import_data->main_window), "lstore");
 
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
-                                                     GTK_WINDOW (top_level),
+                                                     GTK_WINDOW (import_data->main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
                                                      "Cancel", GTK_RESPONSE_CANCEL,
                                                      "Open", GTK_RESPONSE_ACCEPT,
@@ -41,7 +40,7 @@ select_file_cb (GtkWidget   *btn,
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
         gchar *filename = gtk_file_chooser_get_filename (chooser);
-        parse_data_and_update_db (top_level, filename, gtk_widget_get_name (btn), db_data, list_store);
+        parse_data_and_update_db (import_data->main_window, filename, action_name, import_data->db_data, list_store);
         g_free (filename);
     }
 
@@ -52,7 +51,7 @@ select_file_cb (GtkWidget   *btn,
 static gboolean
 parse_data_and_update_db (GtkWidget     *main_window,
                           const gchar   *filename,
-                          const gchar   *widget_name,
+                          const gchar   *action_name,
                           DatabaseData  *db_data,
                           GtkListStore  *list_store)
 {
@@ -63,7 +62,7 @@ parse_data_and_update_db (GtkWidget     *main_window,
         return FALSE;
     }
 
-    if (g_strcmp0 (widget_name, ANDOTP_BTN_NAME) == 0) {
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0) {
         content = get_andotp_data (filename, pwd, db_data->max_file_size_from_memlock, &err);
     } else {
         content = get_authplus_data (filename, pwd, db_data->max_file_size_from_memlock, &err);

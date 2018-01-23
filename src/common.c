@@ -30,8 +30,7 @@ icon_press_cb (GtkEntry         *entry,
 
 GtkWidget *
 create_box_with_buttons (const gchar *add_btn_name,
-                         const gchar *del_btn_name,
-                         const gchar *imp_btn_name)
+                         const gchar *del_btn_name)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
@@ -47,14 +46,6 @@ create_box_with_buttons (const gchar *add_btn_name,
     gtk_container_add (GTK_CONTAINER (del_button), gtk_image_new_from_icon_name ("list-remove-symbolic", GTK_ICON_SIZE_BUTTON));
     gtk_container_add (GTK_CONTAINER (box), del_button);
     gtk_widget_set_tooltip_text (del_button, "Remove");
-
-    if (imp_btn_name != NULL) {
-        GtkWidget *import_btn = gtk_button_new ();
-        gtk_widget_set_name (import_btn, imp_btn_name);
-        gtk_container_add (GTK_CONTAINER (import_btn), gtk_image_new_from_icon_name ("go-jump-symbolic", GTK_ICON_SIZE_BUTTON));
-        gtk_container_add (GTK_CONTAINER (box), import_btn);
-        gtk_widget_set_tooltip_text (import_btn, "Import");
-    }
 
     return box;
 }
@@ -84,11 +75,10 @@ find_widget (GtkWidget      *parent,
         children = gtk_container_get_children (GTK_CONTAINER (child->data));
         g_list_free (child);
     } else {
-        children = gtk_container_get_children (GTK_CONTAINER (parent)); //children are the two buttons
+        children = gtk_container_get_children (GTK_CONTAINER (parent)); //children are the 3 buttons
     }
 
     for (; children != NULL; children = g_list_next (children)) {
-        // g_strcmp0 returns 0 if the strings are equal. 0 is false, thus the '!'
         if (g_strcmp0 (gtk_widget_get_name (children->data), widget_name) == 0) {
             found_widget = children->data;
             break;

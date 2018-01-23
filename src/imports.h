@@ -1,12 +1,12 @@
 #pragma once
 
 #include <gtk/gtk.h>
+#include "db-misc.h"
 
 G_BEGIN_DECLS
 
-#define ANDOTP_BTN_NAME     "andotp_imp_btn"
-#define AUTHPLUS_BTN_NAME   "authplus_imp_btn"
-
+#define ANDOTP_IMPORT_ACTION_NAME "import_andotp"
+#define AUTHPLUS_IMPORT_ACTION_NAME "import_authplus"
 
 typedef struct _otp_t {
     gchar *type;
@@ -27,8 +27,14 @@ typedef struct _otp_t {
     gchar *secret;
 } otp_t;
 
+typedef struct _import_data_t {
+    GtkWidget *main_window;
+    DatabaseData *db_data;
+} ImportData;
 
-void    select_file_cb      (GtkWidget       *btn,
+
+void    select_file_cb      (GSimpleAction   *simple,
+                             GVariant        *parameter,
                              gpointer         user_data);
 
 GSList *get_authplus_data   (const gchar     *zip_path,
