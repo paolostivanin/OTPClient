@@ -39,7 +39,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 $ git clone https://github.com/paolostivanin/otpclient OTPClient
 $ cd OTPClient
 $ mkdir build && cd $_
-$ cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr ..
+$ cmake -DCMAKE_INSTALL_PREFIX=/usr ..
 $ make
 $ sudo make install
 ```
