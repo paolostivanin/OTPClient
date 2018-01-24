@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2017 Paolo Stivanin <info@paolostivanin.com> -->
 <component type="desktop-application">
-  <id>com.paolostivanin.OTPClient</id>
+  <id>com.github.paolostivanin.OTPClient</id>
   <metadata_license>CC-BY-4.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <name>OTPClient</name>
