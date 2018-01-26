@@ -6,8 +6,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 
 set(OTPCLIENT_VERSION_MAJOR "1")
-set(OTPCLIENT_VERSION_MINOR "0")
-set(OTPCLIENT_VERSION_PATCH "6")
+set(OTPCLIENT_VERSION_MINOR "1")
+set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
 set(CMAKE_C_STANDARD 11)
@@ -83,7 +83,9 @@ set(SOURCE_FILES
         src/andotp.c
         src/parse-data.c
         src/gquarks.c
-        src/imports.c src/password-cb.c)
+        src/imports.c
+        src/password-cb.c
+        )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
@@ -99,6 +101,7 @@ install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
+install(FILES src/ui/popover.ui DESTINATION share/otpclient)
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)
