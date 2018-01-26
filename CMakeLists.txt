@@ -83,7 +83,9 @@ set(SOURCE_FILES
         src/andotp.c
         src/parse-data.c
         src/gquarks.c
-        src/imports.c src/password-cb.c)
+        src/imports.c
+        src/password-cb.c
+        )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
