@@ -1,11 +1,14 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 #include "otpclient.h"
 #include "common.h"
 #include "gquarks.h"
 #include "imports.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
+
+#define gcry_calloc_secure_short(n) gcry_calloc_secure(n, 1)
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path                        (GtkWidget *window);
@@ -77,6 +80,8 @@ activate (GtkApplication    *app,
         return;
     }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+    json_set_alloc_funcs (gcry_calloc_secure_short, gcry_free);
 
 #ifdef USE_FLATPAK_APP_FOLDER
     db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);

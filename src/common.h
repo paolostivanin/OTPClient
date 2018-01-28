@@ -20,4 +20,8 @@ guint        get_row_number_from_iter   (GtkListStore   *list_store,
                                          GtkTreeIter     iter);
 
 gchar       *secure_strdup              (const gchar    *src);
+
+guint32      jenkins_one_at_a_time_hash (const gchar    *key,
+                                         gsize           len);
+
 G_END_DECLS
