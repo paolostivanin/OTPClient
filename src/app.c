@@ -358,7 +358,7 @@ destroy_cb (GtkWidget   *window,
     gcry_free (import_data->db_data->key);
     g_free (import_data->db_data->db_path);
     g_slist_free_full (import_data->db_data->objects_hash, g_free);
-    json_node_free (import_data->db_data->json_data);
+    json_decref (import_data->db_data->json_data);
     g_free (import_data->db_data);
     g_free (import_data);
     gtk_clipboard_clear (g_object_get_data (G_OBJECT (window), "clipboard"));
