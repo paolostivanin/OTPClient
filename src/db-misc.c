@@ -24,7 +24,7 @@ static void         backup_db       (const gchar *path);
 
 static void         restore_db      (const gchar *path);
 
-static inline void  jn_free         (gpointer data);
+static inline void  json_free       (gpointer data);
 
 static void         cleanup         (GFile *, gpointer, HeaderData *, GError *);
 
@@ -60,23 +60,10 @@ load_db (DatabaseData    *db_data,
     }
 
     gsize index;
-    json_t *obj, *value;
-    const gchar *key;
+    json_t *obj;
     json_array_foreach (db_data->json_data, index, obj) {
-        gchar *tmp_string = gcry_calloc_secure (256, 1);
-        json_object_foreach (obj, key, value) {
-            if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0) {
-                json_int_t v = json_integer_value (value);
-                g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
-            } else {
-                g_strlcat (tmp_string, json_string_value (value), 256);
-            }
-        }
-        guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+        guint32 hash = json_object_get_hash (obj);
         db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint32)));
-        json_decref (obj);
-        json_decref (value);
-        gcry_free (tmp_string);
     }
 }
 
@@ -95,7 +82,7 @@ update_and_reload_db (DatabaseData   *db_data,
     }
     if (regenerate_model) {
         update_model (db_data, list_store);
-        g_slist_free_full (db_data->data_to_add, jn_free);
+        g_slist_free_full (db_data->data_to_add, json_free);
         db_data->data_to_add = NULL;
     }
 }
@@ -379,7 +366,7 @@ restore_db (const gchar *path)
 
 
 static inline void
-jn_free (gpointer data)
+json_free (gpointer data)
 {
     json_decref (data);
 }

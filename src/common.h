@@ -24,4 +24,6 @@ gchar       *secure_strdup              (const gchar    *src);
 guint32      jenkins_one_at_a_time_hash (const gchar    *key,
                                          gsize           len);
 
+guint32      json_object_get_hash       (json_t *obj);
+
 G_END_DECLS

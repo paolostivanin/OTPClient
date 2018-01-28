@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 
 static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event, gpointer data);
 
@@ -126,6 +127,31 @@ jenkins_one_at_a_time_hash (const gchar *key, gsize len)
     hash += (hash << 3);
     hash ^= (hash >> 11);
     hash += (hash << 15);
+
+    return hash;
+}
+
+
+guint32
+json_object_get_hash (json_t *obj)
+{
+    const gchar *key;
+    json_t *value;
+    gchar *tmp_string = gcry_calloc_secure (256, 1);
+    json_object_foreach (obj, key, value) {
+        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0) {
+            json_int_t v = json_integer_value (value);
+            g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
+        } else {
+            g_strlcat (tmp_string, json_string_value (value), 256);
+        }
+    }
+
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+
+    json_decref (obj);
+    json_decref (value);
+    gcry_free (tmp_string);
 
     return hash;
 }
