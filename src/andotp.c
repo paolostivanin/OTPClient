@@ -1,12 +1,11 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
-#include <json-glib/json-glib.h>
+#include <jansson.h>
 #include "file-size.h"
 #include "imports.h"
 #include "common.h"
 #include "gquarks.h"
-#include "otpclient.h"
 
 #define ANDOTP_IV_SIZE 12
 #define TAG_SIZE 16
@@ -130,29 +129,21 @@ static GSList *
 parse_json_data (const gchar *data,
                  GError     **err)
 {
-    JsonParser *parser = json_parser_new ();
-    if (!json_parser_load_from_data (parser, data, -1, err)) {
-        g_object_unref (parser);
+    json_error_t jerr;
+    json_t *array = json_loads (data, 0, &jerr);
+    if (array == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, jerr.text);
         return NULL;
     }
 
-    JsonNode *root = json_parser_get_root (parser);
-    g_return_val_if_fail (JSON_NODE_HOLDS_ARRAY (root), NULL);
-    JsonArray *arr = json_node_get_array (root);
-
     GSList *otps = NULL;
-    for (guint i = 0; i < json_array_get_length (arr); i++) {
-        JsonNode *node = json_array_get_element (arr, i);
-        JsonObject *object = json_node_get_object (node);
-        if (object == NULL) {
-            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Expected to find a json object");
-            return NULL;
-        }
+    for (guint i = 0; i < json_array_size (array); i++) {
+        json_t *obj = json_array_get (array, i);
 
         otp_t *otp = g_new0 (otp_t, 1);
-        otp->secret = secure_strdup (json_object_get_string_member (object, "secret"));
+        otp->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
 
-        const gchar *label_with_issuer = json_object_get_string_member (object, "label");
+        const gchar *label_with_issuer = json_string_value (json_object_get (obj, "label"));
         gchar **tokens = g_strsplit (label_with_issuer, "-", -1);
         if (tokens[0] && tokens[1]) {
             otp->issuer = g_strdup (g_strstrip (tokens[0]));
@@ -162,10 +153,10 @@ parse_json_data (const gchar *data,
         }
         g_strfreev (tokens);
 
-        otp->period = (guint8) json_object_get_int_member (object, "period");
-        otp->digits = (guint8) json_object_get_int_member (object, "digits");
+        otp->period = (guint32) json_integer_value (json_object_get(obj, "period"));
+        otp->digits = (guint32) json_integer_value (json_object_get(obj, "digits"));
 
-        const gchar *type = json_object_get_string_member (object, "type");
+        const gchar *type = json_string_value (json_object_get (obj, "type"));
         if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup (type);
             otp->period = 30;
@@ -174,12 +165,14 @@ parse_json_data (const gchar *data,
             // TODO read this property from the loaded file when andOTP will implement HOTP
             otp->counter = 0;
         } else {
-            g_printerr ("otp type is neither TOTP nor HOTP\n");
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "otp type is neither TOTP nor HOTP");
             gcry_free (otp->secret);
+            g_free (otp);
+            json_decref (obj);
             return NULL;
         }
 
-        const gchar *algo = json_object_get_string_member (object, "algorithm");
+        const gchar *algo = json_string_value (json_object_get (obj, "algorithm"));
         if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
             g_ascii_strcasecmp (algo, "SHA256") == 0 ||
             g_ascii_strcasecmp (algo, "SHA512") == 0) {
@@ -187,13 +180,15 @@ parse_json_data (const gchar *data,
         } else {
             g_printerr ("algo not supported (must be either one of: sha1, sha256 or sha512\n");
             gcry_free (otp->secret);
+            g_free (otp);
+            json_decref (obj);
             return NULL;
         }
 
         otps = g_slist_append (otps, g_memdup (otp, sizeof (otp_t)));
         g_free (otp);
+        json_decref (obj);
     }
-    g_object_unref (parser);
 
     return otps;
 }
