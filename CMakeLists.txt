@@ -66,7 +66,8 @@ set(HEADER_FILES
         src/treeview.h
         src/add-data-dialog.h
         src/gquarks.h
-        src/message-dialogs.h src/password-cb.h)
+        src/message-dialogs.h
+        src/password-cb.h)
 
 set(SOURCE_FILES
         src/treeview.c

@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <cotp.h>
+#include <jansson.h>
 #include "otpclient.h"
 #include "timer.h"
 #include "liststore-misc.h"
@@ -12,17 +13,17 @@ typedef struct _parsed_json_data {
     gchar **issuers;
 } ParsedData;
 
-static void set_json_data (JsonNode *root_json_node, ParsedData *pjd);
+static void          set_json_data          (json_t *array, ParsedData *pjd);
 
-static void add_data_to_model (DatabaseData *db_data, GtkListStore *store);
+static void          add_data_to_model      (DatabaseData *db_data, GtkListStore *store);
 
-static GtkTreeModel *create_model (DatabaseData *db_data);
+static GtkTreeModel *create_model           (DatabaseData *db_data);
 
-static void add_columns (GtkTreeView *treeview, DatabaseData *db_data);
+static void          add_columns            (GtkTreeView *treeview, DatabaseData *db_data);
 
-static void row_selected_cb (GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data);
+static void          row_selected_cb        (GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data);
 
-static void free_parsed_json_data (ParsedData *pjd);
+static void          free_parsed_json_data  (ParsedData *pjd);
 
 
 GtkListStore *
@@ -80,7 +81,6 @@ remove_selected_entries (DatabaseData *db_data,
     GtkTreeIter iter;
     gboolean valid, is_active;
     GError *err = NULL;
-    JsonArray *ja = json_node_get_array (db_data->json_data);
 
     g_return_if_fail (list_store != NULL);
 
@@ -90,7 +90,7 @@ remove_selected_entries (DatabaseData *db_data,
         gtk_tree_model_get (GTK_TREE_MODEL (list_store), &iter, COLUMN_BOOLEAN, &is_active, -1);
         if (is_active) {
             guint row_number = get_row_number_from_iter (list_store, iter);
-            json_array_remove_element (ja, row_number);
+            json_array_remove (db_data->json_data, row_number);
             gtk_list_store_remove (list_store, &iter);
             valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL (list_store), &iter);
         } else {
@@ -105,24 +105,23 @@ remove_selected_entries (DatabaseData *db_data,
 
 
 static void
-set_json_data (JsonNode     *root_json_node,
-               ParsedData   *pjd)
+set_json_data (json_t     *array,
+               ParsedData *pjd)
 {
-    JsonArray *ja = json_node_get_array (root_json_node);
-    guint ja_len = json_array_get_length (ja);
-    JsonObject *jo;
-    pjd->types = (gchar **) g_malloc0 ((ja_len + 1)  * sizeof (gchar *));
-    pjd->labels = (gchar **) g_malloc0 ((ja_len + 1) * sizeof (gchar *));
-    pjd->issuers = (gchar **) g_malloc0 ((ja_len + 1) * sizeof (gchar *));
-    for (guint i = 0; i < ja_len; i++) {
-        jo = json_array_get_object_element (ja, i);
-        pjd->types[i] = g_strdup (json_object_get_string_member (jo, "type"));
-        pjd->labels[i] = g_strdup (json_object_get_string_member (jo, "label"));
-        pjd->issuers[i] = g_strdup (json_object_get_string_member (jo, "issuer"));
+    gsize array_len = json_array_size (array);
+    pjd->types = (gchar **) g_malloc0 ((array_len + 1)  * sizeof (gchar *));
+    pjd->labels = (gchar **) g_malloc0 ((array_len + 1) * sizeof (gchar *));
+    pjd->issuers = (gchar **) g_malloc0 ((array_len + 1) * sizeof (gchar *));
+    for (guint i = 0; i < array_len; i++) {
+        json_t *obj = json_array_get (array, i);
+        pjd->types[i] = g_strdup (json_string_value (json_object_get (obj, "type")));
+        pjd->labels[i] = g_strdup (json_string_value (json_object_get (obj, "label")));
+        pjd->issuers[i] = g_strdup (json_string_value (json_object_get (obj, "issuer")));
+        json_decref (obj);
     }
-    pjd->types[ja_len] = NULL;
-    pjd->labels[ja_len] = NULL;
-    pjd->issuers[ja_len] = NULL;
+    pjd->types[array_len] = NULL;
+    pjd->labels[array_len] = NULL;
+    pjd->issuers[array_len] = NULL;
 }
 
 

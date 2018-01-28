@@ -132,7 +132,7 @@ parse_json_data (const gchar *data,
     json_error_t jerr;
     json_t *array = json_loads (data, 0, &jerr);
     if (array == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, jerr.text);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
     }
 
