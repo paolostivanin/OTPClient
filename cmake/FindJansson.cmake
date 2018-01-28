@@ -1,0 +1,16 @@
+find_path(JANSSON_INCLUDE_DIR jansson.h)
+
+find_library(JANSSON_LIBRARIES jansson)
+
+mark_as_advanced(JANSSON_LIBRARIES JANSSON_INCLUDE_DIR)
+
+if(JANSSON_INCLUDE_DIR AND EXISTS "${JANSSON_INCLUDE_DIR}/jansson.h")
+    file(STRINGS "${JANSSON_INCLUDE_DIR}/jansson.h" JANSSON_H REGEX "^#define JANSSON_VERSION \"[^\"]*\"$")
+    string(REGEX REPLACE "^.*JANSSON_VERSION \"([0-9]+).*$" "\\1" JANSSON_VERSION_MAJOR "${JANSSON_H}")
+    string(REGEX REPLACE "^.*JANSSON_VERSION \"[0-9]+\\.([0-9]+).*$" "\\1" JANSSON_VERSION_MINOR  "${JANSSON_H}")
+    string(REGEX REPLACE "^.*JANSSON_VERSION \"[0-9]+\\.[0-9]+\\.([0-9]+).*$" "\\1" JANSSON_VERSION_PATCH "${JANSSON_H}")
+    set(JANSSON_VERSION_STRING "${JANSSON_VERSION_MAJOR}.${JANSSON_VERSION_MINOR}.${JANSSON_VERSION_PATCH}")
+endif()
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(Jansson DEFAULT_MSG JANSSON_LIBRARIES JANSSON_INCLUDE_DIR)
