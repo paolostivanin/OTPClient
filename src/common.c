@@ -155,3 +155,32 @@ json_object_get_hash (json_t *obj)
 
     return hash;
 }
+
+
+json_t *
+build_json_obj (const gchar *type,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *acc_key,
+                gint         digits,
+                const gchar *algo,
+                gint64       ctr)
+{
+    json_t *obj = json_object ();
+    json_object_set (obj, "type", json_string (type));
+    json_object_set (obj, "label", json_string (acc_label));
+    json_object_set (obj, "issuer", json_string (acc_iss));
+    json_object_set (obj, "secret", json_string (acc_key));
+    json_object_set (obj, "digits", json_integer (digits));
+    json_object_set (obj, "algo", json_string (algo));
+
+    json_object_set (obj, "secret", json_string (acc_key));
+
+    if (g_strcmp0 (type, "TOTP") == 0) {
+        json_object_set (obj, "period", json_integer (30));
+    } else {
+        json_object_set (obj, "counter", json_integer (ctr));
+    }
+
+    return obj;
+}

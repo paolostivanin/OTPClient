@@ -18,9 +18,6 @@ static json_t   *get_json_obj             (Widgets *widgets,
                                            const gchar *acc_label, const gchar *acc_iss, const gchar *acc_key,
                                            gint i);
 
-static json_t   *build_json_obj           (const gchar *type, const gchar *acc_label, const gchar *acc_iss,
-                                           const gchar *acc_key, const gchar *digits_str, const gchar *algo, gint64 ctr);
-
 
 gboolean
 parse_user_data (Widgets        *widgets,
@@ -114,40 +111,10 @@ get_json_obj (Widgets *widgets,
     gchar *digits = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->dig_cb_box, GtkWidget * , i)));
     gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
     gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->spin_btn, GtkWidget * , i)));
-    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, digits, algo, (gint64) ctr);
+    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, (gint)g_ascii_strtoll (digits, NULL, 10), algo, (gint64) ctr);
     g_free (type);
     g_free (digits);
     g_free (algo);
 
     return jn;
-}
-
-
-static json_t *
-build_json_obj (const gchar *type,
-                const gchar *acc_label,
-                const gchar *acc_iss,
-                const gchar *acc_key,
-                const gchar *digits_str,
-                const gchar *algo,
-                gint64       ctr)
-{
-    json_t *obj = json_object ();
-    gint64 digits = g_ascii_strtoll (digits_str, NULL, 10);
-    json_object_set (obj, "type", json_string (type));
-    json_object_set (obj, "label", json_string (acc_label));
-    json_object_set (obj, "issuer", json_string (acc_iss));
-    json_object_set (obj, "secret", json_string (acc_key));
-    json_object_set (obj, "digits", json_integer (digits));
-    json_object_set (obj, "algo", json_string (algo));
-
-    json_object_set (obj, "secret", json_string (acc_key));
-
-    if (g_strcmp0 (type, "TOTP") == 0) {
-        json_object_set (obj, "period", json_integer (30));
-    } else {
-        json_object_set (obj, "counter", json_integer (ctr));
-    }
-
-    return obj;
 }
