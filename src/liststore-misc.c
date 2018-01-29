@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include <cotp.h>
-#include <json-glib/json-glib.h>
+#include <jansson.h>
 #include "db-misc.h"
 #include "treeview.h"
 #include "liststore-misc.h"
@@ -97,17 +97,17 @@ set_otp_data (OtpData       *otp_data,
               DatabaseData  *db_data,
               guint          row_number)
 {
-    JsonArray *ja = json_node_get_array (db_data->json_data);
-    JsonObject *jo = json_array_get_object_element (ja, (guint) row_number);
-    otp_data->type = g_strdup (json_object_get_string_member (jo, "type"));
-    otp_data->secret = g_strdup (json_object_get_string_member (jo, "secret"));
-    otp_data->algo = g_strdup (json_object_get_string_member (jo, "algo"));
-    otp_data->digits = (gint) json_object_get_int_member (jo, "digits");
-    if (json_object_has_member (jo, "counter")) {
+    json_t *obj = json_array_get (db_data->json_data, row_number);
+
+    otp_data->type = g_strdup (json_string_value (json_object_get (obj, "type")));
+    otp_data->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
+    otp_data->algo = g_strdup (json_string_value (json_object_get (obj, "algo")));
+    otp_data->digits = (gint)json_integer_value (json_object_get (obj, "digits"));
+    if (json_object_get (obj, "counter") != NULL) {
         GError *err = NULL;
-        otp_data->counter = json_object_get_int_member (jo, "counter");
+        otp_data->counter = json_integer_value (json_object_get (obj, "counter"));
         // every time HOTP is accessed, counter must be increased
-        json_object_set_int_member (jo, "counter", otp_data->counter + 1);
+        json_object_set (obj, "counter", json_integer (otp_data->counter + 1));
         update_and_reload_db (db_data, NULL, FALSE, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
             g_printerr ("%s\n", err->message);
@@ -120,7 +120,7 @@ static void
 clean_otp_data (OtpData *otp_data)
 {
     g_free (otp_data->type);
-    g_free (otp_data->secret);
+    gcry_free (otp_data->secret);
     g_free (otp_data->algo);
     g_free (otp_data);
 }

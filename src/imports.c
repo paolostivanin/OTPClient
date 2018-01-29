@@ -1,10 +1,12 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 #include "db-misc.h"
 #include "imports.h"
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
+#include "common.h"
 
 
 static gboolean  parse_data_and_update_db    (GtkWidget     *main_window,
@@ -12,9 +14,6 @@ static gboolean  parse_data_and_update_db    (GtkWidget     *main_window,
                                               const gchar   *action_name,
                                               DatabaseData  *db_data,
                                               GtkListStore  *list_store);
-
-
-static JsonNode *get_json_node               (otp_t         *otp);
 
 static void      free_gslist                 (GSList        *otps,
                                               guint          list_len);
@@ -76,14 +75,15 @@ parse_data_and_update_db (GtkWidget     *main_window,
         return FALSE;
     }
 
-    JsonNode *jn;
+    json_t *obj;
     guint list_len = g_slist_length (content);
     for (guint i = 0; i < list_len; i++) {
-        jn = get_json_node (g_slist_nth_data (content, i));
-        guint hash = json_object_hash (json_node_get_object (jn));
+        otp_t *otp = g_slist_nth_data (content, i);
+        obj = build_json_obj (otp->type, otp->label, otp->issuer, otp->secret, otp->digits, otp->algo, otp->counter);
+        guint hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
-            db_data->data_to_add = g_slist_append (db_data->data_to_add, jn);
+            db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");
         }
@@ -98,40 +98,6 @@ parse_data_and_update_db (GtkWidget     *main_window,
     free_gslist (content, list_len);
 
     return TRUE;
-}
-
-
-static JsonNode *
-get_json_node (otp_t *otp)
-{
-    JsonBuilder *jb = json_builder_new ();
-
-    jb = json_builder_begin_object (jb);
-    jb = json_builder_set_member_name (jb, "type");
-    jb = json_builder_add_string_value (jb, otp->type);
-    jb = json_builder_set_member_name (jb, "label");
-    jb = json_builder_add_string_value (jb, otp->label);
-    jb = json_builder_set_member_name (jb, "issuer");
-    jb = json_builder_add_string_value (jb, otp->issuer);
-    jb = json_builder_set_member_name (jb, "secret");
-    jb = json_builder_add_string_value (jb, otp->secret);
-    jb = json_builder_set_member_name (jb, "digits");
-    jb = json_builder_add_int_value (jb, otp->digits);
-    jb = json_builder_set_member_name (jb, "algo");
-    jb = json_builder_add_string_value (jb, otp->algo);
-    if (g_strcmp0 (otp->type, "TOTP") == 0) {
-        jb = json_builder_set_member_name (jb, "period");
-        json_builder_add_int_value (jb, otp->period);
-    } else {
-        jb = json_builder_set_member_name (jb, "counter");
-        json_builder_add_int_value (jb, otp->counter);
-    }
-    jb = json_builder_end_object (jb);
-
-    JsonNode *jnode = json_builder_get_root (jb);
-    g_object_unref (jb);
-
-    return jnode;
 }
 
 

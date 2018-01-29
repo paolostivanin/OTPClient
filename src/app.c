@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 #include "otpclient.h"
 #include "common.h"
 #include "gquarks.h"
@@ -77,6 +78,8 @@ activate (GtkApplication    *app,
         return;
     }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
 #ifdef USE_FLATPAK_APP_FOLDER
     db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
@@ -353,7 +356,7 @@ destroy_cb (GtkWidget   *window,
     gcry_free (import_data->db_data->key);
     g_free (import_data->db_data->db_path);
     g_slist_free_full (import_data->db_data->objects_hash, g_free);
-    json_node_free (import_data->db_data->json_data);
+    json_decref (import_data->db_data->json_data);
     g_free (import_data->db_data);
     g_free (import_data);
     gtk_clipboard_clear (g_object_get_data (G_OBJECT (window), "clipboard"));

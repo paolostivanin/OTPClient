@@ -6,9 +6,9 @@
 #include "gquarks.h"
 #include "message-dialogs.h"
 
-#define MAX_ENTRY_ACC_LENGTH 128
+#define MAX_ENTRY_ACC_LENGTH 80
 #define MAX_ENTRY_ISS_LENGTH MAX_ENTRY_ACC_LENGTH
-#define MAX_ENTRY_KEY_LENGTH 64
+#define MAX_ENTRY_KEY_LENGTH 48
 
 static Widgets *init_widgets (void);
 

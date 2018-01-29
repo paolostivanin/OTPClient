@@ -1,31 +1,32 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
-#include <json-glib/json-glib.h>
+#include <jansson.h>
 #include "db-misc.h"
 #include "otpclient.h"
 #include "file-size.h"
 #include "gquarks.h"
+#include "common.h"
 
 
-static void reload_db (DatabaseData *db_data, GError **err);
+static void         reload_db       (DatabaseData *db_data, GError **err);
 
-static void update_db (DatabaseData *data);
+static void         update_db       (DatabaseData *data);
 
-static gpointer encrypt_db (const gchar *db_path, const gchar *in_memory_json, const gchar *password);
+static gpointer     encrypt_db      (const gchar *db_path, const gchar *in_memory_json, const gchar *password);
 
-static inline void add_to_json (gpointer list_elem, gpointer json_array);
+static inline void  add_to_json     (gpointer list_elem, gpointer json_array);
 
-static gchar *decrypt_db (const gchar *db_path, const gchar *password);
+static gchar       *decrypt_db      (const gchar *db_path, const gchar *password);
 
-static guchar *get_derived_key (const gchar *pwd, HeaderData *header_data);
+static guchar      *get_derived_key (const gchar *pwd, HeaderData *header_data);
 
-static void backup_db (const gchar *path);
+static void         backup_db       (const gchar *path);
 
-static void restore_db (const gchar *path);
+static void         restore_db      (const gchar *path);
 
-static inline void jn_free (gpointer data);
+static inline void  json_free       (gpointer data);
 
-static void cleanup (GFile *, gpointer, HeaderData *, GError *);
+static void         cleanup         (GFile *, gpointer, HeaderData *, GError *);
 
 
 void
@@ -50,16 +51,19 @@ load_db (DatabaseData    *db_data,
         return;
     }
 
-    db_data->json_data = json_from_string (in_memory_json, err);
+    json_error_t jerr;
+    db_data->json_data = json_loads (in_memory_json, 0, &jerr);
     gcry_free (in_memory_json);
     if (db_data->json_data == NULL) {
+        g_printerr ("Error while loading json data: %s\n", jerr.text);
         return;
     }
 
-    JsonArray *ja = json_node_get_array (db_data->json_data);
-    for (guint i = 0; i < json_array_get_length (ja); i++) {
-        guint hash = json_object_hash (json_array_get_object_element (ja, i));
-        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+    gsize index;
+    json_t *obj;
+    json_array_foreach (db_data->json_data, index, obj) {
+        guint32 hash = json_object_get_hash (obj);
+        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint32)));
     }
 }
 
@@ -78,7 +82,7 @@ update_and_reload_db (DatabaseData   *db_data,
     }
     if (regenerate_model) {
         update_model (db_data, list_store);
-        g_slist_free_full (db_data->data_to_add, jn_free);
+        g_slist_free_full (db_data->data_to_add, json_free);
         db_data->data_to_add = NULL;
     }
 }
@@ -101,7 +105,7 @@ reload_db (DatabaseData  *db_data,
            GError       **err)
 {
     if (db_data->json_data != NULL) {
-        json_node_free (db_data->json_data);
+        json_decref (db_data->json_data);
     }
     load_db (db_data, err);
 }
@@ -113,28 +117,16 @@ update_db (DatabaseData *data)
     gboolean first_run = FALSE;
     if (data->json_data == NULL) {
         first_run = TRUE;
-    }
-    JsonArray *ja;
-    if (first_run) {
-        // this is the first run, array must be created. No need to backup an empty file
-        ja = json_array_new ();
+        data->json_data = json_array ();
     } else {
+        // database is backed-up only if this is not the first run
         backup_db (data->db_path);
-        ja = json_node_get_array (data->json_data);
     }
 
-    g_slist_foreach (data->data_to_add, add_to_json, ja);
+    g_slist_foreach (data->data_to_add, add_to_json, data->json_data);
 
-    gchar *plain_data;
-    if (first_run) {
-        JsonNode *jn = json_node_alloc ();
-        jn = json_node_init_array (jn, ja);
-        plain_data = json_to_string (jn, FALSE);
-        json_node_free (jn);
-        json_array_unref (ja);
-    } else {
-        plain_data = json_to_string (data->json_data, FALSE);
-    }
+    gchar *plain_data = json_dumps (data->json_data, JSON_COMPACT);
+
     if (encrypt_db (data->db_path, plain_data, data->key) != NULL) {
         g_printerr ("Couldn't update the database.\n");
         if (!first_run) {
@@ -142,7 +134,8 @@ update_db (DatabaseData *data)
             restore_db (data->db_path);
         }
     }
-    g_free (plain_data);
+
+    gcry_free (plain_data);
 }
 
 
@@ -150,8 +143,7 @@ static inline void
 add_to_json (gpointer list_elem,
              gpointer json_array)
 {
-    // array will take ownership of the json node, thus the copy
-    json_array_add_element (json_array, json_node_copy (list_elem));
+    json_array_append (json_array, json_deep_copy (list_elem));
 }
 
 
@@ -369,9 +361,9 @@ restore_db (const gchar *path)
 
 
 static inline void
-jn_free (gpointer data)
+json_free (gpointer data)
 {
-    json_node_free (data);
+    json_decref (data);
 }
 
 

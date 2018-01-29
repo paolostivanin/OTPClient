@@ -13,11 +13,11 @@ typedef struct _otp_t {
 
     gchar *algo;
 
-    guint8 digits;
+    guint32 digits;
 
     union {
-        gint16 period;
-        gint64 counter;
+        guint32 period;
+        guint64 counter;
     };
 
     gchar *label;

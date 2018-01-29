@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 
 static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event, gpointer data);
 
@@ -111,4 +112,73 @@ secure_strdup (const gchar *src)
     memcpy (sec_buf, src, strlen (src) + 1);
 
     return sec_buf;
+}
+
+
+guint32
+jenkins_one_at_a_time_hash (const gchar *key, gsize len)
+{
+    guint32 hash, i;
+    for(hash = i = 0; i < len; ++i) {
+        hash += key[i];
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
+    }
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
+
+    return hash;
+}
+
+
+guint32
+json_object_get_hash (json_t *obj)
+{
+    const gchar *key;
+    json_t *value;
+    gchar *tmp_string = gcry_calloc_secure (256, 1);
+    json_object_foreach (obj, key, value) {
+        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
+            json_int_t v = json_integer_value (value);
+            g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
+        } else {
+            g_strlcat (tmp_string, json_string_value (value), 256);
+        }
+    }
+
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+
+    gcry_free (tmp_string);
+
+    return hash;
+}
+
+
+json_t *
+build_json_obj (const gchar *type,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *acc_key,
+                gint         digits,
+                const gchar *algo,
+                gint64       ctr)
+{
+    json_t *obj = json_object ();
+    json_object_set (obj, "type", json_string (type));
+    json_object_set (obj, "label", json_string (acc_label));
+    json_object_set (obj, "issuer", json_string (acc_iss));
+    json_object_set (obj, "secret", json_string (acc_key));
+    json_object_set (obj, "digits", json_integer (digits));
+    json_object_set (obj, "algo", json_string (algo));
+
+    json_object_set (obj, "secret", json_string (acc_key));
+
+    if (g_strcmp0 (type, "TOTP") == 0) {
+        json_object_set (obj, "period", json_integer (30));
+    } else {
+        json_object_set (obj, "counter", json_integer (ctr));
+    }
+
+    return obj;
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <json-glib/json-glib.h>
+#include <jansson.h>
 
 G_BEGIN_DECLS
 
@@ -24,7 +24,7 @@ typedef struct _db_data {
 
     gchar *key;
 
-    JsonNode *json_data;
+    json_t *json_data;
 
     GSList *objects_hash;
 

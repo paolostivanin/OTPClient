@@ -34,26 +34,26 @@ find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
 find_package(Cotp 1.0.10 REQUIRED)
 find_package(Libzip 1.1.0 REQUIRED)
+find_package(Jansson 2.8.0 REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
-pkg_check_modules(JSON_GLIB REQUIRED json-glib-1.0)
 
 include_directories(${GTK3_INCLUDE_DIRS}
-        ${JSON_GLIB_INCLUDE_DIRS}
         ${GCRYPT_INCLUDE_DIR}
         ${COTP_INCLUDE_DIR}
-        ${LIBZIP_INCLUDE_DIRS})
+        ${LIBZIP_INCLUDE_DIR}
+        ${JANSSON_INCLUDE_DIR})
 
 link_directories(${GTK3_LIBRARY_DIRS}
-        ${JSON_GLIB_LIBRARY_DIRS}
-        ${GCRYPT_LIBRARY_DIRS}
-        ${COTP_LIBRARY_DIRS}
-        ${LIBZIP_LIBRARY_DIRS})
+        ${GCRYPT_LIBRARY_DIR}
+        ${COTP_LIBRARY_DIR}
+        ${LIBZIP_LIBRARY_DIR}
+        ${JANSSON_LIBRARY_DIR})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
-        ${JSON_GLIB_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
         ${COTP_CFLAGS_OTHER}
-        ${LIBZIP_CFLAGS_OTHER})
+        ${LIBZIP_CFLAGS_OTHER}
+        ${JANSSON_CFLAGS_OTHER})
 
 set(HEADER_FILES
         src/common.h
@@ -66,7 +66,8 @@ set(HEADER_FILES
         src/treeview.h
         src/add-data-dialog.h
         src/gquarks.h
-        src/message-dialogs.h src/password-cb.h)
+        src/message-dialogs.h
+        src/password-cb.h)
 
 set(SOURCE_FILES
         src/treeview.c
@@ -93,7 +94,8 @@ target_link_libraries(${PROJECT_NAME}
         ${JSON_GLIB_LIBRARIES}
         ${GCRYPT_LIBRARIES}
         ${COTP_LIBRARIES}
-        ${LIBZIP_LIBRARIES})
+        ${LIBZIP_LIBRARIES}
+        ${JANSSON_LIBRARIES})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
