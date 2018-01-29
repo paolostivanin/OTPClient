@@ -15,7 +15,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 |----|-----------|
 |GTK+|3.22|
 |Glib|2.50.0|
-|json-glib|1.2.0|
+|jansson|2.8.0|
 |libgcrypt|1.6.0|
 |libzip|1.1.0|
 |[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
@@ -89,7 +89,7 @@ Personally, I prefer to spend time on development rather than packaging for the 
 
 |Distro|Link|
 |:-:|:---:|
-|Archlinux|https://aur.archlinux.org/packages/otpclient-git|
+|Archlinux|https://aur.archlinux.org/packages/otpclient|
 
 ## Flatpak
 To install Flatpak, follow the [official guide](https://flatpak.org/getting.html). To install OTPClient, open a terminal and the execute:
