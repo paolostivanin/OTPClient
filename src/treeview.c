@@ -117,7 +117,6 @@ set_json_data (json_t     *array,
         pjd->types[i] = g_strdup (json_string_value (json_object_get (obj, "type")));
         pjd->labels[i] = g_strdup (json_string_value (json_object_get (obj, "label")));
         pjd->issuers[i] = g_strdup (json_string_value (json_object_get (obj, "issuer")));
-        json_decref (obj);
     }
     pjd->types[array_len] = NULL;
     pjd->labels[array_len] = NULL;

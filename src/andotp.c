@@ -187,7 +187,6 @@ parse_json_data (const gchar *data,
 
         otps = g_slist_append (otps, g_memdup (otp, sizeof (otp_t)));
         g_free (otp);
-        json_decref (obj);
     }
 
     return otps;

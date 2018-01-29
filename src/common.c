@@ -139,7 +139,7 @@ json_object_get_hash (json_t *obj)
     json_t *value;
     gchar *tmp_string = gcry_calloc_secure (256, 1);
     json_object_foreach (obj, key, value) {
-        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0) {
+        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
             g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
         } else {
@@ -149,8 +149,6 @@ json_object_get_hash (json_t *obj)
 
     guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
 
-    json_decref (obj);
-    json_decref (value);
     gcry_free (tmp_string);
 
     return hash;

@@ -117,17 +117,13 @@ update_db (DatabaseData *data)
     gboolean first_run = FALSE;
     if (data->json_data == NULL) {
         first_run = TRUE;
-    }
-    json_t *jn_array;
-    if (first_run) {
-        // this is the first run, array must be created. No need to backup an empty file
-        jn_array = json_array ();
+        data->json_data = json_array ();
     } else {
+        // database is backed-up only if this is not the first run
         backup_db (data->db_path);
-        jn_array = data->json_data;
     }
 
-    g_slist_foreach (data->data_to_add, add_to_json, jn_array);
+    g_slist_foreach (data->data_to_add, add_to_json, data->json_data);
 
     gchar *plain_data = json_dumps (data->json_data, JSON_COMPACT);
 
@@ -140,7 +136,6 @@ update_db (DatabaseData *data)
     }
 
     gcry_free (plain_data);
-    json_decref (jn_array);
 }
 
 

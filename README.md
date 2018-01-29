@@ -81,15 +81,8 @@ reboot the system.
 |Debian|-|testing (08/nov/2017)|GNOME|
 |Solus|-|stable|Budgie|
 |Fedora|26, 27|-|GNOME|
-|macOS[2]|10.13|High Sierra|-|
 
 [1] OTPClient can be run on Ubuntu 16.04 only with [Flatpak](#flatpak).
-
-[2] For MacOS you need to:
-- install brew
-- install `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`, `json-glib`
-- create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
-- install `libcotp`
 
 ## Packages
 Personally, I prefer to spend time on development rather than packaging for the myriads of systems out there. If you want to maintain the package for your favourite/daily driver distro(s), feel free to drop me an email or open a PR with an update for this section :)
