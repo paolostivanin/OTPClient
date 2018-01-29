@@ -216,14 +216,12 @@ add_popover_to_button (GtkWidget    *button,
     } else if (g_file_test (g_strconcat ("/usr/local/", partial_path, NULL), G_FILE_TEST_EXISTS)) {
         prefix = "/usr/local/";
     } else {
-        prefix = "/home/polslinux/Documents/Development/Projects/OTPClient/src/ui/popover.ui";
-//        return FALSE;
+        return FALSE;
     }
 #else
     prefix = "/app/";
 #endif
-//    gchar *path = g_strconcat (prefix, partial_path, NULL);
-    gchar *path = g_strconcat (prefix, NULL);
+    gchar *path = g_strconcat (prefix, partial_path, NULL);
     GtkBuilder *builder = gtk_builder_new_from_file (path);
     g_free (path);
     GtkWidget *popover = GTK_WIDGET (gtk_builder_get_object (builder, "pop1"));
