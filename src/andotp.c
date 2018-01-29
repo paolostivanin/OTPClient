@@ -189,5 +189,7 @@ parse_json_data (const gchar *data,
         g_free (otp);
     }
 
+    json_decref (array);
+
     return otps;
 }
