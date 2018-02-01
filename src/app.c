@@ -98,6 +98,7 @@ activate (GtkApplication    *app,
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
+    retry:
     db_data->key = prompt_for_password (main_window, g_file_test (db_data->db_path, G_FILE_TEST_EXISTS), NULL);
     if (db_data->key == NULL) {
         g_free (db_data);
@@ -110,9 +111,7 @@ activate (GtkApplication    *app,
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (db_data->key);
-        g_free (db_data);
-        g_application_quit (G_APPLICATION (app));
-        return;
+        goto retry;
     }
 
     GtkClipboard *clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
