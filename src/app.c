@@ -98,7 +98,8 @@ activate (GtkApplication    *app,
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
-    db_data->key = prompt_for_password (main_window, g_file_test (db_data->db_path, G_FILE_TEST_EXISTS));
+    retry:
+    db_data->key = prompt_for_password (main_window, g_file_test (db_data->db_path, G_FILE_TEST_EXISTS), NULL);
     if (db_data->key == NULL) {
         g_free (db_data);
         g_application_quit (G_APPLICATION (app));
@@ -110,9 +111,7 @@ activate (GtkApplication    *app,
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (db_data->key);
-        g_free (db_data);
-        g_application_quit (G_APPLICATION (app));
-        return;
+        goto retry;
     }
 
     GtkClipboard *clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
@@ -321,17 +320,20 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
                     gpointer       user_data)
 {
     ImportData *import_data = (ImportData *)user_data;
-    gcry_free (import_data->db_data->key);
-    import_data->db_data->key = prompt_for_password (import_data->main_window, FALSE);
-    if (import_data->db_data->key != NULL) {
+    gchar *tmp_key = secure_strdup (import_data->db_data->key);
+    gchar *pwd = prompt_for_password (import_data->main_window, FALSE, tmp_key);
+    if (pwd != NULL) {
+        import_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (import_data->db_data, NULL, FALSE, &err);
+        update_and_reload_db(import_data->db_data, NULL, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (import_data->main_window));
             destroy_cb (import_data->main_window, import_data);
             g_application_quit (G_APPLICATION (app));
         }
+    } else {
+        gcry_free (tmp_key);
     }
 }
 
