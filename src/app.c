@@ -165,7 +165,7 @@ create_main_window_with_header_bar (GtkApplication  *app,
 
     import_data->main_window = window;
     
-    gtk_container_set_border_width (GTK_CONTAINER (window), 10);
+    gtk_container_set_border_width (GTK_CONTAINER (window), 7);
 
     if (width > 0 && height > 0) {
         gtk_window_set_default_size (GTK_WINDOW (window), width, height);
