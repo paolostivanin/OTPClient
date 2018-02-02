@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2018 Paolo Stivanin <info@paolostivanin.com> -->
 <component type="desktop-application">
-  <id>com.github.paolostivanin.OTPClient</id>
+  <id type="desktop">com.github.paolostivanin.OTPClient.desktop</id>
   <metadata_license>CC-BY-4.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <name>OTPClient</name>
-  <summary>Manage TOTP and HOTP tokens in a secure way</summary>
+  <summary>GTK+ application for managing TOTP and HOTP tokens with built-in encryption.</summary>
 
   <keywords>
     <keyword>otp</keyword>
@@ -26,11 +26,11 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   <screenshots>
     <screenshot type="default">
       <caption>Main window</caption>
-      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/mainwin.png</image>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/f2b56b4b/data/screenshots/mainwin.png</image>
     </screenshot>
     <screenshot>
       <caption>Add tokens</caption>
-      <image>https://github.com/paolostivanin/OTPClient/blob/master/data/screenshots/addtokens.png</image>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/f2b56b4b/data/screenshots/addtokens.png</image>
     </screenshot>
   </screenshots>
 
@@ -65,7 +65,7 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
-    <release version="1.1.0" date="2018-02-03">
+    <release version="1.1.0" date="2018-02-02">
       <description>
         <p>https://github.com/paolostivanin/OTPClient/releases/tag/v1.1.0</p>
       </description>
