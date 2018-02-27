@@ -91,7 +91,6 @@ set(SOURCE_FILES
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
         ${GTK3_LIBRARIES}
-        ${JSON_GLIB_LIBRARIES}
         ${GCRYPT_LIBRARIES}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES}

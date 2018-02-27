@@ -13,6 +13,7 @@ typedef struct _parsed_json_data {
     gchar **issuers;
 } ParsedData;
 
+
 static void          set_json_data          (json_t *array, ParsedData *pjd);
 
 static void          add_data_to_model      (DatabaseData *db_data, GtkListStore *store);
@@ -46,13 +47,15 @@ create_treeview (GtkWidget      *main_win,
 
     GtkWidget *treeview = gtk_tree_view_new_with_model (model);
     gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACC_LABEL);
-
-    // signal sent when selected row is double clicked
-    g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
-
     g_object_unref (model);
 
-    g_object_set_data (G_OBJECT (timer_label), "lstore", GTK_LIST_STORE (model));
+    GtkListStore *list_store = GTK_LIST_STORE (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview)));
+
+    // signal sent when selected row is double clicked
+    g_object_set_data (G_OBJECT (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview))), "clipboard", clipboard);
+    g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
+
+    g_object_set_data (G_OBJECT (timer_label), "lstore", list_store);
     g_object_set_data (G_OBJECT (timer_label), "db_data", db_data);
     g_timeout_add_seconds (1, label_update, timer_label);
 
@@ -60,7 +63,7 @@ create_treeview (GtkWidget      *main_win,
 
     add_columns (GTK_TREE_VIEW (treeview), db_data);
 
-    return GTK_LIST_STORE (model);
+    return list_store;
 }
 
 
@@ -170,6 +173,7 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((unused)),
     GtkTreeModel *model = (GtkTreeModel *) data;
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
+    GtkClipboard *clipboard = g_object_get_data (G_OBJECT(model), "clipboard");
 
     gtk_tree_model_get_iter (model, &iter, path);
 
@@ -187,8 +191,13 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((unused)),
         GTimeSpan diff = g_date_time_difference (now, db_data->last_hotp_update);
         if (g_strcmp0 (otp_type, "HOTP") == 0 && diff < G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
             gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, db_data->last_hotp, -1);
+            gtk_clipboard_set_text (clipboard, db_data->last_hotp, -1);
         } else {
             set_otp (GTK_LIST_STORE (model), iter, db_data);
+            gchar *otp_value;
+            gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+            gtk_clipboard_set_text (clipboard, otp_value, -1);
+            g_free (otp_value);
         }
         g_date_time_unref (now);
     }
