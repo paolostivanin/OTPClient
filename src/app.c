@@ -128,7 +128,8 @@ activate (GtkApplication    *app,
 
 
 static void
-get_saved_window_size (gint *width, gint *height)
+get_saved_window_size (gint *width,
+                       gint *height)
 {
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
