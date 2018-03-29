@@ -103,8 +103,10 @@ To install Flatpak, follow the [official guide](https://flatpak.org/getting.html
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install flathub com.github.paolostivanin.OTPClient
 ```
-Please note that with the flatpak version you won't be asked where to store the database. Instead, the software will use the app's data directory (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`)
-This change was necessary in order to restrict the app's permissions to the filesystem (from the initial `filesystem=home` to nothing).
+
+:warning: Please note that with the flatpak version you **won't** be asked where to store the database. Instead, the software will use the app's data directory (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`)
+This change was necessary in order to restrict the app's permissions to **NOT HAVE** full access to the host's filesystem.
+Because of that, if you want to import a file you have to place it under the aforementioned folder (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`).
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.

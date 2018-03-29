@@ -35,6 +35,10 @@ select_file_cb (GSimpleAction *simple,
                                                      "Open", GTK_RESPONSE_ACCEPT,
                                                      NULL);
 
+#ifdef USE_FLATPAK_APP_FOLDER
+    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_user_data_dir ());
+#endif
+
     gint res = gtk_dialog_run (GTK_DIALOG (dialog));
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);

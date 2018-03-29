@@ -3,6 +3,7 @@ cmake-build-debug/
 build/
 tests/
 .flatpak-builder/
+flatpak/repo/
 
 # Object files
 *.o
