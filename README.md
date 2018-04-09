@@ -96,6 +96,7 @@ Personally, I prefer to spend time on development rather than packaging for the 
 |Distro|Link|
 |:-:|:---:|
 |Archlinux|https://aur.archlinux.org/packages/otpclient|
+|Gentoo linux|https://github.com/mPolr/overlay|
 
 ## Flatpak
 To install Flatpak, follow the [official guide](https://flatpak.org/getting.html). To install OTPClient, open a terminal and the execute:
