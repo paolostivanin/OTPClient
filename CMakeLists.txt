@@ -35,25 +35,29 @@ find_package(Gcrypt 1.6.0 REQUIRED)
 find_package(Cotp 1.0.10 REQUIRED)
 find_package(Libzip 1.1.0 REQUIRED)
 find_package(Jansson 2.8.0 REQUIRED)
+find_package(Zbar 0.10.0 REQUIRED)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 
 include_directories(${GTK3_INCLUDE_DIRS}
         ${GCRYPT_INCLUDE_DIR}
         ${COTP_INCLUDE_DIR}
         ${LIBZIP_INCLUDE_DIR}
-        ${JANSSON_INCLUDE_DIR})
+        ${JANSSON_INCLUDE_DIR}
+        ${ZBAR_INCLUDE_DIR})
 
 link_directories(${GTK3_LIBRARY_DIRS}
         ${GCRYPT_LIBRARY_DIR}
         ${COTP_LIBRARY_DIR}
         ${LIBZIP_LIBRARY_DIR}
-        ${JANSSON_LIBRARY_DIR})
+        ${JANSSON_LIBRARY_DIR}
+        ${ZBAR_LIBRARY_DIR})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
         ${COTP_CFLAGS_OTHER}
         ${LIBZIP_CFLAGS_OTHER}
-        ${JANSSON_CFLAGS_OTHER})
+        ${JANSSON_CFLAGS_OTHER}
+        ${ZBAR_CFLAGS_OTHER})
 
 set(HEADER_FILES
         src/common.h
@@ -67,7 +71,9 @@ set(HEADER_FILES
         src/add-data-dialog.h
         src/gquarks.h
         src/message-dialogs.h
-        src/password-cb.h)
+        src/password-cb.h
+        src/get-builder.h
+        src/parse-uri.h)
 
 set(SOURCE_FILES
         src/treeview.c
@@ -86,7 +92,9 @@ set(SOURCE_FILES
         src/gquarks.c
         src/imports.c
         src/password-cb.c
-        )
+        src/webcam-cb.c
+        src/get-builder.c
+        src/parse-uri.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
@@ -94,7 +102,8 @@ target_link_libraries(${PROJECT_NAME}
         ${GCRYPT_LIBRARIES}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES}
-        ${JANSSON_LIBRARIES})
+        ${JANSSON_LIBRARIES}
+        ${ZBAR_LIBRARIES})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
@@ -103,6 +112,7 @@ install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
 install(FILES src/ui/popover.ui DESTINATION share/otpclient)
+install(FILES src/ui/webcam-diag.ui DESTINATION share/otpclient)
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)

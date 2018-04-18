@@ -11,14 +11,15 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 ![Add tokens](/data/screenshots/addtokens.png?raw=true "Add new tokens")
 
 ## Requirements
-|Name|Min Version|
-|----|-----------|
-|GTK+|3.22|
-|Glib|2.50.0|
-|jansson|2.8.0|
-|libgcrypt|1.6.0|
-|libzip|1.1.0|
-|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
+|Name|Min Version|Suggested Version|
+|----|-----------|-----------------|
+|GTK+|3.22|-|
+|Glib|2.50.0|-|
+|jansson|2.8.0|-|
+|libgcrypt|1.6.0|-|
+|libzip|1.1.0|-|
+|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|-|
+|zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))    |
 
 ## Features
 - support for TOTP and HOTP

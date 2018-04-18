@@ -47,4 +47,11 @@ GSList *get_andotp_data     (const gchar     *path,
                              gint32           max_file_size,
                              GError         **err);
 
+gchar  *update_db_from_otps (GSList          *otps,
+                             DatabaseData    *db_data,
+                             GtkListStore    *list_store);
+
+void    free_otps_gslist    (GSList          *otps,
+                             guint            list_len);
+
 G_END_DECLS

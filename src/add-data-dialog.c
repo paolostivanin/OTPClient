@@ -5,6 +5,7 @@
 #include "add-data-dialog.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
+#include "imports.h"
 
 #define MAX_ENTRY_ACC_LENGTH 80
 #define MAX_ENTRY_ISS_LENGTH MAX_ENTRY_ACC_LENGTH
@@ -33,15 +34,18 @@ static GtkWidget *create_integer_spin_button (void);
 static void cleanup_widgets (Widgets *widgets);
 
 
-int
-add_data_dialog (GtkWidget      *main_win,
-                 DatabaseData   *db_data,
-                 GtkListStore   *list_store)
+void
+add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
+                 GVariant      *parameter __attribute__((unused)),
+                 gpointer       user_data)
 {
     Widgets *widgets = init_widgets ();
 
+    ImportData *import_data = (ImportData *)user_data;
+    GtkListStore *list_store = g_object_get_data (G_OBJECT (import_data->main_window), "lstore");
+
     widgets->dialog = gtk_dialog_new_with_buttons ("Add Data to Database",
-                                                   GTK_WINDOW (main_win),
+                                                   GTK_WINDOW (import_data->main_window),
                                                    GTK_DIALOG_DESTROY_WITH_PARENT,
                                                    "OK", GTK_RESPONSE_OK,
                                                    "Cancel", GTK_RESPONSE_CANCEL,
@@ -79,10 +83,10 @@ add_data_dialog (GtkWidget      *main_win,
     gint result = gtk_dialog_run (GTK_DIALOG (widgets->dialog));
     switch (result) {
         case GTK_RESPONSE_OK:
-            if (parse_user_data (widgets, db_data)) {
-                update_and_reload_db (db_data, list_store, TRUE, &err);
+            if (parse_user_data (widgets, import_data->db_data)) {
+                update_and_reload_db (import_data->db_data, list_store, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
-                    show_message_dialog (main_win, err->message, GTK_MESSAGE_ERROR);
+                    show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
             }
             break;
@@ -92,8 +96,6 @@ add_data_dialog (GtkWidget      *main_win,
     }
     gtk_widget_destroy (widgets->dialog);
     cleanup_widgets (widgets);
-
-    return 0;
 }
 
 
@@ -135,7 +137,7 @@ static void
 setup_header_bar (Widgets *widgets)
 {
     GtkWidget *header_bar = create_header_bar ("Add New Account(s)");
-    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog");
+    GtkWidget *box = create_box_with_buttons ("add_btn_dialog", "del_btn_dialog", FALSE);
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     gtk_window_set_titlebar (GTK_WINDOW (widgets->dialog), header_bar);
     g_signal_connect (find_widget (box, "add_btn_dialog"), "clicked", G_CALLBACK (add_widgets_cb), widgets);
