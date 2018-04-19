@@ -2,7 +2,7 @@
 #include "db-misc.h"
 #include "otpclient.h"
 #include "common.h"
-#include "add-data-dialog.h"
+#include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
 #include "imports.h"

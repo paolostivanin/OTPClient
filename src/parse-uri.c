@@ -15,10 +15,15 @@ set_otps_from_uris (const gchar   *otpauth_uris,
                     GSList       **otps)
 {
     gchar **uris = g_strsplit (otpauth_uris, "\n", -1);
-    gint i = 0;
-    while (g_strrstr (uris[i], "otpauth") != NULL) {
-        parse_uri (uris[i], &(*otps));
-        i++;
+    guint i = 0, uris_len = g_strv_length (uris);
+    gchar *haystack = NULL;
+    if (uris_len > 0) {
+        for (; i < uris_len; i++) {
+            haystack = g_strrstr (uris[i], "otpauth");
+            if (haystack != NULL) {
+                parse_uri (haystack, otps);
+            }
+        }
     }
     g_strfreev (uris);
 }
@@ -35,6 +40,8 @@ parse_uri (const gchar   *uri,
     uri_copy += 10;
 
     otp_t *otp = g_new0 (otp_t, 1);
+    // set default digits value to 6. If something else is specified, it will be read later on
+    otp->digits = 6;
     if (g_ascii_strncasecmp (uri_copy, "totp/", 5) == 0) {
         otp->type = g_strdup ("TOTP");
         otp->period = 30;

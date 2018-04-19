@@ -68,7 +68,7 @@ set(HEADER_FILES
         src/otpclient.h
         src/timer.h
         src/treeview.h
-        src/add-data-dialog.h
+        src/manual-add-cb.h
         src/gquarks.h
         src/message-dialogs.h
         src/password-cb.h
@@ -82,7 +82,7 @@ set(SOURCE_FILES
         src/message-dialogs.c
         src/db-misc.c
         src/file-size.c
-        src/add-data-dialog.c
+        src/manual-add-cb.c
         src/common.c
         src/timer.c
         src/liststore-misc.c
@@ -92,9 +92,10 @@ set(SOURCE_FILES
         src/gquarks.c
         src/imports.c
         src/password-cb.c
-        src/webcam-cb.c
+        src/webcam-add-cb.c
         src/get-builder.c
-        src/parse-uri.c)
+        src/parse-uri.c
+        src/screenshot-add-cb.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}

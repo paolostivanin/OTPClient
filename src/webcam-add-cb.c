@@ -112,6 +112,10 @@ add_data_to_db (const gchar *otp_uri, ImportData *import_data)
     GtkListStore *list_store = g_object_get_data (G_OBJECT (import_data->main_window), "lstore");
     GSList *otps = NULL;
     set_otps_from_uris (otp_uri, &otps);
+    if (g_slist_length (otps) < 1) {
+        show_message_dialog (import_data->main_window, "No valid otpauth uris found", GTK_MESSAGE_ERROR);
+        return;
+    }
     gchar *err_msg = update_db_from_otps (otps, import_data->db_data, list_store);
     if (err_msg != NULL) {
         show_message_dialog (import_data->main_window, err_msg, GTK_MESSAGE_ERROR);

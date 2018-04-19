@@ -3,7 +3,7 @@
 #include "otpclient.h"
 
 
-gint64 get_current_memlock_limit (void);
+static gint64 get_current_memlock_limit (void);
 
 
 gint
@@ -28,7 +28,7 @@ main (gint    argc,
 }
 
 
-gint64
+static gint64
 get_current_memlock_limit ()
 {
     struct rlimit r;
