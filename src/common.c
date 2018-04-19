@@ -31,12 +31,18 @@ icon_press_cb (GtkEntry         *entry,
 
 GtkWidget *
 create_box_with_buttons (const gchar *add_btn_name,
-                         const gchar *del_btn_name)
+                         const gchar *del_btn_name,
+                         gboolean add_btn_is_menu)
 {
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_style_context_add_class (gtk_widget_get_style_context (box), "linked");
 
-    GtkWidget *add_button = gtk_button_new ();
+    GtkWidget *add_button;
+    if (add_btn_is_menu) {
+        add_button = gtk_menu_button_new ();
+    } else {
+        add_button = gtk_button_new ();
+    }
     gtk_widget_set_name (add_button, add_btn_name);
     gtk_container_add (GTK_CONTAINER (add_button), gtk_image_new_from_icon_name ("list-add-symbolic", GTK_ICON_SIZE_BUTTON));
     gtk_container_add (GTK_CONTAINER (box), add_button);
