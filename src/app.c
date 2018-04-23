@@ -7,6 +7,7 @@
 #include "imports.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
+#include "get-builder.h"
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path                        (GtkWidget *window);
@@ -16,11 +17,11 @@ static void       get_saved_window_size              (gint *width, gint *height)
 
 static GtkWidget *create_main_window_with_header_bar (GtkApplication *app, gint width, gint height, ImportData *import_data);
 
-static gboolean   add_popover_to_button              (GtkWidget *button, ImportData *import_data);
+static gboolean   add_popover_to_settings_button     (GtkWidget *button, ImportData *import_data);
+
+static gboolean   add_popover_to_add_button          (GtkWidget *button, ImportData *import_data);
 
 static void       get_window_size_cb                 (GtkWidget *window, GtkAllocation *allocation, gpointer user_data);
-
-static void       add_data_cb                        (GtkWidget *btn, gpointer user_data);
 
 static void       del_data_cb                        (GtkWidget *btn, gpointer user_data);
 
@@ -119,7 +120,6 @@ activate (GtkApplication    *app,
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
     g_object_set_data (G_OBJECT (main_window), "clipboard", clipboard);
 
-    g_signal_connect (find_widget (main_window, "add_btn_app"), "clicked", G_CALLBACK (add_data_cb), db_data);
     g_signal_connect (find_widget (main_window, "del_btn_app"), "clicked", G_CALLBACK (del_data_cb), db_data);
     g_signal_connect (main_window, "destroy", G_CALLBACK (destroy_cb), import_data);
 
@@ -179,13 +179,16 @@ create_main_window_with_header_bar (GtkApplication  *app,
     header_bar_text[strlen(header_bar_text)] = '\0';
 
     GtkWidget *header_bar = create_header_bar (header_bar_text);
-    GtkWidget *box = create_box_with_buttons ("add_btn_app", "del_btn_app");
+    GtkWidget *box = create_box_with_buttons ("add_btn_app", "del_btn_app", TRUE);
     gtk_header_bar_pack_start (GTK_HEADER_BAR (header_bar), box);
     GtkWidget *settings_btn = gtk_menu_button_new ();
     gtk_widget_set_name (settings_btn, "settings_btn_app");
     gtk_container_add (GTK_CONTAINER (settings_btn), gtk_image_new_from_icon_name ("open-menu-symbolic", GTK_ICON_SIZE_BUTTON));
-    if (!add_popover_to_button (settings_btn, import_data)) {
+    if (!add_popover_to_settings_button (settings_btn, import_data)) {
         return NULL;
+    }
+    if (!add_popover_to_add_button (find_widget (box, "add_btn_app"), import_data)) {
+       return NULL;
     }
     gtk_header_bar_pack_end (GTK_HEADER_BAR (header_bar), settings_btn);
 
@@ -198,8 +201,8 @@ create_main_window_with_header_bar (GtkApplication  *app,
 
 
 static gboolean
-add_popover_to_button (GtkWidget    *button,
-                       ImportData   *import_data)
+add_popover_to_settings_button (GtkWidget *button,
+                                ImportData *import_data)
 {
     static GActionEntry menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
@@ -208,29 +211,41 @@ add_popover_to_button (GtkWidget    *button,
             { .name = "change_pwd", .activate = change_password_cb }
     };
 
-    const gchar *prefix;
-    const gchar *partial_path = "share/otpclient/popover.ui";
-#ifndef USE_FLATPAK_APP_FOLDER
-    if (g_file_test (g_strconcat ("/usr/", partial_path, NULL), G_FILE_TEST_EXISTS)) {
-        prefix = "/usr/";
-    } else if (g_file_test (g_strconcat ("/usr/local/", partial_path, NULL), G_FILE_TEST_EXISTS)) {
-        prefix = "/usr/local/";
-    } else {
-        return FALSE;
-    }
-#else
-    prefix = "/app/";
-#endif
-    gchar *path = g_strconcat (prefix, partial_path, NULL);
-    GtkBuilder *builder = gtk_builder_new_from_file (path);
-    g_free (path);
-    GtkWidget *popover = GTK_WIDGET (gtk_builder_get_object (builder, "pop1"));
+    GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/popover.ui");
+    GtkWidget *popover = GTK_WIDGET (gtk_builder_get_object (builder, "settings_pop"));
 
     GActionGroup *actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP (actions), menu_entries, G_N_ELEMENTS (menu_entries), import_data);
     gtk_widget_insert_action_group (popover, "menu", actions);
 
     gtk_menu_button_set_popover (GTK_MENU_BUTTON (button), popover);
+
+    g_object_unref (builder);
+
+    return TRUE;
+}
+
+
+static gboolean
+add_popover_to_add_button (GtkWidget    *button,
+                           ImportData   *import_data)
+{
+    static GActionEntry menu_entries[] = {
+            { .name = "webcam", .activate = webcam_cb },
+            { .name = "screenshot", .activate = screenshot_cb },
+            { .name = "photo", .activate = NULL },
+            { .name = "manually", .activate = add_data_dialog }
+    };
+
+    GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/popover.ui");
+    GtkWidget *popover = GTK_WIDGET (gtk_builder_get_object (builder, "add_pop"));
+
+    GActionGroup *actions = (GActionGroup *)g_simple_action_group_new ();
+    g_action_map_add_action_entries (G_ACTION_MAP (actions), menu_entries, G_N_ELEMENTS (menu_entries), import_data);
+    gtk_widget_insert_action_group (popover, "menu", actions);
+
+    gtk_menu_button_set_popover (GTK_MENU_BUTTON (button), popover);
+
     g_object_unref (builder);
 
     return TRUE;
@@ -289,17 +304,6 @@ get_db_path (GtkWidget *window)
 
 
 static void
-add_data_cb (GtkWidget *btn,
-             gpointer   user_data)
-{
-    GtkWidget *top_level = gtk_widget_get_toplevel (btn);
-    DatabaseData *db_data = (DatabaseData *)user_data;
-    GtkListStore *list_store = g_object_get_data (G_OBJECT (top_level), "lstore");
-    add_data_dialog (top_level, db_data, list_store);
-}
-
-
-static void
 del_data_cb (GtkWidget *btn,
              gpointer   user_data)
 {
@@ -326,13 +330,14 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
     if (pwd != NULL) {
         import_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db(import_data->db_data, NULL, FALSE, &err);
+        update_and_reload_db (import_data->db_data, NULL, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (import_data->main_window));
             destroy_cb (import_data->main_window, import_data);
             g_application_quit (G_APPLICATION (app));
         }
+        show_message_dialog (import_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
     } else {
         gcry_free (tmp_key);
     }

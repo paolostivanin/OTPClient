@@ -2,7 +2,7 @@
 #include <string.h>
 #include <jansson.h>
 #include "otpclient.h"
-#include "add-data-dialog.h"
+#include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
 #include "common.h"
