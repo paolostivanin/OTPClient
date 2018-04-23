@@ -48,7 +48,6 @@ prompt_for_password (GtkWidget *main_window, gboolean file_exists, gchar *curren
 
     gtk_widget_show_all (dialog);
 
-    // TODO pwd min chars 6
     // TODO add confirmation dialog when pwd is changed
     gint ret;
     do {
