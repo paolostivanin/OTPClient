@@ -232,7 +232,7 @@ add_popover_to_add_button (GtkWidget    *button,
 {
     static GActionEntry menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
-            { .name = "screenshot", .activate = NULL },
+            { .name = "screenshot", .activate = screenshot_cb },
             { .name = "photo", .activate = NULL },
             { .name = "manually", .activate = add_data_dialog }
     };
@@ -330,13 +330,14 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
     if (pwd != NULL) {
         import_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db(import_data->db_data, NULL, FALSE, &err);
+        update_and_reload_db (import_data->db_data, NULL, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (import_data->main_window));
             destroy_cb (import_data->main_window, import_data);
             g_application_quit (G_APPLICATION (app));
         }
+        show_message_dialog (import_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
     } else {
         gcry_free (tmp_key);
     }

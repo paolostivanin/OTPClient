@@ -18,6 +18,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 |jansson|2.8.0|-|
 |libgcrypt|1.6.0|-|
 |libzip|1.1.0|-|
+|libpng|1.6.0|-|
 |[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|-|
 |zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))    |
 
