@@ -208,7 +208,8 @@ add_popover_to_settings_button (GtkWidget *button,
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = "export", .activate = NULL },
-            { .name = "change_pwd", .activate = change_password_cb }
+            { .name = "change_pwd", .activate = change_password_cb },
+            { .name = "edit_rows", .activate = edit_selected_rows }
     };
 
     GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/popover.ui");
@@ -233,7 +234,6 @@ add_popover_to_add_button (GtkWidget    *button,
     static GActionEntry menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "screenshot", .activate = screenshot_cb },
-            { .name = "photo", .activate = NULL },
             { .name = "manually", .activate = add_data_dialog }
     };
 

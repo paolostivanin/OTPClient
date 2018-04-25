@@ -11,6 +11,7 @@ label_update (gpointer data)
     gchar *label_text = g_strdup_printf ("Token validity: %ds", token_validity);
     gtk_label_set_label (GTK_LABEL (label), label_text);
     if (token_validity == 29) {
+        // TODO read from mainwin, but be sure stuff is not null
         DatabaseData *db_data = g_object_get_data (G_OBJECT (label), "db_data");
         GtkListStore *list_store = g_object_get_data (G_OBJECT (label), "lstore");
         traverse_liststore (list_store, db_data);

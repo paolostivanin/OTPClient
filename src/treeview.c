@@ -55,6 +55,7 @@ create_treeview (GtkWidget      *main_win,
     g_object_set_data (G_OBJECT (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview))), "clipboard", clipboard);
     g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
 
+    // TODO in app.c the following things are set into the mainwin. We should reuse them
     g_object_set_data (G_OBJECT (timer_label), "lstore", list_store);
     g_object_set_data (G_OBJECT (timer_label), "db_data", db_data);
     g_timeout_add_seconds (1, label_update, timer_label);

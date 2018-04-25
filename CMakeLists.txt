@@ -101,7 +101,7 @@ set(SOURCE_FILES
         src/get-builder.c
         src/parse-uri.c
         src/screenshot-add-cb.c
-        src/add-common.c)
+        src/add-common.c src/edit-data.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
@@ -121,6 +121,7 @@ install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION sh
 
 install(FILES src/ui/popover.ui DESTINATION share/otpclient)
 install(FILES src/ui/webcam-diag.ui DESTINATION share/otpclient)
+install(FILES src/ui/edit-diag.ui DESTINATION share/otpclient)
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)
