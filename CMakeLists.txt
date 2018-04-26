@@ -78,7 +78,8 @@ set(HEADER_FILES
         src/password-cb.h
         src/get-builder.h
         src/parse-uri.h
-        src/add-common.h)
+        src/add-common.h
+        src/qrcode-parser.h)
 
 set(SOURCE_FILES
         src/treeview.c
@@ -101,7 +102,10 @@ set(SOURCE_FILES
         src/get-builder.c
         src/parse-uri.c
         src/screenshot-add-cb.c
-        src/add-common.c src/edit-data.c)
+        src/add-common.c
+        src/edit-data.c
+        src/select-photo-add-cb.c
+        src/qrcode-parser.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
