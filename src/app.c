@@ -234,6 +234,7 @@ add_popover_to_add_button (GtkWidget    *button,
     static GActionEntry menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "screenshot", .activate = screenshot_cb },
+            { .name = "select_photo", .activate = select_photo_cb },
             { .name = "manually", .activate = add_data_dialog }
     };
 

@@ -25,6 +25,10 @@ void screenshot_cb          (GSimpleAction  *simple,
                              GVariant       *parameter,
                              gpointer        user_data);
 
+void select_photo_cb        (GSimpleAction  *simple,
+                             GVariant       *parameter,
+                             gpointer        user_data);
+
 void edit_selected_rows     (GSimpleAction  *simple,
                              GVariant       *parameter,
                              gpointer        user_data);
