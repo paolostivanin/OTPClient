@@ -7,9 +7,9 @@
 #include "message-dialogs.h"
 #include "imports.h"
 
-#define MAX_ENTRY_ACC_LENGTH 80
+#define MAX_ENTRY_ACC_LENGTH 64
 #define MAX_ENTRY_ISS_LENGTH MAX_ENTRY_ACC_LENGTH
-#define MAX_ENTRY_KEY_LENGTH 48
+#define MAX_ENTRY_KEY_LENGTH 96
 
 static Widgets *init_widgets (void);
 

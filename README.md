@@ -60,7 +60,7 @@ After the first run, every time you start the program you will be asked to enter
 ## Limitations
 On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
 
-If you are going to store more than ~250 tokens, each one using very long label and issuer (80 chars each) and a long secret (48 chars), then you must have to increase that limit.
+If you are going to store more than ~200 tokens, each one using long label and issuer (64 chars each) and a very long secret (96 chars), then you must have to increase that limit.
 To do that, please follow these steps:
 * create a file called, for example, `/etc/security/limits.d/memlock.conf` and add the following text:
 ```
@@ -78,11 +78,10 @@ reboot the system.
 |OS|Version|Branch|DE|
 |:-:|:----:|:----:|:-:|
 |Archlinux|-|stable|GNOME|
-|Ubuntu|16.04[1], 17.10|-|GNOME|
+|Ubuntu|16.04[1], 18.04|-|GNOME|
 |Debian|9|stable|GNOME|
-|Debian|-|testing (08/nov/2017)|GNOME|
 |Solus|-|stable|Budgie|
-|Fedora|26, 27|-|GNOME|
+|Fedora|27, 28|-|GNOME|
 |macOS|10.13[2]|High Sierra|-|
 
 [1] OTPClient can be run on Ubuntu 16.04 only with [Flatpak](#flatpak).
