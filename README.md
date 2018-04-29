@@ -56,6 +56,16 @@ Please keep in mind that the **password can't be recovered**. This means that if
 
 After the first run, every time you start the program you will be asked to enter the password you have previously chosen.
 
+### Add a token
+There are multiple ways to add a new token to the app:
+1. by using the webcam to scan a qrcode, for example, from your smartphone (Scan using webcam)
+2. by taking a screenshot of the screen you are currently using (Take screenshot). **This requires gnome-shell**
+3. by uploading a qrcode (Select photo). You can, for example, take a screenshot using another tool and then upload the photo using this option.
+4. by manually entering the needed info (Manually)
+
+### Delete a token
+To delete a token, you have to tick the row(s) you want to delete and then press the `-` button on the header bar (top left corner).
+Please note that the row(s) **must be ticked** and not just selected.
 
 ## Limitations
 On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
