@@ -32,7 +32,11 @@ parse_qrcode (const gchar    *png_path,
     }
 
     zbar_image_t *image = zbar_image_create ();
+#ifdef ZBAR_OLD_LIB
+    zbar_image_set_format (image, *(int*)"Y800");
+#else
     zbar_image_set_format (image, zbar_fourcc ('Y','8','0','0'));
+#endif
     zbar_image_set_size (image, image_data->width, image_data->height);
     zbar_image_set_data (image, image_data->raw_data, image_data->width * image_data->height, zbar_image_free_data);
 

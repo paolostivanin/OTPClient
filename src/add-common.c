@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <string.h>
 #include <zbar.h>
 #include "imports.h"
 #include "common.h"

@@ -6,7 +6,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 
 set(OTPCLIENT_VERSION_MAJOR "1")
-set(OTPCLIENT_VERSION_MINOR "1")
+set(OTPCLIENT_VERSION_MINOR "2")
 set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
@@ -33,17 +33,22 @@ endif()
 find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
 find_package(Cotp 1.0.10 REQUIRED)
-find_package(Libzip 1.1.0 REQUIRED)
-find_package(Libpng 1.6.0 REQUIRED)
-find_package(Jansson 2.8.0 REQUIRED)
-find_package(Zbar 0.10.0 REQUIRED)
+pkg_check_modules(PNG REQUIRED libpng>=1.6.0)
+pkg_check_modules(LIBZIP REQUIRED libzip>=1.1.0)
+pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
+pkg_check_modules(ZBAR REQUIRED zbar>=0.10.0)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+
+if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DZBAR_OLD_LIB")
+endif ()
+
 
 include_directories(${GTK3_INCLUDE_DIRS}
         ${GCRYPT_INCLUDE_DIR}
         ${COTP_INCLUDE_DIR}
-        ${LIBZIP_INCLUDE_DIR}
-        ${LIBPNG_INCLUDE_DIR}
+        ${LIBZIP_INCLUDE_DIR_ZIP}
+        ${PNG_INCLUDE_DIR}
         ${JANSSON_INCLUDE_DIR}
         ${ZBAR_INCLUDE_DIR})
 
@@ -51,15 +56,14 @@ link_directories(${GTK3_LIBRARY_DIRS}
         ${GCRYPT_LIBRARY_DIR}
         ${COTP_LIBRARY_DIR}
         ${LIBZIP_LIBRARY_DIR}
-        ${LIBPNG_LIBRARY_DIR}
+        ${PNG_LIBRARY_DIR}
         ${JANSSON_LIBRARY_DIR}
         ${ZBAR_LIBRARY_DIR})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
-        ${COTP_CFLAGS_OTHER}
         ${LIBZIP_CFLAGS_OTHER}
-        ${LIBPNG_CFLAGS_OTHER}
+        ${PNG_CFLAGS_OTHER}
         ${JANSSON_CFLAGS_OTHER}
         ${ZBAR_CFLAGS_OTHER})
 
@@ -113,7 +117,7 @@ target_link_libraries(${PROJECT_NAME}
         ${GCRYPT_LIBRARIES}
         ${COTP_LIBRARIES}
         ${LIBZIP_LIBRARIES}
-        ${LIBPNG_LIBRARIES}
+        ${PNG_LIBRARIES}
         ${JANSSON_LIBRARIES}
         ${ZBAR_LIBRARIES})
 
