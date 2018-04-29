@@ -74,7 +74,6 @@ set(HEADER_FILES
         src/db-misc.h
         src/liststore-misc.h
         src/otpclient.h
-        src/timer.h
         src/treeview.h
         src/manual-add-cb.h
         src/gquarks.h
@@ -94,7 +93,6 @@ set(SOURCE_FILES
         src/file-size.c
         src/manual-add-cb.c
         src/common.c
-        src/timer.c
         src/liststore-misc.c
         src/authplus.c
         src/andotp.c

@@ -2,7 +2,6 @@
 #include <cotp.h>
 #include <jansson.h>
 #include "otpclient.h"
-#include "timer.h"
 #include "liststore-misc.h"
 #include "common.h"
 
@@ -13,6 +12,8 @@ typedef struct _parsed_json_data {
     gchar **issuers;
 } ParsedData;
 
+
+static gboolean      label_update           (gpointer data);
 
 static void          set_json_data          (json_t *array, ParsedData *pjd);
 
@@ -55,7 +56,6 @@ create_treeview (GtkWidget      *main_win,
     g_object_set_data (G_OBJECT (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview))), "clipboard", clipboard);
     g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
 
-    // TODO in app.c the following things are set into the mainwin. We should reuse them
     g_object_set_data (G_OBJECT (timer_label), "lstore", list_store);
     g_object_set_data (G_OBJECT (timer_label), "db_data", db_data);
     g_timeout_add_seconds (1, label_update, timer_label);
@@ -105,6 +105,25 @@ remove_selected_entries (DatabaseData *db_data,
     if (err != NULL) {
         g_printerr ("%s\n", err->message);
     }
+}
+
+
+static gboolean
+label_update (gpointer data)
+{
+    GtkWidget *label = (GtkWidget *)data;
+    gint sec_expired = 59 - g_date_time_get_second (g_date_time_new_now_local ());
+    gint token_validity = (sec_expired < 30) ? sec_expired : sec_expired-30;
+    gchar *label_text = g_strdup_printf ("Token validity: %ds", token_validity);
+    gtk_label_set_label (GTK_LABEL (label), label_text);
+    if (token_validity == 29) {
+        DatabaseData *db_data = g_object_get_data (G_OBJECT (label), "db_data");
+        GtkListStore *list_store = g_object_get_data (G_OBJECT (label), "lstore");
+        traverse_liststore (list_store, db_data);
+    }
+    g_free (label_text);
+
+    return TRUE;
 }
 
 
