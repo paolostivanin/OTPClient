@@ -42,7 +42,11 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
     g_variant_get (res, "(iiii)", &x, &y, &width, &height);
     g_variant_unref (res);
 
+#ifndef USE_FLATPAK_APP_FOLDER
     gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode.png", NULL);
+#else
+    gchar *filename = g_build_filename (g_get_user_data_dir (), "qrcode.png", NULL);
+#endif
     res = g_dbus_connection_call_sync (connection, interface, object_path, interface,
                                        "ScreenshotArea", g_variant_new ("(iiiibs)", x, y, width, height, TRUE, filename),
                                        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
