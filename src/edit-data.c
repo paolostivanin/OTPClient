@@ -65,8 +65,12 @@ show_edit_dialog (EditData *edit_data, ImportData *import_data, gchar *acc_lab, 
 
     GtkWidget *cur_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_label_entry"));
     GtkWidget *cur_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_iss_entry"));
-    gtk_entry_set_text (GTK_ENTRY (cur_lab_entry), acc_lab);
-    gtk_entry_set_text (GTK_ENTRY (cur_iss_entry), acc_iss);
+    if (cur_lab_entry != NULL) {
+        gtk_entry_set_text (GTK_ENTRY (cur_lab_entry), acc_lab);
+    }
+    if (cur_iss_entry != NULL) {
+        gtk_entry_set_text (GTK_ENTRY (cur_iss_entry), acc_iss);
+    }
 
     GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "new_label_entry"));
     GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "new_iss_entry"));
