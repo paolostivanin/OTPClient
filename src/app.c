@@ -115,6 +115,14 @@ activate (GtkApplication    *app,
         goto retry;
     }
 
+    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE) || json_array_size (db_data->json_data) == 0) {
+        const gchar *msg = "This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
+        "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
+        "- to <b>import</b> existing tokens, please click the menu button <b>on the top right</b>.\n"
+        "\nIf you need more info, please visit the <a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>";
+        show_message_dialog (main_window, msg, GTK_MESSAGE_INFO);
+    }
+
     GtkClipboard *clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
     GtkListStore *list_store = create_treeview (main_window, clipboard, db_data);
     g_object_set_data (G_OBJECT (main_window), "lstore", list_store);
