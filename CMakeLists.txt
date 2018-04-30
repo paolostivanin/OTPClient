@@ -36,7 +36,7 @@ find_package(Cotp 1.0.10 REQUIRED)
 pkg_check_modules(PNG REQUIRED libpng>=1.6.0)
 pkg_check_modules(LIBZIP REQUIRED libzip>=1.1.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
-pkg_check_modules(ZBAR REQUIRED zbar>=0.10.0)
+pkg_check_modules(ZBAR REQUIRED zbar>=0.10)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 
 if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
