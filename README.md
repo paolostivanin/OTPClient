@@ -7,8 +7,10 @@
 Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
 
 ## Screenshots
+![Empty main window](/data/screenshots/empty-mainwin.png?raw=true "Empty main window")
 ![Main window](/data/screenshots/mainwin.png?raw=true "Main window")
-![Add tokens](/data/screenshots/addtokens.png?raw=true "Add new tokens")
+![Add tokens](/data/screenshots/add-new.png?raw=true "Add new tokens")
+![Settings menu](/data/screenshots/menu.png?raw=true "Settings menu")
 
 ## Requirements
 |Name|Min Version|Suggested Version|
