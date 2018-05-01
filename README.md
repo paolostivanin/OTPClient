@@ -55,6 +55,9 @@ See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 ## Tested OS
 See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 
+## Flatpak
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
+
 ## Packages
 Personally, I prefer to spend time on development rather than packaging for the myriads of systems out there. If you want to maintain the package for your favourite/daily driver distro(s), feel free to drop me an email or open a PR with an update for this section :)
 
@@ -62,9 +65,6 @@ Personally, I prefer to spend time on development rather than packaging for the 
 |:-:|:---:|
 |Archlinux|https://aur.archlinux.org/packages/otpclient|
 |Gentoo linux|https://github.com/mPolr/overlay|
-
-## Flatpak
-See the wiki
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
