@@ -7,18 +7,22 @@
 Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
 
 ## Screenshots
+![Empty main window](/data/screenshots/empty-mainwin.png?raw=true "Empty main window")
 ![Main window](/data/screenshots/mainwin.png?raw=true "Main window")
-![Add tokens](/data/screenshots/addtokens.png?raw=true "Add new tokens")
+![Add tokens](/data/screenshots/add-new.png?raw=true "Add new tokens")
+![Settings menu](/data/screenshots/menu.png?raw=true "Settings menu")
 
 ## Requirements
-|Name|Min Version|
-|----|-----------|
-|GTK+|3.22|
-|Glib|2.50.0|
-|jansson|2.8.0|
-|libgcrypt|1.6.0|
-|libzip|1.1.0|
-|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|
+|Name|Min Version|Suggested Version|
+|----|-----------|-----------------|
+|GTK+|3.22|-|
+|Glib|2.50.0|-|
+|jansson|2.8.0|-|
+|libgcrypt|1.6.0|-|
+|libzip|1.1.0|-|
+|libpng|1.6.0|-|
+|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|-|
+|zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))    |
 
 ## Features
 - support for TOTP and HOTP
@@ -54,11 +58,21 @@ Please keep in mind that the **password can't be recovered**. This means that if
 
 After the first run, every time you start the program you will be asked to enter the password you have previously chosen.
 
+### Add a token
+There are multiple ways to add a new token to the app:
+1. by using the webcam to scan a qrcode, for example, from your smartphone (Scan using webcam)
+2. by taking a screenshot of the screen you are currently using (Take screenshot). **This requires gnome-shell**
+3. by uploading a qrcode (Select photo). You can, for example, take a screenshot using another tool and then upload the photo using this option.
+4. by manually entering the needed info (Manually)
+
+### Delete a token
+To delete a token, you have to tick the row(s) you want to delete and then press the `-` button on the header bar (top left corner).
+Please note that the row(s) **must be ticked** and not just selected.
 
 ## Limitations
 On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
 
-If you are going to store more than ~250 tokens, each one using very long label and issuer (80 chars each) and a long secret (48 chars), then you must have to increase that limit.
+If you are going to store more than ~200 tokens, each one using long label and issuer (64 chars each) and a very long secret (96 chars), then you must have to increase that limit.
 To do that, please follow these steps:
 * create a file called, for example, `/etc/security/limits.d/memlock.conf` and add the following text:
 ```
@@ -76,11 +90,10 @@ reboot the system.
 |OS|Version|Branch|DE|
 |:-:|:----:|:----:|:-:|
 |Archlinux|-|stable|GNOME|
-|Ubuntu|16.04[1], 17.10|-|GNOME|
+|Ubuntu|16.04[1], 18.04|-|GNOME|
 |Debian|9|stable|GNOME|
-|Debian|-|testing (08/nov/2017)|GNOME|
 |Solus|-|stable|Budgie|
-|Fedora|26, 27|-|GNOME|
+|Fedora|27, 28|-|GNOME|
 |macOS|10.13[2]|High Sierra|-|
 
 [1] OTPClient can be run on Ubuntu 16.04 only with [Flatpak](#flatpak).

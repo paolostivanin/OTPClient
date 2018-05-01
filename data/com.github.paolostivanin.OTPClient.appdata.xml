@@ -26,11 +26,19 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   <screenshots>
     <screenshot type="default">
       <caption>Main window</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/f2b56b4b/data/screenshots/mainwin.png</image>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/mainwin.png</image>
     </screenshot>
     <screenshot>
-      <caption>Add tokens</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/f2b56b4b/data/screenshots/addtokens.png</image>
+      <caption>Empty main window</caption>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/empty-mainwin.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Add new tokens</caption>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/add-new.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Settings menu</caption>
+      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/menu.png</image>
     </screenshot>
   </screenshots>
 
@@ -65,6 +73,11 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
+    <release version="1.2.0" date="2018-05-01">
+      <description>
+        <p>https://github.com/paolostivanin/OTPClient/releases/tag/v1.2.0</p>
+      </description>
+    </release>
     <release version="1.1.1" date="2018-03-29">
       <description>
         <p>https://github.com/paolostivanin/OTPClient/releases/tag/v1.1.1</p>

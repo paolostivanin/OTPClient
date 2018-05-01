@@ -13,4 +13,4 @@ if(COTP_INCLUDE_DIR AND EXISTS "${COTP_INCLUDE_DIR}/cotp.h")
 endif()
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Cotp DEFAULT_MSG COTP_LIBRARIES COTP_INCLUDE_DIR)
+find_package_handle_standard_args(Cotp REQUIRED_VARS COTP_LIBRARIES COTP_INCLUDE_DIR VERSION_VAR ${COTP_VERSION_STRING})

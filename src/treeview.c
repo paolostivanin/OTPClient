@@ -2,7 +2,6 @@
 #include <cotp.h>
 #include <jansson.h>
 #include "otpclient.h"
-#include "timer.h"
 #include "liststore-misc.h"
 #include "common.h"
 
@@ -12,6 +11,9 @@ typedef struct _parsed_json_data {
     gchar **labels;
     gchar **issuers;
 } ParsedData;
+
+
+static gboolean      label_update           (gpointer data);
 
 static void          set_json_data          (json_t *array, ParsedData *pjd);
 
@@ -46,13 +48,15 @@ create_treeview (GtkWidget      *main_win,
 
     GtkWidget *treeview = gtk_tree_view_new_with_model (model);
     gtk_tree_view_set_search_column (GTK_TREE_VIEW (treeview), COLUMN_ACC_LABEL);
-
-    // signal sent when selected row is double clicked
-    g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
-
     g_object_unref (model);
 
-    g_object_set_data (G_OBJECT (timer_label), "lstore", GTK_LIST_STORE (model));
+    GtkListStore *list_store = GTK_LIST_STORE (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview)));
+
+    // signal sent when selected row is double clicked
+    g_object_set_data (G_OBJECT (gtk_tree_view_get_model (GTK_TREE_VIEW (treeview))), "clipboard", clipboard);
+    g_signal_connect (treeview, "row-activated", G_CALLBACK (row_selected_cb), clipboard);
+
+    g_object_set_data (G_OBJECT (timer_label), "lstore", list_store);
     g_object_set_data (G_OBJECT (timer_label), "db_data", db_data);
     g_timeout_add_seconds (1, label_update, timer_label);
 
@@ -60,7 +64,7 @@ create_treeview (GtkWidget      *main_win,
 
     add_columns (GTK_TREE_VIEW (treeview), db_data);
 
-    return GTK_LIST_STORE (model);
+    return list_store;
 }
 
 
@@ -101,6 +105,29 @@ remove_selected_entries (DatabaseData *db_data,
     if (err != NULL) {
         g_printerr ("%s\n", err->message);
     }
+}
+
+
+static gboolean
+label_update (gpointer data)
+{
+    GtkWidget *label = (GtkWidget *)data;
+    DatabaseData *db_data = g_object_get_data (G_OBJECT (label), "db_data");
+    if (json_array_size (db_data->json_data) > 0) {
+        if (!gtk_widget_is_visible (label)) {
+            gtk_widget_show (label);
+        }
+        gint sec_expired = 59 - g_date_time_get_second (g_date_time_new_now_local());
+        gint token_validity = (sec_expired < 30) ? sec_expired : sec_expired - 30;
+        gchar *label_text = g_strdup_printf ("Token validity: %ds", token_validity);
+        gtk_label_set_label (GTK_LABEL (label), label_text);
+        if (token_validity == 29) {
+            GtkListStore *list_store = g_object_get_data (G_OBJECT (label), "lstore");
+            traverse_liststore (list_store, db_data);
+        }
+        g_free (label_text);
+    }
+    return TRUE;
 }
 
 
@@ -170,6 +197,7 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((unused)),
     GtkTreeModel *model = (GtkTreeModel *) data;
     GtkTreeIter  iter;
     GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
+    GtkClipboard *clipboard = g_object_get_data (G_OBJECT(model), "clipboard");
 
     gtk_tree_model_get_iter (model, &iter, path);
 
@@ -187,8 +215,13 @@ fixed_toggled (GtkCellRendererToggle    *cell __attribute__((unused)),
         GTimeSpan diff = g_date_time_difference (now, db_data->last_hotp_update);
         if (g_strcmp0 (otp_type, "HOTP") == 0 && diff < G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
             gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, db_data->last_hotp, -1);
+            gtk_clipboard_set_text (clipboard, db_data->last_hotp, -1);
         } else {
             set_otp (GTK_LIST_STORE (model), iter, db_data);
+            gchar *otp_value;
+            gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+            gtk_clipboard_set_text (clipboard, otp_value, -1);
+            g_free (otp_value);
         }
         g_date_time_unref (now);
     }
