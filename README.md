@@ -6,12 +6,6 @@
 
 Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
 
-## Screenshots
-![Empty main window](/data/screenshots/empty-mainwin.png?raw=true "Empty main window")
-![Main window](/data/screenshots/mainwin.png?raw=true "Main window")
-![Add tokens](/data/screenshots/add-new.png?raw=true "Add new tokens")
-![Settings menu](/data/screenshots/menu.png?raw=true "Settings menu")
-
 ## Requirements
 |Name|Min Version|Suggested Version|
 |----|-----------|-----------------|
@@ -34,7 +28,8 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt 
 - auto-refresh TOTP every 30 seconds
-- double click on a *ticked row* to copy the OTP value
+- when a row is **ticked**, the otp is automatically copied to the clipboard (which is erased before terminating the program)
+  - another otp value can still be copied by double clicking it when the **row is ticked**
 
 ## Installation
 1. install all the needed libraries listed under [requirements](#requirements)
@@ -48,60 +43,20 @@ $ make
 $ sudo make install
 ```
 
+## Screenshots
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
+
 ## How To Use
-On the first run, you will be asked:
-
-1. where to store the database file
-2. to type two times the encryption password for the database
-
-Please keep in mind that the **password can't be recovered**. This means that if the password is forgotten, **the data is lost**.
-
-After the first run, every time you start the program you will be asked to enter the password you have previously chosen.
-
-### Add a token
-There are multiple ways to add a new token to the app:
-1. by using the webcam to scan a qrcode, for example, from your smartphone (Scan using webcam)
-2. by taking a screenshot of the screen you are currently using (Take screenshot). **This requires gnome-shell**
-3. by uploading a qrcode (Select photo). You can, for example, take a screenshot using another tool and then upload the photo using this option.
-4. by manually entering the needed info (Manually)
-
-### Delete a token
-To delete a token, you have to tick the row(s) you want to delete and then press the `-` button on the header bar (top left corner).
-Please note that the row(s) **must be ticked** and not just selected.
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 
 ## Limitations
-On Ubuntu 16.04 (and maybe other distro), the `memlock` default value is very low (`64 KB`, you can check that with `ulimit -l`).
-
-If you are going to store more than ~200 tokens, each one using long label and issuer (64 chars each) and a very long secret (96 chars), then you must have to increase that limit.
-To do that, please follow these steps:
-* create a file called, for example, `/etc/security/limits.d/memlock.conf` and add the following text:
-```
-* soft memlock unlimited
-* hard memlock unlimited
-```
-* append to the file `/etc/pam.d/common-session` (could be another file on another distro):
-```
-session required pam_limits.so
-```
-reboot the system.
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 
 ## Tested OS
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 
-|OS|Version|Branch|DE|
-|:-:|:----:|:----:|:-:|
-|Archlinux|-|stable|GNOME|
-|Ubuntu|16.04[1], 18.04|-|GNOME|
-|Debian|9|stable|GNOME|
-|Solus|-|stable|Budgie|
-|Fedora|27, 28|-|GNOME|
-|macOS|10.13[2]|High Sierra|-|
-
-[1] OTPClient can be run on Ubuntu 16.04 only with [Flatpak](#flatpak).
-
-[2] For MacOS you need to install:
-- with brew: `cmake`, `gkt+3`, `gnome-icon-theme`, `libzip`, `libgcrypt`
-  - create the missing symlink: `ln -s /usr/local/Cellar/libzip/<VERSION>/lib/libzip/include/zipconf.h /usr/local/include/`
-- compile and install manually: `libcotp` and`jansson`
+## Flatpak
+See the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki)
 
 ## Packages
 Personally, I prefer to spend time on development rather than packaging for the myriads of systems out there. If you want to maintain the package for your favourite/daily driver distro(s), feel free to drop me an email or open a PR with an update for this section :)
@@ -110,17 +65,6 @@ Personally, I prefer to spend time on development rather than packaging for the 
 |:-:|:---:|
 |Archlinux|https://aur.archlinux.org/packages/otpclient|
 |Gentoo linux|https://github.com/mPolr/overlay|
-
-## Flatpak
-To install Flatpak, follow the [official guide](https://flatpak.org/getting.html). To install OTPClient, open a terminal and the execute:
-```
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install flathub com.github.paolostivanin.OTPClient
-```
-
-:warning: Please note that with the flatpak version you **won't** be asked where to store the database. Instead, the software will use the app's data directory (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`)
-This change was necessary in order to restrict the app's permissions to **NOT HAVE** full access to the host's filesystem.
-Because of that, if you want to import a file you have to place it under the aforementioned folder (`/home/USER/.var/app/com.github.paolostivanin.OTPClient/data`).
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
