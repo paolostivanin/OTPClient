@@ -65,6 +65,7 @@ Personally, I prefer to spend time on development rather than packaging for the 
 |:-:|:---:|
 |Archlinux|https://aur.archlinux.org/packages/otpclient|
 |Gentoo linux|https://github.com/mPolr/overlay|
+|Ubuntu|https://launchpad.net/~dawidd0811/+archive/ubuntu/otpclient|
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
