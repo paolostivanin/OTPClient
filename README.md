@@ -18,9 +18,9 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 |Glib|2.48.0|-|-|
 |jansson|2.8.0|-|-|
 |libgcrypt|1.6.0|-|-|
-|libzip|1.1.0|-|-|
+|libzip|1.0.0|-|-|
 |libpng|1.2.0|-|-|
-|[libcotp](https://github.com/paolostivanin/libcotp)|1.0.10|1.0.14|1.1.0 will be supported starting from OTPClient v1.3.0|
+|[libcotp](https://github.com/paolostivanin/libcotp)|1.1.0|-|
 |zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))|-|
 
 ## Features
