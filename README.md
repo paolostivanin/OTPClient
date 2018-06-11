@@ -4,7 +4,7 @@
        src="https://scan.coverity.com/projects/12749/badge.svg"/>
 </a>
 
-Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostivanin/libcotp)
+Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
 |Name|Min Version|Suggested Version|
@@ -19,7 +19,7 @@ Simple GTK+ v3 TOTP/HOTP client that uses [libcotp](https://github.com/paolostiv
 |zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))    |
 
 ## Features
-- support for TOTP and HOTP
+- support both TOTP and HOTP
 - support 6 and 8 digits
 - support SHA1, SHA256 and SHA2512 algorithms
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
