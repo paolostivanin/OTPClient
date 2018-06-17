@@ -12,16 +12,16 @@
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
-|Name|Min Version|Suggested Version|Notes|
-|----|-----------|-----------------|-----|
-|GTK+|3.18|-|-|
-|Glib|2.48.0|-|-|
-|jansson|2.8.0|-|-|
-|libgcrypt|1.6.0|-|-|
-|libzip|1.0.0|-|-|
-|libpng|1.2.0|-|-|
+|Name|Min Version|Suggested Version|
+|----|-----------|-----------------|
+|GTK+|3.18|3.22|
+|Glib|2.48.0|2.50|
+|jansson|2.8.0|-|
+|libgcrypt|1.6.0|-|
+|libzip|1.0.0|-|
+|libpng|1.2.0|-|
 |[libcotp](https://github.com/paolostivanin/libcotp)|1.1.0|-|
-|zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))|-|
+|zbar|0.10|0.20 ([linuxtv](https://linuxtv.org/downloads/zbar/))|
 
 ## Features
 - support both TOTP and HOTP
