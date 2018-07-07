@@ -45,20 +45,20 @@ endif ()
 
 
 include_directories(${GTK3_INCLUDE_DIRS}
-        ${GCRYPT_INCLUDE_DIR}
-        ${COTP_INCLUDE_DIR}
-        ${LIBZIP_INCLUDE_DIR_ZIP}
-        ${PNG_INCLUDE_DIR}
-        ${JANSSON_INCLUDE_DIR}
-        ${ZBAR_INCLUDE_DIR})
+        ${GCRYPT_INCLUDE_DIRS}
+        ${COTP_INCLUDE_DIRS}
+        ${LIBZIP_INCLUDE_DIRS}
+        ${PNG_INCLUDE_DIRS}
+        ${JANSSON_INCLUDE_DIRS}
+        ${ZBAR_INCLUDE_DIRS})
 
 link_directories(${GTK3_LIBRARY_DIRS}
-        ${GCRYPT_LIBRARY_DIR}
-        ${COTP_LIBRARY_DIR}
-        ${LIBZIP_LIBRARY_DIR}
-        ${PNG_LIBRARY_DIR}
-        ${JANSSON_LIBRARY_DIR}
-        ${ZBAR_LIBRARY_DIR})
+        ${GCRYPT_LIBRARY_DIRS}
+        ${COTP_LIBRARY_DIRS}
+        ${LIBZIP_LIBRARY_DIRS}
+        ${PNG_LIBRARY_DIRS}
+        ${JANSSON_LIBRARY_DIRS}
+        ${ZBAR_LIBRARY_DIRS})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
