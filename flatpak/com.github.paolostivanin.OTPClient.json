@@ -80,8 +80,8 @@
       "sources": [
         {
           "type": "archive",
-          "url": "https://github.com/paolostivanin/libbaseencode/archive/v1.0.4.tar.gz",
-          "sha256": "1ed0a3dd29a0ed70c7113f1b1b7d17f72c65454946a9fb915edf5050f8e0c65d"
+          "url": "https://github.com/paolostivanin/libbaseencode/archive/v1.0.6.tar.gz",
+          "sha256": "10c7e1fab2a29761000cd8234479ba8467b4e3895f46834f88bab3cc77c29f25"
         }
       ]
     },
@@ -95,8 +95,8 @@
       "sources": [
         {
           "type": "archive",
-          "url": "https://github.com/paolostivanin/libcotp/archive/v1.0.11.tar.gz",
-          "sha256": "fd01f46a81a1f2811c932eab336276d982369401ae405e36034f1aa859b04a74"
+          "url": "https://github.com/paolostivanin/libcotp/archive/v1.0.14.tar.gz",
+          "sha256": "01dc2e1734d50bfd5063922f880c32b69837b59cc9bdfe75b6746930a09e49a9"
         }
       ]
     },
