@@ -1,5 +1,7 @@
 language: c
 
+build_environment: Ubuntu 16.04
+
 branches:
   only:
     - master
@@ -18,7 +20,7 @@ build:
     - make
     - sudo make install
     - cd ../..
-    - git clone https://github.com/paolostivanin/libcotp.git
+    - git clone https://github.com/paolostivanin/libcotp.git -b v1.0.14
     - cd libcotp && mkdir build && cd $_
     - cmake .. -DCMAKE_INSTALL_PREFIX=/usr
     - make
