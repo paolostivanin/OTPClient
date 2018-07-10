@@ -1,0 +1,68 @@
+version: 2.0
+
+jobs:
+  ubuntu1604:
+    docker:
+      - image: ubuntu:16.04
+    steps:
+      - checkout
+      - run: echo "Content is $(ls)"
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+  ubuntu1804:
+    docker:
+      - image: ubuntu:18.04
+    steps:
+      - checkout
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+  debianLatestStable:
+    docker:
+      - image: debian:latest
+    steps:
+      - checkout
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+  fedora28:
+    docker:
+      - image: fedora:28
+    steps:
+      - checkout
+      - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk3-devel libzip-devel jansson-devel libpng-devel zbar-devel
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+  archlinux:
+    docker:
+      - image: archlinux/base:latest
+    steps:
+      - checkout
+      - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk3 libgcrypt zbar gcc clang cmake make libzip jansson libpng
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+  opensuseLeap:
+    docker:
+      - image: opensuse/leap
+    steps:
+      - checkout
+      - run: zypper -n ref && zypper -n dup && zypper -n in git gcc clang cmake make libgcrypt-devel libpng-devel gtk3-devel libzip-devel libzbar-devel libjansson-devel
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - ubuntu1604
+      - ubuntu1804
+      - debianLatestStable
+      - fedora28
+      - archlinux
+      - opensuseLeap
