@@ -3,6 +3,11 @@
   <img alt="Coverity Scan Build Status"
        src="https://scan.coverity.com/projects/12749/badge.svg"/>
 </a>
+<a href="https://circleci.com/gh/paolostivanin/OTPClient">
+  <img alt="CircleCI"
+       src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
+</a>
+
 
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
