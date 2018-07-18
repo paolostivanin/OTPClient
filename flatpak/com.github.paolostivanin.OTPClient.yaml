@@ -1,0 +1,81 @@
+app-id: com.github.paolostivanin.OTPClient
+runtime: org.gnome.Platform
+runtime-version: '3.28'
+sdk: org.gnome.Sdk
+command: otpclient
+finish-args:
+- "--share=ipc"
+- "--socket=x11"
+- "--socket=wayland"
+- "--filesystem=xdg-run/dconf"
+- "--filesystem=~/.config/dconf:ro"
+- "--device=all"
+- "--talk-name=ca.desrt.dconf"
+- "--talk-name=org.gnome.Shell.Screenshot"
+- "--env=DCONF_USER_CONFIG_DIR=.config/dconf"
+modules:
+- name: libzip
+  buildsystem: cmake-ninja
+  config-opts:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  cleanup:
+  - "/include"
+  - "/bin"
+  - "/share"
+  - "/lib/pkgconfig"
+  - "/lib/*.la"
+  sources:
+  - type: archive
+    url: https://libzip.org/download/libzip-1.5.1.tar.xz
+    sha256: 04ea35b6956c7b3453f1ed3f3fe40e3ddae1f43931089124579e8384e79ed372
+- name: jansson
+  cleanup:
+  - "/include"
+  - "/bin"
+  - "/share"
+  - "/lib/pkgconfig"
+  - "/lib/*.la"
+  sources:
+  - type: archive
+    url: http://www.digip.org/jansson/releases/jansson-2.11.tar.gz
+    sha256: 6e85f42dabe49a7831dbdd6d30dca8a966956b51a9a50ed534b82afc3fa5b2f4
+- name: zbar
+  config-opts:
+  - "--without-qt"
+  - "--without-gtk"
+  - "--without-xv"
+  - "--without-imagemagick"
+  - "--enable-codes=qrcode"
+  sources:
+  - type: archive
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.20.tar.bz2
+    sha256: b92a130744c907905eb61479a03036569045a08693535c9b630c591ea13ee620
+- name: libbaseencode
+  buildsystem: cmake-ninja
+  config-opts:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  cleanup:
+  - "/include"
+  sources:
+  - type: archive
+    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.6.tar.gz
+    sha256: 10c7e1fab2a29761000cd8234479ba8467b4e3895f46834f88bab3cc77c29f25
+- name: libcotp
+  buildsystem: cmake-ninja
+  config-opts:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  cleanup:
+  - "/include"
+  sources:
+  - type: archive
+    url: https://github.com/paolostivanin/libcotp/archive/v1.0.14.tar.gz
+    sha256: 01dc2e1734d50bfd5063922f880c32b69837b59cc9bdfe75b6746930a09e49a9
+- name: OTPClient
+  buildsystem: cmake-ninja
+  config-opts:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DUSE_FLATPAK_APP_FOLDER=ON"
+  sources:
+  - type: git
+    url: https://github.com/paolostivanin/OTPClient.git
+    branch: master

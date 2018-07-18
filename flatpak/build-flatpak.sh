@@ -7,4 +7,4 @@ flatpak-builder \
   --repo=repo \
   --arch=$(flatpak --default-arch) \
   --subject="build of com.github.paolostivanin.OTPClient, $(date)" \
-  build com.github.paolostivanin.OTPClient.json
+  build com.github.paolostivanin.OTPClient.yaml
