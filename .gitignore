@@ -4,6 +4,7 @@ build/
 tests/
 .flatpak-builder/
 flatpak/repo/
+TODO
 
 # Object files
 *.o

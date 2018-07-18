@@ -112,6 +112,11 @@ Author: Paolo Stivanin
       <column type="gint"/>
     </columns>
   </object>
+  <object class="GtkAdjustment" id="manual_add_adjustment_id">
+    <property name="upper">100</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">5</property>
+  </object>
   <object class="GtkPopoverMenu" id="settings_pop_id">
     <property name="can_focus">False</property>
     <child>
@@ -252,7 +257,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <child>
-              <object class="GtkMenuButton" id="add_btn_id">
+              <object class="GtkMenuButton" id="add_btn_main_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -274,7 +279,7 @@ Author: Paolo Stivanin
               </packing>
             </child>
             <child>
-              <object class="GtkMenuButton" id="del_btn_id">
+              <object class="GtkMenuButton" id="del_btn_main_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -880,6 +885,226 @@ has been found or after 30 seconds if nothing has been detected.</property>
     <action-widgets>
       <action-widget response="-6">edit_diag_cancel_btn</action-widget>
       <action-widget response="-5">edit_diag_ok_btn</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkDialog" id="manual_add_diag_id">
+    <property name="can_focus">False</property>
+    <property name="border_width">10</property>
+    <property name="title" translatable="yes">Add Token</property>
+    <property name="window_position">center</property>
+    <property name="type_hint">dialog</property>
+    <property name="gravity">center</property>
+    <property name="transient_for">appwindow_id</property>
+    <property name="attached_to">appwindow_id</property>
+    <child>
+      <placeholder/>
+    </child>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">10</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="manual_diag_cancel_btn_id">
+                <property name="label" translatable="yes">Cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="manual_diag_ok_btn_id">
+                <property name="label" translatable="yes">OK</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">5</property>
+            <child>
+              <object class="GtkBox">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <child>
+                  <object class="GtkComboBoxText" id="otp_combotext_id">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="active">0</property>
+                    <items>
+                      <item id="0" translatable="yes">TOTP</item>
+                      <item id="1" translatable="yes">HOTP</item>
+                    </items>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkComboBoxText" id="algo_combotext_id">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="active">0</property>
+                    <items>
+                      <item id="0" translatable="yes">SHA1</item>
+                      <item id="1" translatable="yes">SHA256</item>
+                      <item id="2" translatable="yes">SHA512</item>
+                    </items>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="manual_diag_label_entry_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="max_length">64</property>
+                <property name="primary_icon_tooltip_text" translatable="yes">Label</property>
+                <property name="placeholder_text" translatable="yes">Label</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="manual_diag_issuer_entry_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="max_length">64</property>
+                <property name="primary_icon_tooltip_text" translatable="yes">Issuer</property>
+                <property name="placeholder_text" translatable="yes">Issuer</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="manual_diag_secret_entry_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="max_length">96</property>
+                <property name="secondary_icon_name">dialog-password-symbolic</property>
+                <property name="primary_icon_tooltip_text" translatable="yes">Secret</property>
+                <property name="placeholder_text" translatable="yes">Secret</property>
+                <property name="input_purpose">password</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <child>
+                  <object class="GtkComboBoxText" id="digits_combotext_id">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="active">1</property>
+                    <items>
+                      <item id="0" translatable="yes">5 (Steam)</item>
+                      <item id="1" translatable="yes">6 digits</item>
+                      <item id="2" translatable="yes">8 digits</item>
+                    </items>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkComboBoxText" id="period_combotext_id">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="active">0</property>
+                    <items>
+                      <item id="0" translatable="yes">30s</item>
+                      <item id="1" translatable="yes">60s</item>
+                    </items>
+                  </object>
+                  <packing>
+                    <property name="expand">True</property>
+                    <property name="fill">True</property>
+                    <property name="position">1</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSpinButton" id="manual_diag_spin_btn_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="adjustment">manual_add_adjustment_id</property>
+                <property name="climb_rate">1</property>
+                <property name="numeric">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">7</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-6">manual_diag_cancel_btn_id</action-widget>
+      <action-widget response="-5">manual_diag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="newdb_pwd_diag_id">
