@@ -43,7 +43,9 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </screenshots>
 
   <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
+  <url type="bugtracker">https://github.com/paolostivanin/OTPClient/issues</url>
   <update_contact>info@paolostivanin.com</update_contact>
+  <developer_name>Paolo Stivanin</developer_name>
 
   <provides>
     <binary>otpclient</binary>
