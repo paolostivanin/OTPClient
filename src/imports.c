@@ -55,7 +55,7 @@ update_db_from_otps (GSList *otps, DatabaseData *db_data, GtkListStore *list_sto
     guint list_len = g_slist_length (otps);
     for (guint i = 0; i < list_len; i++) {
         otp_t *otp = g_slist_nth_data (otps, i);
-        obj = build_json_obj (otp->type, otp->label, otp->issuer, otp->secret, otp->digits, otp->algo, otp->counter);
+        obj = build_json_obj (otp->type, otp->label, otp->issuer, otp->secret, otp->digits, otp->period, otp->algo, otp->counter);
         guint hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
