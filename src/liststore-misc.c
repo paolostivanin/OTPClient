@@ -13,6 +13,7 @@ typedef struct _otp_data {
     gchar *secret;
     gchar *algo;
     gint digits;
+    gint period;
     gint64 counter;
 } OtpData;
 
@@ -70,7 +71,7 @@ set_otp (GtkListStore   *list_store,
     cotp_error_t otp_err;
     gchar *otp;
     if (g_strcmp0 (otp_data->type, "TOTP") == 0) {
-        otp = get_totp (otp_data->secret, otp_data->digits, algo, &otp_err);
+        otp = get_totp (otp_data->secret, otp_data->digits, otp_data->period, algo, &otp_err);
     } else {
         // clean previous HOTP info
         g_free (db_data->last_hotp);
@@ -103,6 +104,7 @@ set_otp_data (OtpData       *otp_data,
     otp_data->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
     otp_data->algo = g_strdup (json_string_value (json_object_get (obj, "algo")));
     otp_data->digits = (gint)json_integer_value (json_object_get (obj, "digits"));
+    otp_data->period = (gint)json_integer_value (json_object_get (obj, "period"));
     if (json_object_get (obj, "counter") != NULL) {
         GError *err = NULL;
         otp_data->counter = json_integer_value (json_object_get (obj, "counter"));
