@@ -108,12 +108,14 @@ get_json_obj (Widgets *widgets,
               gint i)
 {
     gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->type_cb_box, GtkWidget * , i)));
-    gchar *digits = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->dig_cb_box, GtkWidget * , i)));
+    gchar *digits = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->dig_entry, GtkWidget * , i)));
+    gchar *period = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->per_entry, GtkWidget * , i)));
     gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
     gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->spin_btn, GtkWidget * , i)));
-    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, (gint)g_ascii_strtoll (digits, NULL, 10), algo, (gint64) ctr);
+    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, (gint)g_ascii_strtoll (digits, NULL, 10), (gint)g_ascii_strtoll (period, NULL, 10), algo, (gint64) ctr);
     g_free (type);
     g_free (digits);
+    g_free (period);
     g_free (algo);
 
     return jn;
