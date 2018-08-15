@@ -10,7 +10,8 @@ typedef struct _widgets {
     GArray *acc_entry;
     GArray *iss_entry;
     GArray *key_entry;
-    GArray *dig_cb_box;
+    GArray *dig_entry;
+    GArray *per_entry;
     GArray *alg_cb_box;
     GArray *spin_btn;
 

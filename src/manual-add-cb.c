@@ -28,6 +28,7 @@ static void update_grid (Widgets *widgets);
 static void del_entry_cb (GtkWidget *btn, gpointer user_data);
 
 static void sensitive_cb (GtkWidget *cb, gpointer user_data);
+static void sensitive_per (GtkWidget *cb, gpointer user_data);
 
 static GtkWidget *create_integer_spin_button (void);
 
@@ -58,6 +59,7 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     GtkWidget *iss_label = gtk_label_new ("Issuer");
     GtkWidget *key_label = gtk_label_new ("Secret");
     GtkWidget *dig_label = gtk_label_new ("Digits");
+    GtkWidget *per_label = gtk_label_new ("Period");
     GtkWidget *alg_label = gtk_label_new ("Algo");
     GtkWidget *ctr_label = gtk_label_new ("Counter");
 
@@ -74,7 +76,8 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), iss_label, acc_label, GTK_POS_RIGHT, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_label, iss_label, GTK_POS_RIGHT, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_label, key_label, GTK_POS_RIGHT, 2, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_label, dig_label, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), per_label, dig_label, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_label, per_label, GTK_POS_RIGHT, 2, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), ctr_label, alg_label, GTK_POS_RIGHT, 2, 1);
 
     add_widgets_cb (NULL, widgets);
@@ -107,7 +110,8 @@ init_widgets ()
     w->acc_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
     w->iss_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
     w->key_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
-    w->dig_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->dig_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
+    w->per_entry = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
     w->alg_cb_box = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
     w->spin_btn = g_array_new (FALSE, FALSE, sizeof (GtkWidget *));
 
@@ -161,17 +165,20 @@ add_widgets_cb (GtkWidget *btn __attribute__((unused)),
     gtk_entry_set_max_length (GTK_ENTRY (key_entry), MAX_ENTRY_KEY_LENGTH);
 
     GtkWidget *type_cb_box = get_cb_box ("totp", "hotp", NULL, "TOTP", "HOTP", NULL, "totp");
-    GtkWidget *dig_cb_box = get_cb_box ("6digits", "8digits", NULL, "6", "8", NULL, "6digits");
+    GtkWidget *dig_entry = gtk_entry_new (); gtk_entry_set_text(GTK_ENTRY(dig_entry), "6");
+    GtkWidget *per_entry = gtk_entry_new (); gtk_entry_set_text(GTK_ENTRY(per_entry), "30");
     GtkWidget *alg_cb_box = get_cb_box ("sha1", "sha256", "sha512", "SHA1", "SHA256", "SHA512", "sha1");
 
     GtkWidget *sb = create_integer_spin_button ();
     g_signal_connect (type_cb_box, "changed", G_CALLBACK (sensitive_cb), sb);
+    g_signal_connect (type_cb_box, "changed", G_CALLBACK (sensitive_per), per_entry);
 
     g_array_append_val (widgets->type_cb_box, type_cb_box);
     g_array_append_val (widgets->acc_entry, acc_entry);
     g_array_append_val (widgets->iss_entry, iss_entry);
     g_array_append_val (widgets->key_entry, key_entry);
-    g_array_append_val (widgets->dig_cb_box, dig_cb_box);
+    g_array_append_val (widgets->dig_entry, dig_entry);
+    g_array_append_val (widgets->per_entry, per_entry);
     g_array_append_val (widgets->alg_cb_box, alg_cb_box);
     g_array_append_val (widgets->spin_btn, sb);
     set_icon_to_entry (g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1),
@@ -209,7 +216,8 @@ update_grid (Widgets *widgets)
     gtk_widget_set_hexpand (iss_entry_to_add, TRUE);
     GtkWidget *key_entry_to_add = g_array_index (widgets->key_entry, GtkWidget *, widgets->key_entry->len - 1);
     gtk_widget_set_hexpand (key_entry_to_add, TRUE);
-    GtkWidget *dig_cb_to_add = g_array_index (widgets->dig_cb_box, GtkWidget *, widgets->dig_cb_box->len - 1);
+    GtkWidget *dig_entry_to_add = g_array_index (widgets->dig_entry, GtkWidget *, widgets->dig_entry->len - 1);
+    GtkWidget *per_entry_to_add = g_array_index (widgets->per_entry, GtkWidget *, widgets->per_entry->len - 1);
     GtkWidget *alg_cb_to_add = g_array_index (widgets->alg_cb_box, GtkWidget *, widgets->alg_cb_box->len - 1);
     GtkWidget *spin_to_add = g_array_index (widgets->spin_btn, GtkWidget *, widgets->spin_btn->len - 1);
 
@@ -217,8 +225,9 @@ update_grid (Widgets *widgets)
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), acc_entry_to_add, type_cb_to_add, GTK_POS_RIGHT, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), iss_entry_to_add, acc_entry_to_add, GTK_POS_RIGHT, 4, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), key_entry_to_add, iss_entry_to_add, GTK_POS_RIGHT, 4, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_cb_to_add, key_entry_to_add, GTK_POS_RIGHT, 2, 1);
-    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_cb_to_add, dig_cb_to_add, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), dig_entry_to_add, key_entry_to_add, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), per_entry_to_add, dig_entry_to_add, GTK_POS_RIGHT, 2, 1);
+    gtk_grid_attach_next_to (GTK_GRID (widgets->grid), alg_cb_to_add, per_entry_to_add, GTK_POS_RIGHT, 2, 1);
     gtk_grid_attach_next_to (GTK_GRID (widgets->grid), spin_to_add, alg_cb_to_add, GTK_POS_RIGHT, 2, 1);
 
     gtk_widget_show_all (widgets->dialog);
@@ -240,7 +249,8 @@ del_entry_cb (GtkWidget *btn __attribute__((unused)),
     g_array_remove_index (widgets->acc_entry, current_position);
     g_array_remove_index (widgets->iss_entry, current_position);
     g_array_remove_index (widgets->key_entry, current_position);
-    g_array_remove_index (widgets->dig_cb_box, current_position);
+    g_array_remove_index (widgets->dig_entry, current_position);
+    g_array_remove_index (widgets->per_entry, current_position);
     g_array_remove_index (widgets->alg_cb_box, current_position);
     g_array_remove_index (widgets->spin_btn, current_position);
 }
@@ -252,6 +262,19 @@ sensitive_cb (GtkWidget *cb,
 {
     GtkWidget *sb = (GtkWidget *) user_data;
     if (g_strcmp0 (gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (cb)), "HOTP") == 0) {
+        gtk_widget_set_sensitive (sb, TRUE);
+    } else {
+        gtk_widget_set_sensitive (sb, FALSE);
+    }
+}
+
+
+static void
+sensitive_per (GtkWidget *cb,
+               gpointer   user_data)
+{
+    GtkWidget *sb = (GtkWidget *) user_data;
+    if (g_strcmp0 (gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (cb)), "TOTP") == 0) {
         gtk_widget_set_sensitive (sb, TRUE);
     } else {
         gtk_widget_set_sensitive (sb, FALSE);
@@ -277,7 +300,8 @@ cleanup_widgets (Widgets *widgets)
     g_array_free (widgets->acc_entry, TRUE);
     g_array_free (widgets->iss_entry, TRUE);
     g_array_free (widgets->key_entry, TRUE);
-    g_array_free (widgets->dig_cb_box, TRUE);
+    g_array_free (widgets->dig_entry, TRUE);
+    g_array_free (widgets->per_entry, TRUE);
     g_array_free (widgets->alg_cb_box, TRUE);
     g_array_free (widgets->spin_btn, TRUE);
     g_free (widgets);
