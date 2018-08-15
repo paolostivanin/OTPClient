@@ -167,6 +167,7 @@ build_json_obj (const gchar *type,
                 const gchar *acc_iss,
                 const gchar *acc_key,
                 gint         digits,
+                gint         period,
                 const gchar *algo,
                 gint64       ctr)
 {
@@ -176,13 +177,12 @@ build_json_obj (const gchar *type,
     json_object_set (obj, "issuer", json_string (acc_iss));
     json_object_set (obj, "secret", json_string (acc_key));
     json_object_set (obj, "digits", json_integer (digits));
+    json_object_set (obj, "period", json_integer (period));
     json_object_set (obj, "algo", json_string (algo));
 
     json_object_set (obj, "secret", json_string (acc_key));
 
-    if (g_strcmp0 (type, "TOTP") == 0) {
-        json_object_set (obj, "period", json_integer (30));
-    } else {
+    if (g_strcmp0 (type, "HOTP") == 0) {
         json_object_set (obj, "counter", json_integer (ctr));
     }
 
