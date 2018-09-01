@@ -32,7 +32,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
-pkg_check_modules(COTP REQUIRED cotp>=1.1.0)
+pkg_check_modules(COTP REQUIRED cotp>=1.2.1)
 pkg_check_modules(PNG REQUIRED libpng>=1.2.0)
 pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
