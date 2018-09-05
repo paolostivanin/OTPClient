@@ -110,10 +110,10 @@ Author: Paolo Stivanin
       <column type="gchar"/>
       <!-- column-name Issuer -->
       <column type="gchar"/>
-      <!-- column-name Value -->
+      <!-- column-name OTP Value -->
       <column type="gchar"/>
       <!-- column-name Validity -->
-      <column type="gint"/>
+      <column type="gchar"/>
     </columns>
   </object>
   <object class="GtkAdjustment" id="manual_add_adjustment_id">
