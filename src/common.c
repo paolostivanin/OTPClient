@@ -2,24 +2,8 @@
 #include <gcrypt.h>
 #include <jansson.h>
 
-static void icon_press_cb (GtkEntry *entry, gint position, GdkEventButton *event, gpointer data);
-
 
 void
-set_icon_to_entry (GtkWidget    *entry,
-                   const gchar  *icon_name,
-                   const gchar  *tooltip_text)
-{
-    GIcon *gicon = g_themed_icon_new_with_default_fallbacks (icon_name);
-    gtk_entry_set_icon_from_gicon (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, gicon);
-    gtk_entry_set_icon_activatable (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, TRUE);
-    gtk_entry_set_icon_tooltip_text (GTK_ENTRY (entry), GTK_ENTRY_ICON_SECONDARY, tooltip_text);
-    gtk_entry_set_visibility (GTK_ENTRY (entry), FALSE);
-    g_signal_connect (entry, "icon-press", G_CALLBACK(icon_press_cb), NULL);
-}
-
-
-static void
 icon_press_cb (GtkEntry         *entry,
                gint              position __attribute__((unused)),
                GdkEventButton   *event    __attribute__((unused)),
@@ -67,34 +51,6 @@ create_header_bar (const gchar *headerbar_title)
     gtk_header_bar_set_has_subtitle (GTK_HEADER_BAR (header_bar), FALSE);
 
     return header_bar;
-}
-
-
-GtkWidget *
-find_widget (GtkWidget      *parent,
-             const gchar    *widget_name)
-{
-    GtkWidget *found_widget = NULL;
-    GList *children = NULL;
-    if (GTK_IS_BIN (parent)) {
-        GtkWidget *header_bar = gtk_window_get_titlebar (GTK_WINDOW (parent));
-        GList *child = gtk_container_get_children (GTK_CONTAINER (header_bar)); //there's only one child, a GTK_CONTAINER (box)
-        children = gtk_container_get_children (GTK_CONTAINER (child->data));
-        g_list_free (child);
-    } else {
-        children = gtk_container_get_children (GTK_CONTAINER (parent)); //children are the 3 buttons
-    }
-
-    for (; children != NULL; children = g_list_next (children)) {
-        if (g_strcmp0 (gtk_widget_get_name (children->data), widget_name) == 0) {
-            found_widget = children->data;
-            break;
-        }
-    }
-
-    g_list_free (children);
-
-    return found_widget;
 }
 
 
@@ -168,6 +124,7 @@ build_json_obj (const gchar *type,
                 const gchar *acc_key,
                 gint         digits,
                 const gchar *algo,
+                gint         period,
                 gint64       ctr)
 {
     json_t *obj = json_object ();
@@ -181,7 +138,7 @@ build_json_obj (const gchar *type,
     json_object_set (obj, "secret", json_string (acc_key));
 
     if (g_strcmp0 (type, "TOTP") == 0) {
-        json_object_set (obj, "period", json_integer (30));
+        json_object_set (obj, "period", json_integer (period));
     } else {
         json_object_set (obj, "counter", json_integer (ctr));
     }

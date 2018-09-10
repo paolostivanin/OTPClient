@@ -3,22 +3,28 @@
 G_BEGIN_DECLS
 
 enum {
-    COLUMN_BOOLEAN,
     COLUMN_TYPE,
     COLUMN_ACC_LABEL,
     COLUMN_ACC_ISSUER,
     COLUMN_OTP,
+    COLUMN_VALIDITY,
+    COLUMN_PERIOD,
     NUM_COLUMNS
 };
 
-GtkListStore    *create_treeview            (GtkWidget    *main_window,
-                                             GtkClipboard *clipboard,
-                                             DatabaseData *db_data);
+void create_treeview    (AppData            *app_data);
 
-void             update_model               (DatabaseData *db_data,
-                                             GtkListStore *store);
+void update_model       (DatabaseData       *db_data,
+                         GtkTreeView        *tree_view);
 
-void             remove_selected_entries    (DatabaseData *db_data,
-                                             GtkListStore *list_store);
+void delete_rows_cb     (GtkTreeView        *tree_view,
+                         GtkTreePath        *path,
+                         GtkTreeViewColumn  *column,
+                         gpointer            user_data);
+
+void row_selected_cb    (GtkTreeView        *tree_view,
+                         GtkTreePath        *path,
+                         GtkTreeViewColumn  *column,
+                         gpointer            user_data);
 
 G_END_DECLS

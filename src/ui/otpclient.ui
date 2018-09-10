@@ -110,11 +110,18 @@ Author: Paolo Stivanin
       <column type="gchar"/>
       <!-- column-name Issuer -->
       <column type="gchar"/>
-      <!-- column-name OTP Value -->
+      <!-- column-name OTP -->
       <column type="gchar"/>
       <!-- column-name Validity -->
-      <column type="gchar"/>
+      <column type="gint"/>
+      <!-- column-name Period -->
+      <column type="gint"/>
     </columns>
+  </object>
+  <object class="GtkImage" id="lrs_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="icon_name">list-remove-symbolic</property>
   </object>
   <object class="GtkAdjustment" id="manual_add_adjustment_id">
     <property name="upper">100</property>
@@ -288,20 +295,13 @@ Author: Paolo Stivanin
               </packing>
             </child>
             <child>
-              <object class="GtkMenuButton" id="del_btn_main_id">
+              <object class="GtkToggleButton" id="del_toggle_btn_id">
+                <property name="name">delbtn</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="tooltip_text" translatable="yes">Remove token</property>
-                <property name="action_name">app.delete_selected</property>
-                <child>
-                  <object class="GtkImage">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="icon_name">list-remove-symbolic</property>
-                  </object>
-                </child>
-                <accelerator key="d" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+                <property name="tooltip_text" translatable="yes">Delete row(s)</property>
+                <property name="image">lrs_image</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -507,6 +507,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     </action-widgets>
   </object>
   <object class="GtkDialog" id="decpwd_diag_id">
+    <property name="width_request">400</property>
+    <property name="height_request">150</property>
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
     <property name="title" translatable="yes">Password</property>
@@ -562,6 +564,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           <object class="GtkLabel" id="decpwd_label_id">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
+            <property name="margin_top">5</property>
+            <property name="margin_bottom">5</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
           </object>
@@ -1392,7 +1396,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkLabel">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Hide OTP after</property>
+                <property name="label" translatable="yes">Show next OTP</property>
               </object>
               <packing>
                 <property name="left_attach">0</property>
@@ -1422,24 +1426,6 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               </packing>
             </child>
             <child>
-              <object class="GtkComboBoxText" id="cycles_cb_id">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="active">0</property>
-                <property name="active_id">0</property>
-                <items>
-                  <item id="0" translatable="yes">Never</item>
-                  <item id="1" translatable="yes">1 cycle</item>
-                  <item id="2" translatable="yes">2 cycles</item>
-                  <item id="3" translatable="yes">3 cycles</item>
-                </items>
-              </object>
-              <packing>
-                <property name="left_attach">1</property>
-                <property name="top_attach">0</property>
-              </packing>
-            </child>
-            <child>
               <object class="GtkSwitch" id="notif_switch_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
@@ -1464,6 +1450,16 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <packing>
                 <property name="left_attach">1</property>
                 <property name="top_attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="nextotp_switch_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+              </object>
+              <packing>
+                <property name="left_attach">1</property>
+                <property name="top_attach">0</property>
               </packing>
             </child>
           </object>
