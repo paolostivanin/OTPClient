@@ -294,9 +294,9 @@ del_data_cb (GtkToggleButton *btn,
             "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>";
 
         if (get_confirmation_from_dialog (app_data->main_window, msg)) {
+            g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
             gtk_tree_selection_unselect_all (tree_selection);
             gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_SINGLE);
-            g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
             g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(delete_rows_cb), app_data);
         } else {
             gtk_toggle_button_set_active (btn, FALSE);
@@ -304,9 +304,9 @@ del_data_cb (GtkToggleButton *btn,
     } else {
         gtk_style_context_remove_provider (gsc, app_data->css_provider);
         g_object_unref (app_data->css_provider);
+        gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_MULTIPLE);
         g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
         g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
-        gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_MULTIPLE);
     }
 }
 
