@@ -342,7 +342,6 @@ Author: Paolo Stivanin
         <property name="visible">True</property>
         <property name="can_focus">True</property>
         <property name="shadow_type">etched-in</property>
-        <property name="propagate_natural_width">True</property>
         <child>
           <object class="GtkViewport">
             <property name="visible">True</property>
