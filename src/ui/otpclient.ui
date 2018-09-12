@@ -110,7 +110,7 @@ Author: Paolo Stivanin
       <column type="gchar"/>
       <!-- column-name Issuer -->
       <column type="gchar"/>
-      <!-- column-name OTP -->
+      <!-- column-name OTP Value -->
       <column type="gchar"/>
       <!-- column-name Validity -->
       <column type="gint"/>
@@ -354,6 +354,7 @@ Author: Paolo Stivanin
                 <property name="hscroll_policy">natural</property>
                 <property name="vscroll_policy">natural</property>
                 <property name="model">liststore_model_id</property>
+                <property name="headers_clickable">False</property>
                 <property name="search_column">1</property>
                 <property name="enable_grid_lines">horizontal</property>
                 <property name="activate_on_single_click">True</property>

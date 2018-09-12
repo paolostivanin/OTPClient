@@ -5,6 +5,8 @@
 #include "message-dialogs.h"
 #include "common.h"
 #include "gquarks.h"
+#include "app.h"
+#include "otpclient.h"
 
 typedef struct _edit_data_t {
     GtkListStore *list_store;
@@ -12,7 +14,7 @@ typedef struct _edit_data_t {
     DatabaseData *db_data;
 } EditData;
 
-static void show_edit_dialog (EditData *edit_data, ImportData *import_data, gchar *acc_lab, gchar *acc_iss);
+static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *acc_lab, gchar *acc_iss);
 
 static gchar *get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_entry, GtkWidget *new_iss_entry);
 
@@ -25,55 +27,59 @@ edit_selected_rows (GSimpleAction *simple    __attribute__((unused)),
                     gpointer       user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
-    ImportData *import_data = (ImportData *)user_data;
-    edit_data->db_data = import_data->db_data;
-    edit_data->list_store = g_object_get_data (G_OBJECT (import_data->main_window), "lstore");
+    AppData *app_data = (AppData *)user_data;
+    edit_data->db_data = app_data->db_data;
 
-    gboolean valid, is_active;
-    gchar *iss, *lab;
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
 
-    valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL (edit_data->list_store), &edit_data->iter);
-    while (valid) {
-        gtk_tree_model_get (GTK_TREE_MODEL (edit_data->list_store), &edit_data->iter, COLUMN_BOOLEAN, &is_active, -1);
+    edit_data->list_store = GTK_LIST_STORE(model);
 
-        if (is_active) {
-            gtk_tree_model_get (GTK_TREE_MODEL (edit_data->list_store), &edit_data->iter, COLUMN_ACC_LABEL, &lab, -1);
-            gtk_tree_model_get (GTK_TREE_MODEL (edit_data->list_store), &edit_data->iter, COLUMN_ACC_ISSUER, &iss, -1);
-            show_edit_dialog (edit_data, import_data, lab, iss);
-            g_free (iss);
-            g_free (lab);
-        }
+    GSList *active_rows = gtk_tree_selection_get_selected_rows (gtk_tree_view_get_selection (app_data->tree_view), &model);
 
-        valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (edit_data->list_store), &edit_data->iter);
+    GtkTreeIter iter;
+    gchar *current_label, *current_issuer;
+    gint i = 0;
+    GtkTreePath *path = g_slist_nth_data (active_rows, i);
+    while (path != NULL) {
+        gtk_tree_model_get_iter (model, &iter, path);
+        gtk_tree_model_get (model, &iter, 1, &current_label, 2, &current_issuer, -1);
+        show_edit_dialog (edit_data, app_data, current_label, current_issuer);
+        g_free (current_label);
+        g_free (current_issuer);
+        path = g_slist_nth_data (active_rows, ++i);
     }
+    
+    g_slist_free_full (active_rows, (GDestroyNotify)gtk_tree_path_free);
 
     GError *err = NULL;
     update_and_reload_db (edit_data->db_data, edit_data->list_store, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
-        show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
     }
     g_free (edit_data);
 }
 
 
 static void
-show_edit_dialog (EditData *edit_data, ImportData *import_data, gchar *acc_lab, gchar *acc_iss)
+show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer)
 {
-    GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/edit-diag.ui");
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     GtkWidget *diag = GTK_WIDGET (gtk_builder_get_object (builder, "edit_diag_id"));
-    gtk_window_set_transient_for (GTK_WINDOW (diag), GTK_WINDOW (import_data->main_window));
 
     GtkWidget *cur_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_label_entry"));
     GtkWidget *cur_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_iss_entry"));
     if (cur_lab_entry != NULL) {
-        gtk_entry_set_text (GTK_ENTRY (cur_lab_entry), acc_lab);
+        gtk_entry_set_text (GTK_ENTRY (cur_lab_entry), current_label);
     }
     if (cur_iss_entry != NULL) {
-        gtk_entry_set_text (GTK_ENTRY (cur_iss_entry), acc_iss);
+        gtk_entry_set_text (GTK_ENTRY (cur_iss_entry), current_issuer);
     }
 
-    GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "new_label_entry"));
-    GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "new_iss_entry"));
+    GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newlabel_id"));
+    GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newissuer_id"));
+
+    gtk_entry_set_text (GTK_ENTRY(new_lab_entry), current_label);
+    gtk_entry_set_text (GTK_ENTRY(new_iss_entry), current_issuer);
 
     gchar *err_msg = NULL;
     gint res = gtk_dialog_run (GTK_DIALOG (diag));
@@ -81,7 +87,7 @@ show_edit_dialog (EditData *edit_data, ImportData *import_data, gchar *acc_lab, 
         case GTK_RESPONSE_OK:
             err_msg = get_parse_and_set_data_from_entries (edit_data, new_lab_entry, new_iss_entry);
             if (err_msg != NULL) {
-                show_message_dialog (import_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
                 g_free (err_msg);
             }
             break;
@@ -102,7 +108,7 @@ get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_ent
     const gchar *new_label = gtk_entry_get_text (GTK_ENTRY (new_lab_entry));
     const gchar *new_issuer = gtk_entry_get_text (GTK_ENTRY (new_iss_entry));
 
-    if (!g_utf8_validate (new_label, -1, NULL) || !g_utf8_validate (new_issuer, -1, NULL)) {
+    if (!g_str_is_ascii (new_label) || !g_str_is_ascii (new_issuer)) {
         return g_strdup ("Only ASCII characters are supported at the moment.");
     }
 
