@@ -3,6 +3,8 @@
 #include <gtk/gtk.h>
 #include "db-misc.h"
 
+#define NOTIFICATION_ID "otp-copied"
+
 G_BEGIN_DECLS
 
 enum _search_column_id { LABEL, ISSUER } SearchColumnID;
@@ -18,6 +20,8 @@ typedef struct _app_data_t {
     gint search_column;
 
     GtkCssProvider *css_provider;
+
+    GNotification *notification;
 
     DatabaseData *db_data;
 } AppData;

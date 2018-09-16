@@ -126,7 +126,15 @@ activate (GtkApplication    *app,
     }
 
     app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
+    
     create_treeview (app_data);
+    
+    app_data->notification = g_notification_new ("OTPClient");
+    g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
+    GIcon *icon = g_themed_icon_new ("otpclient");
+    g_notification_set_icon (app_data->notification, icon);
+    g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
+    g_object_unref (icon);
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (builder, "del_toggle_btn_id"));
@@ -296,6 +304,7 @@ del_data_cb (GtkToggleButton *btn,
         if (get_confirmation_from_dialog (app_data->main_window, msg)) {
             g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
             gtk_tree_selection_unselect_all (tree_selection);
+            // TODO: clear all otps?
             gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_SINGLE);
             g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(delete_rows_cb), app_data);
         } else {
@@ -359,6 +368,8 @@ destroy_cb (GtkWidget   *window,
     json_decref (app_data->db_data->json_data);
     g_free (app_data->db_data);
     gtk_clipboard_clear (app_data->clipboard);
+    g_application_withdraw_notification (gtk_window_get_application (GTK_WINDOW(app_data->main_window)), NOTIFICATION_ID);
+    g_object_unref (app_data->notification);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbad-function-cast"
     gint w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));

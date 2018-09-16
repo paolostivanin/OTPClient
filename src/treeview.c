@@ -50,7 +50,10 @@ create_treeview (AppData *app_data)
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
 
     // signal sent when row is selected
-    g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data->clipboard);
+    g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
+
+    // signal sent when ...
+    // TODO: clear everything BUT selected (eg 3 rows selected then 1 selected)
 
     g_object_unref (builder);
 }
@@ -105,49 +108,42 @@ row_selected_cb (GtkTreeView        *tree_view,
                  GtkTreeViewColumn  *column    __attribute__((unused)),
                  gpointer            user_data)
 {
-    GtkClipboard *clipboard = (GtkClipboard *) user_data;
+    AppData *app_data = (AppData *)user_data;
     GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
 
     GtkTreeIter  iter;
     gtk_tree_model_get_iter (model, &iter, path);
 
-    gchar *otp_value;
+    gchar *otp_type, *otp_value;
+    gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
     gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
 
-    gtk_clipboard_set_text (clipboard, otp_value, -1);
-
-    g_free (otp_value);
-
-/*     GtkTreeModel *model = (GtkTreeModel *) data;
-    GtkTreeIter  iter;
-    GtkTreePath *path = gtk_tree_path_new_from_string (path_str);
-
-    gtk_tree_model_get_iter (model, &iter, path);
-
-    gchar *otp_type;
-    gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
-
-    if (fixed) {
-        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
-    } else {
-        DatabaseData *db_data = g_object_get_data (G_OBJECT (model), "data");
-        GDateTime *now = g_date_time_new_now_local ();
-        GTimeSpan diff = g_date_time_difference (now, db_data->last_hotp_update);
-        if (g_strcmp0 (otp_type, "HOTP") == 0 && diff < G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
-            gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, db_data->last_hotp, -1);
-            gtk_clipboard_set_text (clipboard, db_data->last_hotp, -1);
-        } else {
-            set_otp (GTK_LIST_STORE (model), iter, db_data);
-            gchar *otp_value;
-            gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
-            gtk_clipboard_set_text (clipboard, otp_value, -1);
-            g_free (otp_value);
+    GDateTime *now = g_date_time_new_now_local ();
+    GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
+    if (g_utf8_strlen (otp_value, -1) > 3) {
+        // OTP is already set, so we only have to copy the value to the clipboard and send the notification
+        if (g_strcmp0 (otp_type, "HOTP") == 0) {
+            if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
+                set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
+                g_free (otp_value);
+                gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+            }
         }
-        g_date_time_unref (now);
+    } else {
+        // OTP is not already set
+        set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
+        g_free (otp_value);
+        gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
     }
 
+    gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
+    if (!app_data->disable_notifications) {
+        g_application_send_notification (gtk_window_get_application (app_data->main_window), NOTIFICATION_ID, app_data->notification);
+    }
+
+    g_date_time_unref (now);
     g_free (otp_type);
-    gtk_tree_path_free (path); */
+    g_free (otp_value);
 }
 
 
