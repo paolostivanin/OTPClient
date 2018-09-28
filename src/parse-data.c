@@ -90,7 +90,7 @@ is_input_valid (GtkWidget    *dialog,
         g_free (msg);
         return FALSE;
     }
-    if (!str_is_only_num (period) || g_ascii_strtoll (period, NULL, 10) < 4 || g_ascii_strtoll (period, NULL, 10) > 10) {
+    if (!str_is_only_num (period) || g_ascii_strtoll (period, NULL, 10) < 10 || g_ascii_strtoll (period, NULL, 10) > 120) {
         gchar *msg = g_strconcat ("The period entry should contain only digits and the value should be between 10 and 120 (inclusive).\n"
                                   "Entry with label '", acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
