@@ -22,10 +22,10 @@ Author: Paolo Stivanin
 
 -->
 <interface>
-  <requires lib="gtk+" version="3.20"/>
+  <requires lib="gtk+" version="3.18"/>
   <!-- interface-license-type gplv3 -->
   <!-- interface-name OTPClient -->
-  <!-- interface-description Simple GTK+ OTP client (TOTP and HOTP) -->
+  <!-- interface-description Highly secure and easy to use GTK+ OTP client -->
   <!-- interface-copyright 2018 -->
   <!-- interface-authors Paolo Stivanin -->
   <object class="GtkPopoverMenu" id="add_pop_id">
@@ -116,6 +116,10 @@ Author: Paolo Stivanin
       <column type="gint"/>
       <!-- column-name Period -->
       <column type="gint"/>
+      <!-- column-name Updated -->
+      <column type="gboolean"/>
+      <!-- column-name Less Than a Minute -->
+      <column type="gboolean"/>
     </columns>
   </object>
   <object class="GtkImage" id="lrs_image">
@@ -358,9 +362,7 @@ Author: Paolo Stivanin
                 <property name="enable_grid_lines">horizontal</property>
                 <property name="activate_on_single_click">True</property>
                 <child internal-child="selection">
-                  <object class="GtkTreeSelection" id="tree_selection_id">
-                    <property name="mode">multiple</property>
-                  </object>
+                  <object class="GtkTreeSelection" id="tree_selection_id"/>
                 </child>
               </object>
             </child>

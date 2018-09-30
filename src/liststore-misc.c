@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <cotp.h>
 #include <jansson.h>
+#include <app.h>
 #include "db-misc.h"
 #include "treeview.h"
 #include "liststore-misc.h"
@@ -14,6 +15,7 @@ typedef struct _otp_data {
     gchar *algo;
     gint digits;
     gint64 counter;
+    gboolean steam;
 } OtpData;
 
 static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, guint row_number);
@@ -21,29 +23,51 @@ static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, guint row_nu
 static void clean_otp_data (OtpData *otp_data);
 
 
-void
-traverse_liststore (GtkListStore *liststore,
-                    DatabaseData *db_data)
+gboolean
+traverse_liststore (GtkTreeModel *model,
+                    GtkTreePath  *path,
+                    GtkTreeIter  *iter,
+                    gpointer      user_data)
 {
-    GtkTreeIter iter;
-    gboolean valid, is_active;
-    gchar *otp_type;
+    AppData *app_data = (AppData *)user_data;
+    gchar *otp_type, *otp;
+    guint validity, period;
+    gboolean only_a_minute_left, updated;
 
-    g_return_if_fail (liststore != NULL);
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        COLUMN_UPDATED, &updated,
+                        COLUMN_LESS_THAN_A_MINUTE, &only_a_minute_left,
+                        -1);
 
-    valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL (liststore), &iter);
-
-    while (valid) {
-        gtk_tree_model_get (GTK_TREE_MODEL (liststore), &iter, COLUMN_BOOLEAN, &is_active, -1);
-        gtk_tree_model_get (GTK_TREE_MODEL (liststore), &iter, COLUMN_TYPE, &otp_type, -1);
-
-        if (is_active && g_strcmp0 (otp_type, "TOTP") == 0) {
-            set_otp (liststore, iter, db_data);
+    if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_strcmp0 (otp_type, "TOTP") == 0) {
+        gboolean short_countdown = (period <= 60 || only_a_minute_left) ? TRUE : FALSE;
+        gint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
+        gint token_validity = remaining_seconds % period;
+        if (remaining_seconds % period == 60) {
+            short_countdown = TRUE;
         }
-
-        valid = gtk_tree_model_iter_next (GTK_TREE_MODEL (liststore), &iter);
-        g_free (otp_type);
+        if (remaining_seconds % period == 0) {
+            if (!app_data->show_next_otp || updated) {
+                short_countdown = FALSE;
+                updated = FALSE;
+                gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "");
+            } else {
+                updated = TRUE;
+                set_otp (GTK_LIST_STORE (model), *iter, app_data->db_data);
+            }
+        }
+        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, updated, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
     }
+
+    g_free (otp_type);
+    g_free (otp);
+
+    // do not stop walking the store, check next row
+    return FALSE;
 }
 
 
@@ -70,7 +94,11 @@ set_otp (GtkListStore   *list_store,
     cotp_error_t otp_err;
     gchar *otp;
     if (g_strcmp0 (otp_data->type, "TOTP") == 0) {
-        otp = get_totp (otp_data->secret, otp_data->digits, algo, &otp_err);
+        if (otp_data->steam) {
+            otp = get_steam_totp (otp_data->secret, &otp_err);
+        } else {
+            otp = get_totp (otp_data->secret, otp_data->digits, algo, &otp_err);
+        }
     } else {
         // clean previous HOTP info
         g_free (db_data->last_hotp);
@@ -103,6 +131,7 @@ set_otp_data (OtpData       *otp_data,
     otp_data->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
     otp_data->algo = g_strdup (json_string_value (json_object_get (obj, "algo")));
     otp_data->digits = (gint)json_integer_value (json_object_get (obj, "digits"));
+    otp_data->steam = (g_ascii_strcasecmp (json_object_get (obj, "issuer"), "steam") == 0 ? TRUE : FALSE);
     if (json_object_get (obj, "counter") != NULL) {
         GError *err = NULL;
         otp_data->counter = json_integer_value (json_object_get (obj, "counter"));
