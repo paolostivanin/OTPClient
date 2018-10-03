@@ -9,6 +9,7 @@
 #include "password-cb.h"
 #include "get-builder.h"
 #include "app.h"
+#include "liststore-misc.h"
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path            (GtkWidget *window);
@@ -141,6 +142,8 @@ activate (GtkApplication    *app,
 
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK (del_data_cb), app_data);
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK (destroy_cb), app_data);
+
+    app_data->source_id = g_timeout_add_seconds (1, traverse_liststore, app_data);
 
     gtk_widget_show_all (app_data->main_window);
 
@@ -303,9 +306,9 @@ del_data_cb (GtkToggleButton *btn,
 
         if (get_confirmation_from_dialog (app_data->main_window, msg)) {
             g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
+            // the following function emits the "changed" signal
             gtk_tree_selection_unselect_all (tree_selection);
-            // TODO: clear all otps?
-            gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_SINGLE);
+            // TODO: clear all enabled otps with g_signal_emit ?
             g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(delete_rows_cb), app_data);
         } else {
             gtk_toggle_button_set_active (btn, FALSE);
@@ -313,7 +316,6 @@ del_data_cb (GtkToggleButton *btn,
     } else {
         gtk_style_context_remove_provider (gsc, app_data->css_provider);
         g_object_unref (app_data->css_provider);
-        gtk_tree_selection_set_mode (tree_selection, GTK_SELECTION_MULTIPLE);
         g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
         g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
     }
@@ -362,6 +364,7 @@ destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     AppData *app_data = (AppData *)user_data;
+    g_source_remove (app_data->source_id);
     gcry_free (app_data->db_data->key);
     g_free (app_data->db_data->db_path);
     g_slist_free_full (app_data->db_data->objects_hash, g_free);

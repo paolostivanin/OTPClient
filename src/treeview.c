@@ -15,9 +15,6 @@ typedef struct _parsed_json_data {
     GArray *periods;
 } ParsedData;
 
-
-static gboolean      label_update           (gpointer data);
-
 static void          set_json_data          (json_t *array, ParsedData *pjd);
 
 static void          add_data_to_model      (DatabaseData *db_data, GtkListStore *store);
@@ -28,6 +25,8 @@ static void          add_columns            (GtkTreeView *treeview);
 
 static void          row_selected_cb        (GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data);
 
+static void          hide_all_otps_cb       (GtkTreeView *tree_view, gpointer user_data);
+
 static void          free_parsed_json_data  (ParsedData *pjd);
 
 
@@ -36,9 +35,14 @@ create_treeview (AppData *app_data)
 {
     // Because we rely on the order in which data has been added to the model when deleting a row, columns must NOT be clickable/reordable
 
+    g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 
     app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (builder, "treeview_id"));
+
+    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
+    gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
     
     GtkListStore *list_store = GTK_LIST_STORE(gtk_builder_get_object (builder, "liststore_model_id"));
 
@@ -49,11 +53,11 @@ create_treeview (AppData *app_data)
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
 
-    // signal sent when row is selected
+    // signal emitted when row is selected
     g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
 
-    // signal sent when ...
-    // TODO: clear everything BUT selected (eg 3 rows selected then 1 selected)
+    // signal emitted when CTRL+H is pressed
+    g_signal_connect (app_data->tree_view, "hide-all-otps", G_CALLBACK(hide_all_otps_cb), app_data);
 
     g_object_unref (builder);
 }
@@ -121,7 +125,7 @@ row_selected_cb (GtkTreeView        *tree_view,
     GDateTime *now = g_date_time_new_now_local ();
     GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
     if (g_utf8_strlen (otp_value, -1) > 3) {
-        // OTP is already set, so we only have to copy the value to the clipboard and send the notification
+        // OTP is already set, so we update the value only if it is an HOTP
         if (g_strcmp0 (otp_type, "HOTP") == 0) {
             if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
                 set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
@@ -130,12 +134,12 @@ row_selected_cb (GtkTreeView        *tree_view,
             }
         }
     } else {
-        // OTP is not already set
+        // OTP is not already set, so we set it
         set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
         g_free (otp_value);
         gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
     }
-
+    // and, in any case, we copy the otp to the clipboard and send a notification
     gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
     if (!app_data->disable_notifications) {
         g_application_send_notification (gtk_window_get_application (app_data->main_window), NOTIFICATION_ID, app_data->notification);
@@ -144,6 +148,36 @@ row_selected_cb (GtkTreeView        *tree_view,
     g_date_time_unref (now);
     g_free (otp_type);
     g_free (otp_value);
+}
+
+
+static void
+hide_all_otps_cb (GtkTreeView *tree_view,
+                 gpointer      user_data)
+{
+    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (tree_view)), foreach_func_clear_otps, user_data);
+}
+
+
+static void
+foreach_func_clear_otps (GtkTreeModel *model,
+                         GtkTreePath  *path,
+                         GtkTreeIter  *iter,
+                         gpointer      user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    gchar *otp;
+
+    gtk_tree_model_get (model, iter, COLUMN_OTP, &otp, -1);
+
+    if (otp != NULL && g_utf8_strlen (otp, -1) > 4) {
+        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
+    }
+
+    g_free (otp);
+
+    // do not stop walking the store, check next row
+    return FALSE;
 }
 
 
@@ -189,6 +223,8 @@ add_data_to_model (DatabaseData *db_data,
                             COLUMN_OTP, "",
                             COLUMN_VALIDITY, "",
                             COLUMN_PERIOD, g_array_index (pjd->periods, gint, i),
+                            COLUMN_UPDATED, FALSE,
+                            COLUMN_LESS_THAN_A_MINUTE, FALSE,
                             -1);
         i++;
     }
@@ -225,6 +261,16 @@ add_columns (GtkTreeView *tree_view)
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Period", renderer, "text", COLUMN_PERIOD, NULL);
+    gtk_tree_view_column_set_visible (column, FALSE);
+    gtk_tree_view_append_column (tree_view, column);
+
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Updated", renderer, "text", COLUMN_UPDATED, NULL);
+    gtk_tree_view_column_set_visible (column, FALSE);
+    gtk_tree_view_append_column (tree_view, column);
+
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Less Than a Minute", renderer, "text", COLUMN_LESS_THAN_A_MINUTE, NULL);
     gtk_tree_view_column_set_visible (column, FALSE);
     gtk_tree_view_append_column (tree_view, column);
 }

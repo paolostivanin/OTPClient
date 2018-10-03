@@ -23,6 +23,8 @@ typedef struct _app_data_t {
 
     GNotification *notification;
 
+    guint source_id;
+
     DatabaseData *db_data;
 } AppData;
 
