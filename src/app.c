@@ -308,7 +308,8 @@ del_data_cb (GtkToggleButton *btn,
             g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
             // the following function emits the "changed" signal
             gtk_tree_selection_unselect_all (tree_selection);
-            // TODO: clear all enabled otps with g_signal_emit ?
+            // clear all active otps before proceeding to the deletion phase
+            g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
             g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(delete_rows_cb), app_data);
         } else {
             gtk_toggle_button_set_active (btn, FALSE);
