@@ -97,7 +97,7 @@ is_input_valid (GtkWidget    *dialog,
         g_free (msg);
         return FALSE;
     }
-    if (!str_is_only_num (counter) || g_ascii_strtoll (period, NULL, 10) < 0 || g_ascii_strtoll (period, NULL, 10) == G_MAXINT64) {
+    if (!str_is_only_num (counter) || g_ascii_strtoll (counter, NULL, 10) < 1 || g_ascii_strtoll (counter, NULL, 10) == G_MAXINT64) {
         gchar *msg = g_strconcat ("The counter entry should contain only digits and the value should be between 1 and G_MAXINT64-1 (inclusive).\n"
                                   "Entry with label '", acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
