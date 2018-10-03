@@ -22,9 +22,9 @@ static void set_data_in_lstore_and_json (EditData *edit_data, const gchar *label
 
 
 void
-edit_selected_rows (GSimpleAction *simple    __attribute__((unused)),
-                    GVariant      *parameter __attribute__((unused)),
-                    gpointer       user_data)
+edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
+                      GVariant      *parameter __attribute__((unused)),
+                      gpointer       user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
     AppData *app_data = (AppData *)user_data;
@@ -34,22 +34,14 @@ edit_selected_rows (GSimpleAction *simple    __attribute__((unused)),
 
     edit_data->list_store = GTK_LIST_STORE(model);
 
-    GSList *active_rows = gtk_tree_selection_get_selected_rows (gtk_tree_view_get_selection (app_data->tree_view), &model);
-
     GtkTreeIter iter;
     gchar *current_label, *current_issuer;
-    gint i = 0;
-    GtkTreePath *path = g_slist_nth_data (active_rows, i);
-    while (path != NULL) {
-        gtk_tree_model_get_iter (model, &iter, path);
-        gtk_tree_model_get (model, &iter, 1, &current_label, 2, &current_issuer, -1);
+    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &iter)) {
+        gtk_tree_model_get (model, &iter, COLUMN_ACC_LABEL, &current_label, COLUMN_ACC_ISSUER, &current_issuer, -1);
         show_edit_dialog (edit_data, app_data, current_label, current_issuer);
         g_free (current_label);
         g_free (current_issuer);
-        path = g_slist_nth_data (active_rows, ++i);
     }
-    
-    g_slist_free_full (active_rows, (GDestroyNotify)gtk_tree_path_free);
 
     GError *err = NULL;
     update_and_reload_db (edit_data->db_data, edit_data->list_store, TRUE, &err);
