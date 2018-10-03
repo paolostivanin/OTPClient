@@ -110,7 +110,7 @@ Author: Paolo Stivanin
       <column type="gchar"/>
       <!-- column-name Issuer -->
       <column type="gchar"/>
-      <!-- column-name OTP Value -->
+      <!-- column-name OTPValue -->
       <column type="gchar"/>
       <!-- column-name Validity -->
       <column type="gint"/>
@@ -118,7 +118,7 @@ Author: Paolo Stivanin
       <column type="gint"/>
       <!-- column-name Updated -->
       <column type="gboolean"/>
-      <!-- column-name Less Than a Minute -->
+      <!-- column-name LessThanAMinute -->
       <column type="gboolean"/>
     </columns>
   </object>
