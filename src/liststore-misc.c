@@ -20,54 +20,18 @@ typedef struct _otp_data {
 
 static void set_otp_data (OtpData *otp_data, DatabaseData *db_data, guint row_number);
 
+static gboolean foreach_func_update_otps (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer user_data);
+
 static void clean_otp_data (OtpData *otp_data);
 
 
 gboolean
-traverse_liststore (GtkTreeModel *model,
-                    GtkTreePath  *path,
-                    GtkTreeIter  *iter,
-                    gpointer      user_data)
+traverse_listore (gpointer user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    gchar *otp_type, *otp;
-    guint validity, period;
-    gboolean only_a_minute_left, updated;
+    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (app_data->tree_view)), foreach_func_update_otps, app_data);
 
-    gtk_tree_model_get (model, iter,
-                        COLUMN_TYPE, &otp_type,
-                        COLUMN_OTP, &otp,
-                        COLUMN_VALIDITY, &validity,
-                        COLUMN_PERIOD, &period,
-                        COLUMN_UPDATED, &updated,
-                        COLUMN_LESS_THAN_A_MINUTE, &only_a_minute_left,
-                        -1);
-
-    if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_strcmp0 (otp_type, "TOTP") == 0) {
-        gboolean short_countdown = (period <= 60 || only_a_minute_left) ? TRUE : FALSE;
-        gint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
-        gint token_validity = remaining_seconds % period;
-        if (remaining_seconds % period == 60) {
-            short_countdown = TRUE;
-        }
-        if (remaining_seconds % period == 0) {
-            if (!app_data->show_next_otp || updated) {
-                short_countdown = FALSE;
-                updated = FALSE;
-                gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "");
-            } else {
-                updated = TRUE;
-                set_otp (GTK_LIST_STORE (model), *iter, app_data->db_data);
-            }
-        }
-        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, updated, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
-    }
-
-    g_free (otp_type);
-    g_free (otp);
-
-    // do not stop walking the store, check next row
-    return FALSE;
+    return TRUE;
 }
 
 
@@ -117,6 +81,54 @@ set_otp (GtkListStore   *list_store,
 
     g_free (otp);
     clean_otp_data (otp_data);
+}
+
+
+static gboolean
+foreach_func_update_otps (GtkTreeModel *model,
+                          GtkTreePath  *path,
+                          GtkTreeIter  *iter,
+                          gpointer      user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    gchar *otp_type, *otp;
+    guint validity, period;
+    gboolean only_a_minute_left, updated;
+
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        COLUMN_UPDATED, &updated,
+                        COLUMN_LESS_THAN_A_MINUTE, &only_a_minute_left,
+                        -1);
+
+    if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_strcmp0 (otp_type, "TOTP") == 0) {
+        gboolean short_countdown = (period <= 60 || only_a_minute_left) ? TRUE : FALSE;
+        gint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
+        gint token_validity = remaining_seconds % period;
+        if (remaining_seconds % period == 60) {
+            short_countdown = TRUE;
+        }
+        if (remaining_seconds % period == 0) {
+            if (!app_data->show_next_otp || updated) {
+                short_countdown = FALSE;
+                updated = FALSE;
+                gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "");
+            } else {
+                updated = TRUE;
+                set_otp (GTK_LIST_STORE (model), *iter, app_data->db_data);
+            }
+        }
+        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, updated, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
+    }
+
+    g_free (otp_type);
+    g_free (otp);
+
+    // do not stop walking the store, check next row
+    return FALSE;
 }
 
 
