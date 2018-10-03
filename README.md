@@ -14,7 +14,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 ## Requirements
 |Name|Min Version|Suggested Version|
 |----|-----------|-----------------|
-|GTK+|3.18|3.22|
+|GTK+|3.20|3.22|
 |Glib|2.48.0|2.50|
 |jansson|2.8.0|-|
 |libgcrypt|1.6.0|-|
@@ -31,15 +31,15 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
 - import encrypted [andOTP](https://github.com/flocke/andOTP) backup
-- encrypt local file using AES256-GCM
+- local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
 
 ## Wiki
-Have a lookt at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki) for a lot more information about OTPClient.
+For things like roadmap, screenshots, how to use OTPClient, etc, please have a lookt at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.
 
 ## Manual installation
-If OTPClient hasn't been packaged for your distro ([check here](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages)) and your distro doesn't support flatpak, then you'll have to manually compile and install OTPClient.
+If OTPClient hasn't been packaged for your distro ([check here](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages)) and your distro doesn't support Flatpak, then you'll have to manually compile and install OTPClient.
 1. install all the needed libraries listed under [requirements](#requirements)
 2. clone and install OTPClient:
 ```
