@@ -210,14 +210,15 @@ set_action_group (GtkBuilder *builder,
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = "export", .activate = NULL },
             { .name = "change_pwd", .activate = change_password_cb },
-            { .name = "edit_rows", .activate = edit_selected_rows }
+            { .name = "edit_row", .activate = edit_selected_row_cb },
+            { .name = "settings", .activate = show_settings_dialog_cb }
     };
 
     static GActionEntry add_menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "screenshot", .activate = screenshot_cb },
             { .name = "select_photo", .activate = select_photo_cb },
-            { .name = "manually", .activate = add_data_dialog }
+            { .name = "manual", .activate = add_data_dialog }
     };
 
     GtkWidget *settings_popover = GTK_WIDGET (gtk_builder_get_object (builder, "settings_pop_id"));

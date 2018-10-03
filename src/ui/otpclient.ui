@@ -22,7 +22,7 @@ Author: Paolo Stivanin
 
 -->
 <interface>
-  <requires lib="gtk+" version="3.18"/>
+  <requires lib="gtk+" version="3.20"/>
   <!-- interface-license-type gplv3 -->
   <!-- interface-name OTPClient -->
   <!-- interface-description Highly secure and easy to use GTK+ OTP client -->
@@ -40,7 +40,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">add.webcam</property>
+            <property name="action_name">add_menu.webcam</property>
             <property name="text" translatable="yes">Scan using webcam</property>
             <accelerator key="w" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
@@ -55,7 +55,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">add.screenshot</property>
+            <property name="action_name">add_menu.screenshot</property>
             <property name="text" translatable="yes">Take screenshot</property>
             <accelerator key="t" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
@@ -70,7 +70,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">add.select_photo</property>
+            <property name="action_name">add_menu.select_photo</property>
             <property name="text" translatable="yes">Select photo</property>
             <accelerator key="p" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
@@ -85,7 +85,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">add.manual</property>
+            <property name="action_name">add_menu.manual</property>
             <property name="text" translatable="yes">Manually</property>
             <accelerator key="l" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
@@ -144,7 +144,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">menu.import_andotp</property>
+            <property name="action_name">settings_menu.import_andotp</property>
             <property name="text" translatable="yes">andOTP</property>
           </object>
           <packing>
@@ -158,7 +158,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">menu.auth_plus</property>
+            <property name="action_name">settings_menu.import_authplus</property>
             <property name="text" translatable="yes">Authenticator Plus</property>
           </object>
           <packing>
@@ -213,7 +213,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">menu.change_pwd</property>
+            <property name="action_name">settings_menu.change_pwd</property>
             <property name="text" translatable="yes">Change password</property>
             <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
@@ -228,7 +228,7 @@ Author: Paolo Stivanin
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">menu.edit</property>
+            <property name="action_name">settings_menu.edit_row</property>
             <property name="text" translatable="yes">Edit row</property>
             <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
