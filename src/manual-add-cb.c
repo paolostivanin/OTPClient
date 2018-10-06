@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include "app.h"
 #include "db-misc.h"
 #include "otpclient.h"
 #include "common.h"
@@ -9,7 +8,11 @@
 #include "imports.h"
 #include "get-builder.h"
 
-static void changed_otp_cb (GtkWidget *cb, gpointer user_data);
+static void changed_otp_cb      (GtkWidget *cb,
+                                 gpointer   user_data);
+
+static void steam_toggled_cb    (GtkWidget *        __attribute__((unused)),
+                                 gpointer   user_data);
 
 
 void
@@ -18,14 +21,13 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
                  gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    GtkListStore *list_store = g_object_get_data (G_OBJECT (app_data->main_window), "lstore");
     Widgets *widgets = g_new0 (Widgets, 1);
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     widgets->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "manual_add_diag_id"));
     widgets->otp_cb = GTK_WIDGET(gtk_builder_get_object (builder, "otp_combotext_id"));
     widgets->algo_cb = GTK_WIDGET(gtk_builder_get_object (builder, "algo_combotext_id"));
-    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (builder, "steam_ck_btn"));
+    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (builder, "steam_     __attribute__((unused))"));
     widgets->iss_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_issuer_entry_id"));
     widgets->sec_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_secret_entry_id"));
     widgets->digits_entry = GTK_WIDGET(gtk_builder_get_object (builder, "digits_entry_manual_diag"));
@@ -42,7 +44,7 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     switch (result) {
         case GTK_RESPONSE_OK:
             if (parse_user_data (widgets, app_data->db_data)) {
-                update_and_reload_db (app_data->db_data, list_store, TRUE, &err);
+                update_and_reload_db (app_data, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
@@ -63,12 +65,12 @@ changed_otp_cb (GtkWidget *cb,
 {
     Widgets *widgets = (Widgets *)user_data;
     // id 0 is totp, id 1 is hotp
-    gtk_widget_set_sensitive (widgets->counter_entry, gtk_combo_box_get_active (cb));
+    gtk_widget_set_sensitive (widgets->counter_entry, gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
 }
 
 
 static void
-steam_toggled_cb (GtkWidget *ck_btn,
+steam_toggled_cb (GtkWidget *ck_btn     __attribute__((unused)),
                   gpointer   user_data)
 {
     Widgets *widgets = (Widgets *)user_data;
@@ -80,14 +82,15 @@ steam_toggled_cb (GtkWidget *ck_btn,
     gtk_widget_set_sensitive (widgets->counter_entry, !button_toggled);
     g_object_set (widgets->iss_entry, "editable", !button_toggled, NULL);
     if (button_toggled) {
-        gtk_combo_box_set_active (widgets->otp_cb, 0); // TOTP
-        gtk_combo_box_set_active (widgets->algo_cb, 0); // SHA1
-        gtk_entry_set_text (GTK_ENTRY (widgets->iss_entry), "Steam");
-        gtk_entry_set_text (GTK_ENTRY (widgets->period_entry), "");
-        gtk_entry_set_text (GTK_ENTRY (widgets->digits_entry), "5");
+        gtk_combo_box_set_active (GTK_COMBO_BOX(widgets->otp_cb), 0); // TOTP
+        gtk_combo_box_set_active (GTK_COMBO_BOX(widgets->algo_cb), 0); // SHA1
+        gtk_entry_set_text (GTK_ENTRY(widgets->iss_entry), "Steam");
+        gtk_entry_set_text (GTK_ENTRY(widgets->period_entry), "30");
+        gtk_entry_set_text (GTK_ENTRY(widgets->digits_entry), "5");
     } else {
-        gtk_entry_set_text (GTK_ENTRY (widgets->iss_entry), "");
-        gtk_entry_set_text (GTK_ENTRY (widgets->digits_entry), "");
-        gtk_entry_set_text (GTK_ENTRY (widgets->counter_entry), "");
+        gtk_entry_set_text (GTK_ENTRY(widgets->iss_entry), "");
+        gtk_entry_set_text (GTK_ENTRY(widgets->digits_entry), "");
+        gtk_entry_set_text (GTK_ENTRY(widgets->period_entry), "");
+        gtk_entry_set_text (GTK_ENTRY(widgets->counter_entry), "");
     }
 }

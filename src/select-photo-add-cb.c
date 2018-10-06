@@ -1,6 +1,5 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
-#include "app.h"
 #include "imports.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"

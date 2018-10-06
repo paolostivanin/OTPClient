@@ -68,46 +68,48 @@ add_definitions(${GTK3_CFLAGS_OTHER}
         ${ZBAR_CFLAGS_OTHER})
 
 set(HEADER_FILES
-        src/common.h
-        src/file-size.h
-        src/imports.h
-        src/db-misc.h
-        src/liststore-misc.h
-        src/otpclient.h
-        src/treeview.h
-        src/manual-add-cb.h
-        src/gquarks.h
-        src/message-dialogs.h
-        src/password-cb.h
-        src/get-builder.h
-        src/parse-uri.h
         src/add-common.h
-        src/qrcode-parser.h)
+        src/common.h
+        src/data.h
+        src/db-misc.h
+        src/file-size.h
+        src/get-builder.h
+        src/gquarks.h
+        src/imports.h
+        src/liststore-misc.h
+        src/manual-add-cb.h
+        src/message-dialogs.h
+        src/otpclient.h
+        src/parse-uri.h
+        src/password-cb.h
+        src/qrcode-parser.h
+        src/treeview.h)
 
 set(SOURCE_FILES
-        src/treeview.c
-        src/main.c
-        src/app.c
-        src/message-dialogs.c
-        src/db-misc.c
-        src/file-size.c
-        src/manual-add-cb.c
-        src/common.c
-        src/liststore-misc.c
-        src/authplus.c
+        src/add-common.c
         src/andotp.c
-        src/parse-data.c
+        src/app.c
+        src/authplus.c
+        src/common.c
+        src/db-misc.c
+        src/edit-data.c
+        src/file-size.c
+        src/get-builder.c
         src/gquarks.c
         src/imports.c
-        src/password-cb.c
-        src/webcam-add-cb.c
-        src/get-builder.c
+        src/liststore-misc.c
+        src/main.c
+        src/manual-add-cb.c
+        src/message-dialogs.c
+        src/parse-data.c
         src/parse-uri.c
+        src/password-cb.c
+        src/qrcode-parser.c
         src/screenshot-add-cb.c
-        src/add-common.c
-        src/edit-data.c
         src/select-photo-add-cb.c
-        src/qrcode-parser.c)
+        src/settings.c
+        src/treeview.c
+        src/webcam-add-cb.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}

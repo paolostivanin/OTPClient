@@ -1,6 +1,5 @@
 #pragma once
 
-#include "db-misc.h"
 #include "treeview.h"
 
 G_BEGIN_DECLS
@@ -10,6 +9,8 @@ G_BEGIN_DECLS
 #define UI_PARTIAL_PATH         "share/otpclient/otpclient.ui"
 
 #define HOTP_RATE_LIMIT_IN_SEC  3
+
+#define NOTIFICATION_ID "otp-copied"
 
 void activate                   (GtkApplication *app,
                                  gpointer        user_data);

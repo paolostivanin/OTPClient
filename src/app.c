@@ -8,7 +8,6 @@
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "get-builder.h"
-#include "app.h"
 #include "liststore-misc.h"
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -17,7 +16,7 @@ static gchar     *get_db_path            (GtkWidget *window);
 
 static void       get_config_data        (gint *width, gint *height, AppData *app_data);
 
-static void       create_main_window     (GtkApplication *app, gint width, gint height, AppData *app_data);
+static void       create_main_window     (gint width, gint height, AppData *app_data);
 
 static gboolean   set_action_group       (GtkBuilder *builder, AppData *app_data);
 
@@ -58,7 +57,7 @@ activate (GtkApplication    *app,
 
     app_data->db_data = g_new0 (DatabaseData, 1);
 
-    create_main_window (app, width, height, app_data);
+    create_main_window (width, height, app_data);
     if (app_data->main_window == NULL) {
         g_printerr ("Couldn't locate the ui file, exiting...\n");
         g_free (app_data->db_data);
@@ -103,7 +102,7 @@ activate (GtkApplication    *app,
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
     retry:
-    app_data->db_data->key = prompt_for_password (app_data->main_window, app_data->db_data->db_path, NULL);
+    app_data->db_data->key = prompt_for_password (app_data->db_data->db_path, NULL);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION (app));
@@ -181,8 +180,7 @@ get_config_data (gint     *width,
 
 
 static void
-create_main_window (GtkApplication  *app,
-                    gint             width,
+create_main_window (gint             width,
                     gint             height,
                     AppData         *app_data)
 {
@@ -193,7 +191,7 @@ create_main_window (GtkApplication  *app,
     gtk_window_set_default_size (GTK_WINDOW (app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
 
     GtkWidget *header_bar =  GTK_WIDGET (gtk_builder_get_object (builder, "headerbar_id"));
-    gtk_header_bar_set_subtitle (header_bar, APP_VERSION);
+    gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), APP_VERSION);
 
     set_action_group (builder, app_data);
 
@@ -222,13 +220,11 @@ set_action_group (GtkBuilder *builder,
     };
 
     GtkWidget *settings_popover = GTK_WIDGET (gtk_builder_get_object (builder, "settings_pop_id"));
-    GtkWidget *settings_btn = GTK_WIDGET (gtk_builder_get_object (builder, "settings_btn_id"));
     GActionGroup *settings_actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP (settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
 
     GtkWidget *add_popover = GTK_WIDGET (gtk_builder_get_object (builder, "add_pop_id"));
-    GtkWidget *add_btn = GTK_WIDGET (gtk_builder_get_object (builder, "add_btn_main_id"));
     GActionGroup *add_actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
@@ -305,7 +301,7 @@ del_data_cb (GtkToggleButton *btn,
     if (gtk_toggle_button_get_active (btn)) {
         app_data->css_provider = gtk_css_provider_new ();
         gtk_css_provider_load_from_data (app_data->css_provider, "#delbtn { background: #ff0033; }", -1, NULL);
-        gtk_style_context_add_provider (gsc, app_data->css_provider, GTK_STYLE_PROVIDER_PRIORITY_USER);
+        gtk_style_context_add_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
         AppData *app_data = (AppData *) user_data;
         const gchar *msg = "You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
             "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>";
@@ -321,7 +317,7 @@ del_data_cb (GtkToggleButton *btn,
             gtk_toggle_button_set_active (btn, FALSE);
         }
     } else {
-        gtk_style_context_remove_provider (gsc, app_data->css_provider);
+        gtk_style_context_remove_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider));
         g_object_unref (app_data->css_provider);
         g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
         g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
@@ -336,11 +332,11 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
     gchar *tmp_key = secure_strdup (app_data->db_data->key);
-    gchar *pwd = prompt_for_password (app_data->main_window, app_data->db_data->db_path, tmp_key);
+    gchar *pwd = prompt_for_password (app_data->db_data->db_path, tmp_key);
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (app_data->db_data, NULL, FALSE, &err);
+        update_and_reload_db (app_data, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
@@ -378,7 +374,7 @@ destroy_cb (GtkWidget   *window,
     json_decref (app_data->db_data->json_data);
     g_free (app_data->db_data);
     gtk_clipboard_clear (app_data->clipboard);
-    g_application_withdraw_notification (gtk_window_get_application (GTK_WINDOW(app_data->main_window)), NOTIFICATION_ID);
+    g_application_withdraw_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW(app_data->main_window))), NOTIFICATION_ID);
     g_object_unref (app_data->notification);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbad-function-cast"

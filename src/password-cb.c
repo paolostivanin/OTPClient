@@ -14,15 +14,15 @@ typedef struct _entrywidgets {
     gchar *cur_pwd;
 } EntryWidgets;
 
-static void       check_pwd_cb  (GtkWidget *entry,
-                                 gpointer   user_data);
+static void check_pwd_cb  (GtkWidget *entry,
+                           gpointer   user_data);
 
-static void       password_cb   (GtkWidget *entry,
-                                 gpointer  *pwd);
+static void password_cb   (GtkWidget *entry,
+                           gpointer  *pwd);
 
 
 gchar *
-prompt_for_password (GtkWidget *main_window, const gchar *db_path, gchar *current_key)
+prompt_for_password (const gchar *db_path, gchar *current_key)
 {
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 

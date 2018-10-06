@@ -4,7 +4,6 @@
 #include <zbar.h>
 #include <png.h>
 #include <gcrypt.h>
-#include "app.h"
 #include "imports.h"
 #include "message-dialogs.h"
 #include "common.h"

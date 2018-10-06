@@ -1,7 +1,7 @@
 #pragma once
 
 #include <gtk/gtk.h>
-#include "db-misc.h"
+#include "data.h"
 
 G_BEGIN_DECLS
 
@@ -42,8 +42,7 @@ GSList *get_andotp_data     (const gchar     *path,
                              GError         **err);
 
 gchar  *update_db_from_otps (GSList          *otps,
-                             DatabaseData    *db_data,
-                             GtkListStore    *list_store);
+                             AppData         *app_data);
 
 void    free_otps_gslist    (GSList          *otps,
                              guint            list_len);

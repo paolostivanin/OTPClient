@@ -1,13 +1,12 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
-#include "app.h"
-#include "db-misc.h"
 #include "imports.h"
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
 #include "common.h"
+#include "db-misc.h"
 
 
 static gboolean  parse_data_and_update_db    (AppData       *app_data,
@@ -22,7 +21,6 @@ select_file_cb (GSimpleAction *simple,
 {
     const gchar *action_name = g_action_get_name (G_ACTION (simple));
     AppData *app_data = (AppData *)user_data;
-    GtkListStore *list_store = g_object_get_data (G_OBJECT (app_data->main_window), "lstore");
 
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
                                                      GTK_WINDOW (app_data->main_window),
@@ -48,7 +46,7 @@ select_file_cb (GSimpleAction *simple,
 
 
 gchar *
-update_db_from_otps (GSList *otps, DatabaseData *db_data, GtkListStore *list_store)
+update_db_from_otps (GSList *otps, AppData *app_data)
 {
     json_t *obj;
     guint list_len = g_slist_length (otps);
@@ -56,16 +54,16 @@ update_db_from_otps (GSList *otps, DatabaseData *db_data, GtkListStore *list_sto
         otp_t *otp = g_slist_nth_data (otps, i);
         obj = build_json_obj (otp->type, otp->label, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
         guint hash = json_object_get_hash (obj);
-        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
-            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
-            db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
+        if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
+            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+            app_data->db_data->data_to_add = g_slist_append (app_data->db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");
         }
     }
 
     GError *err = NULL;
-    update_and_reload_db (db_data, list_store, TRUE, &err);
+    update_and_reload_db (app_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         return g_strdup (err->message);
     }
@@ -99,7 +97,7 @@ parse_data_and_update_db (AppData       *app_data,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (app_data->main_window, TRUE, NULL);
+    gchar *pwd = prompt_for_password (app_data->db_data->db_path, app_data->db_data->key);
     if (pwd == NULL) {
         return FALSE;
     }
@@ -118,7 +116,7 @@ parse_data_and_update_db (AppData       *app_data,
         return FALSE;
     }
 
-    gchar *err_msg = update_db_from_otps (content, app_data->db_data, GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view)));
+    gchar *err_msg = update_db_from_otps (content, app_data);
     if (err_msg != NULL) {
         show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);

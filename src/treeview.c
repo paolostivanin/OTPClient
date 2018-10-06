@@ -4,7 +4,7 @@
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "common.h"
-#include "app.h"
+#include "get-builder.h"
 #include "message-dialogs.h"
 
 
@@ -15,19 +15,23 @@ typedef struct _parsed_json_data {
     GArray *periods;
 } ParsedData;
 
-static void          set_json_data          (json_t *array, ParsedData *pjd);
+static void     set_json_data      (json_t         *array,
+                                         ParsedData     *pjd);
 
-static void          add_data_to_model      (DatabaseData *db_data, GtkListStore *store);
+static void     add_data_to_model  (DatabaseData   *db_data,
+                                    GtkListStore   *store);
 
-static GtkTreeModel *create_model           (DatabaseData *db_data);
+static void     add_columns        (GtkTreeView    *treeview);
 
-static void          add_columns            (GtkTreeView *treeview);
+static void     hide_all_otps_cb   (GtkTreeView    *tree_view,
+                                    gpointer        user_data);
 
-static void          row_selected_cb        (GtkTreeView *tree_view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer user_data);
+static gboolean clear_all_otps     (GtkTreeModel   *model,
+                                    GtkTreePath    *path,
+                                    GtkTreeIter    *iter,
+                                    gpointer        user_data);
 
-static void          hide_all_otps_cb       (GtkTreeView *tree_view, gpointer user_data);
-
-static void          free_parsed_json_data  (ParsedData *pjd);
+static void     free_pjd           (ParsedData     *pjd);
 
 
 void
@@ -64,14 +68,13 @@ create_treeview (AppData *app_data)
 
 
 void
-update_model (DatabaseData *db_data,
-              GtkTreeView  *tree_view)
+update_model (AppData *app_data)
 {
-    GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (tree_view));
+    GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view));
 
     gtk_list_store_clear (store);
 
-    add_data_to_model (db_data, store);
+    add_data_to_model (app_data->db_data, store);
 }
 
 
@@ -97,7 +100,7 @@ delete_rows_cb (GtkTreeView        *tree_view,
     gtk_list_store_remove (list_store, &iter);
     
     GError *err = NULL;
-    update_and_reload_db (db_data, list_store, FALSE, &err);
+    update_and_reload_db (app_data, FALSE, &err);
     if (err != NULL) {
         gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
@@ -128,21 +131,21 @@ row_selected_cb (GtkTreeView        *tree_view,
         // OTP is already set, so we update the value only if it is an HOTP
         if (g_strcmp0 (otp_type, "HOTP") == 0) {
             if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
-                set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
+                set_otp (GTK_LIST_STORE (model), iter, app_data);
                 g_free (otp_value);
                 gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
             }
         }
     } else {
         // OTP is not already set, so we set it
-        set_otp (GTK_LIST_STORE (model), iter, app_data->db_data);
+        set_otp (GTK_LIST_STORE (model), iter, app_data);
         g_free (otp_value);
         gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
     }
     // and, in any case, we copy the otp to the clipboard and send a notification
     gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
     if (!app_data->disable_notifications) {
-        g_application_send_notification (gtk_window_get_application (app_data->main_window), NOTIFICATION_ID, app_data->notification);
+        g_application_send_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW(app_data->main_window))), NOTIFICATION_ID, app_data->notification);
     }
 
     g_date_time_unref (now);
@@ -155,23 +158,21 @@ static void
 hide_all_otps_cb (GtkTreeView *tree_view,
                  gpointer      user_data)
 {
-    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (tree_view)), foreach_func_clear_otps, user_data);
+    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (tree_view)), clear_all_otps, user_data);
 }
 
 
-static void
-foreach_func_clear_otps (GtkTreeModel *model,
-                         GtkTreePath  *path,
-                         GtkTreeIter  *iter,
-                         gpointer      user_data)
+static gboolean
+clear_all_otps (GtkTreeModel *model,
+                GtkTreePath  *path      __attribute__((unused)),
+                GtkTreeIter  *iter,
+                gpointer      user_data __attribute__((unused)))
 {
-    AppData *app_data = (AppData *)user_data;
     gchar *otp;
-
     gtk_tree_model_get (model, iter, COLUMN_OTP, &otp, -1);
 
     if (otp != NULL && g_utf8_strlen (otp, -1) > 4) {
-        gtk_list_store_set (GTK_LIST_STORE (model), &iter, COLUMN_OTP, "", -1);
+        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", -1);
     }
 
     g_free (otp);
@@ -228,7 +229,7 @@ add_data_to_model (DatabaseData *db_data,
                             -1);
         i++;
     }
-    free_parsed_json_data (pjd);
+    free_pjd (pjd);
 }
 
 
@@ -277,7 +278,7 @@ add_columns (GtkTreeView *tree_view)
 
 
 static void
-free_parsed_json_data (ParsedData *pjd)
+free_pjd (ParsedData *pjd)
 {
     g_strfreev (pjd->types);
     g_strfreev (pjd->labels);

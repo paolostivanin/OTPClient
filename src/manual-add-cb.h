@@ -1,6 +1,5 @@
 #pragma once
 
-
 typedef struct _widgets {
     GtkWidget *dialog;
     GtkWidget *otp_cb;

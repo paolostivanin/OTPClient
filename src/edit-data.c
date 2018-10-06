@@ -1,11 +1,11 @@
 #include <gtk/gtk.h>
 #include "imports.h"
 #include "treeview.h"
+#include "db-misc.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
 #include "common.h"
 #include "gquarks.h"
-#include "app.h"
 #include "otpclient.h"
 
 typedef struct _edit_data_t {
@@ -44,7 +44,7 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
     }
 
     GError *err = NULL;
-    update_and_reload_db (edit_data->db_data, edit_data->list_store, TRUE, &err);
+    update_and_reload_db (app_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
     }

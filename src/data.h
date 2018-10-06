@@ -1,13 +1,26 @@
 #pragma once
 
 #include <gtk/gtk.h>
-#include "db-misc.h"
-
-#define NOTIFICATION_ID "otp-copied"
+#include <jansson.h>
 
 G_BEGIN_DECLS
 
-enum _search_column_id { LABEL, ISSUER } SearchColumnID;
+typedef struct _db_data {
+    gchar *db_path;
+
+    gchar *key;
+
+    json_t *json_data;
+
+    GSList *objects_hash;
+
+    GSList *data_to_add;
+
+    gint32 max_file_size_from_memlock;
+
+    gchar *last_hotp;
+    GDateTime *last_hotp_update;
+} DatabaseData;
 
 typedef struct _app_data_t {
     GtkWidget *main_window;

@@ -8,6 +8,6 @@ gboolean traverse_liststore (gpointer        user_data);
 
 void     set_otp            (GtkListStore   *list_store,
                              GtkTreeIter     iter,
-                             DatabaseData   *db_data);
+                             AppData        *app_data);
 
 G_END_DECLS

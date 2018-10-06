@@ -2,6 +2,7 @@
 #include <string.h>
 #include <jansson.h>
 #include "otpclient.h"
+#include "db-misc.h"
 #include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
@@ -144,10 +145,10 @@ get_json_obj (Widgets     *widgets,
 {
     gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (widgets->otp_cb));
     gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (widgets->algo_cb));
-    gint digits = (gint)g_ascii_strtoll (digits, NULL, 10);
-    gint period = (gint)g_ascii_strtoll (period, NULL, 10);
-    gint64 counter = g_ascii_strtoll (counter, NULL, 10);
-    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, digits, algo, period, counter);
+    gint digits_int = (gint)g_ascii_strtoll (digits, NULL, 10);
+    gint period_int = (gint)g_ascii_strtoll (period, NULL, 10);
+    gint64 ctr = g_ascii_strtoll (counter, NULL, 10);
+    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, digits_int, algo, period_int, ctr);
     g_free (type);
     g_free (algo);
 

@@ -1,7 +1,7 @@
 #include <gtk/gtk.h>
-#include "app.h"
 #include "otpclient.h"
 #include "message-dialogs.h"
+#include "get-builder.h"
 
 void
 show_settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
@@ -48,8 +48,8 @@ show_settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 
     switch (gtk_dialog_run (GTK_DIALOG(dialog))) {
         case GTK_RESPONSE_OK:
-            app_data->show_next_otp = gtk_switch_get_active (GTK_SWITCH(sno_switch);
-            app_data->disable_notifications = gtk_switch_get_active (GTK_SWITCH(dn_switch);
+            app_data->show_next_otp = gtk_switch_get_active (GTK_SWITCH(sno_switch));
+            app_data->disable_notifications = gtk_switch_get_active (GTK_SWITCH(dn_switch));
             app_data->search_column = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(sc_cb)), NULL, 10);
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);

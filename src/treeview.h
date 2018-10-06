@@ -1,5 +1,7 @@
 #pragma once
 
+#include "data.h"
+
 G_BEGIN_DECLS
 
 enum {
@@ -16,8 +18,7 @@ enum {
 
 void create_treeview    (AppData            *app_data);
 
-void update_model       (DatabaseData       *db_data,
-                         GtkTreeView        *tree_view);
+void update_model       (AppData            *app_data);
 
 void delete_rows_cb     (GtkTreeView        *tree_view,
                          GtkTreePath        *path,
