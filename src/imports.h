@@ -27,12 +27,6 @@ typedef struct _otp_t {
     gchar *secret;
 } otp_t;
 
-typedef struct _import_data_t {
-    GtkWidget *main_window;
-    DatabaseData *db_data;
-} ImportData;
-
-
 void    select_file_cb      (GSimpleAction   *simple,
                              GVariant        *parameter,
                              gpointer         user_data);

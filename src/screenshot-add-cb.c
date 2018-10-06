@@ -4,6 +4,7 @@
 #include <zbar.h>
 #include <png.h>
 #include <gcrypt.h>
+#include "app.h"
 #include "imports.h"
 #include "message-dialogs.h"
 #include "common.h"
@@ -16,12 +17,12 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
                GVariant      *parameter __attribute__((unused)),
                gpointer       user_data)
 {
-    ImportData *import_data = (ImportData *)user_data;
+    AppData *app_data = (AppData *)user_data;
 
     GError *err = NULL;
     GDBusConnection *connection = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, &err);
     if (err != NULL) {
-        show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         g_clear_error (&err);
         return;
     }
@@ -32,7 +33,7 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
     GVariant *res = g_dbus_connection_call_sync (connection, interface, object_path, interface,
                                                  "SelectArea", NULL, NULL, G_DBUS_CALL_FLAGS_NONE, G_MAXINT, NULL, &err);
     if (err != NULL) {
-        show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         g_object_unref (connection);
         g_clear_error (&err);
         return;
@@ -51,7 +52,7 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
                                        "ScreenshotArea", g_variant_new ("(iiiibs)", x, y, width, height, TRUE, filename),
                                        NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, &err);
     if (err != NULL) {
-        show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         g_clear_error (&err);
         g_free (filename);
         g_object_unref (connection);
@@ -62,7 +63,7 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
     gchar *out_filename;
     g_variant_get (res, "(bs)", &success, &out_filename);
     if (!success) {
-        show_message_dialog (import_data->main_window, "Failed to get screenshot using ScreenshotArea", GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, "Failed to get screenshot using ScreenshotArea", GTK_MESSAGE_ERROR);
         g_variant_unref (res);
         g_free (filename);
         g_object_unref (connection);
@@ -72,7 +73,7 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
     gchar *otpauth_uri = NULL;
     gchar *err_msg = parse_qrcode (out_filename, &otpauth_uri);
     if (err_msg != NULL) {
-        show_message_dialog (import_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);
         g_variant_unref (res);
         g_free (filename);
@@ -82,13 +83,13 @@ screenshot_cb (GSimpleAction *simple    __attribute__((unused)),
 
     g_unlink (filename);
 
-    err_msg = add_data_to_db (otpauth_uri, import_data);
+    err_msg = add_data_to_db (otpauth_uri, app_data);
     if (err_msg != NULL) {
-        show_message_dialog (import_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);
         // no need to return here as we have to clean-up also the following stuff
     } else {
-        show_message_dialog (import_data->main_window, "QRCode successfully imported from the screenshot", GTK_MESSAGE_INFO);
+        show_message_dialog (app_data->main_window, "QRCode successfully imported from the screenshot", GTK_MESSAGE_INFO);
     }
 
     gcry_free (otpauth_uri);

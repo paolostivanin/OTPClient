@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include "app.h"
 #include "db-misc.h"
 #include "otpclient.h"
 #include "common.h"
@@ -16,8 +17,8 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
                  GVariant      *parameter __attribute__((unused)),
                  gpointer       user_data)
 {
-    ImportData *import_data = (ImportData *)user_data;
-    GtkListStore *list_store = g_object_get_data (G_OBJECT (import_data->main_window), "lstore");
+    AppData *app_data = (AppData *)user_data;
+    GtkListStore *list_store = g_object_get_data (G_OBJECT (app_data->main_window), "lstore");
     Widgets *widgets = g_new0 (Widgets, 1);
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
@@ -40,10 +41,10 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     gint result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
     switch (result) {
         case GTK_RESPONSE_OK:
-            if (parse_user_data (widgets, import_data->db_data)) {
-                update_and_reload_db (import_data->db_data, list_store, TRUE, &err);
+            if (parse_user_data (widgets, app_data->db_data)) {
+                update_and_reload_db (app_data->db_data, list_store, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
-                    show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
+                    show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
             }
             break;
