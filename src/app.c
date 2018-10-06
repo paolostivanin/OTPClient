@@ -233,6 +233,11 @@ set_action_group (GtkBuilder *builder,
     g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
 
+#if GTK_CHECK_VERSION(3, 20, 0)
+    gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
+    gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
+#endif
+
     return TRUE;
 }
 
@@ -329,20 +334,20 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
                     GVariant      *parameter __attribute__((unused)),
                     gpointer       user_data)
 {
-    ImportData *import_data = (ImportData *)user_data;
-    gchar *tmp_key = secure_strdup (import_data->db_data->key);
-    gchar *pwd = prompt_for_password (import_data->main_window, import_data->db_data->db_path, tmp_key);
+    AppData *app_data = (AppData *)user_data;
+    gchar *tmp_key = secure_strdup (app_data->db_data->key);
+    gchar *pwd = prompt_for_password (app_data->main_window, app_data->db_data->db_path, tmp_key);
     if (pwd != NULL) {
-        import_data->db_data->key = pwd;
+        app_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (import_data->db_data, NULL, FALSE, &err);
+        update_and_reload_db (app_data->db_data, NULL, FALSE, &err);
         if (err != NULL) {
-            show_message_dialog (import_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            GtkApplication *app = gtk_window_get_application (GTK_WINDOW (import_data->main_window));
-            destroy_cb (import_data->main_window, import_data);
+            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+            GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
+            destroy_cb (app_data->main_window, app_data);
             g_application_quit (G_APPLICATION (app));
         }
-        show_message_dialog (import_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
+        show_message_dialog (app_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
     } else {
         gcry_free (tmp_key);
     }
