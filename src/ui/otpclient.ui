@@ -253,6 +253,21 @@ Author: Paolo Stivanin
             <property name="position">4</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="shortcuts_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">menu.shortcuts</property>
+            <property name="text" translatable="yes">Keyboard shortcuts</property>
+            <accelerator key="k" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">5</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">main</property>
@@ -304,7 +319,7 @@ Author: Paolo Stivanin
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="tooltip_text" translatable="yes">Delete row(s)</property>
+                <property name="tooltip_text" translatable="yes">Toggle delete rows</property>
                 <property name="image">lrs_image</property>
               </object>
               <packing>

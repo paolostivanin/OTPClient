@@ -61,23 +61,23 @@ activate (GtkApplication    *app,
     if (app_data->main_window == NULL) {
         g_printerr ("Couldn't locate the ui file, exiting...\n");
         g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION (app));
+        g_application_quit (G_APPLICATION(app));
         return;
     }
-    gtk_application_add_window (GTK_APPLICATION (app), GTK_WINDOW (app_data->main_window));
-    g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK (get_window_size_cb), NULL);
+    gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
+    g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
     if (!gcry_check_version ("1.6.0")) {
         show_message_dialog (app_data->main_window, "The required version of GCrypt is 1.6.0 or greater.", GTK_MESSAGE_ERROR);
         g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION (app));
+        g_application_quit (G_APPLICATION(app));
         return;
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
         show_message_dialog (app_data->main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
         g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION (app));
+        g_application_quit (G_APPLICATION(app));
         return;
     }
     gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
@@ -90,7 +90,7 @@ activate (GtkApplication    *app,
     app_data->db_data->db_path = get_db_path (app_data->main_window);
     if (app_data->db_data->db_path == NULL) {
         g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION (app));
+        g_application_quit (G_APPLICATION(app));
         return;
     }
 #endif
@@ -105,7 +105,7 @@ activate (GtkApplication    *app,
     app_data->db_data->key = prompt_for_password (app_data->db_data->db_path, NULL);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION (app));
+        g_application_quit (G_APPLICATION(app));
         return;
     }
 
@@ -139,8 +139,13 @@ activate (GtkApplication    *app,
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (builder, "del_toggle_btn_id"));
 
-    g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK (del_data_cb), app_data);
-    g_signal_connect (app_data->main_window, "destroy", G_CALLBACK (destroy_cb), app_data);
+    GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_TOGGLE_BUTTON_GET_CLASS (del_toggle_btn));
+    gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggled", 0);
+    g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
+
+    GtkBindingSet *mainwin_binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS(app_data->main_window));
+    gtk_binding_entry_add_signal (mainwin_binding_set, GDK_KEY_q, GDK_CONTROL_MASK, "destroy", 0);
+    g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_seconds (1, traverse_liststore, app_data);
 
@@ -185,12 +190,12 @@ create_main_window (gint             width,
                     AppData         *app_data)
 {
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    app_data->main_window = GTK_WIDGET (gtk_builder_get_object (builder, "appwindow_id"));
-    gtk_window_set_icon_name (GTK_WINDOW (app_data->main_window), "otpclient");
+    app_data->main_window = GTK_WIDGET(gtk_builder_get_object (builder, "appwindow_id"));
+    gtk_window_set_icon_name (GTK_WINDOW(app_data->main_window), "otpclient");
 
-    gtk_window_set_default_size (GTK_WINDOW (app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
+    gtk_window_set_default_size (GTK_WINDOW(app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
 
-    GtkWidget *header_bar =  GTK_WIDGET (gtk_builder_get_object (builder, "headerbar_id"));
+    GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (builder, "headerbar_id"));
     gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), APP_VERSION);
 
     set_action_group (builder, app_data);
@@ -209,7 +214,8 @@ set_action_group (GtkBuilder *builder,
             { .name = "export", .activate = NULL },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
-            { .name = "settings", .activate = show_settings_dialog_cb }
+            { .name = "settings", .activate = settings_dialog_cb },
+            { .name = "shortcuts", .activate = shortcuts_window_cb }
     };
 
     static GActionEntry add_menu_entries[] = {
@@ -341,7 +347,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
             destroy_cb (app_data->main_window, app_data);
-            g_application_quit (G_APPLICATION (app));
+            g_application_quit (G_APPLICATION(app));
         }
         show_message_dialog (app_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
     } else {

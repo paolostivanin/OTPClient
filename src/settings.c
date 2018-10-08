@@ -4,9 +4,9 @@
 #include "get-builder.h"
 
 void
-show_settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
-                         GVariant      *parameter __attribute__((unused)),
-                         gpointer       user_data)
+settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
+                    GVariant      *parameter __attribute__((unused)),
+                    gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
 
@@ -45,6 +45,8 @@ show_settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     gtk_switch_set_active (GTK_SWITCH(dn_switch), app_data->disable_notifications);
     gchar *active_id_string = g_strdup_printf ("%d", app_data->search_column);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(sc_cb), active_id_string);
+
+    gtk_widget_show_all (dialog);
 
     switch (gtk_dialog_run (GTK_DIALOG(dialog))) {
         case GTK_RESPONSE_OK:

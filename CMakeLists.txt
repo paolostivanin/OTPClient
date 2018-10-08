@@ -108,6 +108,7 @@ set(SOURCE_FILES
         src/screenshot-add-cb.c
         src/select-photo-add-cb.c
         src/settings.c
+        src/shortcuts.c
         src/treeview.c
         src/webcam-add-cb.c)
 
@@ -127,9 +128,9 @@ install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
-install(FILES src/ui/popover.ui DESTINATION share/otpclient)
-install(FILES src/ui/webcam-diag.ui DESTINATION share/otpclient)
-install(FILES src/ui/edit-diag.ui DESTINATION share/otpclient)
+install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
+install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
+
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)
