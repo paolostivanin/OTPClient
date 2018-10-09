@@ -29,6 +29,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
         g_object_unref (builder);
         return;
     }
+    g_free (cfg_file_path);
     
     // if key is not found, g_key_file_get_boolean returns FALSE and g_key_file_get_integer returns 0.
     // Therefore, having these values as default is exactly what we want. So no need to check whether or not the key is missing.
@@ -45,6 +46,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     gtk_switch_set_active (GTK_SWITCH(dn_switch), app_data->disable_notifications);
     gchar *active_id_string = g_strdup_printf ("%d", app_data->search_column);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(sc_cb), active_id_string);
+    g_free (active_id_string);
 
     gtk_widget_show_all (dialog);
 
@@ -61,11 +63,9 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
             break;
     }
 
-    gtk_widget_destroy (dialog);
-
-    g_free (active_id_string);
-    g_free (cfg_file_path);
     g_key_file_free (kf);
+
+    gtk_widget_destroy (dialog);
     
     g_object_unref (builder);
 }

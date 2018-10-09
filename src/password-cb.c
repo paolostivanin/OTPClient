@@ -66,7 +66,7 @@ prompt_for_password (const gchar *db_path, gchar *current_key)
     gint ret;
     do {
         ret = gtk_dialog_run (GTK_DIALOG (dialog));
-        if (ret == GTK_RESPONSE_ACCEPT) {
+        if (ret == GTK_RESPONSE_OK) {
             if (file_exists) {
                 password_cb (entry_widgets->entry1, (gpointer *) &entry_widgets->pwd);
             } else {

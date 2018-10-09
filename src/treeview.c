@@ -156,7 +156,7 @@ row_selected_cb (GtkTreeView        *tree_view,
 
 static void
 hide_all_otps_cb (GtkTreeView *tree_view,
-                 gpointer      user_data)
+                  gpointer     user_data)
 {
     gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (tree_view)), clear_all_otps, user_data);
 }

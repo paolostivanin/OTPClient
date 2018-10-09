@@ -15,7 +15,9 @@ static gboolean  is_input_valid            (GtkWidget   *dialog,
                                             const gchar *secret,
                                             const gchar *digits,
                                             const gchar *period,
-                                            const gchar *counter);
+                                            gboolean     period_active,
+                                            const gchar *counter,
+                                            gboolean     counter_active);
 
 static gboolean  str_is_only_num_or_alpha  (const gchar *string);
 
@@ -42,7 +44,9 @@ parse_user_data (Widgets        *widgets,
     const gchar *digits = gtk_entry_get_text (GTK_ENTRY (widgets->digits_entry));
     const gchar *period = gtk_entry_get_text (GTK_ENTRY (widgets->period_entry));
     const gchar *counter = gtk_entry_get_text (GTK_ENTRY (widgets->counter_entry));
-    if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, digits, period, counter)) {
+    gboolean period_active = gtk_widget_get_sensitive (widgets->period_entry);
+    gboolean counter_active = gtk_widget_get_sensitive (widgets->counter_entry);
+    if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, digits, period, period_active, counter, counter_active)) {
         obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, digits, period, counter);
         guint32 hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
@@ -59,13 +63,15 @@ parse_user_data (Widgets        *widgets,
 
 
 static gboolean
-is_input_valid (GtkWidget    *dialog,
-                const gchar  *acc_label,
-                const gchar  *acc_iss,
-                const gchar  *secret,
+is_input_valid (GtkWidget   *dialog,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *secret,
                 const gchar *digits,
                 const gchar *period,
-                const gchar *counter)
+                gboolean     period_active,
+                const gchar *counter,
+                gboolean     counter_active)
 {
     if (g_utf8_strlen (acc_label, -1) == 0 || g_utf8_strlen (secret, -1) == 0) {
         show_message_dialog (dialog, "Label and/or secret can't be empty", GTK_MESSAGE_ERROR);
@@ -91,14 +97,14 @@ is_input_valid (GtkWidget    *dialog,
         g_free (msg);
         return FALSE;
     }
-    if (!str_is_only_num (period) || g_ascii_strtoll (period, NULL, 10) < 10 || g_ascii_strtoll (period, NULL, 10) > 120) {
+    if (period_active && (!str_is_only_num (period) || g_ascii_strtoll (period, NULL, 10) < 10 || g_ascii_strtoll (period, NULL, 10) > 120)) {
         gchar *msg = g_strconcat ("The period entry should contain only digits and the value should be between 10 and 120 (inclusive).\n"
                                   "Entry with label '", acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
         return FALSE;
     }
-    if (!str_is_only_num (counter) || g_ascii_strtoll (counter, NULL, 10) < 1 || g_ascii_strtoll (counter, NULL, 10) == G_MAXINT64) {
+    if (counter_active && (!str_is_only_num (counter) || g_ascii_strtoll (counter, NULL, 10) < 1 || g_ascii_strtoll (counter, NULL, 10) == G_MAXINT64)) {
         gchar *msg = g_strconcat ("The counter entry should contain only digits and the value should be between 1 and G_MAXINT64-1 (inclusive).\n"
                                   "Entry with label '", acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);

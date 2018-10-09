@@ -27,7 +27,8 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     widgets->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "manual_add_diag_id"));
     widgets->otp_cb = GTK_WIDGET(gtk_builder_get_object (builder, "otp_combotext_id"));
     widgets->algo_cb = GTK_WIDGET(gtk_builder_get_object (builder, "algo_combotext_id"));
-    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (builder, "steam_     __attribute__((unused))"));
+    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (builder, "steam_ck_btn"));
+    widgets->label_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_label_entry_id"));
     widgets->iss_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_issuer_entry_id"));
     widgets->sec_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_secret_entry_id"));
     widgets->digits_entry = GTK_WIDGET(gtk_builder_get_object (builder, "digits_entry_manual_diag"));
@@ -37,7 +38,7 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
 
     g_signal_connect (widgets->sec_entry, "icon-press", G_CALLBACK(icon_press_cb), NULL);
     g_signal_connect (widgets->otp_cb, "changed", G_CALLBACK(changed_otp_cb), widgets);
-    g_signal_connect (widgets->steam_ck, "", G_CALLBACK(steam_toggled_cb), widgets);
+    g_signal_connect (widgets->steam_ck, "toggled", G_CALLBACK(steam_toggled_cb), widgets);
 
     GError *err = NULL;
     gint result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
