@@ -102,26 +102,6 @@ Author: Paolo Stivanin
       </packing>
     </child>
   </object>
-  <object class="GtkListStore" id="liststore_model_id">
-    <columns>
-      <!-- column-name Type -->
-      <column type="gchar"/>
-      <!-- column-name Label -->
-      <column type="gchar"/>
-      <!-- column-name Issuer -->
-      <column type="gchar"/>
-      <!-- column-name OTPValue -->
-      <column type="gchar"/>
-      <!-- column-name Validity -->
-      <column type="gint"/>
-      <!-- column-name Period -->
-      <column type="gint"/>
-      <!-- column-name Updated -->
-      <column type="gboolean"/>
-      <!-- column-name LessThanAMinute -->
-      <column type="gboolean"/>
-    </columns>
-  </object>
   <object class="GtkImage" id="lrs_image">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -364,7 +344,6 @@ Author: Paolo Stivanin
             <property name="can_focus">True</property>
             <property name="hexpand">True</property>
             <property name="vexpand">True</property>
-            <property name="model">liststore_model_id</property>
             <property name="headers_clickable">False</property>
             <property name="enable_grid_lines">horizontal</property>
             <property name="activate_on_single_click">True</property>

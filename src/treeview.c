@@ -45,11 +45,14 @@ create_treeview (AppData *app_data)
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
     
-    GtkListStore *list_store = GTK_LIST_STORE(gtk_builder_get_object (app_data->builder, "liststore_model_id"));
+    GtkListStore *list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+                                                   G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
 
     add_columns (app_data->tree_view);
 
     add_data_to_model (app_data->db_data, list_store);
+
+    gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(list_store));
     
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
@@ -59,6 +62,8 @@ create_treeview (AppData *app_data)
 
     // signal emitted when CTRL+H is pressed
     g_signal_connect (app_data->tree_view, "hide-all-otps", G_CALLBACK(hide_all_otps_cb), app_data);
+
+    g_object_unref (list_store);
 }
 
 
