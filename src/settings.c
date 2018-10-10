@@ -10,8 +10,6 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
 
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-
     gchar *cfg_file_path;
 #ifndef USE_FLATPAK_APP_FOLDER
     cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
@@ -26,7 +24,6 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
         g_free (msg);
         g_free (cfg_file_path);
         g_key_file_free (kf);
-        g_object_unref (builder);
         return;
     }
     g_free (cfg_file_path);
@@ -37,10 +34,10 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
     app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
 
-    GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "settings_diag_id"));
-    GtkWidget *sno_switch = GTK_WIDGET(gtk_builder_get_object (builder, "nextotp_switch_id"));
-    GtkWidget *dn_switch = GTK_WIDGET(gtk_builder_get_object (builder, "notif_switch_id"));
-    GtkWidget *sc_cb = GTK_WIDGET(gtk_builder_get_object (builder, "search_by_cb_id"));
+    GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "settings_diag_id"));
+    GtkWidget *sno_switch = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "nextotp_switch_id"));
+    GtkWidget *dn_switch = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "notif_switch_id"));
+    GtkWidget *sc_cb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "search_by_cb_id"));
 
     gtk_switch_set_active (GTK_SWITCH(sno_switch), app_data->show_next_otp);
     gtk_switch_set_active (GTK_SWITCH(dn_switch), app_data->disable_notifications);
@@ -66,6 +63,4 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     g_key_file_free (kf);
 
     gtk_widget_destroy (dialog);
-    
-    g_object_unref (builder);
 }

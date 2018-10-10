@@ -23,6 +23,8 @@ typedef struct _db_data {
 } DatabaseData;
 
 typedef struct _app_data_t {
+    GtkBuilder *builder;
+
     GtkWidget *main_window;
     GtkTreeView *tree_view;
 

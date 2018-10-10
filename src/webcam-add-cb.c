@@ -1,7 +1,6 @@
 #include <gtk/gtk.h>
 #include <zbar.h>
 #include <gcrypt.h>
-#include "get-builder.h"
 #include "common.h"
 #include "imports.h"
 #include "parse-uri.h"
@@ -32,9 +31,7 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
 
     ConfigData *cfg_data = g_new0 (ConfigData, 1);
 
-    GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/webcam-diag.ui");
-    cfg_data->diag = GTK_WIDGET (gtk_builder_get_object (builder, "diag_webcam"));
-    gtk_window_set_transient_for (GTK_WINDOW (cfg_data->diag), GTK_WINDOW (app_data->main_window));
+    cfg_data->diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_webcam_id"));
 
     cfg_data->qrcode_found = FALSE;
     cfg_data->gtimeout_exit_value = TRUE;
@@ -46,7 +43,6 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         show_message_dialog (app_data->main_window, "Couldn't initialize the webcam", GTK_MESSAGE_ERROR);
         zbar_processor_destroy (proc);
         g_free (cfg_data);
-        g_object_unref (builder);
         return;
     }
     zbar_processor_set_data_handler (proc, scan_qrcode, cfg_data);
@@ -76,7 +72,6 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         }
         gtk_widget_destroy (cfg_data->diag);
         g_free (cfg_data);
-        g_object_unref (builder);
     }
 }
 

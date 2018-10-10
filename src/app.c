@@ -57,6 +57,8 @@ activate (GtkApplication    *app,
 
     app_data->db_data = g_new0 (DatabaseData, 1);
 
+    app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+
     create_main_window (width, height, app_data);
     if (app_data->main_window == NULL) {
         g_printerr ("Couldn't locate the ui file, exiting...\n");
@@ -102,7 +104,7 @@ activate (GtkApplication    *app,
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
     retry:
-    app_data->db_data->key = prompt_for_password (app_data->db_data->db_path, NULL);
+    app_data->db_data->key = prompt_for_password (app_data, NULL);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
@@ -136,8 +138,7 @@ activate (GtkApplication    *app,
     g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
     g_object_unref (icon);
 
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (builder, "del_toggle_btn_id"));
+    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
 
     GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_TOGGLE_BUTTON_GET_CLASS (del_toggle_btn));
     gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggled", 0);
@@ -150,8 +151,6 @@ activate (GtkApplication    *app,
     app_data->source_id = g_timeout_add_seconds (1, traverse_liststore, app_data);
 
     gtk_widget_show_all (app_data->main_window);
-
-    g_object_unref (builder);
 }
 
 
@@ -189,18 +188,15 @@ create_main_window (gint             width,
                     gint             height,
                     AppData         *app_data)
 {
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    app_data->main_window = GTK_WIDGET(gtk_builder_get_object (builder, "appwindow_id"));
+    app_data->main_window = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "appwindow_id"));
     gtk_window_set_icon_name (GTK_WINDOW(app_data->main_window), "otpclient");
 
     gtk_window_set_default_size (GTK_WINDOW(app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
 
-    GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (builder, "headerbar_id"));
+    GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (app_data->builder, "headerbar_id"));
     gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), APP_VERSION);
 
-    set_action_group (builder, app_data);
-
-    g_object_unref (builder);
+    set_action_group (app_data->builder, app_data);
 }
 
 
@@ -338,7 +334,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
     gchar *tmp_key = secure_strdup (app_data->db_data->key);
-    gchar *pwd = prompt_for_password (app_data->db_data->db_path, tmp_key);
+    gchar *pwd = prompt_for_password (app_data, tmp_key);
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;
@@ -388,6 +384,7 @@ destroy_cb (GtkWidget   *window,
     gint h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
 #pragma GCC diagnostic pop
     save_window_size (w, h);
+    g_object_unref (app_data->builder);
     g_free (app_data);
 }
 

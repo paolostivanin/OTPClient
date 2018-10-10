@@ -4,7 +4,6 @@
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "common.h"
-#include "get-builder.h"
 #include "message-dialogs.h"
 
 
@@ -41,14 +40,12 @@ create_treeview (AppData *app_data)
 
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-
-    app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (builder, "treeview_id"));
+    app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (app_data->builder, "treeview_id"));
 
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
     
-    GtkListStore *list_store = GTK_LIST_STORE(gtk_builder_get_object (builder, "liststore_model_id"));
+    GtkListStore *list_store = GTK_LIST_STORE(gtk_builder_get_object (app_data->builder, "liststore_model_id"));
 
     add_columns (app_data->tree_view);
 
@@ -62,8 +59,6 @@ create_treeview (AppData *app_data)
 
     // signal emitted when CTRL+H is pressed
     g_signal_connect (app_data->tree_view, "hide-all-otps", G_CALLBACK(hide_all_otps_cb), app_data);
-
-    g_object_unref (builder);
 }
 
 

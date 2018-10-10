@@ -127,11 +127,6 @@ Author: Paolo Stivanin
     <property name="can_focus">False</property>
     <property name="icon_name">list-remove-symbolic</property>
   </object>
-  <object class="GtkAdjustment" id="manual_add_adjustment_id">
-    <property name="upper">100</property>
-    <property name="step_increment">1</property>
-    <property name="page_increment">5</property>
-  </object>
   <object class="GtkPopoverMenu" id="settings_pop_id">
     <property name="can_focus">False</property>
     <child>
@@ -360,28 +355,21 @@ Author: Paolo Stivanin
       <object class="GtkScrolledWindow" id="scrolledwin_id">
         <property name="visible">True</property>
         <property name="can_focus">True</property>
+        <property name="hexpand">True</property>
+        <property name="vexpand">True</property>
         <property name="shadow_type">etched-in</property>
         <child>
-          <object class="GtkViewport">
+          <object class="GtkTreeView" id="treeview_id">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <child>
-              <object class="GtkTreeView" id="treeview_id">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="hexpand">True</property>
-                <property name="vexpand">True</property>
-                <property name="hscroll_policy">natural</property>
-                <property name="vscroll_policy">natural</property>
-                <property name="model">liststore_model_id</property>
-                <property name="headers_clickable">False</property>
-                <property name="search_column">1</property>
-                <property name="enable_grid_lines">horizontal</property>
-                <property name="activate_on_single_click">True</property>
-                <child internal-child="selection">
-                  <object class="GtkTreeSelection" id="tree_selection_id"/>
-                </child>
-              </object>
+            <property name="can_focus">True</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <property name="model">liststore_model_id</property>
+            <property name="headers_clickable">False</property>
+            <property name="enable_grid_lines">horizontal</property>
+            <property name="activate_on_single_click">True</property>
+            <child internal-child="selection">
+              <object class="GtkTreeSelection"/>
             </child>
           </object>
         </child>

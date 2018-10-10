@@ -55,11 +55,10 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
 static void
 show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer)
 {
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    GtkWidget *diag = GTK_WIDGET (gtk_builder_get_object (builder, "edit_diag_id"));
+    GtkWidget *diag = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "edit_diag_id"));
 
-    GtkWidget *cur_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_label_entry"));
-    GtkWidget *cur_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "cur_iss_entry"));
+    GtkWidget *cur_lab_entry = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "cur_label_entry"));
+    GtkWidget *cur_iss_entry = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "cur_iss_entry"));
     if (cur_lab_entry != NULL) {
         gtk_entry_set_text (GTK_ENTRY (cur_lab_entry), current_label);
     }
@@ -67,8 +66,8 @@ show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, 
         gtk_entry_set_text (GTK_ENTRY (cur_iss_entry), current_issuer);
     }
 
-    GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newlabel_id"));
-    GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newissuer_id"));
+    GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "entry_newlabel_id"));
+    GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "entry_newissuer_id"));
 
     gtk_entry_set_text (GTK_ENTRY(new_lab_entry), current_label);
     gtk_entry_set_text (GTK_ENTRY(new_iss_entry), current_issuer);
@@ -89,8 +88,6 @@ show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, 
     }
 
     gtk_widget_destroy (diag);
-
-    g_object_unref (builder);
 }
 
 

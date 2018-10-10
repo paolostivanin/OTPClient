@@ -22,39 +22,37 @@ static void password_cb   (GtkWidget *entry,
 
 
 gchar *
-prompt_for_password (const gchar *db_path, gchar *current_key)
+prompt_for_password (AppData *app_data, gchar *current_key)
 {
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-
     EntryWidgets *entry_widgets = g_new0 (EntryWidgets, 1);
     entry_widgets->retry = FALSE;
 
-    gboolean file_exists = g_file_test (db_path, G_FILE_TEST_EXISTS);
+    gboolean file_exists = g_file_test (app_data->db_data->db_path, G_FILE_TEST_EXISTS);
     GtkWidget *dialog;
     if (file_exists == TRUE && current_key == NULL) {
         // decrypt dialog, just one field
-        dialog = GTK_WIDGET (gtk_builder_get_object (builder, "decpwd_diag_id"));
-        gchar *text = g_strconcat ("Enter the decryption password for ", db_path, NULL);
-        gtk_label_set_text (GTK_LABEL(gtk_builder_get_object (builder, "decpwd_label_id")), text);
+        dialog = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "decpwd_diag_id"));
+        gchar *text = g_strconcat ("Enter the decryption password for ", app_data->db_data->db_path, NULL);
+        gtk_label_set_text (GTK_LABEL(gtk_builder_get_object (app_data->builder, "decpwd_label_id")), text);
         g_free (text);
-        entry_widgets->entry1 = GTK_WIDGET (gtk_builder_get_object (builder,"decpwddiag_entry_id"));
+        entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"decpwddiag_entry_id"));
         g_signal_connect (entry_widgets->entry1, "activate", G_CALLBACK (password_cb), (gpointer *) &entry_widgets->pwd);
         g_signal_connect (entry_widgets->entry1, "icon-press", G_CALLBACK (icon_press_cb), NULL);
     } else if (file_exists == FALSE && current_key == NULL) {
         // new db dialog, 2 fields
-        dialog = GTK_WIDGET (gtk_builder_get_object (builder, "newdb_pwd_diag_id"));
-        entry_widgets->entry1 = GTK_WIDGET (gtk_builder_get_object (builder,"newdb_pwd_diag_entry1_id"));
-        entry_widgets->entry2 = GTK_WIDGET (gtk_builder_get_object (builder,"newdb_pwd_diag_entry2_id"));
+        dialog = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "newdb_pwd_diag_id"));
+        entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"newdb_pwd_diag_entry1_id"));
+        entry_widgets->entry2 = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"newdb_pwd_diag_entry2_id"));
         g_signal_connect (entry_widgets->entry2, "activate", G_CALLBACK (check_pwd_cb), entry_widgets);
         g_signal_connect (entry_widgets->entry1, "icon-press", G_CALLBACK (icon_press_cb), NULL);
         g_signal_connect (entry_widgets->entry2, "icon-press", G_CALLBACK (icon_press_cb), NULL);
     } else {
         // change pwd dialog, 3 fields
-        dialog = GTK_WIDGET (gtk_builder_get_object (builder, "changepwd_diag_id"));
+        dialog = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "changepwd_diag_id"));
         entry_widgets->cur_pwd = secure_strdup (current_key);
-        entry_widgets->entry_old = GTK_WIDGET (gtk_builder_get_object (builder,"changepwd_diag_currententry_id"));
-        entry_widgets->entry1 = GTK_WIDGET (gtk_builder_get_object (builder,"changepwd_diag_newentry1_id"));
-        entry_widgets->entry2 = GTK_WIDGET (gtk_builder_get_object (builder,"changepwd_diag_newentry2_id"));
+        entry_widgets->entry_old = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"changepwd_diag_currententry_id"));
+        entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"changepwd_diag_newentry1_id"));
+        entry_widgets->entry2 = GTK_WIDGET(gtk_builder_get_object (app_data->builder,"changepwd_diag_newentry2_id"));
         g_signal_connect (entry_widgets->entry2, "activate", G_CALLBACK (check_pwd_cb), entry_widgets);
         g_signal_connect (entry_widgets->entry1, "icon-press", G_CALLBACK (icon_press_cb), NULL);
         g_signal_connect (entry_widgets->entry2, "icon-press", G_CALLBACK (icon_press_cb), NULL);
@@ -87,7 +85,7 @@ prompt_for_password (const gchar *db_path, gchar *current_key)
     }
 
     g_free (entry_widgets);
-    g_object_unref (builder);
+
     gtk_widget_destroy (dialog);
 
     return pwd;
