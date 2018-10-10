@@ -172,7 +172,7 @@ clear_all_otps (GtkTreeModel *model,
     gtk_tree_model_get (model, iter, COLUMN_OTP, &otp, -1);
 
     if (otp != NULL && g_utf8_strlen (otp, -1) > 4) {
-        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", -1);
+        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", COLUMN_VALIDITY, 0, COLUMN_UPDATED, FALSE, COLUMN_LESS_THAN_A_MINUTE, FALSE, -1);
     }
 
     g_free (otp);
@@ -221,8 +221,6 @@ add_data_to_model (DatabaseData *db_data,
                             COLUMN_TYPE, pjd->types[i],
                             COLUMN_ACC_LABEL, pjd->labels[i],
                             COLUMN_ACC_ISSUER, pjd->issuers[i],
-                            COLUMN_OTP, "",
-                            COLUMN_VALIDITY, "",
                             COLUMN_PERIOD, g_array_index (pjd->periods, gint, i),
                             COLUMN_UPDATED, FALSE,
                             COLUMN_LESS_THAN_A_MINUTE, FALSE,
