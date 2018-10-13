@@ -148,7 +148,7 @@ activate (GtkApplication    *app,
     gtk_binding_entry_add_signal (mainwin_binding_set, GDK_KEY_q, GDK_CONTROL_MASK, "destroy", 0);
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
-    app_data->source_id = g_timeout_add_seconds (1, traverse_liststore, app_data);
+    app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 500, traverse_liststore, app_data, NULL);
 
     gtk_widget_show_all (app_data->main_window);
 }
