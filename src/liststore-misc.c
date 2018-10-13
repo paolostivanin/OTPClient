@@ -110,11 +110,11 @@ foreach_func_update_otps (GtkTreeModel *model,
         if (remaining_seconds % period == 60) {
             short_countdown = TRUE;
         }
-        if (remaining_seconds % period == 0) {
+        if ((remaining_seconds % period) == (period - 1)) {
             if (!app_data->show_next_otp || updated) {
                 short_countdown = FALSE;
                 updated = FALSE;
-                gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "");
+                gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", -1);
             } else {
                 updated = TRUE;
                 set_otp (GTK_LIST_STORE (model), *iter, app_data);
