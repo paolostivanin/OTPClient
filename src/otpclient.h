@@ -6,7 +6,6 @@ G_BEGIN_DECLS
 
 #define APP_NAME                "OTPClient"
 #define APP_VERSION             "1.3.0-alpha"
-#define UI_PARTIAL_PATH         "share/otpclient/otpclient.ui"
 
 #define HOTP_RATE_LIMIT_IN_SEC  3
 

@@ -6,6 +6,7 @@
 #include "parse-uri.h"
 #include "message-dialogs.h"
 #include "add-common.h"
+#include "get-builder.h"
 
 
 typedef struct _config_data {
@@ -31,7 +32,10 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
 
     ConfigData *cfg_data = g_new0 (ConfigData, 1);
 
-    cfg_data->diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_webcam_id"));
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    cfg_data->diag = GTK_WIDGET(gtk_builder_get_object (builder, "diag_webcam_id"));
+
+    gtk_window_set_transient_for (GTK_WINDOW(cfg_data->diag), GTK_WINDOW(app_data->main_window));
 
     cfg_data->qrcode_found = FALSE;
     cfg_data->gtimeout_exit_value = TRUE;
@@ -73,6 +77,7 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         gtk_widget_destroy (cfg_data->diag);
         g_free (cfg_data);
     }
+    g_object_unref (builder);
 }
 
 

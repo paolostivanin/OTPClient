@@ -102,259 +102,6 @@ Author: Paolo Stivanin
       </packing>
     </child>
   </object>
-  <object class="GtkImage" id="lrs_image">
-    <property name="visible">True</property>
-    <property name="can_focus">False</property>
-    <property name="icon_name">list-remove-symbolic</property>
-  </object>
-  <object class="GtkPopoverMenu" id="settings_pop_id">
-    <property name="can_focus">False</property>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="import_andotp_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.import_andotp</property>
-            <property name="text" translatable="yes">andOTP</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_authplus_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.import_authplus</property>
-            <property name="text" translatable="yes">Authenticator Plus</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">import_menu</property>
-        <property name="position">1</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="import_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="text" translatable="yes">Import</property>
-            <property name="menu_name">import_menu</property>
-            <accelerator key="i" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="text" translatable="yes">Export</property>
-            <property name="menu_name">export_menu</property>
-            <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="change_pwd_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.change_pwd</property>
-            <property name="text" translatable="yes">Change password</property>
-            <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="edit_row_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.edit_row</property>
-            <property name="text" translatable="yes">Edit row</property>
-            <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="settings_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.settings</property>
-            <property name="text" translatable="yes">Settings</property>
-            <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">4</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="shortcuts_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.shortcuts</property>
-            <property name="text" translatable="yes">Keyboard shortcuts</property>
-            <accelerator key="k" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">5</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">main</property>
-        <property name="position">2</property>
-      </packing>
-    </child>
-  </object>
-  <object class="GtkApplicationWindow" id="appwindow_id">
-    <property name="can_focus">False</property>
-    <property name="window_position">center</property>
-    <property name="default_width">500</property>
-    <property name="default_height">350</property>
-    <property name="gravity">center</property>
-    <child type="titlebar">
-      <object class="GtkHeaderBar" id="headerbar_id">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="title" translatable="yes">OTPClient</property>
-        <property name="show_close_button">True</property>
-        <child>
-          <object class="GtkBox" id="main_hbar">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <child>
-              <object class="GtkMenuButton" id="add_btn_main_id">
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-                <property name="tooltip_text" translatable="yes">Add token</property>
-                <property name="popover">add_pop_id</property>
-                <child>
-                  <object class="GtkImage">
-                    <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="icon_name">list-add-symbolic</property>
-                  </object>
-                </child>
-                <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">0</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkToggleButton" id="del_toggle_btn_id">
-                <property name="name">delbtn</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-                <property name="tooltip_text" translatable="yes">Toggle delete rows</property>
-                <property name="image">lrs_image</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">1</property>
-              </packing>
-            </child>
-            <style>
-              <class name="linked"/>
-            </style>
-          </object>
-        </child>
-        <child>
-          <object class="GtkMenuButton" id="settings_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="tooltip_text" translatable="yes">Settings</property>
-            <property name="popover">settings_pop_id</property>
-            <child>
-              <object class="GtkImage">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="icon_name">open-menu-symbolic</property>
-              </object>
-            </child>
-            <accelerator key="m" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-          </object>
-          <packing>
-            <property name="pack_type">end</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-      </object>
-    </child>
-    <child>
-      <object class="GtkScrolledWindow" id="scrolledwin_id">
-        <property name="visible">True</property>
-        <property name="can_focus">True</property>
-        <property name="hexpand">True</property>
-        <property name="vexpand">True</property>
-        <property name="shadow_type">etched-in</property>
-        <child>
-          <object class="GtkTreeView" id="treeview_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="hexpand">True</property>
-            <property name="vexpand">True</property>
-            <property name="headers_clickable">False</property>
-            <property name="enable_grid_lines">horizontal</property>
-            <property name="activate_on_single_click">True</property>
-            <child internal-child="selection">
-              <object class="GtkTreeSelection"/>
-            </child>
-          </object>
-        </child>
-      </object>
-    </child>
-  </object>
   <object class="GtkDialog" id="changepwd_diag_id">
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
@@ -362,7 +109,6 @@ Author: Paolo Stivanin
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -498,7 +244,6 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <property name="border_width">5</property>
     <property name="title" translatable="yes">Password</property>
     <property name="type_hint">dialog</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -582,88 +327,12 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
       <action-widget response="-5">decpwddiag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
-  <object class="GtkDialog" id="deldiag_id">
-    <property name="can_focus">False</property>
-    <property name="border_width">5</property>
-    <property name="title" translatable="yes">Delete data</property>
-    <property name="window_position">center</property>
-    <property name="type_hint">dialog</property>
-    <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
-    <child>
-      <placeholder/>
-    </child>
-    <child internal-child="vbox">
-      <object class="GtkBox">
-        <property name="can_focus">False</property>
-        <property name="orientation">vertical</property>
-        <property name="spacing">10</property>
-        <child internal-child="action_area">
-          <object class="GtkButtonBox">
-            <property name="can_focus">False</property>
-            <property name="layout_style">end</property>
-            <child>
-              <object class="GtkButton" id="deldiag_cancel_btn_id">
-                <property name="label" translatable="yes">Cancel</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-              </object>
-              <packing>
-                <property name="expand">True</property>
-                <property name="fill">True</property>
-                <property name="position">0</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="deldiag_cancel_ok_id">
-                <property name="label" translatable="yes">OK</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">True</property>
-              </object>
-              <packing>
-                <property name="expand">True</property>
-                <property name="fill">True</property>
-                <property name="position">1</property>
-              </packing>
-            </child>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">False</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkLabel" id="deldiag_label_id">
-            <property name="visible">True</property>
-            <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Do you really want to &lt;b&gt;permanently delete&lt;/b&gt;
-the selected entries from the database?</property>
-            <property name="use_markup">True</property>
-            <property name="justify">center</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-      </object>
-    </child>
-    <action-widgets>
-      <action-widget response="-6">deldiag_cancel_btn_id</action-widget>
-      <action-widget response="-5">deldiag_cancel_ok_id</action-widget>
-    </action-widgets>
-  </object>
   <object class="GtkDialog" id="diag_webcam_id">
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">Scan using webcam</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child type="titlebar">
       <placeholder/>
     </child>
@@ -730,7 +399,6 @@ has been found or after 30 seconds if nothing has been detected.</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -883,6 +551,11 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
       <action-widget response="-5">edit_diag_ok_btn</action-widget>
     </action-widgets>
   </object>
+  <object class="GtkImage" id="lrs_image">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="icon_name">list-remove-symbolic</property>
+  </object>
   <object class="GtkDialog" id="manual_add_diag_id">
     <property name="can_focus">False</property>
     <property name="border_width">10</property>
@@ -890,7 +563,6 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -1198,7 +870,6 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -1318,7 +989,6 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <property name="transient_for">appwindow_id</property>
     <child>
       <placeholder/>
     </child>
@@ -1453,5 +1123,253 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
       <action-widget response="-6">settings_diag_cancel_btn_id</action-widget>
       <action-widget response="-5">settings_diag_ok_btn_id</action-widget>
     </action-widgets>
+  </object>
+  <object class="GtkPopoverMenu" id="settings_pop_id">
+    <property name="can_focus">False</property>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="import_andotp_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.import_andotp</property>
+            <property name="text" translatable="yes">andOTP</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_authplus_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.import_authplus</property>
+            <property name="text" translatable="yes">Authenticator Plus</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">import_menu</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="import_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="text" translatable="yes">Import</property>
+            <property name="menu_name">import_menu</property>
+            <accelerator key="i" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="text" translatable="yes">Export</property>
+            <property name="menu_name">export_menu</property>
+            <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="change_pwd_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.change_pwd</property>
+            <property name="text" translatable="yes">Change password</property>
+            <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="edit_row_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.edit_row</property>
+            <property name="text" translatable="yes">Edit row</property>
+            <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">3</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="settings_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.settings</property>
+            <property name="text" translatable="yes">Settings</property>
+            <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="shortcuts_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.shortcuts</property>
+            <property name="text" translatable="yes">Keyboard shortcuts</property>
+            <accelerator key="k" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">5</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">main</property>
+        <property name="position">2</property>
+      </packing>
+    </child>
+  </object>
+  <object class="GtkApplicationWindow" id="appwindow_id">
+    <property name="can_focus">False</property>
+    <property name="window_position">center</property>
+    <property name="default_width">500</property>
+    <property name="default_height">350</property>
+    <property name="gravity">center</property>
+    <child type="titlebar">
+      <object class="GtkHeaderBar" id="headerbar_id">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="title" translatable="yes">OTPClient</property>
+        <property name="show_close_button">True</property>
+        <child>
+          <object class="GtkBox" id="main_hbar">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <child>
+              <object class="GtkMenuButton" id="add_btn_main_id">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="tooltip_text" translatable="yes">Add token</property>
+                <property name="popover">add_pop_id</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">True</property>
+                    <property name="can_focus">False</property>
+                    <property name="icon_name">list-add-symbolic</property>
+                  </object>
+                </child>
+                <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkToggleButton" id="del_toggle_btn_id">
+                <property name="name">delbtn</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="tooltip_text" translatable="yes">Toggle delete rows</property>
+                <property name="image">lrs_image</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <style>
+              <class name="linked"/>
+            </style>
+          </object>
+        </child>
+        <child>
+          <object class="GtkMenuButton" id="settings_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="tooltip_text" translatable="yes">Settings</property>
+            <property name="popover">settings_pop_id</property>
+            <child>
+              <object class="GtkImage">
+                <property name="visible">True</property>
+                <property name="can_focus">False</property>
+                <property name="icon_name">open-menu-symbolic</property>
+              </object>
+            </child>
+            <accelerator key="m" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+          </object>
+          <packing>
+            <property name="pack_type">end</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <child>
+      <object class="GtkScrolledWindow" id="scrolledwin_id">
+        <property name="visible">True</property>
+        <property name="can_focus">True</property>
+        <property name="hexpand">True</property>
+        <property name="vexpand">True</property>
+        <property name="shadow_type">etched-in</property>
+        <child>
+          <object class="GtkTreeView" id="treeview_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="hexpand">True</property>
+            <property name="vexpand">True</property>
+            <property name="headers_clickable">False</property>
+            <property name="enable_grid_lines">horizontal</property>
+            <property name="activate_on_single_click">True</property>
+            <child internal-child="selection">
+              <object class="GtkTreeSelection"/>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
   </object>
 </interface>

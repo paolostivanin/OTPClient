@@ -6,6 +6,7 @@
 #include "gquarks.h"
 #include "message-dialogs.h"
 #include "imports.h"
+#include "get-builder.h"
 
 static void changed_otp_cb      (GtkWidget *cb,
                                  gpointer   user_data);
@@ -22,17 +23,20 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     AppData *app_data = (AppData *)user_data;
     Widgets *widgets = g_new0 (Widgets, 1);
 
-    widgets->dialog = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "manual_add_diag_id"));
-    widgets->otp_cb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "otp_combotext_id"));
-    widgets->algo_cb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "algo_combotext_id"));
-    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "steam_ck_btn"));
-    widgets->label_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "manual_diag_label_entry_id"));
-    widgets->iss_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "manual_diag_issuer_entry_id"));
-    widgets->sec_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "manual_diag_secret_entry_id"));
-    widgets->digits_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "digits_entry_manual_diag"));
-    widgets->period_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "period_entry_manual_diag"));
-    widgets->counter_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "counter_entry_manual_diag"));
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    widgets->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "manual_add_diag_id"));
+    widgets->otp_cb = GTK_WIDGET(gtk_builder_get_object (builder, "otp_combotext_id"));
+    widgets->algo_cb = GTK_WIDGET(gtk_builder_get_object (builder, "algo_combotext_id"));
+    widgets->steam_ck = GTK_WIDGET(gtk_builder_get_object (builder, "steam_ck_btn"));
+    widgets->label_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_label_entry_id"));
+    widgets->iss_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_issuer_entry_id"));
+    widgets->sec_entry = GTK_WIDGET(gtk_builder_get_object (builder, "manual_diag_secret_entry_id"));
+    widgets->digits_entry = GTK_WIDGET(gtk_builder_get_object (builder, "digits_entry_manual_diag"));
+    widgets->period_entry = GTK_WIDGET(gtk_builder_get_object (builder, "period_entry_manual_diag"));
+    widgets->counter_entry = GTK_WIDGET(gtk_builder_get_object (builder, "counter_entry_manual_diag"));
     gtk_widget_set_sensitive (widgets->counter_entry, FALSE); // by default TOTP is selected, so we don't need counter_cb
+
+    gtk_window_set_transient_for (GTK_WINDOW(widgets->dialog), GTK_WINDOW(app_data->main_window));
 
     g_signal_connect (widgets->sec_entry, "icon-press", G_CALLBACK(icon_press_cb), NULL);
     g_signal_connect (widgets->otp_cb, "changed", G_CALLBACK(changed_otp_cb), widgets);
@@ -53,8 +57,10 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
         default:
             break;
     }
+
     gtk_widget_destroy (widgets->dialog);
     g_free (widgets);
+    g_object_unref (builder);
 }
 
 
