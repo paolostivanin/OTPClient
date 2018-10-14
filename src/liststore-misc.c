@@ -111,14 +111,14 @@ foreach_func_update_otps (GtkTreeModel *model,
             short_countdown = TRUE;
         }
         if ((remaining_seconds % period) == (period - 1)) {
-            if (!app_data->show_next_otp || already_updated_once) {
+            if ((app_data->show_next_otp) && (already_updated_once == FALSE)) {
+                already_updated_once = TRUE;
+                set_otp (GTK_LIST_STORE (model), *iter, app_data);
+            } else {
                 short_countdown = FALSE;
                 already_updated_once = FALSE;
                 token_validity = 0;
                 gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", -1);
-            } else {
-                already_updated_once = TRUE;
-                set_otp (GTK_LIST_STORE (model), *iter, app_data);
             }
         }
         gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, already_updated_once, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
