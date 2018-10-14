@@ -92,14 +92,14 @@ foreach_func_update_otps (GtkTreeModel *model,
     AppData *app_data = (AppData *)user_data;
     gchar *otp_type, *otp;
     guint validity, period;
-    gboolean only_a_minute_left, updated;
+    gboolean only_a_minute_left, already_updated_once;
 
     gtk_tree_model_get (model, iter,
                         COLUMN_TYPE, &otp_type,
                         COLUMN_OTP, &otp,
                         COLUMN_VALIDITY, &validity,
                         COLUMN_PERIOD, &period,
-                        COLUMN_UPDATED, &updated,
+                        COLUMN_UPDATED, &already_updated_once,
                         COLUMN_LESS_THAN_A_MINUTE, &only_a_minute_left,
                         -1);
 
@@ -111,17 +111,17 @@ foreach_func_update_otps (GtkTreeModel *model,
             short_countdown = TRUE;
         }
         if ((remaining_seconds % period) == (period - 1)) {
-            if (!app_data->show_next_otp || updated) {
+            if (!app_data->show_next_otp || already_updated_once) {
                 short_countdown = FALSE;
-                updated = FALSE;
+                already_updated_once = FALSE;
                 token_validity = 0;
                 gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", -1);
             } else {
-                updated = TRUE;
+                already_updated_once = TRUE;
                 set_otp (GTK_LIST_STORE (model), *iter, app_data);
             }
         }
-        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, updated, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
+        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_VALIDITY, token_validity, COLUMN_UPDATED, already_updated_once, COLUMN_LESS_THAN_A_MINUTE, short_countdown, -1);
     }
 
     g_free (otp_type);
