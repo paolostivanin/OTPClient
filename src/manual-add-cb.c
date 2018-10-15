@@ -69,8 +69,9 @@ changed_otp_cb (GtkWidget *cb,
                 gpointer   user_data)
 {
     Widgets *widgets = (Widgets *)user_data;
-    // id 0 is totp, id 1 is hotp
+    // id 0 (FALSE) is totp, id 1 (TRUE) is hotp
     gtk_widget_set_sensitive (widgets->counter_entry, gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
+    gtk_widget_set_sensitive (widgets->period_entry, gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
 }
 
 
