@@ -43,20 +43,20 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     g_signal_connect (widgets->steam_ck, "toggled", G_CALLBACK(steam_toggled_cb), widgets);
 
     GError *err = NULL;
-    gint result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
-    switch (result) {
-        case GTK_RESPONSE_OK:
+    gboolean retry = TRUE;
+    gint result;
+    do {
+        result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
+        if (result == GTK_RESPONSE_OK) {
             if (parse_user_data (widgets, app_data->db_data)) {
                 update_and_reload_db (app_data, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
+                retry = FALSE;
             }
-            break;
-        case GTK_RESPONSE_CANCEL:
-        default:
-            break;
-    }
+        }
+    } while (result == GTK_RESPONSE_OK && retry == TRUE);
 
     gtk_widget_destroy (widgets->dialog);
     g_free (widgets);
@@ -71,7 +71,7 @@ changed_otp_cb (GtkWidget *cb,
     Widgets *widgets = (Widgets *)user_data;
     // id 0 (FALSE) is totp, id 1 (TRUE) is hotp
     gtk_widget_set_sensitive (widgets->counter_entry, gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
-    gtk_widget_set_sensitive (widgets->period_entry, gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
+    gtk_widget_set_sensitive (widgets->period_entry, !gtk_combo_box_get_active (GTK_COMBO_BOX(cb)));
 }
 
 
