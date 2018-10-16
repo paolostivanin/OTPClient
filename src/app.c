@@ -304,12 +304,12 @@ del_data_cb (GtkToggleButton *btn,
         app_data->css_provider = gtk_css_provider_new ();
         gtk_css_provider_load_from_data (app_data->css_provider, "#delbtn { background: #ff0033; }", -1, NULL);
         gtk_style_context_add_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
-        AppData *app_data = (AppData *) user_data;
+        AppData *app_data = (AppData *)user_data;
         const gchar *msg = "You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
             "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>";
 
         if (get_confirmation_from_dialog (app_data->main_window, msg)) {
-            g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data->clipboard);
+            g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data);
             // the following function emits the "changed" signal
             gtk_tree_selection_unselect_all (tree_selection);
             // clear all active otps before proceeding to the deletion phase
