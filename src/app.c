@@ -133,7 +133,7 @@ activate (GtkApplication    *app,
     
     app_data->notification = g_notification_new ("OTPClient");
     g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
-    GIcon *icon = g_themed_icon_new ("otpclient");
+    GIcon *icon = g_themed_icon_new ("com.github.paolostivanin.OTPClient");
     g_notification_set_icon (app_data->notification, icon);
     g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
     g_object_unref (icon);
