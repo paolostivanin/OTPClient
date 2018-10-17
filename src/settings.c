@@ -57,7 +57,8 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
             g_key_file_set_integer (kf, "config", "search_column", app_data->search_column);
-	        g_key_file_save_to_file (kf, cfg_file_path, NULL);
+            g_key_file_save_to_file (kf, cfg_file_path, NULL);
+            gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
             break;
         case GTK_RESPONSE_CANCEL:
             break;
