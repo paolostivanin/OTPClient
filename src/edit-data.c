@@ -34,10 +34,9 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
 
     edit_data->list_store = GTK_LIST_STORE(model);
 
-    GtkTreeIter iter;
     gchar *current_label, *current_issuer;
-    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &iter)) {
-        gtk_tree_model_get (model, &iter, COLUMN_ACC_LABEL, &current_label, COLUMN_ACC_ISSUER, &current_issuer, -1);
+    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &edit_data->iter)) {
+        gtk_tree_model_get (model, &edit_data->iter, COLUMN_ACC_LABEL, &current_label, COLUMN_ACC_ISSUER, &current_issuer, -1);
         show_edit_dialog (edit_data, app_data, current_label, current_issuer);
         g_free (current_label);
         g_free (current_issuer);
