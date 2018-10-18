@@ -11,24 +11,39 @@
 #include "liststore-misc.h"
 
 #ifndef USE_FLATPAK_APP_FOLDER
-static gchar     *get_db_path            (GtkWidget *window);
+static gchar     *get_db_path               (GtkWidget          *window);
 #endif
 
-static void       get_config_data        (gint *width, gint *height, AppData *app_data);
+static void       get_config_data           (gint               *width, 
+                                             gint               *height, 
+                                             AppData            *app_data);
 
-static void       create_main_window     (gint width, gint height, AppData *app_data);
+static void       create_main_window        (gint                width,
+                                             gint                height,
+                                             AppData            *app_data);
 
-static gboolean   set_action_group       (GtkBuilder *builder, AppData *app_data);
+static gboolean   set_action_group          (GtkBuilder         *builder,
+                                             AppData            *app_data);
 
-static void       get_window_size_cb     (GtkWidget *window, GtkAllocation *allocation, gpointer user_data);
+static void       get_window_size_cb        (GtkWidget          *window,
+                                             GtkAllocation      *allocation,
+                                             gpointer            user_data);
 
-static void       del_data_cb            (GtkToggleButton *btn, gpointer user_data);
+static void       toggle_delete_button_cb   (GtkWidget          *main_window,
+                                             gpointer            user_data);
 
-static void       change_password_cb     (GSimpleAction *simple, GVariant *parameter, gpointer user_data);
+static void       del_data_cb               (GtkToggleButton    *btn,
+                                             gpointer            user_data);
 
-static void       save_window_size       (gint width, gint height);
+static void       change_password_cb        (GSimpleAction      *simple,
+                                             GVariant           *parameter,
+                                             gpointer            user_data);
 
-static void       destroy_cb             (GtkWidget *window, gpointer user_data);
+static void       save_window_size          (gint                width,
+                                             gint                height);
+
+static void       destroy_cb                (GtkWidget          *window,
+                                             gpointer            user_data);
 
 
 void
@@ -140,12 +155,12 @@ activate (GtkApplication    *app,
 
     GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
 
-    GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_TOGGLE_BUTTON_GET_CLASS (del_toggle_btn));
-    gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggled", 0);
+    g_signal_new ("toggle-delete-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
+    gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
+    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_delete_button_cb), del_toggle_btn);
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
 
-    GtkBindingSet *mainwin_binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS(app_data->main_window));
-    gtk_binding_entry_add_signal (mainwin_binding_set, GDK_KEY_q, GDK_CONTROL_MASK, "destroy", 0);
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 500, traverse_liststore, app_data, NULL);
@@ -289,6 +304,14 @@ get_db_path (GtkWidget *window)
     return db_path;
 }
 #endif
+
+
+static void
+toggle_delete_button_cb (GtkWidget *main_window __attribute__((unused)),
+                         gpointer   user_data)
+{
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(user_data), !gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(user_data)));
+}
 
 
 static void
