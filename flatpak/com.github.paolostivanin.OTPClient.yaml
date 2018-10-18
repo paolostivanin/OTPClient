@@ -18,6 +18,7 @@ modules:
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   - "/bin"
@@ -42,18 +43,29 @@ modules:
 - name: zbar
   config-opts:
   - "--without-qt"
+  - "--without-qt5"
   - "--without-gtk"
   - "--without-xv"
   - "--without-imagemagick"
+  - "--without-python2"
   - "--enable-codes=qrcode"
   sources:
+  - type: script
+    dest-filename: autogen.sh
+    commands:
+    - "autoreconf -vfi -W none"
   - type: archive
     url: https://www.linuxtv.org/downloads/zbar/zbar-0.20.1.tar.bz2
     sha256: a0081a9b473d9e44e029d948a8d7f22deb1bf128980f3fc4e185298066e62a6c
+  - type: shell
+    # avoid building documentation
+    commands:
+    - "sed -i '48d' Makefile.am"
 - name: libbaseencode
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   sources:
@@ -64,6 +76,7 @@ modules:
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   sources:

@@ -102,7 +102,7 @@ activate (GtkApplication    *app,
     json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
 #ifdef USE_FLATPAK_APP_FOLDER
-    db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
+    app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
 #else
     app_data->db_data->db_path = get_db_path (app_data->main_window);
     if (app_data->db_data->db_path == NULL) {
