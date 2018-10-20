@@ -2,97 +2,137 @@
 #include <string.h>
 #include <jansson.h>
 #include "otpclient.h"
+#include "db-misc.h"
 #include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
 #include "common.h"
 
 
-static gboolean  is_input_valid           (GtkWidget *dialog,
-                                           const gchar *acc_label, const gchar *acc_iss, const gchar *secret,
-                                           gint len, GError **err);
+static gboolean  is_input_valid            (GtkWidget   *dialog,
+                                            const gchar *acc_label,
+                                            const gchar *acc_iss,
+                                            const gchar *secret,
+                                            const gchar *digits,
+                                            const gchar *period,
+                                            gboolean     period_active,
+                                            const gchar *counter,
+                                            gboolean     counter_active);
 
-static gboolean  str_is_only_num_or_alpha (const gchar *secret);
+static gboolean  str_is_only_num_or_alpha  (const gchar *string);
 
-static json_t   *get_json_obj             (Widgets *widgets,
-                                           const gchar *acc_label, const gchar *acc_iss, const gchar *acc_key,
-                                           gint i);
+static gboolean  str_is_only_num           (const gchar *string);
+
+static json_t   *get_json_obj              (Widgets     *widgets,
+                                            const gchar *acc_label,
+                                            const gchar *acc_iss,
+                                            const gchar *acc_key,
+                                            const gchar *digits,
+                                            const gchar *period,
+                                            const gchar *counter);
 
 
 gboolean
 parse_user_data (Widgets        *widgets,
                  DatabaseData   *db_data)
 {
-    GError *err = NULL;
     json_t *obj;
-    gint i = 0;
-    while (i < widgets->acc_entry->len) {
-        const gchar *acc_label = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->acc_entry, GtkWidget * , i)));
-        const gchar *acc_iss = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->iss_entry, GtkWidget * , i)));
-        const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (g_array_index (widgets->key_entry, GtkWidget * , i)));
-        if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, widgets->acc_entry->len, &err)) {
-            obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, i);
-            guint32 hash = json_object_get_hash (obj);
-            if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
-                db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
-                db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
-            } else {
-                g_print ("[INFO] Duplicate element not added\n");
-            }
-        } else if (err != NULL) {
-            return FALSE;
+
+    const gchar *acc_label = gtk_entry_get_text (GTK_ENTRY (widgets->label_entry));
+    const gchar *acc_iss = gtk_entry_get_text (GTK_ENTRY (widgets->iss_entry));
+    const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY (widgets->sec_entry));
+    const gchar *digits = gtk_entry_get_text (GTK_ENTRY (widgets->digits_entry));
+    const gchar *period = gtk_entry_get_text (GTK_ENTRY (widgets->period_entry));
+    const gchar *counter = gtk_entry_get_text (GTK_ENTRY (widgets->counter_entry));
+    gboolean period_active = gtk_widget_get_sensitive (widgets->period_entry);
+    gboolean counter_active = gtk_widget_get_sensitive (widgets->counter_entry);
+    if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, digits, period, period_active, counter, counter_active)) {
+        obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, digits, period, counter);
+        guint32 hash = json_object_get_hash (obj);
+        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
+            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+            db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
+        } else {
+            g_print ("[INFO] Duplicate element not added\n");
         }
-        i++;
+    } else {
+        return FALSE;
     }
-    g_clear_error (&err);
     return TRUE;
 }
 
 
 static gboolean
-is_input_valid (GtkWidget    *dialog,
-                const gchar  *acc_label,
-                const gchar  *acc_iss,
-                const gchar  *secret,
-                gint          len,
-                GError      **err)
+is_input_valid (GtkWidget   *dialog,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *secret,
+                const gchar *digits,
+                const gchar *period,
+                gboolean     period_active,
+                const gchar *counter,
+                gboolean     counter_active)
 {
     if (g_utf8_strlen (acc_label, -1) == 0 || g_utf8_strlen (secret, -1) == 0) {
         show_message_dialog (dialog, "Label and/or secret can't be empty", GTK_MESSAGE_ERROR);
-        if (len == 1) {
-            g_set_error (err, invalid_input_gquark (), -1, "No more entries to process");
-        }
         return FALSE;
     }
     if (!g_str_is_ascii (acc_label) || !g_str_is_ascii (acc_iss)) {
-        gchar *msg = g_strconcat ("Only ASCII characters are supported. Entry with label '",
-                                  acc_label, "' will not be added.", NULL);
+        gchar *msg = g_strconcat ("Only ASCII characters are supported. Entry with label '", acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
-        if (len == 1) {
-            g_set_error (err, invalid_input_gquark (), -1, "No more entries to process");
-        }
         g_free (msg);
         return FALSE;
     }
     if (!str_is_only_num_or_alpha (secret)) {
-        gchar *msg = g_strconcat ("Secret can contain only characters from the english alphabet and numbers. Entry with label '",
+        gchar *msg = g_strconcat ("Secret can contain only characters from the english alphabet and digits. Entry with label '",
                                   acc_label, "' will not be added.", NULL);
         show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
-        if (len == 1) {
-            g_set_error (err, invalid_input_gquark (), -1, "No more entries to process");
-        }
         g_free (msg);
         return FALSE;
+    }
+    if (!str_is_only_num (digits) || g_ascii_strtoll (digits, NULL, 10) < 4 || g_ascii_strtoll (digits, NULL, 10) > 10) {
+        gchar *msg = g_strconcat ("The digits entry should contain only digits and the value should be between 4 and 10 inclusive.\n"
+                                  "Entry with label '", acc_label, "' will not be added.", NULL);
+        show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        return FALSE;
+    }
+    if (period_active && (!str_is_only_num (period) || g_ascii_strtoll (period, NULL, 10) < 10 || g_ascii_strtoll (period, NULL, 10) > 120)) {
+        gchar *msg = g_strconcat ("The period entry should contain only digits and the value should be between 10 and 120 (inclusive).\n"
+                                  "Entry with label '", acc_label, "' will not be added.", NULL);
+        show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        return FALSE;
+    }
+    if (counter_active && (!str_is_only_num (counter) || g_ascii_strtoll (counter, NULL, 10) < 1 || g_ascii_strtoll (counter, NULL, 10) == G_MAXINT64)) {
+        gchar *msg = g_strconcat ("The counter entry should contain only digits and the value should be between 1 and G_MAXINT64-1 (inclusive).\n"
+                                  "Entry with label '", acc_label, "' will not be added.", NULL);
+        show_message_dialog (dialog, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+
+static gboolean
+str_is_only_num_or_alpha (const gchar *string)
+{
+    for (gint i = 0; i < strlen (string); i++) {
+        if (!g_ascii_isalnum (string[i])) {
+            return FALSE;
+        }
     }
     return TRUE;
 }
 
 
 static gboolean
-str_is_only_num_or_alpha (const gchar *secret)
+str_is_only_num (const gchar *string)
 {
-    for (gint i = 0; i < strlen (secret); i++) {
-        if (!g_ascii_isalnum (secret[i]) && !g_ascii_isalpha (secret[i])) {
+    for (gint i = 0; i < strlen (string); i++) {
+        if (!g_ascii_isdigit (string[i])) {
             return FALSE;
         }
     }
@@ -101,19 +141,21 @@ str_is_only_num_or_alpha (const gchar *secret)
 
 
 static json_t *
-get_json_obj (Widgets *widgets,
+get_json_obj (Widgets     *widgets,
               const gchar *acc_label,
               const gchar *acc_iss,
               const gchar *acc_key,
-              gint i)
+              const gchar *digits,
+              const gchar *period,
+              const gchar *counter)
 {
-    gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->type_cb_box, GtkWidget * , i)));
-    gchar *digits = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->dig_cb_box, GtkWidget * , i)));
-    gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (g_array_index (widgets->alg_cb_box, GtkWidget * , i)));
-    gdouble ctr = gtk_spin_button_get_value (GTK_SPIN_BUTTON (g_array_index (widgets->spin_btn, GtkWidget * , i)));
-    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, (gint)g_ascii_strtoll (digits, NULL, 10), algo, (gint64) ctr);
+    gchar *type = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (widgets->otp_cb));
+    gchar *algo = gtk_combo_box_text_get_active_text (GTK_COMBO_BOX_TEXT (widgets->algo_cb));
+    gint digits_int = (gint)g_ascii_strtoll (digits, NULL, 10);
+    gint period_int = (gint)g_ascii_strtoll (period, NULL, 10);
+    gint64 ctr = g_ascii_strtoll (counter, NULL, 10);
+    json_t *jn = build_json_obj (type, acc_label, acc_iss, acc_key, digits_int, algo, period_int, ctr);
     g_free (type);
-    g_free (digits);
     g_free (algo);
 
     return jn;

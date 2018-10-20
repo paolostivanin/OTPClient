@@ -153,17 +153,15 @@ parse_json_data (const gchar *data,
         }
         g_strfreev (tokens);
 
-        otp->period = (guint32) json_integer_value (json_object_get(obj, "period"));
         otp->digits = (guint32) json_integer_value (json_object_get(obj, "digits"));
 
         const gchar *type = json_string_value (json_object_get (obj, "type"));
         if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup (type);
-            otp->period = 30;
+            otp->period = (guint32)json_integer_value (json_object_get (obj, "period"));
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
             otp->type = g_strdup (type);
-            // TODO read this property from the loaded file when andOTP will implement HOTP
-            otp->counter = 0;
+            otp->counter = json_integer_value (json_object_get (obj, "counter"));
         } else {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "otp type is neither TOTP nor HOTP");
             gcry_free (otp->secret);

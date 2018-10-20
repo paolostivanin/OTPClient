@@ -4,6 +4,6 @@
 
 G_BEGIN_DECLS
 
-gchar *prompt_for_password (GtkWidget *main_window, gboolean file_exists, gchar *current_key);
+gchar *prompt_for_password (AppData *app_data, gchar *current_key);
 
 G_END_DECLS

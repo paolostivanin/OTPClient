@@ -1,6 +1,6 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '3.28'
+runtime-version: '3.30'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
@@ -18,6 +18,7 @@ modules:
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   - "/bin"
@@ -42,34 +43,46 @@ modules:
 - name: zbar
   config-opts:
   - "--without-qt"
+  - "--without-qt5"
   - "--without-gtk"
   - "--without-xv"
   - "--without-imagemagick"
+  - "--without-python2"
   - "--enable-codes=qrcode"
   sources:
+  - type: script
+    dest-filename: autogen.sh
+    commands:
+    - "autoreconf -vfi -W none"
   - type: archive
-    url: https://www.linuxtv.org/downloads/zbar/zbar-0.20.tar.bz2
-    sha256: b92a130744c907905eb61479a03036569045a08693535c9b630c591ea13ee620
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.20.1.tar.bz2
+    sha256: a0081a9b473d9e44e029d948a8d7f22deb1bf128980f3fc4e185298066e62a6c
+  - type: shell
+    # avoid building documentation
+    commands:
+    - "sed -i '48d' Makefile.am"
 - name: libbaseencode
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.6.tar.gz
-    sha256: 10c7e1fab2a29761000cd8234479ba8467b4e3895f46834f88bab3cc77c29f25
+    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.9.tar.gz
+    sha256: a183d7cf30d931b2a078d6f0ef64616b71ab26f9258e5f4e191778c7ace7175d
 - name: libcotp
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DCMAKE_INSTALL_LIBDIR=lib"
   cleanup:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libcotp/archive/v1.0.14.tar.gz
-    sha256: 01dc2e1734d50bfd5063922f880c32b69837b59cc9bdfe75b6746930a09e49a9
+    url: https://github.com/paolostivanin/libcotp/archive/v1.2.1.tar.gz
+    sha256: 52ea9d876d8465aad666bdb38a59d85f183a0e8d2aa14b14d07e4e6bc471648e
 - name: OTPClient
   buildsystem: cmake-ninja
   config-opts:

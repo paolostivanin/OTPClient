@@ -12,7 +12,7 @@ git clone https://github.com/paolostivanin/libbaseencode.git
 cd libbaseencode && mkdir build && cd "$_"
   __compile_and_install
 cd ../..
-git clone https://github.com/paolostivanin/libcotp.git -b v1.0.14
+git clone https://github.com/paolostivanin/libcotp.git
 cd libcotp && mkdir build && cd "$_"
   __compile_and_install
 cd ../..

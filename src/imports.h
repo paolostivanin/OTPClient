@@ -1,7 +1,7 @@
 #pragma once
 
 #include <gtk/gtk.h>
-#include "db-misc.h"
+#include "data.h"
 
 G_BEGIN_DECLS
 
@@ -27,12 +27,6 @@ typedef struct _otp_t {
     gchar *secret;
 } otp_t;
 
-typedef struct _import_data_t {
-    GtkWidget *main_window;
-    DatabaseData *db_data;
-} ImportData;
-
-
 void    select_file_cb      (GSimpleAction   *simple,
                              GVariant        *parameter,
                              gpointer         user_data);
@@ -48,8 +42,7 @@ GSList *get_andotp_data     (const gchar     *path,
                              GError         **err);
 
 gchar  *update_db_from_otps (GSList          *otps,
-                             DatabaseData    *db_data,
-                             GtkListStore    *list_store);
+                             AppData         *app_data);
 
 void    free_otps_gslist    (GSList          *otps,
                              guint            list_len);

@@ -1,9 +1,10 @@
-.idea/
 cmake-build-debug/
 build/
 tests/
 .flatpak-builder/
 flatpak/repo/
+TODO
+.vscode/
 
 # Object files
 *.o

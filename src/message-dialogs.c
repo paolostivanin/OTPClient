@@ -26,18 +26,11 @@ get_confirmation_from_dialog (GtkWidget     *parent,
                               const gchar   *message)
 {
     static GtkWidget *dialog = NULL;
-    GtkDialogFlags flags = GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT;
     gboolean confirm;
 
-    if (parent == NULL) {
-        dialog = gtk_dialog_new_with_buttons ("Confirm", NULL, flags,
-                                              "Yes", GTK_RESPONSE_YES, "No", GTK_RESPONSE_NO,
-                                              NULL);
-    } else {
-        dialog = gtk_dialog_new_with_buttons ("Confirm", GTK_WINDOW (parent), flags,
-                                              "Yes", GTK_RESPONSE_YES, "No", GTK_RESPONSE_NO,
-                                              NULL);
-    }
+    dialog = gtk_dialog_new_with_buttons ("Confirm", GTK_WINDOW (parent), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+                                          "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL,
+                                           NULL);
 
     gtk_container_set_border_width (GTK_CONTAINER (dialog), 5);
 
@@ -50,10 +43,10 @@ get_confirmation_from_dialog (GtkWidget     *parent,
 
     gint result = gtk_dialog_run (GTK_DIALOG (dialog));
     switch (result) {
-        case GTK_RESPONSE_YES:
+        case GTK_RESPONSE_OK:
             confirm = TRUE;
             break;
-        case GTK_RESPONSE_NO:
+        case GTK_RESPONSE_CANCEL:
         default:
             confirm = FALSE;
             break;

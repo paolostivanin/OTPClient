@@ -6,8 +6,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 
 set(OTPCLIENT_VERSION_MAJOR "1")
-set(OTPCLIENT_VERSION_MINOR "2")
-set(OTPCLIENT_VERSION_PATCH "2")
+set(OTPCLIENT_VERSION_MINOR "3")
+set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
 set(CMAKE_C_STANDARD 11)
@@ -32,12 +32,12 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Gcrypt 1.6.0 REQUIRED)
-pkg_check_modules(COTP REQUIRED cotp<=1.0.14)
+pkg_check_modules(COTP REQUIRED cotp>=1.2.1)
 pkg_check_modules(PNG REQUIRED libpng>=1.2.0)
 pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.10)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.18.0)
 
 if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DZBAR_OLD_LIB")
@@ -68,46 +68,49 @@ add_definitions(${GTK3_CFLAGS_OTHER}
         ${ZBAR_CFLAGS_OTHER})
 
 set(HEADER_FILES
-        src/common.h
-        src/file-size.h
-        src/imports.h
-        src/db-misc.h
-        src/liststore-misc.h
-        src/otpclient.h
-        src/treeview.h
-        src/manual-add-cb.h
-        src/gquarks.h
-        src/message-dialogs.h
-        src/password-cb.h
-        src/get-builder.h
-        src/parse-uri.h
         src/add-common.h
-        src/qrcode-parser.h)
+        src/common.h
+        src/data.h
+        src/db-misc.h
+        src/file-size.h
+        src/get-builder.h
+        src/gquarks.h
+        src/imports.h
+        src/liststore-misc.h
+        src/manual-add-cb.h
+        src/message-dialogs.h
+        src/otpclient.h
+        src/parse-uri.h
+        src/password-cb.h
+        src/qrcode-parser.h
+        src/treeview.h)
 
 set(SOURCE_FILES
-        src/treeview.c
-        src/main.c
-        src/app.c
-        src/message-dialogs.c
-        src/db-misc.c
-        src/file-size.c
-        src/manual-add-cb.c
-        src/common.c
-        src/liststore-misc.c
-        src/authplus.c
+        src/add-common.c
         src/andotp.c
-        src/parse-data.c
+        src/app.c
+        src/authplus.c
+        src/common.c
+        src/db-misc.c
+        src/edit-data.c
+        src/file-size.c
+        src/get-builder.c
         src/gquarks.c
         src/imports.c
-        src/password-cb.c
-        src/webcam-add-cb.c
-        src/get-builder.c
+        src/liststore-misc.c
+        src/main.c
+        src/manual-add-cb.c
+        src/message-dialogs.c
+        src/parse-data.c
         src/parse-uri.c
+        src/password-cb.c
+        src/qrcode-parser.c
         src/screenshot-add-cb.c
-        src/add-common.c
-        src/edit-data.c
         src/select-photo-add-cb.c
-        src/qrcode-parser.c)
+        src/settings.c
+        src/shortcuts.c
+        src/treeview.c
+        src/webcam-add-cb.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
@@ -125,9 +128,9 @@ install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
-install(FILES src/ui/popover.ui DESTINATION share/otpclient)
-install(FILES src/ui/webcam-diag.ui DESTINATION share/otpclient)
-install(FILES src/ui/edit-diag.ui DESTINATION share/otpclient)
+install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
+install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
+
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)

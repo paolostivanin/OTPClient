@@ -1,12 +1,12 @@
 #include <gtk/gtk.h>
 #include <zbar.h>
 #include <gcrypt.h>
-#include "get-builder.h"
 #include "common.h"
 #include "imports.h"
 #include "parse-uri.h"
 #include "message-dialogs.h"
 #include "add-common.h"
+#include "get-builder.h"
 
 
 typedef struct _config_data {
@@ -28,13 +28,14 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
            GVariant      *parameter __attribute__((unused)),
            gpointer       user_data)
 {
-    ImportData *import_data = (ImportData *)user_data;
+    AppData *app_data = (AppData *)user_data;
 
     ConfigData *cfg_data = g_new0 (ConfigData, 1);
 
-    GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/webcam-diag.ui");
-    cfg_data->diag = GTK_WIDGET (gtk_builder_get_object (builder, "diag_webcam"));
-    gtk_window_set_transient_for (GTK_WINDOW (cfg_data->diag), GTK_WINDOW (import_data->main_window));
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    cfg_data->diag = GTK_WIDGET(gtk_builder_get_object (builder, "diag_webcam_id"));
+
+    gtk_window_set_transient_for (GTK_WINDOW(cfg_data->diag), GTK_WINDOW(app_data->main_window));
 
     cfg_data->qrcode_found = FALSE;
     cfg_data->gtimeout_exit_value = TRUE;
@@ -43,10 +44,9 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
     zbar_processor_t *proc = zbar_processor_create (1);
     zbar_processor_set_config (proc, ZBAR_NONE, ZBAR_CFG_ENABLE, 1);
     if (zbar_processor_init (proc, "/dev/video0", 1)) {
-        show_message_dialog (import_data->main_window, "Couldn't initialize the webcam", GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, "Couldn't initialize the webcam", GTK_MESSAGE_ERROR);
         zbar_processor_destroy (proc);
         g_free (cfg_data);
-        g_object_unref (builder);
         return;
     }
     zbar_processor_set_data_handler (proc, scan_qrcode, cfg_data);
@@ -60,12 +60,12 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
     gint response = gtk_dialog_run (GTK_DIALOG (cfg_data->diag));
     if (response == GTK_RESPONSE_CANCEL) {
         if (cfg_data->qrcode_found) {
-            gchar *err_msg = add_data_to_db (cfg_data->otp_uri, import_data);
+            gchar *err_msg = add_data_to_db (cfg_data->otp_uri, app_data);
             if (err_msg != NULL) {
-                show_message_dialog (import_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
                 g_free (err_msg);
             } else {
-                show_message_dialog (import_data->main_window, "QRCode successfully scanned", GTK_MESSAGE_INFO);
+                show_message_dialog (app_data->main_window, "QRCode successfully scanned", GTK_MESSAGE_INFO);
             }
             gcry_free (cfg_data->otp_uri);
         }
@@ -76,8 +76,8 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         }
         gtk_widget_destroy (cfg_data->diag);
         g_free (cfg_data);
-        g_object_unref (builder);
     }
+    g_object_unref (builder);
 }
 
 

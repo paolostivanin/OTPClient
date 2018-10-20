@@ -7,6 +7,10 @@
 #include "gquarks.h"
 #include "common.h"
 
+typedef struct _header_data {
+    guint8 iv[IV_SIZE];
+    guint8 salt[KDF_SALT_SIZE];
+} HeaderData;
 
 static void         reload_db       (DatabaseData *db_data, GError **err);
 
@@ -69,21 +73,20 @@ load_db (DatabaseData    *db_data,
 
 
 void
-update_and_reload_db (DatabaseData   *db_data,
-                      GtkListStore   *list_store,
-                      gboolean        regenerate_model,
-                      GError        **err)
+update_and_reload_db (AppData   *app_data,
+                      gboolean   regenerate_model,
+                      GError   **err)
 {
-    update_db (db_data);
-    reload_db (db_data, err);
+    update_db (app_data->db_data);
+    reload_db (app_data->db_data, err);
     if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
         g_printerr("%s\n", (*err)->message);
         return;
     }
     if (regenerate_model) {
-        update_model (db_data, list_store);
-        g_slist_free_full (db_data->data_to_add, json_free);
-        db_data->data_to_add = NULL;
+        update_model (app_data);
+        g_slist_free_full (app_data->db_data->data_to_add, json_free);
+        app_data->db_data->data_to_add = NULL;
     }
 }
 

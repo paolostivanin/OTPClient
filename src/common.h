@@ -5,18 +5,16 @@
 
 G_BEGIN_DECLS
 
-void         set_icon_to_entry          (GtkWidget      *entry,
-                                         const gchar    *icon_name,
-                                         const gchar    *tooltip_text);
+void         icon_press_cb              (GtkEntry       *entry,
+                                         gint            position,
+                                         GdkEventButton *event,
+                                         gpointer        data);
 
 GtkWidget   *create_box_with_buttons    (const gchar    *add_btn_name,
                                          const gchar    *del_btn_name,
                                          gboolean        add_btn_is_menu);
 
 GtkWidget   *create_header_bar          (const gchar    *headerbar_title);
-
-GtkWidget   *find_widget                (GtkWidget      *parent,
-                                         const gchar    *widget_name);
 
 guint        get_row_number_from_iter   (GtkListStore   *list_store,
                                          GtkTreeIter     iter);
@@ -34,6 +32,7 @@ json_t      *build_json_obj             (const gchar *type,
                                          const gchar *acc_key,
                                          gint         digits,
                                          const gchar *algo,
+                                         gint         period,
                                          gint64       ctr);
 
 G_END_DECLS
