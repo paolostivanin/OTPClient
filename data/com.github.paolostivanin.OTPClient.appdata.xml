@@ -26,19 +26,27 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   <screenshots>
     <screenshot type="default">
       <caption>Main window</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/mainwin.png</image>
+      <image type="source">https://preview.ibb.co/jE5eff/main.png</image>
     </screenshot>
     <screenshot>
       <caption>Empty main window</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/empty-mainwin.png</image>
+      <image type="source">https://image.ibb.co/garPD0/emptymain.png</image>
     </screenshot>
     <screenshot>
-      <caption>Add new tokens</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/add-new.png</image>
+      <caption>Add menu</caption>
+      <image type="source">https://preview.ibb.co/c840mL/addmenu.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>General menu</caption>
+      <image type="source">https://image.ibb.co/dZit6L/hambmenu.png</image>
     </screenshot>
     <screenshot>
       <caption>Settings menu</caption>
-      <image type="source">https://cdn.rawgit.com/paolostivanin/OTPClient/54325c1d/data/screenshots/menu.png</image>
+      <image type="source">https://image.ibb.co/jXpSY0/settingsmenu.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Manually add a token</caption>
+      <image type="source">https://preview.ibb.co/dxmkLf/manualadd.png</image>
     </screenshot>
   </screenshots>
 
