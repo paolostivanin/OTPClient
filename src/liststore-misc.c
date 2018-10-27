@@ -143,7 +143,8 @@ set_otp_data (OtpData  *otp_data,
     otp_data->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
     otp_data->algo = g_strdup (json_string_value (json_object_get (obj, "algo")));
     otp_data->digits = (gint)json_integer_value (json_object_get (obj, "digits"));
-    otp_data->steam = (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "issuer")), "steam") == 0 ? TRUE : FALSE);
+    const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+    otp_data->steam = ((issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) ? TRUE : FALSE);
     if (json_object_get (obj, "counter") != NULL) {
         GError *err = NULL;
         otp_data->counter = json_integer_value (json_object_get (obj, "counter"));
