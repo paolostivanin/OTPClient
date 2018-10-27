@@ -27,7 +27,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - support both TOTP and HOTP
 - support setting custom digits (between 4 and 10 inclusive)
 - support setting a custom period (between 10 and 120 seconds inclusive)
-- support SHA1, SHA256 and SHA2512 algorithms
+- support SHA1, SHA256 and SHA512 algorithms
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
 - import encrypted [andOTP](https://github.com/flocke/andOTP) backup
