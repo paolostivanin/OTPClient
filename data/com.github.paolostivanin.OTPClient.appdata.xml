@@ -89,7 +89,7 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
         <ul>
           <li>fixed a bug that caused a row with an empty issuer to be treated as a steam code</li>
           <li>fixed an issue that prevented the same item to be deleted and added again</li>
-          <li>the correct passsword dialog is displayed when importing something while the local db is empty</li>
+          <li>the correct password dialog is displayed when importing something while the local db is empty</li>
         </ul>
       </description>
     </release>
