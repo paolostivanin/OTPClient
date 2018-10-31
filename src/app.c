@@ -119,7 +119,7 @@ activate (GtkApplication    *app,
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
     retry:
-    app_data->db_data->key = prompt_for_password (app_data, NULL);
+    app_data->db_data->key = prompt_for_password (app_data, NULL, NULL);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
@@ -357,7 +357,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
     gchar *tmp_key = secure_strdup (app_data->db_data->key);
-    gchar *pwd = prompt_for_password (app_data, tmp_key);
+    gchar *pwd = prompt_for_password (app_data, tmp_key, NULL);
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;

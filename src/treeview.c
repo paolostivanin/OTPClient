@@ -85,7 +85,6 @@ delete_rows_cb (GtkTreeView        *tree_view,
                 gpointer            user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    DatabaseData *db_data = app_data->db_data;
 
     g_return_if_fail (tree_view != NULL);
   
@@ -96,7 +95,7 @@ delete_rows_cb (GtkTreeView        *tree_view,
     gtk_tree_model_get_iter (model, &iter, path);
 
     guint row_number = get_row_number_from_iter (list_store, iter);
-    json_array_remove (db_data->json_data, row_number);
+    json_array_remove (app_data->db_data->json_data, row_number);
     gtk_list_store_remove (list_store, &iter);
     
     GError *err = NULL;

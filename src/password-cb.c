@@ -25,7 +25,9 @@ static void password_cb   (GtkWidget *entry,
 
 
 gchar *
-prompt_for_password (AppData *app_data, gchar *current_key)
+prompt_for_password (AppData *app_data,
+                     gchar *current_key,
+                     const gchar *action_name)
 {
     EntryWidgets *entry_widgets = g_new0 (EntryWidgets, 1);
     entry_widgets->retry = FALSE;
@@ -35,11 +37,16 @@ prompt_for_password (AppData *app_data, gchar *current_key)
 
     gboolean pwd_must_be_checked = TRUE;
     gboolean file_exists = g_file_test (app_data->db_data->db_path, G_FILE_TEST_EXISTS);
-    if (file_exists == TRUE && current_key == NULL) {
+    if ((file_exists == TRUE || action_name != NULL) && current_key == NULL) {
         // decrypt dialog, just one field
         pwd_must_be_checked = FALSE;
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "decpwd_diag_id"));
-        gchar *text = g_strconcat ("Enter the decryption password for ", app_data->db_data->db_path, NULL);
+        gchar *text;
+        if (action_name == NULL){
+            text = g_strconcat ("Enter the decryption password for ", app_data->db_data->db_path, NULL);
+        } else {
+            text = g_strdup ("Enter the decryption password");
+        }
         gtk_label_set_text (GTK_LABEL(gtk_builder_get_object (builder, "decpwd_label_id")), text);
         g_free (text);
         entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (builder,"decpwddiag_entry_id"));
@@ -74,7 +81,7 @@ prompt_for_password (AppData *app_data, gchar *current_key)
     do {
         ret = gtk_dialog_run (GTK_DIALOG(dialog));
         if (ret == GTK_RESPONSE_OK) {
-            if (file_exists && pwd_must_be_checked == FALSE) {
+            if ((file_exists == TRUE || action_name != NULL) && pwd_must_be_checked == FALSE) {
                 password_cb (entry_widgets->entry1, (gpointer *)&entry_widgets->pwd);
             } else {
                 check_pwd_cb (entry_widgets->entry1, (gpointer)entry_widgets);

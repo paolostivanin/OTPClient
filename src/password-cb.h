@@ -4,6 +4,6 @@
 
 G_BEGIN_DECLS
 
-gchar *prompt_for_password (AppData *app_data, gchar *current_key);
+gchar *prompt_for_password (AppData *app_data, gchar *current_key, const gchar *action_name);
 
 G_END_DECLS

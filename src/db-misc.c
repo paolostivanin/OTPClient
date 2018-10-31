@@ -110,6 +110,10 @@ reload_db (DatabaseData  *db_data,
     if (db_data->json_data != NULL) {
         json_decref (db_data->json_data);
     }
+
+    g_slist_free_full (db_data->objects_hash, g_free);
+    db_data->objects_hash = NULL;
+
     load_db (db_data, err);
 }
 

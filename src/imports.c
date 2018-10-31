@@ -97,7 +97,7 @@ parse_data_and_update_db (AppData       *app_data,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (app_data, NULL);
+    gchar *pwd = prompt_for_password (app_data, NULL, action_name);
     if (pwd == NULL) {
         return FALSE;
     }
