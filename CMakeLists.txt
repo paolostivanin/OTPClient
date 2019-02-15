@@ -6,8 +6,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 
 set(OTPCLIENT_VERSION_MAJOR "1")
-set(OTPCLIENT_VERSION_MINOR "3")
-set(OTPCLIENT_VERSION_PATCH "1")
+set(OTPCLIENT_VERSION_MINOR "4")
+set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
 set(CMAKE_C_STANDARD 11)
@@ -83,7 +83,8 @@ set(HEADER_FILES
         src/parse-uri.h
         src/password-cb.h
         src/qrcode-parser.h
-        src/treeview.h)
+        src/treeview.h
+        src/exports.h)
 
 set(SOURCE_FILES
         src/add-common.c
@@ -110,7 +111,8 @@ set(SOURCE_FILES
         src/settings.c
         src/shortcuts.c
         src/treeview.c
-        src/webcam-add-cb.c)
+        src/webcam-add-cb.c
+        src/exports.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}

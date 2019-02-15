@@ -19,11 +19,11 @@ select_file_cb (GSimpleAction *simple,
                 GVariant      *parameter __attribute__((unused)),
                 gpointer       user_data)
 {
-    const gchar *action_name = g_action_get_name (G_ACTION (simple));
+    const gchar *action_name = g_action_get_name (G_ACTION(simple));
     AppData *app_data = (AppData *)user_data;
 
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
-                                                     GTK_WINDOW (app_data->main_window),
+                                                     GTK_WINDOW(app_data->main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
                                                      "Cancel", GTK_RESPONSE_CANCEL,
                                                      "Open", GTK_RESPONSE_ACCEPT,
@@ -33,9 +33,9 @@ select_file_cb (GSimpleAction *simple,
     gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_user_data_dir ());
 #endif
 
-    gint res = gtk_dialog_run (GTK_DIALOG (dialog));
+    gint res = gtk_dialog_run (GTK_DIALOG(dialog));
     if (res == GTK_RESPONSE_ACCEPT) {
-        GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+        GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         gchar *filename = gtk_file_chooser_get_filename (chooser);
         parse_data_and_update_db (app_data, filename, action_name);
         g_free (filename);
@@ -54,7 +54,7 @@ update_db_from_otps (GSList *otps, AppData *app_data)
         otp_t *otp = g_slist_nth_data (otps, i);
         obj = build_json_obj (otp->type, otp->label, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
         guint hash = json_object_get_hash (obj);
-        if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
+        if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER(hash), check_duplicate) == NULL) {
             app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
             app_data->db_data->data_to_add = g_slist_append (app_data->db_data->data_to_add, obj);
         } else {
@@ -97,7 +97,7 @@ parse_data_and_update_db (AppData       *app_data,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (app_data, NULL, action_name);
+    gchar *pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
     if (pwd == NULL) {
         return FALSE;
     }

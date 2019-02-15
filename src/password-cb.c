@@ -25,9 +25,10 @@ static void password_cb   (GtkWidget *entry,
 
 
 gchar *
-prompt_for_password (AppData *app_data,
-                     gchar *current_key,
-                     const gchar *action_name)
+prompt_for_password (AppData        *app_data,
+                     gchar          *current_key,
+                     const gchar    *action_name,
+                     gboolean        is_export_pwd)
 {
     EntryWidgets *entry_widgets = g_new0 (EntryWidgets, 1);
     entry_widgets->retry = FALSE;
@@ -52,7 +53,7 @@ prompt_for_password (AppData *app_data,
         entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (builder,"decpwddiag_entry_id"));
         g_signal_connect (entry_widgets->entry1, "activate", G_CALLBACK (send_ok_cb), NULL);
         g_signal_connect (entry_widgets->entry1, "icon-press", G_CALLBACK (icon_press_cb), NULL);
-    } else if (file_exists == FALSE && current_key == NULL) {
+    } else if ((file_exists == FALSE && current_key == NULL) || is_export_pwd == TRUE) {
         // new db dialog, 2 fields
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "newdb_pwd_diag_id"));
         entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (builder,"newdb_pwd_diag_entry1_id"));
