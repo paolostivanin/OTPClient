@@ -69,6 +69,12 @@ prompt_for_password (AppData        *app_data,
         g_signal_connect (entry_widgets->entry2, "icon-press", G_CALLBACK (icon_press_cb), NULL);
     } else {
         // change pwd dialog, 3 fields
+        if (current_key == NULL) {
+            show_message_dialog (app_data->main_window, "ERROR: current_key cannot be NULL", GTK_MESSAGE_ERROR);
+            g_free (entry_widgets);
+            g_object_unref (builder);
+            return NULL;
+        }
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "changepwd_diag_id"));
         entry_widgets->cur_pwd = secure_strdup (current_key);
         entry_widgets->entry_old = GTK_WIDGET(gtk_builder_get_object (builder,"changepwd_diag_currententry_id"));
