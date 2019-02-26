@@ -240,6 +240,11 @@ parse_json_data (const gchar *data,
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
             otp->type = g_strdup (type);
             otp->counter = json_integer_value (json_object_get (obj, "counter"));
+        } else if (g_ascii_strcasecmp (type, "Steam") == 0) {
+            otp->type = g_strdup ("TOTP");
+            otp->period = (guint32)json_integer_value (json_object_get (obj, "period"));
+            g_free (otp->issuer);
+            otp->issuer = g_strdup ("Steam");
         } else {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "otp type is neither TOTP nor HOTP");
             gcry_free (otp->secret);
