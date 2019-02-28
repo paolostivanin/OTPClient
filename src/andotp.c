@@ -115,7 +115,13 @@ export_andotp ( const gchar *export_path,
     gsize index;
     json_array_foreach (json_db_data, index, db_obj) {
         export_obj = json_object ();
-        json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
+
+        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "issuer")), "steam") == 0) {
+            json_object_set (export_obj, "type", json_string ("STEAM"));
+        } else {
+            json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
+        }
+
         gchar *constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
                                                 " - ",
                                                 json_string_value (json_object_get (db_obj, "label")),
@@ -243,6 +249,10 @@ parse_json_data (const gchar *data,
         } else if (g_ascii_strcasecmp (type, "Steam") == 0) {
             otp->type = g_strdup ("TOTP");
             otp->period = (guint32)json_integer_value (json_object_get (obj, "period"));
+            if (otp->period == 0) {
+                // andOTP exported backup for Steam might not contain the period field,
+                otp->period = 30;
+            }
             g_free (otp->issuer);
             otp->issuer = g_strdup ("Steam");
         } else {
