@@ -74,6 +74,10 @@ show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, 
     gtk_entry_set_text (GTK_ENTRY(new_lab_entry), current_label);
     gtk_entry_set_text (GTK_ENTRY(new_iss_entry), current_issuer);
 
+    if (g_ascii_strcasecmp (current_issuer, "steam") == 0) {
+        gtk_widget_set_sensitive (new_iss_entry, FALSE);
+    }
+
     gchar *err_msg = NULL;
     gint res = gtk_dialog_run (GTK_DIALOG (diag));
     switch (res) {

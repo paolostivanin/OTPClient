@@ -5,6 +5,7 @@
 #include "common.h"
 #include "gquarks.h"
 #include "imports.h"
+#include "exports.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "get-builder.h"
@@ -119,7 +120,7 @@ activate (GtkApplication    *app,
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
     retry:
-    app_data->db_data->key = prompt_for_password (app_data, NULL, NULL);
+    app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
@@ -222,7 +223,7 @@ set_action_group (GtkBuilder *builder,
     static GActionEntry settings_menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
-            { .name = "export", .activate = NULL },
+            { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
@@ -357,7 +358,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
     gchar *tmp_key = secure_strdup (app_data->db_data->key);
-    gchar *pwd = prompt_for_password (app_data, tmp_key, NULL);
+    gchar *pwd = prompt_for_password (app_data, tmp_key, NULL, FALSE);
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;

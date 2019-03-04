@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright 2018 Paolo Stivanin <info@paolostivanin.com> -->
+<!-- Copyright 2019 Paolo Stivanin <info@paolostivanin.com> -->
 <component type="desktop-application">
   <id type="desktop">com.github.paolostivanin.OTPClient.desktop</id>
   <metadata_license>CC-BY-4.0</metadata_license>
@@ -83,6 +83,15 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
+    <release version="1.4.0" date="2019-02-23">
+      <description>
+        <p>OTPClient 1.4.0 brings full support to andOTP.</p>
+        <ul>
+          <li>it's now possible to export encrypted andOTP backups</li>
+          <li>use monospace to show the database path on startup</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.1" date="2018-10-31">
       <description>
         <p>OTPClient 1.3.1 brings some fixes to bugs that were introduced with the previous version.</p>

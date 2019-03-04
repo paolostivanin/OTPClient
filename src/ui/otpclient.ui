@@ -1171,6 +1171,31 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
         <child>
+          <object class="GtkModelButton" id="export_andotp_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.export_andotp</property>
+            <property name="text" translatable="yes">andOTP</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">export_menu</property>
+        <property name="position">2</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
           <object class="GtkModelButton" id="import_model_btn_id">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
@@ -1263,7 +1288,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
       </object>
       <packing>
         <property name="submenu">main</property>
-        <property name="position">2</property>
+        <property name="position">3</property>
       </packing>
     </child>
   </object>

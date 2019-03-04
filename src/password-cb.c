@@ -25,9 +25,10 @@ static void password_cb   (GtkWidget *entry,
 
 
 gchar *
-prompt_for_password (AppData *app_data,
-                     gchar *current_key,
-                     const gchar *action_name)
+prompt_for_password (AppData        *app_data,
+                     gchar          *current_key,
+                     const gchar    *action_name,
+                     gboolean        is_export_pwd)
 {
     EntryWidgets *entry_widgets = g_new0 (EntryWidgets, 1);
     entry_widgets->retry = FALSE;
@@ -37,22 +38,28 @@ prompt_for_password (AppData *app_data,
 
     gboolean pwd_must_be_checked = TRUE;
     gboolean file_exists = g_file_test (app_data->db_data->db_path, G_FILE_TEST_EXISTS);
-    if ((file_exists == TRUE || action_name != NULL) && current_key == NULL) {
+    if ((file_exists == TRUE || action_name != NULL) && current_key == NULL && is_export_pwd == FALSE) {
         // decrypt dialog, just one field
         pwd_must_be_checked = FALSE;
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "decpwd_diag_id"));
-        gchar *text;
+        gchar *text = NULL, *markup = NULL;
         if (action_name == NULL){
-            text = g_strconcat ("Enter the decryption password for ", app_data->db_data->db_path, NULL);
+            markup = g_markup_printf_escaped ("%s <span font_family=\"monospace\">%s</span>", "Enter the decryption password for ", app_data->db_data->db_path);
         } else {
             text = g_strdup ("Enter the decryption password");
         }
-        gtk_label_set_text (GTK_LABEL(gtk_builder_get_object (builder, "decpwd_label_id")), text);
-        g_free (text);
+        GtkLabel *label = GTK_LABEL(gtk_builder_get_object (builder, "decpwd_label_id"));
+        if (markup != NULL) {
+            gtk_label_set_markup (label, markup);
+            g_free (markup);
+        } else {
+            gtk_label_set_text (label, text);
+            g_free (text);
+        }
         entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (builder,"decpwddiag_entry_id"));
         g_signal_connect (entry_widgets->entry1, "activate", G_CALLBACK (send_ok_cb), NULL);
         g_signal_connect (entry_widgets->entry1, "icon-press", G_CALLBACK (icon_press_cb), NULL);
-    } else if (file_exists == FALSE && current_key == NULL) {
+    } else if ((file_exists == FALSE && current_key == NULL) || is_export_pwd == TRUE) {
         // new db dialog, 2 fields
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "newdb_pwd_diag_id"));
         entry_widgets->entry1 = GTK_WIDGET(gtk_builder_get_object (builder,"newdb_pwd_diag_entry1_id"));
@@ -62,6 +69,12 @@ prompt_for_password (AppData *app_data,
         g_signal_connect (entry_widgets->entry2, "icon-press", G_CALLBACK (icon_press_cb), NULL);
     } else {
         // change pwd dialog, 3 fields
+        if (current_key == NULL) {
+            show_message_dialog (app_data->main_window, "ERROR: current_key cannot be NULL", GTK_MESSAGE_ERROR);
+            g_free (entry_widgets);
+            g_object_unref (builder);
+            return NULL;
+        }
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "changepwd_diag_id"));
         entry_widgets->cur_pwd = secure_strdup (current_key);
         entry_widgets->entry_old = GTK_WIDGET(gtk_builder_get_object (builder,"changepwd_diag_currententry_id"));
