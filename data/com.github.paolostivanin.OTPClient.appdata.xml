@@ -83,6 +83,15 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
+    <release version="1.4.1" date="2019-03-19">
+      <description>
+        <p>OTPClient 1.4.1 brings some fixes to the flatpak version.</p>
+        <ul>
+          <li>fix setting menu not being accessible</li>
+          <li>fix window size not being remembered</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.4.0" date="2019-02-23">
       <description>
         <p>OTPClient 1.4.0 brings full support to andOTP.</p>

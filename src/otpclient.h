@@ -5,7 +5,7 @@
 G_BEGIN_DECLS
 
 #define APP_NAME                "OTPClient"
-#define APP_VERSION             "1.4.0"
+#define APP_VERSION             "1.4.1"
 
 #define HOTP_RATE_LIMIT_IN_SEC  3
 
