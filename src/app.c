@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <glib/gstdio.h>
 #include "otpclient.h"
 #include "common.h"
 #include "gquarks.h"
@@ -104,6 +105,12 @@ activate (GtkApplication    *app,
 
 #ifdef USE_FLATPAK_APP_FOLDER
     app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
+    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
+    gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
+    }
+    g_free (cfg_file_path);
 #else
     app_data->db_data->db_path = get_db_path (app_data->main_window);
     if (app_data->db_data->db_path == NULL) {
