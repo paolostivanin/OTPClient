@@ -17,28 +17,24 @@ select_photo_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
 
-    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Open File",
                                                      GTK_WINDOW (app_data->main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                     "Cancel", GTK_RESPONSE_CANCEL,
-                                                     "Open", GTK_RESPONSE_ACCEPT,
-                                                     NULL);
+                                                     "Open",
+                                                     "Cancel");
 
     GtkFileFilter *filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (filter, "QR Image (*.png)");
     gtk_file_filter_add_pattern (filter, "*.png");
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), filter);
 
-#ifdef USE_FLATPAK_APP_FOLDER
-    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_user_data_dir ());
-#endif
-
-    gint res = gtk_dialog_run (GTK_DIALOG (dialog));
+    gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG (dialog));
     if (res == GTK_RESPONSE_ACCEPT) {
         gchar *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
         parse_file_and_update_db (filename, app_data);
         g_free (filename);
     }
-    gtk_widget_destroy (dialog);
+    g_object_unref (dialog);
 }
 
 
