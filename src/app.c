@@ -45,7 +45,7 @@ static void       save_window_size          (gint                width,
                                              gint                height);
 
 static gboolean   key_pressed_cb            (GtkWidget          *window,
-                                             GdkEventKey        *eveny_key,
+                                             GdkEventKey        *event_key,
                                              gpointer            user_data);
 
 static void       destroy_cb                (GtkWidget          *window,
