@@ -44,6 +44,10 @@ static void       change_password_cb        (GSimpleAction      *simple,
 static void       save_window_size          (gint                width,
                                              gint                height);
 
+static gboolean   key_pressed_cb            (GtkWidget          *window,
+                                             GdkEventKey        *eveny_key,
+                                             gpointer            user_data);
+
 static void       destroy_cb                (GtkWidget          *window,
                                              gpointer            user_data);
 
@@ -168,12 +172,29 @@ activate (GtkApplication    *app,
     gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
     g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_delete_button_cb), del_toggle_btn);
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
+    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 500, traverse_liststore, app_data, NULL);
 
     gtk_widget_show_all (app_data->main_window);
+}
+
+
+static gboolean
+key_pressed_cb (GtkWidget   *window,
+                GdkEventKey *event_key,
+                gpointer     user_data __attribute__((unused)))
+{
+    switch (event_key->keyval) {
+        case GDK_KEY_q:
+        if (event_key->state & GDK_CONTROL_MASK) {
+            gtk_window_close (GTK_WINDOW(window));
+        }
+        break;
+    }
+    return FALSE;
 }
 
 
