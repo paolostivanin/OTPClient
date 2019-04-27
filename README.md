@@ -1,11 +1,9 @@
 # OTPClient
 <a href="https://scan.coverity.com/projects/paolostivanin-otpclient">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/12749/badge.svg"/>
+  <img alt="Coverity Scan Build Status" src="https://img.shields.io/coverity/scan/12749.svg"/>
 </a>
 <a href="https://circleci.com/gh/paolostivanin/OTPClient">
-  <img alt="CircleCI"
-       src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
+  <img alt="CircleCI" src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
 </a>
 
 
