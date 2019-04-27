@@ -22,21 +22,33 @@ select_file_cb (GSimpleAction *simple,
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     AppData *app_data = (AppData *)user_data;
 
+#if GTK_CHECK_VERSION(3, 20, 0)
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Open File",
                                                      GTK_WINDOW(app_data->main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
                                                      "Open",
                                                      "Cancel");
-
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
+#else
+    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
+                                                     GTK_WINDOW(app_data->main_window),
+                                                     GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                     "Cancel", GTK_RESPONSE_CANCEL,
+                                                     "Open", GTK_RESPONSE_ACCEPT,
+                                                     NULL);
+    gint res = gtk_dialog_run (GTK_DIALOG(dialog));
+#endif
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         gchar *filename = gtk_file_chooser_get_filename (chooser);
         parse_data_and_update_db (app_data, filename, action_name);
         g_free (filename);
     }
-
+#if GTK_CHECK_VERSION(3, 20, 0)
     g_object_unref (dialog);
+#else
+    gtk_widget_destroy (dialog);
+#endif
 }
 
 
