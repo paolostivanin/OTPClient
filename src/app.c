@@ -305,17 +305,16 @@ get_db_path (GtkWidget *window)
             return NULL;
         }
     } else {
-        GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
+        GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
                                                          GTK_WINDOW (window),
                                                          GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                         "Cancel", GTK_RESPONSE_CANCEL,
-                                                         "OK", GTK_RESPONSE_ACCEPT,
-                                                         NULL);
+                                                         "OK",
+                                                         "Cancel");
         GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
         gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
         gtk_file_chooser_set_select_multiple (chooser, FALSE);
         gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
-        gint res = gtk_dialog_run (GTK_DIALOG (dialog));
+        gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
         if (res == GTK_RESPONSE_ACCEPT) {
             db_path = gtk_file_chooser_get_filename (chooser);
             g_key_file_set_string (kf, "config", "db_path", db_path);
@@ -325,7 +324,7 @@ get_db_path (GtkWidget *window)
                 g_key_file_free (kf);
             }
         }
-        gtk_widget_destroy (dialog);
+        g_object_unref (dialog);
     }
 
     g_free (cfg_file_path);

@@ -22,18 +22,13 @@ select_file_cb (GSimpleAction *simple,
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     AppData *app_data = (AppData *)user_data;
 
-    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Open File",
                                                      GTK_WINDOW(app_data->main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                     "Cancel", GTK_RESPONSE_CANCEL,
-                                                     "Open", GTK_RESPONSE_ACCEPT,
-                                                     NULL);
+                                                     "Open",
+                                                     "Cancel");
 
-#ifdef USE_FLATPAK_APP_FOLDER
-    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER (dialog), g_get_user_data_dir ());
-#endif
-
-    gint res = gtk_dialog_run (GTK_DIALOG(dialog));
+    gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
         gchar *filename = gtk_file_chooser_get_filename (chooser);
@@ -41,7 +36,7 @@ select_file_cb (GSimpleAction *simple,
         g_free (filename);
     }
 
-    gtk_widget_destroy (dialog);
+    g_object_unref (dialog);
 }
 
 
