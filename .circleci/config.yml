@@ -29,9 +29,9 @@ jobs:
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
-  fedora28:
+  fedora30:
     docker:
-      - image: fedora:28
+      - image: fedora:30
     steps:
       - checkout
       - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk3-devel libzip-devel jansson-devel libpng-devel zbar-devel
@@ -63,6 +63,6 @@ workflows:
       - ubuntu1604
       - ubuntu1804
       - debianLatestStable
-      - fedora28
+      - fedora30
       - archlinux
       - opensuseLeap
