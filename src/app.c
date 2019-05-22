@@ -294,14 +294,20 @@ get_db_path (GtkWidget *window)
     gchar *cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
+            show_message_dialog (window, err->message, GTK_MESSAGE_ERROR);
             g_key_file_free (kf);
             return NULL;
         }
         db_path = g_key_file_get_string (kf, "config", "db_path", &err);
         if (db_path == NULL) {
-            g_printerr ("%s\n", err->message);
+            show_message_dialog (window, err->message, GTK_MESSAGE_ERROR);
             g_key_file_free (kf);
+            return NULL;
+        }
+        if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
+            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.", NULL);
+            show_message_dialog (window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
             return NULL;
         }
     } else {
