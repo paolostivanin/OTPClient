@@ -12,7 +12,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 
     gchar *cfg_file_path;
 #ifndef USE_FLATPAK_APP_FOLDER
-    cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
