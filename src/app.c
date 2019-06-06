@@ -207,7 +207,7 @@ get_config_data (gint     *width,
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
 #ifndef USE_FLATPAK_APP_FOLDER
-    cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
@@ -291,7 +291,7 @@ get_db_path (GtkWidget *window)
     gchar *db_path = NULL;
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             show_message_dialog (window, err->message, GTK_MESSAGE_ERROR);
@@ -471,7 +471,7 @@ save_window_size (gint width,
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
 #ifndef USE_FLATPAK_APP_FOLDER
-    cfg_file_path = g_build_filename (g_get_home_dir (), ".config", "otpclient.cfg", NULL);
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
