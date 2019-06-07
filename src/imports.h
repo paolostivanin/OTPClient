@@ -23,7 +23,7 @@ typedef struct _otp_t {
         guint64 counter;
     };
 
-    gchar *label;
+    gchar *account_name;
 
     gchar *issuer;
 

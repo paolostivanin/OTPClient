@@ -76,9 +76,9 @@ parse_parameters (const gchar   *modified_uri,
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
     if (tokens[0] && tokens[1]) {
         otp->issuer = g_strdup (tokens[0]);
-        otp->label = g_strdup (tokens[1]);
+        otp->account_name = g_strdup (tokens[1]);
     } else {
-        otp->label = g_strdup (tokens[0]);
+        otp->account_name = g_strdup (tokens[0]);
     }
     g_free (escaped_issuer_and_label);
     g_strfreev (tokens);
