@@ -122,11 +122,16 @@ export_andotp ( const gchar *export_path,
             json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
         }
 
-        // FIXME: issuer might be empty
-        gchar *constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
-                                                ":",
-                                                json_string_value (json_object_get (db_obj, "label")),
-                                                NULL);
+        gchar *constructed_label;
+        const gchar *issuer_from_db = json_string_value (json_object_get (db_obj, "issuer"));
+        if (issuer_from_db != NULL && g_utf8_strlen (issuer_from_db, -1) > 0) {
+            constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
+                                            ":",
+                                            json_string_value (json_object_get (db_obj, "label")),
+                                            NULL);
+        } else {
+            constructed_label = g_strdup (json_string_value (json_object_get (db_obj, "label")));
+        }
         json_object_set (export_obj, "label", json_string (constructed_label));
         g_free (constructed_label);
         json_object_set (export_obj, "secret", json_object_get (db_obj, "secret"));
