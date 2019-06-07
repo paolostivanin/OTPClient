@@ -88,7 +88,7 @@ free_otps_gslist (GSList *otps,
         otp_data = g_slist_nth_data (otps, i);
         g_free (otp_data->type);
         g_free (otp_data->algo);
-        g_free (otp_data->label);
+        g_free (otp_data->account_name);
         g_free (otp_data->issuer);
         gcry_free (otp_data->secret);
     }
