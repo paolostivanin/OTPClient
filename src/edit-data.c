@@ -71,10 +71,14 @@ show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, 
     GtkWidget *new_lab_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newlabel_id"));
     GtkWidget *new_iss_entry = GTK_WIDGET (gtk_builder_get_object (builder, "entry_newissuer_id"));
 
-    gtk_entry_set_text (GTK_ENTRY(new_lab_entry), current_label);
-    gtk_entry_set_text (GTK_ENTRY(new_iss_entry), current_issuer);
+    if (current_label != NULL) {
+        gtk_entry_set_text (GTK_ENTRY(new_lab_entry), current_label);
+    }
+    if (current_issuer != NULL) {
+        gtk_entry_set_text (GTK_ENTRY(new_iss_entry), current_issuer);
+    }
 
-    if (g_ascii_strcasecmp (current_issuer, "steam") == 0) {
+    if (current_issuer != NULL && g_ascii_strcasecmp (current_issuer, "steam") == 0) {
         gtk_widget_set_sensitive (new_iss_entry, FALSE);
     }
 
