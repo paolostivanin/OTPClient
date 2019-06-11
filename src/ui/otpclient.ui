@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.22.1 
 
-Copyright (C) 2018
+Copyright (C) 2019
 
 This file is part of OTPClient.
 
@@ -26,7 +26,7 @@ Author: Paolo Stivanin
   <!-- interface-license-type gplv3 -->
   <!-- interface-name OTPClient -->
   <!-- interface-description Highly secure and easy to use GTK+ OTP client -->
-  <!-- interface-copyright 2018 -->
+  <!-- interface-copyright 2019 -->
   <!-- interface-authors Paolo Stivanin -->
   <object class="GtkPopoverMenu" id="add_pop_id">
     <property name="can_focus">False</property>
@@ -448,7 +448,7 @@ has been found or after 30 seconds if nothing has been detected.</property>
           <object class="GtkLabel">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Please note that "label" is &lt;b&gt;mandatory&lt;/b&gt; and "issuer", while optional,
+            <property name="label" translatable="yes">Please note that "account" is &lt;b&gt;mandatory&lt;/b&gt; and "issuer", while optional,
 is &lt;b&gt;highly recommended&lt;/b&gt;</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
@@ -491,7 +491,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                   <object class="GtkLabel">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">New label</property>
+                    <property name="label" translatable="yes">New account</property>
                   </object>
                 </child>
               </object>
@@ -681,7 +681,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                 <property name="can_focus">True</property>
                 <property name="max_length">64</property>
                 <property name="primary_icon_tooltip_text" translatable="yes">Label</property>
-                <property name="placeholder_text" translatable="yes">Label</property>
+                <property name="placeholder_text" translatable="yes">Account</property>
               </object>
               <packing>
                 <property name="expand">True</property>
@@ -1091,7 +1091,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
                 <property name="active">0</property>
                 <property name="active_id">0</property>
                 <items>
-                  <item id="0" translatable="yes">Label</item>
+                  <item id="0" translatable="yes">Account</item>
                   <item id="1" translatable="yes">Issuer</item>
                 </items>
               </object>

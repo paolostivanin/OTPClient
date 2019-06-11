@@ -75,10 +75,10 @@ parse_parameters (const gchar   *modified_uri,
 
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
     if (tokens[0] && tokens[1]) {
-        otp->issuer = g_strdup (tokens[0]);
-        otp->label = g_strdup (tokens[1]);
+        otp->issuer = g_strdup (g_strstrip (tokens[0]));
+        otp->account_name = g_strdup (g_strstrip (tokens[1]));
     } else {
-        otp->label = g_strdup (tokens[0]);
+        otp->account_name = g_strdup (g_strstrip (tokens[0]));
     }
     g_free (escaped_issuer_and_label);
     g_strfreev (tokens);
@@ -109,7 +109,7 @@ parse_parameters (const gchar   *modified_uri,
         } else if (g_ascii_strncasecmp (tokens[i], "issuer=", 7) == 0) {
             tokens[i] += 7;
             if (!otp->issuer) {
-                otp->issuer = g_strdup (tokens[i]);
+                otp->issuer = g_strdup (g_strstrip (tokens[i]));
             }
             tokens[i] -= 7;
         } else if (g_ascii_strncasecmp (tokens[i], "counter=", 8) == 0) {

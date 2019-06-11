@@ -122,10 +122,16 @@ export_andotp ( const gchar *export_path,
             json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
         }
 
-        gchar *constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
-                                                " - ",
-                                                json_string_value (json_object_get (db_obj, "label")),
-                                                NULL);
+        gchar *constructed_label;
+        const gchar *issuer_from_db = json_string_value (json_object_get (db_obj, "issuer"));
+        if (issuer_from_db != NULL && g_utf8_strlen (issuer_from_db, -1) > 0) {
+            constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
+                                            ":",
+                                            json_string_value (json_object_get (db_obj, "label")),
+                                            NULL);
+        } else {
+            constructed_label = g_strdup (json_string_value (json_object_get (db_obj, "label")));
+        }
         json_object_set (export_obj, "label", json_string (constructed_label));
         g_free (constructed_label);
         json_object_set (export_obj, "secret", json_object_get (db_obj, "secret"));
@@ -227,13 +233,13 @@ parse_json_data (const gchar *data,
         otp_t *otp = g_new0 (otp_t, 1);
         otp->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
 
-        const gchar *label_with_issuer = json_string_value (json_object_get (obj, "label"));
-        gchar **tokens = g_strsplit (label_with_issuer, "-", -1);
+        const gchar *account_with_issuer = json_string_value (json_object_get (obj, "label"));
+        gchar **tokens = g_strsplit (account_with_issuer, ":", -1);
         if (tokens[0] && tokens[1]) {
             otp->issuer = g_strdup (g_strstrip (tokens[0]));
-            otp->label = g_strdup (g_strstrip (tokens[1]));
+            otp->account_name = g_strdup (g_strstrip (tokens[1]));
         } else {
-            otp->label = g_strdup (g_strstrip (tokens[0]));
+            otp->account_name = g_strdup (g_strstrip (tokens[0]));
         }
         g_strfreev (tokens);
 
