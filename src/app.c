@@ -62,10 +62,10 @@ activate (GtkApplication    *app,
         max_file_size = 256000; // memlock is either unlimited or bigger than needed
     } else if (memlock_limit == -5) {
         max_file_size = 64000; // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n.");
+        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
     } else {
         max_file_size = (gint32) memlock_limit; // memlock is less than 256 KB
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n.");
+        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
     }
 
     AppData *app_data = g_new0 (AppData, 1);
@@ -300,56 +300,55 @@ get_db_path (GtkWidget *window)
         }
         db_path = g_key_file_get_string (kf, "config", "db_path", &err);
         if (db_path == NULL) {
-            show_message_dialog (window, err->message, GTK_MESSAGE_ERROR);
-            g_key_file_free (kf);
-            return NULL;
+            goto new_db;
         }
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.", NULL);
+            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.\nA new database will be created.", NULL);
             show_message_dialog (window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
-            return NULL;
+            goto new_db;
         }
-    } else {
-#if GTK_CHECK_VERSION(3, 20, 0)
-        GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
-                                                                    GTK_WINDOW (window),
-                                                                    GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                                    "OK",
-                                                                    "Cancel");
-#else
-        GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
-                                                         GTK_WINDOW (window),
-                                                         GTK_FILE_CHOOSER_ACTION_SAVE,
-                                                         "Cancel", GTK_RESPONSE_CANCEL,
-                                                         "OK", GTK_RESPONSE_ACCEPT,
-                                                         NULL);
-#endif
-        GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-        gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
-        gtk_file_chooser_set_select_multiple (chooser, FALSE);
-        gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
-#if GTK_CHECK_VERSION(3, 20, 0)
-        gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
-#else
-        gint res = gtk_dialog_run (GTK_DIALOG (dialog));
-#endif
-        if (res == GTK_RESPONSE_ACCEPT) {
-            db_path = gtk_file_chooser_get_filename (chooser);
-            g_key_file_set_string (kf, "config", "db_path", db_path);
-            g_key_file_save_to_file (kf, cfg_file_path, &err);
-            if (err != NULL) {
-                g_printerr ("%s\n", err->message);
-                g_key_file_free (kf);
-            }
-        }
-#if GTK_CHECK_VERSION(3, 20, 0)
-        g_object_unref (dialog);
-#else
-        gtk_widget_destroy (dialog);
-#endif
+        goto end;
     }
-
+    new_db: ; // empty statement workaround
+#if GTK_CHECK_VERSION(3, 20, 0)
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
+                                                                GTK_WINDOW (window),
+                                                                GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                                "OK",
+                                                                "Cancel");
+#else
+    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
+                                                        GTK_WINDOW (window),
+                                                        GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                        "Cancel", GTK_RESPONSE_CANCEL,
+                                                        "OK", GTK_RESPONSE_ACCEPT,
+                                                        NULL);
+#endif
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+    gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
+    gtk_file_chooser_set_select_multiple (chooser, FALSE);
+    gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
+#if GTK_CHECK_VERSION(3, 20, 0)
+    gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
+#else
+    gint res = gtk_dialog_run (GTK_DIALOG (dialog));
+#endif
+    if (res == GTK_RESPONSE_ACCEPT) {
+        db_path = gtk_file_chooser_get_filename (chooser);
+        g_key_file_set_string (kf, "config", "db_path", db_path);
+        g_key_file_save_to_file (kf, cfg_file_path, &err);
+        if (err != NULL) {
+            g_printerr ("%s\n", err->message);
+            g_key_file_free (kf);
+        }
+    }
+#if GTK_CHECK_VERSION(3, 20, 0)
+    g_object_unref (dialog);
+#else
+    gtk_widget_destroy (dialog);
+#endif
+    end:
     g_free (cfg_file_path);
 
     return db_path;
