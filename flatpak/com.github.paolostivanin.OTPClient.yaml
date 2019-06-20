@@ -1,6 +1,6 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '3.30'
+runtime-version: '3.32'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
@@ -27,8 +27,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://libzip.org/download/libzip-1.5.1.tar.xz
-    sha256: 04ea35b6956c7b3453f1ed3f3fe40e3ddae1f43931089124579e8384e79ed372
+    url: https://libzip.org/download/libzip-1.5.2.tar.xz
+    sha256: b3de4d4bd49a01e0cab3507fc163f88e1651695b6b9cb25ad174dbe319d4a3b4
 - name: jansson
   cleanup:
   - "/include"
@@ -41,26 +41,17 @@ modules:
     url: http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
     sha256: 5f8dec765048efac5d919aded51b26a32a05397ea207aa769ff6b53c7027d2c9
 - name: zbar
-  config-opts:
-  - "--without-qt"
-  - "--without-qt5"
-  - "--without-gtk"
-  - "--without-xv"
-  - "--without-imagemagick"
-  - "--without-python2"
-  - "--enable-codes=qrcode"
+  buildsystem: simple
+  build-commands:
+  - ./configure --prefix=/app --without-qt --without-qt5 --without-gtk --without-xv --without-imagemagick --without-java --without-dbus --enable-codes=qrcode
+  - sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  - sed -i '64d' Makefile.am
+  - make
+  - make install
   sources:
-  - type: script
-    dest-filename: autogen.sh
-    commands:
-    - "autoreconf -vfi -W none"
   - type: archive
-    url: https://www.linuxtv.org/downloads/zbar/zbar-0.20.1.tar.bz2
-    sha256: a0081a9b473d9e44e029d948a8d7f22deb1bf128980f3fc4e185298066e62a6c
-  - type: shell
-    # avoid building documentation
-    commands:
-    - "sed -i '48d' Makefile.am"
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.tar.gz
+    sha256: ac52763a7dd6ddc53ca6cd75ccee14f7abf6ae46ecb31137d025af123edd33bf
 - name: libbaseencode
   buildsystem: cmake-ninja
   config-opts:
