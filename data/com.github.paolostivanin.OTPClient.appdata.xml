@@ -83,6 +83,19 @@ It's also possible to import encrypted backups from andOTP and Authenticator+.
   </content_rating>
 
   <releases>
+    <release version="1.5.0" date="2019-06-20">
+      <description>
+        <p>OTPClient 1.5.0</p>
+        <ul>
+          <li>add shortcut to quit the application</li>
+          <li>use native dialog for open and save actions</li>
+          <li>show error dialog if database is missing</li>
+          <li>rename "label" to "account name"</li>
+          <li>correctly handle empty label and/or issuer when editing a row</li>
+          <li>respect XDG_CONFIG_HOME</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.4.1" date="2019-03-19">
       <description>
         <p>OTPClient 1.4.1 brings some fixes to the flatpak version.</p>
