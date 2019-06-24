@@ -44,7 +44,7 @@ prompt_for_password (AppData        *app_data,
         dialog = GTK_WIDGET(gtk_builder_get_object (builder, "decpwd_diag_id"));
         gchar *text = NULL, *markup = NULL;
         if (action_name == NULL){
-            markup = g_markup_printf_escaped ("%s <span font_family=\"monospace\">%s</span>", "Enter the decryption password for ", app_data->db_data->db_path);
+            markup = g_markup_printf_escaped ("%s <span font_family=\"monospace\">%s</span>", "Enter the decryption password for\n", app_data->db_data->db_path);
         } else {
             text = g_strdup ("Enter the decryption password");
         }
