@@ -77,6 +77,7 @@ set_otp (GtkListStore   *list_store,
         return;
     }
     gtk_list_store_set (list_store, &iter, COLUMN_OTP, otp, -1);
+    app_data->last_user_activity = g_date_time_new_now_local ();
 
     g_free (otp);
     clean_otp_data (otp_data);

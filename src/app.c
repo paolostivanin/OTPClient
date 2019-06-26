@@ -11,13 +11,15 @@
 #include "password-cb.h"
 #include "get-builder.h"
 #include "liststore-misc.h"
+#include "lock-app.h"
+
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path               (GtkWidget          *window);
 #endif
 
-static void       get_config_data           (gint               *width, 
-                                             gint               *height, 
+static void       get_config_data           (gint               *width,
+                                             gint               *height,
                                              AppData            *app_data);
 
 static void       create_main_window        (gint                width,
@@ -48,9 +50,6 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
                                              GdkEventKey        *event_key,
                                              gpointer            user_data);
 
-static void       destroy_cb                (GtkWidget          *window,
-                                             gpointer            user_data);
-
 
 void
 activate (GtkApplication    *app,
@@ -70,10 +69,14 @@ activate (GtkApplication    *app,
 
     AppData *app_data = g_new0 (AppData, 1);
 
+    app_data->app_locked = FALSE;
+
     gint width = 0, height = 0;
-    app_data->show_next_otp = FALSE;
-    app_data->disable_notifications = FALSE;
-    app_data->search_column = 0;
+    app_data->show_next_otp = FALSE; // next otp not shown by default
+    app_data->disable_notifications = FALSE; // notifications enabled by default
+    app_data->search_column = 0; // account
+    app_data->auto_lock = FALSE; // disabled by default
+    app_data->inactivity_timeout = 0; // never
     get_config_data (&width, &height, app_data);
 
     app_data->db_data = g_new0 (DatabaseData, 1);
@@ -155,9 +158,9 @@ activate (GtkApplication    *app,
     }
 
     app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
-    
+
     create_treeview (app_data);
-    
+
     app_data->notification = g_notification_new ("OTPClient");
     g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
     GIcon *icon = g_themed_icon_new ("com.github.paolostivanin.OTPClient");
@@ -177,6 +180,12 @@ activate (GtkApplication    *app,
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 500, traverse_liststore, app_data, NULL);
+
+    setup_dbus_listener (app_data);
+
+    // set last user activity to now, so we have a starting point for the autolock feature
+    app_data->last_user_activity = g_date_time_new_now_local ();
+    app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
 
     gtk_widget_show_all (app_data->main_window);
 }
@@ -220,6 +229,8 @@ get_config_data (gint     *width,
             app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
             app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
             app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
+            app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
+            app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         }
     }
     g_key_file_free (kf);
@@ -437,12 +448,18 @@ get_window_size_cb (GtkWidget      *window,
 }
 
 
-static void
+void
 destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     AppData *app_data = (AppData *)user_data;
     g_source_remove (app_data->source_id);
+    g_source_remove (app_data->source_id_last_activity);
+    g_date_time_unref (app_data->last_user_activity);
+    for (gint i = 0; i < DBUS_SERVICES; i++) {
+        g_dbus_connection_signal_unsubscribe (app_data->connection, app_data->subscription_ids[i]);
+    }
+    g_dbus_connection_close (app_data->connection, NULL, NULL, NULL);
     gcry_free (app_data->db_data->key);
     g_free (app_data->db_data->db_path);
     g_slist_free_full (app_data->db_data->objects_hash, g_free);

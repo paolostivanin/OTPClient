@@ -42,4 +42,7 @@ void shortcuts_window_cb   (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
 
+void destroy_cb            (GtkWidget      *window,
+                            gpointer        user_data);
+
 G_END_DECLS
