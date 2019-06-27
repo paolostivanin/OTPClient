@@ -35,4 +35,7 @@ json_t      *build_json_obj             (const gchar *type,
                                          gint         period,
                                          gint64       ctr);
 
+void send_ok_cb                         (GtkWidget *entry,
+                                         gpointer   user_data);
+
 G_END_DECLS

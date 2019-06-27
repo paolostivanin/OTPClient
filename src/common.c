@@ -145,3 +145,11 @@ build_json_obj (const gchar *type,
 
     return obj;
 }
+
+
+void
+send_ok_cb (GtkWidget *entry,
+            gpointer   user_data __attribute__((unused)))
+{
+    gtk_dialog_response (GTK_DIALOG(gtk_widget_get_toplevel (entry)), GTK_RESPONSE_OK);
+}

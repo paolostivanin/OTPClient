@@ -84,7 +84,8 @@ set(HEADER_FILES
         src/password-cb.h
         src/qrcode-parser.h
         src/treeview.h
-        src/exports.h)
+        src/exports.h
+        src/lock-app.h)
 
 set(SOURCE_FILES
         src/add-common.c
@@ -112,7 +113,8 @@ set(SOURCE_FILES
         src/shortcuts.c
         src/treeview.c
         src/webcam-add-cb.c
-        src/exports.c)
+        src/exports.c
+        src/lock-app.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}

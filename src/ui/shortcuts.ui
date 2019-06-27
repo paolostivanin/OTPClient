@@ -94,6 +94,14 @@
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="visible">1</property>
+                <property name="accelerator">&lt;Ctrl&gt;l</property>
+                <property name="title" translatable="yes">Lock</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
                 <property name="accelerator">&lt;Ctrl&gt;q</property>
                 <property name="title" translatable="yes">Quit</property>
               </object>

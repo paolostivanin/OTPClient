@@ -41,15 +41,7 @@ export_data_cb (GSimpleAction *simple,
         show_message_dialog (app_data->main_window, message, msg_type);
         g_free (message);
         g_free (ret_msg);
-    }/* else if (g_strcmp0 (action_name, "export_authy") == 0) {
-        // TODO: check authy format
-        exported_file_path = g_build_filename (base_dir, "", NULL);
-        export_authy (exported_file_path);
-    } else if (g_strcmp0 (action_name, "export_winauth") == 0) {
-        // TODO: check winauth format
-        exported_file_path = g_build_filename (base_dir, "", NULL);
-        export_winauth (exported_file_path);
-    }*/ else {
+    } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
     }

@@ -14,9 +14,6 @@ typedef struct _entrywidgets {
     gchar *cur_pwd;
 } EntryWidgets;
 
-static void send_ok_cb    (GtkWidget *entry,
-                           gpointer   user_data);
-
 static void check_pwd_cb  (GtkWidget *entry,
                            gpointer   user_data);
 
@@ -120,14 +117,6 @@ prompt_for_password (AppData        *app_data,
     g_object_unref (builder);
 
     return pwd;
-}
-
-
-static void
-send_ok_cb (GtkWidget *entry,
-            gpointer   user_data __attribute__((unused)))
-{
-    gtk_dialog_response (GTK_DIALOG (gtk_widget_get_toplevel (entry)), GTK_RESPONSE_OK);
 }
 
 

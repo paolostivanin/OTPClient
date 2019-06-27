@@ -3,6 +3,8 @@
 #include <gtk/gtk.h>
 #include <jansson.h>
 
+#define DBUS_SERVICES 4
+
 G_BEGIN_DECLS
 
 typedef struct _db_data {
@@ -22,6 +24,7 @@ typedef struct _db_data {
     GDateTime *last_hotp_update;
 } DatabaseData;
 
+
 typedef struct _app_data_t {
     GtkBuilder *builder;
 
@@ -29,18 +32,28 @@ typedef struct _app_data_t {
     GtkTreeView *tree_view;
 
     GtkClipboard *clipboard;
-    
+
     gboolean show_next_otp;
     gboolean disable_notifications;
     gint search_column;
+    gboolean auto_lock;
+    gint inactivity_timeout;
 
     GtkCssProvider *css_provider;
 
     GNotification *notification;
 
     guint source_id;
+    guint source_id_last_activity;
 
     DatabaseData *db_data;
+
+    GDBusConnection *connection;
+    guint subscription_ids[DBUS_SERVICES];
+
+    gboolean app_locked;
+
+    GDateTime *last_user_activity;
 } AppData;
 
 G_END_DECLS
