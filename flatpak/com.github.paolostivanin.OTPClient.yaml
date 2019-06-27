@@ -41,13 +41,16 @@ modules:
     url: http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
     sha256: 5f8dec765048efac5d919aded51b26a32a05397ea207aa769ff6b53c7027d2c9
 - name: zbar
-  buildsystem: simple
-  build-commands:
-  - ./configure --prefix=/app --without-qt --without-qt5 --without-gtk --without-xv --without-imagemagick --without-java --without-dbus --enable-codes=qrcode
-  - sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
-  - sed -i '64d' Makefile.am
-  - make
-  - make install
+  config-opts:
+  - "--without-qt"
+  - "--without-qt5"
+  - "--without-gtk"
+  - "--without-xv"
+  - "--without-imagemagick"
+  - "--without-dbus"
+  - "--with-python=python3"
+  - "--disable-doc"
+  - "--enable-codes=qrcode"
   sources:
   - type: archive
     url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.tar.gz
