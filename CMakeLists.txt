@@ -38,6 +38,7 @@ pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.10)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.18.0)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.48.0)
 
 if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DZBAR_OLD_LIB")
@@ -45,6 +46,7 @@ endif ()
 
 
 include_directories(${GTK3_INCLUDE_DIRS}
+        ${GLIB2_INCLUDE_DIRS}
         ${GCRYPT_INCLUDE_DIRS}
         ${COTP_INCLUDE_DIRS}
         ${LIBZIP_INCLUDE_DIRS}
@@ -53,6 +55,7 @@ include_directories(${GTK3_INCLUDE_DIRS}
         ${ZBAR_INCLUDE_DIRS})
 
 link_directories(${GTK3_LIBRARY_DIRS}
+        ${GLIB2_LIBRARY_DIRS}
         ${GCRYPT_LIBRARY_DIRS}
         ${COTP_LIBRARY_DIRS}
         ${LIBZIP_LIBRARY_DIRS}
@@ -61,6 +64,7 @@ link_directories(${GTK3_LIBRARY_DIRS}
         ${ZBAR_LIBRARY_DIRS})
 
 add_definitions(${GTK3_CFLAGS_OTHER}
+        ${GLIB2_CFLAGS_OTHER}
         ${GCRYPT_CFLAGS_OTHER}
         ${LIBZIP_CFLAGS_OTHER}
         ${PNG_CFLAGS_OTHER}
@@ -116,6 +120,12 @@ set(SOURCE_FILES
         src/exports.c
         src/lock-app.c)
 
+#set(CLI_HEADER_FILES)
+
+set(CLI_SOURCE_FILES
+        src/cli/main.c
+        src/cli/help.c)
+
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
         ${GTK3_LIBRARIES}
@@ -128,7 +138,18 @@ target_link_libraries(${PROJECT_NAME}
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
+add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES}) # ${CLI_HEADER_FILES})
+target_link_libraries(${PROJECT_NAME}-cli
+        ${GLIB2_LIBRARIES}
+        ${GCRYPT_LIBRARIES}
+        ${COTP_LIBRARIES}
+        ${JANSSON_LIBRARIES})
+
+set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
+
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
+
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
