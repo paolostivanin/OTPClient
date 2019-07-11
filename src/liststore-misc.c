@@ -4,7 +4,7 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "gquarks.h"
-#include "common.h"
+#include "gui-common.h"
 
 
 typedef struct _otp_data {

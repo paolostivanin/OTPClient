@@ -5,7 +5,7 @@
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
-#include "common.h"
+#include "gui-common.h"
 #include "db-misc.h"
 
 

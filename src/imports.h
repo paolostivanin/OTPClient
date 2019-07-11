@@ -7,9 +7,6 @@ G_BEGIN_DECLS
 
 #define ANDOTP_IMPORT_ACTION_NAME   "import_andotp"
 #define AUTHPLUS_IMPORT_ACTION_NAME "import_authplus"
-#define AUTHY_IMPORT_ACTION_NAME    "import_authy"
-#define WINAUTH_IMPORT_ACTION_NAME  "import_winauth"
-
 
 typedef struct _otp_t {
     gchar *type;

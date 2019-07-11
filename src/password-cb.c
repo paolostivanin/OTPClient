@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
-#include "common.h"
+#include "gui-common.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "otpclient.h"

@@ -1,5 +1,5 @@
 #include <glib.h>
-#include "common.h"
+#include "gui-common.h"
 #include "imports.h"
 
 

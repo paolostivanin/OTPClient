@@ -5,7 +5,7 @@
 #include "otpclient.h"
 #include "file-size.h"
 #include "gquarks.h"
-#include "common.h"
+#include "gui-common.h"
 
 typedef struct _header_data {
     guint8 iv[IV_SIZE];

@@ -6,7 +6,7 @@
 #include <gcrypt.h>
 #include "imports.h"
 #include "message-dialogs.h"
-#include "common.h"
+#include "gui-common.h"
 #include "add-common.h"
 #include "qrcode-parser.h"
 

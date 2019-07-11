@@ -3,7 +3,7 @@
 #include <jansson.h>
 #include <glib/gstdio.h>
 #include "otpclient.h"
-#include "common.h"
+#include "gui-common.h"
 #include "gquarks.h"
 #include "imports.h"
 #include "exports.h"
@@ -12,6 +12,7 @@
 #include "get-builder.h"
 #include "liststore-misc.h"
 #include "lock-app.h"
+#include "common/common.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -53,19 +54,9 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
 
 void
 activate (GtkApplication    *app,
-          gpointer           user_data)
+          gpointer           user_data __attribute__((unused)))
 {
-    gint64 memlock_limit = (gint64) user_data;
-    gint32 max_file_size;
-    if (memlock_limit == -1 || memlock_limit > 256000) {
-        max_file_size = 256000; // memlock is either unlimited or bigger than needed
-    } else if (memlock_limit == -5) {
-        max_file_size = 64000; // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
-    } else {
-        max_file_size = (gint32) memlock_limit; // memlock is less than 256 KB
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
-    }
+    gint32 max_file_size = get_max_file_size_from_memlock ();
 
     AppData *app_data = g_new0 (AppData, 1);
 
@@ -93,22 +84,13 @@ activate (GtkApplication    *app,
     gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
     g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
-    if (!gcry_check_version ("1.6.0")) {
-        show_message_dialog (app_data->main_window, "The required version of GCrypt is 1.6.0 or greater.", GTK_MESSAGE_ERROR);
+    gchar *msg = init_libs (max_file_size);
+    if (msg != NULL) {
+        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
-        return;
     }
-
-    if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
-        show_message_dialog (app_data->main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
-        g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION(app));
-        return;
-    }
-    gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
-
-    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
 #ifdef USE_FLATPAK_APP_FOLDER
     app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);

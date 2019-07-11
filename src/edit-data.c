@@ -4,7 +4,7 @@
 #include "db-misc.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
-#include "common.h"
+#include "gui-common.h"
 #include "gquarks.h"
 #include "otpclient.h"
 

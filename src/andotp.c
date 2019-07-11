@@ -4,7 +4,7 @@
 #include <jansson.h>
 #include "file-size.h"
 #include "imports.h"
-#include "common.h"
+#include "gui-common.h"
 #include "gquarks.h"
 
 #define ANDOTP_IV_SIZE  12

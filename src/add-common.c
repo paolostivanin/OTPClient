@@ -3,7 +3,7 @@
 #include <zbar.h>
 #include "data.h"
 #include "imports.h"
-#include "common.h"
+#include "gui-common.h"
 #include "parse-uri.h"
 
 static gchar *check_params (GSList *otps);

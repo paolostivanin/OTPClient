@@ -72,8 +72,9 @@ add_definitions(${GTK3_CFLAGS_OTHER}
         ${ZBAR_CFLAGS_OTHER})
 
 set(HEADER_FILES
+        src/common/common.h
         src/add-common.h
-        src/common.h
+        src/gui-common.h
         src/data.h
         src/db-misc.h
         src/file-size.h
@@ -92,11 +93,12 @@ set(HEADER_FILES
         src/lock-app.h)
 
 set(SOURCE_FILES
+        src/common/common.c
         src/add-common.c
         src/andotp.c
         src/app.c
         src/authplus.c
-        src/common.c
+        src/gui-common.c
         src/db-misc.c
         src/edit-data.c
         src/file-size.c
@@ -120,11 +122,16 @@ set(SOURCE_FILES
         src/exports.c
         src/lock-app.c)
 
-#set(CLI_HEADER_FILES)
+set(CLI_HEADER_FILES
+        src/cli/help.h
+        src/cli/add.h
+        src/common/common.h)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
-        src/cli/help.c)
+        src/cli/help.c
+        src/cli/add.c
+        src/common/common.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}
@@ -138,7 +145,7 @@ target_link_libraries(${PROJECT_NAME}
 
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
-add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES}) # ${CLI_HEADER_FILES})
+add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
 target_link_libraries(${PROJECT_NAME}-cli
         ${GLIB2_LIBRARIES}
         ${GCRYPT_LIBRARIES}
