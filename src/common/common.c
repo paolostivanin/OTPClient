@@ -12,11 +12,11 @@ get_max_file_size_from_memlock (void)
         g_print ("[WARNING] your OS's memlock limit may be too low for you (64000 bytes). Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
         return 64000;
     } else {
-        if (r.rlim_cur == -1 || r.rlim_cur > 256000) {
+        if (r.rlim_cur == -1 || r.rlim_cur > 4194304) {
             // memlock is either unlimited or bigger than needed
-            return 256000;
+            return 4194304;
         } else {
-            // memlock is less than 256 KB
+            // memlock is less than 4 MB
             g_print ("[WARNING] your OS's memlock limit may be too low for you (%d bytes). Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n", (gint32)r.rlim_cur);
             return (gint32)r.rlim_cur;
         }
