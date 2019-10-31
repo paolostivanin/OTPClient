@@ -1,7 +1,8 @@
 #include <glib.h>
+#include <sys/resource.h>
+#include <cotp.h>
 #include "gcrypt.h"
 #include "jansson.h"
-#include <sys/resource.h>
 
 gint32
 get_max_file_size_from_memlock (void)
@@ -39,4 +40,20 @@ init_libs (gint32 max_file_size)
     json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
     return NULL;
+}
+
+
+gint
+get_algo_int_from_str (const gchar *algo)
+{
+    gint algo;
+    if (g_strcmp0 (algo, "SHA1") == 0) {
+        algo = SHA1;
+    } else if (g_strcmp0 (algo, "SHA256") == 0) {
+        algo = SHA256;
+    } else {
+        algo = SHA512;
+    }
+
+    return algo;
 }

@@ -5,9 +5,9 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 
-set(OTPCLIENT_VERSION_MAJOR "1")
-set(OTPCLIENT_VERSION_MINOR "5")
-set(OTPCLIENT_VERSION_PATCH "1")
+set(OTPCLIENT_VERSION_MAJOR "2")
+set(OTPCLIENT_VERSION_MINOR "0")
+set(OTPCLIENT_VERSION_PATCH "0")
 set(OTPCLIENT_VERSION "${OTPCLIENT_VERSION_MAJOR}.${OTPCLIENT_VERSION_MINOR}.${OTPCLIENT_VERSION_PATCH}")
 
 set(CMAKE_C_STANDARD 11)
@@ -124,13 +124,12 @@ set(SOURCE_FILES
 
 set(CLI_HEADER_FILES
         src/cli/help.h
-        src/cli/add.h
         src/common/common.h)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
         src/cli/help.c
-        src/cli/add.c
+        src/cli/get-data.c
         src/common/common.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})

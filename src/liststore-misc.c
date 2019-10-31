@@ -5,6 +5,7 @@
 #include "liststore-misc.h"
 #include "gquarks.h"
 #include "gui-common.h"
+#include "common/common.h"
 
 
 typedef struct _otp_data {
@@ -45,14 +46,7 @@ set_otp (GtkListStore   *list_store,
 
     set_otp_data (otp_data, app_data, row_number);
 
-    gint algo;
-    if (g_strcmp0 (otp_data->algo, "SHA1") == 0) {
-        algo = SHA1;
-    } else if (g_strcmp0 (otp_data->algo, "SHA256") == 0) {
-        algo = SHA256;
-    } else {
-        algo = SHA512;
-    }
+    gint algo = get_algo_int_from_str (otp_data->algo);
 
     cotp_error_t otp_err;
     gchar *otp;
