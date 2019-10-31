@@ -47,7 +47,15 @@ show_token (AppData     *app_data,
 void
 list_all_acc_iss (DatabaseData *db_data)
 {
-
+    gsize index;
+    json_t *obj;
+    g_print ("================\n");
+    g_print ("Account | Issuer\n");
+    g_print ("================\n");
+    json_array_foreach (db_data->json_data, index, obj) {
+        g_print ("%s | %s\n", json_string_value (json_object_get (obj, "label")), json_string_value (json_object_get (obj, "issuer")));
+        g_print ("----------------\n");
+    }
 }
 
 
