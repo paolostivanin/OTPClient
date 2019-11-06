@@ -52,7 +52,7 @@ if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DZBAR_OLD_LIB")
 endif ()
 
-set(HEADER_FILES
+set(GUI_HEADER_FILES
         src/common/common.h
         src/add-common.h
         src/gui-common.h
@@ -73,7 +73,7 @@ set(HEADER_FILES
         src/exports.h
         src/lock-app.h)
 
-set(SOURCE_FILES
+set(GUI_SOURCE_FILES
         src/common/common.c
         src/add-common.c
         src/andotp.c
@@ -142,7 +142,7 @@ if(BUILD_GUI)
                 ${JANSSON_INCLUDE_DIRS}
                 ${ZBAR_INCLUDE_DIRS})
 
-        add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES})
+        add_executable(${PROJECT_NAME} ${GUI_SOURCE_FILES} ${GUI_HEADER_FILES})
         target_link_libraries(${PROJECT_NAME}
                 ${GTK3_LIBRARIES}
                 ${GCRYPT_LIBRARIES}

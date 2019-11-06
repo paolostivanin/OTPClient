@@ -13,7 +13,7 @@
 static gchar    *get_db_path    (void);
 #endif
 
-static gchar    *get_pwd        (gboolean file_exists);
+static gchar    *get_pwd        (void);
 
 gint
 main (gint    argc,
@@ -50,7 +50,7 @@ main (gint    argc,
     }
 #endif
 
-    db_data->key = get_pwd (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS));
+    db_data->key = get_pwd ();
     if (db_data->key == NULL) {
         g_free (db_data);
         return -1;
@@ -157,32 +157,19 @@ get_db_path ()
 
 
 static gchar *
-get_pwd (gboolean file_exists)
+get_pwd ()
 {
     gchar *pwd = gcry_calloc_secure (256, 1);
     g_print ("Type the password: ");
     if (fgets (pwd, 256, stdin) == NULL) {
         // TODO: error
+        g_printerr ("error fgets\n");
+        return NULL;
     }
     g_print ("\n");
     pwd[g_utf8_strlen (pwd, -1) - 1] = '\0';
 
-    gchar *pwd_again = gcry_calloc_secure (256, 1);
-    if (file_exists) {
-        g_print ("Type the password again: ");
-        if (fgets (pwd_again, 256, stdin) == NULL) {
-            // TODO: error
-        }
-        pwd_again[g_utf8_strlen (pwd_again, -1) - 1] = '\0';
-        if (g_strcmp0 (pwd, pwd_again) != 0) {
-            // TODO: pwd are different
-        }
-        gcry_free (pwd_again);
-    }
-    g_print ("\n");
+    gchar *realloc_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);
 
-    gchar *final_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);
-    gcry_free (pwd);
-
-    return final_pwd;
+    return realloc_pwd;
 }
