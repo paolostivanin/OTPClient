@@ -1,4 +1,5 @@
 #include <glib.h>
+#include "version.h"
 
 static void print_main_help         (const gchar *prg_name);
 
@@ -8,15 +9,23 @@ static void print_show_help         (const gchar *prg_name);
 gint show_help (const gchar *prg_name,
                 const gchar *help_command)
 {
-    if (g_strcmp0 (help_command, "-h") == 0 || g_strcmp0 (help_command, "--help") == 0 ) {
+    gboolean help_displayed = FALSE;
+    if (g_strcmp0 (help_command, "-h") == 0 || g_strcmp0 (help_command, "--help") == 0) {
         print_main_help (prg_name);
-    } else if (g_strcmp0 (help_command, "--help-show") == 0) {
+        help_displayed = TRUE;
+    } else if (g_strcmp0 (help_command, "-v") == 0 || g_strcmp0 (help_command, "--version") == 0) {
+        g_print ("%s v%s\n", PROJECT_NAME, PROJECT_VER);
+        help_displayed = TRUE;
+    }
+    else if (g_strcmp0 (help_command, "--help-show") == 0) {
         print_show_help (prg_name);
+        help_displayed = TRUE;
     } else {
         print_main_help (prg_name);
+        help_displayed = TRUE;
     }
 
-    return 0;
+    return help_displayed;
 }
 
 
@@ -31,8 +40,8 @@ print_main_help (const gchar *prg_name)
     g_print ("\n");
     g_print ("Main Options:\n");
     g_print ("  -v, --version\t\tShow program version\n");
-    g_print ("  --show\t\tShow a token\n");
-    g_print ("  --list\t\tList all pairs of account and issuer\n");
+    g_print ("  show\t\tShow a token\n");
+    g_print ("  list\t\tList all pairs of account and issuer\n");
     g_print ("\n");
 }
 
@@ -40,9 +49,9 @@ print_main_help (const gchar *prg_name)
 static void
 print_show_help (const gchar *prg_name)
 {
-    g_print ("Usage:\n  %s --show <-a ..> [-i ..] [-m]\n", prg_name);
+    g_print ("Usage:\n  %s show <-a ..> [-i ..] [-m]\n", prg_name);
     g_print ("\n");
-    g_print ("Remove Options:\n");
+    g_print ("Show Options:\n");
     g_print ("  -a, --account\t\tThe account name (mandatory)\n");
     g_print ("  -i, --issuer\t\tThe issuer name (optional)\n");
     g_print ("  -m, --match-exactly\tShow the token only if it matches exactly the account and/or the issuer (optional)\n");

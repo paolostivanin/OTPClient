@@ -43,7 +43,7 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, TRUE, &err);
+    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
     }

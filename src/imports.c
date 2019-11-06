@@ -5,6 +5,7 @@
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
+#include "common/common.h"
 #include "gui-common.h"
 #include "db-misc.h"
 
@@ -70,7 +71,7 @@ update_db_from_otps (GSList *otps, AppData *app_data)
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, TRUE, &err);
+    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         return g_strdup (err->message);
     }

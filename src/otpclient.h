@@ -4,9 +4,6 @@
 
 G_BEGIN_DECLS
 
-#define APP_NAME                "OTPClient"
-#define APP_VERSION             "2.0.0-alpha"
-
 #define HOTP_RATE_LIMIT_IN_SEC  3
 
 #define NOTIFICATION_ID "otp-copied"

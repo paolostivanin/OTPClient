@@ -44,7 +44,7 @@ create_treeview (AppData *app_data)
 
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
-    
+
     GtkListStore *list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
                                                    G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
 
@@ -53,7 +53,7 @@ create_treeview (AppData *app_data)
     add_data_to_model (app_data->db_data, list_store);
 
     gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(list_store));
-    
+
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
 
@@ -87,7 +87,7 @@ delete_rows_cb (GtkTreeView        *tree_view,
     AppData *app_data = (AppData *)user_data;
 
     g_return_if_fail (tree_view != NULL);
-  
+
     GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
     GtkListStore *list_store = GTK_LIST_STORE(model);
 
@@ -97,9 +97,9 @@ delete_rows_cb (GtkTreeView        *tree_view,
     guint row_number = get_row_number_from_iter (list_store, iter);
     json_array_remove (app_data->db_data->json_data, row_number);
     gtk_list_store_remove (list_store, &iter);
-    
+
     GError *err = NULL;
-    update_and_reload_db (app_data, FALSE, &err);
+    update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
     if (err != NULL) {
         gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);

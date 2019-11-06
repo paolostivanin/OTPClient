@@ -46,14 +46,54 @@ init_libs (gint32 max_file_size)
 gint
 get_algo_int_from_str (const gchar *algo)
 {
-    gint algo;
+    gint algo_int;
     if (g_strcmp0 (algo, "SHA1") == 0) {
-        algo = SHA1;
+        algo_int = SHA1;
     } else if (g_strcmp0 (algo, "SHA256") == 0) {
-        algo = SHA256;
+        algo_int = SHA256;
     } else {
-        algo = SHA512;
+        algo_int = SHA512;
     }
 
-    return algo;
+    return algo_int;
+}
+
+
+guint32
+jenkins_one_at_a_time_hash (const gchar *key, gsize len)
+{
+    guint32 hash, i;
+    for(hash = i = 0; i < len; ++i) {
+        hash += key[i];
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
+    }
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
+
+    return hash;
+}
+
+
+guint32
+json_object_get_hash (json_t *obj)
+{
+    const gchar *key;
+    json_t *value;
+    gchar *tmp_string = gcry_calloc_secure (256, 1);
+    json_object_foreach (obj, key, value) {
+        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
+            json_int_t v = json_integer_value (value);
+            g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
+        } else {
+            g_strlcat (tmp_string, json_string_value (value), 256);
+        }
+    }
+
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+
+    gcry_free (tmp_string);
+
+    return hash;
 }

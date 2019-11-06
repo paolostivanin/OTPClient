@@ -2,6 +2,7 @@
 #include <string.h>
 #include <gcrypt.h>
 #include "help.h"
+#include "get-data.h"
 #include "../common/common.h"
 #include "../db-misc.h"
 #include "../otpclient.h"
@@ -14,13 +15,12 @@ static gchar    *get_db_path    (void);
 
 static gchar    *get_pwd        (gboolean file_exists);
 
-
 gint
 main (gint    argc,
       gchar **argv)
 {
-    if (show_help (argv[0], argv[1]) == -1 || argc == 1) {
-        return -1;
+    if (show_help (argv[0], argv[1])) {
+        return 0;
     }
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
@@ -70,7 +70,7 @@ main (gint    argc,
     gchar *account = NULL, *issuer = NULL;
     gboolean show_next_token = FALSE, match_exactly = FALSE;
 
-    if (g_strcmp0 (argv[1], "--show") == 0) {
+    if (g_strcmp0 (argv[1], "show") == 0) {
         if (argc < 2 && argc > 4) {
             g_printerr ("Wrong argument(s). Please type '%s --help-show' to see the available options.\n", argv[0]);
             g_free (db_data);
@@ -92,7 +92,7 @@ main (gint    argc,
             goto end;
         }
         show_token (db_data, account, issuer, match_exactly, show_next_token);
-    } else if (g_strcmp0 (argv[1], "--list") == 0) {
+    } else if (g_strcmp0 (argv[1], "list") == 0) {
         list_all_acc_iss (db_data);
     } else {
         // TODO show help and exit
@@ -137,7 +137,7 @@ get_db_path ()
     }
     type_db_path: ; // empty statement workaround
     g_print ("Type the absolute path to the database: ");
-    gchar *db_path = g_malloc0 (MAX_ABS_PATH_LEN);
+    db_path = g_malloc0 (MAX_ABS_PATH_LEN);
     if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
         // TODO: error
     } else {

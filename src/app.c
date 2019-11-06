@@ -13,6 +13,7 @@
 #include "liststore-misc.h"
 #include "lock-app.h"
 #include "common/common.h"
+#include "version.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -231,7 +232,7 @@ create_main_window (gint             width,
     gtk_window_set_default_size (GTK_WINDOW(app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
 
     GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (app_data->builder, "headerbar_id"));
-    gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), APP_VERSION);
+    gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), PROJECT_VER);
 
     set_action_group (app_data->builder, app_data);
 }
@@ -404,7 +405,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (app_data, FALSE, &err);
+        update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
