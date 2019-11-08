@@ -7,10 +7,11 @@
 #include "gui-common.h"
 #include "gquarks.h"
 
-#define ANDOTP_IV_SIZE  12
-#define ANDOTP_TAG_SIZE 16
+#define ANDOTP_IV_SIZE   12
+#define ANDOTP_SALT_SIZE 12
+#define ANDOTP_TAG_SIZE  16
 
-static guchar *get_sha256 (const gchar *password);
+static guchar *get_derived_key (const gchar *password, const guchar *salt, gint iterations);
 
 static GSList *parse_json_data (const gchar *data, GError **err);
 
@@ -24,6 +25,21 @@ get_andotp_data (const gchar     *path,
     GFile *in_file = g_file_new_for_path (path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
     if (*err != NULL) {
+        g_object_unref (in_file);
+        return NULL;
+    }
+
+    int32_t le_iterations;
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), &le_iterations, 4, NULL, err) == -1) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+    int32_t be_iterations = __builtin_bswap32(le_iterations);
+
+    guchar salt[ANDOTP_SALT_SIZE];
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, ANDOTP_SALT_SIZE, NULL, err) == -1) {
+        g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
@@ -48,7 +64,8 @@ get_andotp_data (const gchar     *path,
         return NULL;
     }
 
-    gsize enc_buf_size = (gsize) input_file_size - ANDOTP_IV_SIZE - ANDOTP_TAG_SIZE;
+    // 4 is the size of iterations (int32)
+    gsize enc_buf_size = (gsize) input_file_size - 4 - ANDOTP_SALT_SIZE - ANDOTP_IV_SIZE - ANDOTP_TAG_SIZE;
     if (enc_buf_size < 1) {
         g_printerr ("A non-encrypted file has been selected\n");
         g_object_unref (in_stream);
@@ -62,7 +79,7 @@ get_andotp_data (const gchar     *path,
     }
     guchar *enc_buf = g_malloc0 (enc_buf_size);
 
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), ANDOTP_IV_SIZE, G_SEEK_SET, NULL, err)) {
+    if (!g_seekable_seek (G_SEEKABLE (in_stream), 4 + ANDOTP_SALT_SIZE + ANDOTP_IV_SIZE, G_SEEK_SET, NULL, err)) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
@@ -77,11 +94,11 @@ get_andotp_data (const gchar     *path,
     g_object_unref (in_stream);
     g_object_unref (in_file);
 
-    guchar *hashed_key = get_sha256 (password);
+    guchar *derived_key = get_derived_key (password, salt, be_iterations);
 
     gcry_cipher_hd_t hd;
     gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
-    gcry_cipher_setkey (hd, hashed_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
+    gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
     gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
 
     gchar *decrypted_json = gcry_calloc_secure (enc_buf_size, 1);
@@ -89,13 +106,13 @@ get_andotp_data (const gchar     *path,
     if (gcry_err_code (gcry_cipher_checktag (hd, tag, ANDOTP_TAG_SIZE)) == GPG_ERR_CHECKSUM) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
         gcry_cipher_close (hd);
-        gcry_free (hashed_key);
+        gcry_free (derived_key);
         g_free (enc_buf);
         return NULL;
     }
 
     gcry_cipher_close (hd);
-    gcry_free (hashed_key);
+    gcry_free (derived_key);
     g_free (enc_buf);
 
     GSList *otps = parse_json_data (decrypted_json, err);
@@ -153,11 +170,18 @@ export_andotp ( const gchar *export_path,
 
     gcry_cipher_hd_t hd;
     gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
-    guchar *hashed_key = get_sha256 (password);
+    guchar *hashed_key = get_derived_key (password);
     gcry_cipher_setkey (hd, hashed_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
     guchar *iv = g_malloc0 (ANDOTP_IV_SIZE);
     gcry_create_nonce (iv, ANDOTP_IV_SIZE);
     gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
+
+    guchar *salt = g_malloc0 (ANDOTP_SALT_SIZE);
+    gcry_create_nonce (salt, ANDOTP_SALT_SIZE);
+
+    // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
+    int32_t le_iterations = (rand() % (5000 - 1000 + 1)) + 1000;
+    int32_t be_iterations = __builtin_bswap32(le_iterations);
 
     gchar *enc_buf = gcry_calloc_secure (json_data_size, 1);
     gcry_cipher_encrypt (hd, enc_buf, json_data_size, json_data, json_data_size);
@@ -168,6 +192,14 @@ export_andotp ( const gchar *export_path,
     GError *err = NULL;
     GFile *out_gfile = g_file_new_for_path (export_path);
     GFileOutputStream *out_stream = g_file_append_to (out_gfile, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
+    if (err != NULL) {
+        goto cleanup_before_exiting;
+    }
+    g_output_stream_write (G_OUTPUT_STREAM (out_stream), &be_iterations, 4, NULL, &err);
+    if (err != NULL) {
+        goto cleanup_before_exiting;
+    }
+    g_output_stream_write (G_OUTPUT_STREAM (out_stream), salt, ANDOTP_SALT_SIZE, NULL, &err);
     if (err != NULL) {
         goto cleanup_before_exiting;
     }
@@ -197,21 +229,15 @@ export_andotp ( const gchar *export_path,
 
 
 static guchar *
-get_sha256 (const gchar *password)
+get_derived_key (const gchar *password, const guchar *salt, gint iterations)
 {
-    gcry_md_hd_t hd;
-    gcry_md_open (&hd, GCRY_MD_SHA256, 0);
-    gcry_md_write (hd, password, strlen (password));
-    gcry_md_final (hd);
+    guchar *derived_key = gcry_malloc_secure (32);
+    if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1) + 1, GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
+                         salt, ANDOTP_SALT_SIZE, iterations, 32, derived_key) != 0) {
+        return NULL;
+    }
 
-    guchar *key = gcry_calloc_secure (gcry_md_get_algo_dlen (GCRY_MD_SHA256), 1);
-
-    guchar *tmp_hash = gcry_md_read (hd, GCRY_MD_SHA256);
-    memcpy (key, tmp_hash, gcry_md_get_algo_dlen (GCRY_MD_SHA256));
-
-    gcry_md_close (hd);
-
-    return key;
+    return derived_key;
 }
 
 
