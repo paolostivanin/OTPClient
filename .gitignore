@@ -5,6 +5,7 @@ tests/
 flatpak/repo/
 TODO
 .vscode/
+.idea/
 
 # Object files
 *.o
