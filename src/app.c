@@ -244,8 +244,10 @@ set_action_group (GtkBuilder *builder,
 {
     static GActionEntry settings_menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
+            { .name = ANDOTP_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
+            { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },

@@ -11,24 +11,50 @@
 #define ANDOTP_SALT_SIZE 12
 #define ANDOTP_TAG_SIZE  16
 
-static guchar *get_derived_key (const gchar *password, const guchar *salt, gint iterations);
+static GSList *get_otps_from_encrypted_backup (const gchar          *path,
+                                               const gchar          *password,
+                                               gint32                max_file_size,
+                                               GFile                *in_file,
+                                               GFileInputStream     *in_stream,
+                                               GError              **err);
 
-static GSList *parse_json_data (const gchar *data, GError **err);
+static GSList *get_otps_from_plain_backup     (const gchar          *path,
+                                               GError              **err);
+
+static guchar *get_derived_key                (const gchar          *password,
+                                               const guchar         *salt,
+                                               gint                  iterations);
+
+static GSList *parse_json_data                (const gchar          *data,
+                                               GError              **err);
 
 
 GSList *
 get_andotp_data (const gchar     *path,
                  const gchar     *password,
                  gint32           max_file_size,
+                 gboolean         encrypted,
                  GError         **err)
 {
-    GFile *in_file = g_file_new_for_path (path);
-    GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
+    GFile *in_file = g_file_new_for_path(path);
+    GFileInputStream *in_stream = g_file_read(in_file, NULL, err);
     if (*err != NULL) {
-        g_object_unref (in_file);
+        g_object_unref(in_file);
         return NULL;
     }
 
+    return encrypted == TRUE ? get_otps_from_encrypted_backup(path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup(path, err);
+}
+
+
+static GSList *
+get_otps_from_encrypted_backup (const gchar          *path,
+                                const gchar          *password,
+                                gint32                max_file_size,
+                                GFile                *in_file,
+                                GFileInputStream     *in_stream,
+                                GError              **err)
+{
     int32_t le_iterations;
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), &le_iterations, 4, NULL, err) == -1) {
         g_object_unref (in_stream);
@@ -122,10 +148,27 @@ get_andotp_data (const gchar     *path,
 }
 
 
+static GSList *
+get_otps_from_plain_backup (const gchar  *path,
+                            GError      **err)
+{
+    gchar *plain_json_data;
+    gsize read_len;
+    if (!g_file_get_contents (path, &plain_json_data, &read_len, err)) {
+        return NULL;
+    }
+
+    GSList *otps = parse_json_data (plain_json_data, err);
+    g_free (plain_json_data);
+
+    return otps;
+}
+
+
 gchar *
-export_andotp ( const gchar *export_path,
-                const gchar *password,
-                json_t *json_db_data)
+export_andotp (const gchar *export_path,
+               const gchar *password,
+               json_t *json_db_data)
 {
     json_t *array = json_array ();
     json_t *db_obj, *export_obj;
@@ -230,7 +273,9 @@ export_andotp ( const gchar *export_path,
 
 
 static guchar *
-get_derived_key (const gchar *password, const guchar *salt, gint iterations)
+get_derived_key (const gchar  *password,
+                 const guchar *salt,
+                 gint          iterations)
 {
     guchar *derived_key = gcry_malloc_secure (32);
     if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1) + 1, GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
