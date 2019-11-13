@@ -1191,12 +1191,26 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
             <property name="action_name">settings_menu.import_andotp</property>
-            <property name="text" translatable="yes">andOTP</property>
+            <property name="text" translatable="yes">andOTP (encrypted)</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_andotp_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.import_andotp_plain</property>
+            <property name="text" translatable="yes">andOTP (plain)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
           </packing>
         </child>
         <child>
@@ -1210,7 +1224,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">1</property>
+            <property name="position">2</property>
           </packing>
         </child>
       </object>
@@ -1230,12 +1244,26 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
             <property name="action_name">settings_menu.export_andotp</property>
-            <property name="text" translatable="yes">andOTP</property>
+            <property name="text" translatable="yes">andOTP (encrypted)</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_andotp_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.export_andotp_plain</property>
+            <property name="text" translatable="yes">andOTP (plain)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
           </packing>
         </child>
       </object>
