@@ -170,6 +170,7 @@ export_andotp (const gchar *export_path,
                const gchar *password,
                json_t *json_db_data)
 {
+    GError *err = NULL;
     json_t *array = json_array ();
     json_t *db_obj, *export_obj;
     gsize index;
@@ -204,16 +205,33 @@ export_andotp (const gchar *export_path,
         }
         json_array_append (array, export_obj);
     }
+
+    // if plaintext export is needed, then write the file and exit
+    if (password == NULL) {
+        FILE *fp = fopen (export_path, "w");
+        if (fp == NULL) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
+            goto end;
+        }
+        if (json_dumpf (array, fp, JSON_COMPACT) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
+        }
+        fclose (fp);
+
+        goto end;
+    }
+
     gchar *json_data = json_dumps (array, JSON_COMPACT);
     if (json_data == NULL) {
         json_array_clear (array);
-        return g_strdup ("couldn't dump json data");
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data");
+        goto end;
     }
     gsize json_data_size = g_utf8_strlen (json_data, -1);
 
     // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
-    int32_t le_iterations = (rand() % (5000 - 1000 + 1)) + 1000;
-    int32_t be_iterations = __builtin_bswap32(le_iterations);
+    int32_t le_iterations = (rand () % (5000 - 1000 + 1)) + 1000;
+    int32_t be_iterations = __builtin_bswap32 (le_iterations);
 
     guchar *iv = g_malloc0 (ANDOTP_IV_SIZE);
     gcry_create_nonce (iv, ANDOTP_IV_SIZE);
@@ -233,7 +251,6 @@ export_andotp (const gchar *export_path,
     gcry_cipher_gettag (hd, tag, ANDOTP_TAG_SIZE);
     gcry_cipher_close (hd);
 
-    GError *err = NULL;
     GFile *out_gfile = g_file_new_for_path (export_path);
     GFileOutputStream *out_stream = g_file_append_to (out_gfile, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
     if (err != NULL) {
@@ -268,6 +285,7 @@ export_andotp (const gchar *export_path,
     g_object_unref (out_stream);
     g_object_unref (out_gfile);
 
+    end:
     return (err != NULL ? g_strdup (err->message) : NULL);
 }
 
