@@ -168,20 +168,21 @@ export_andotp ( const gchar *export_path,
     }
     gsize json_data_size = g_utf8_strlen (json_data, -1);
 
-    gcry_cipher_hd_t hd;
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
-    guchar *hashed_key = get_derived_key (password);
-    gcry_cipher_setkey (hd, hashed_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
+    // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
+    int32_t le_iterations = (rand() % (5000 - 1000 + 1)) + 1000;
+    int32_t be_iterations = __builtin_bswap32(le_iterations);
+
     guchar *iv = g_malloc0 (ANDOTP_IV_SIZE);
     gcry_create_nonce (iv, ANDOTP_IV_SIZE);
-    gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
 
     guchar *salt = g_malloc0 (ANDOTP_SALT_SIZE);
     gcry_create_nonce (salt, ANDOTP_SALT_SIZE);
 
-    // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
-    int32_t le_iterations = (rand() % (5000 - 1000 + 1)) + 1000;
-    int32_t be_iterations = __builtin_bswap32(le_iterations);
+    gcry_cipher_hd_t hd;
+    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
+    guchar *derived_key = get_derived_key (password, salt, be_iterations);
+    gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
+    gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
 
     gchar *enc_buf = gcry_calloc_secure (json_data_size, 1);
     gcry_cipher_encrypt (hd, enc_buf, json_data_size, json_data, json_data_size);
