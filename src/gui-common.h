@@ -10,12 +10,6 @@ void         icon_press_cb              (GtkEntry       *entry,
                                          GdkEventButton *event,
                                          gpointer        data);
 
-GtkWidget   *create_box_with_buttons    (const gchar    *add_btn_name,
-                                         const gchar    *del_btn_name,
-                                         gboolean        add_btn_is_menu);
-
-GtkWidget   *create_header_bar          (const gchar    *headerbar_title);
-
 guint        get_row_number_from_iter   (GtkListStore   *list_store,
                                          GtkTreeIter     iter);
 
