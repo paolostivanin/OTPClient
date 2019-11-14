@@ -6,7 +6,6 @@
 #include "message-dialogs.h"
 #include "gui-common.h"
 #include "gquarks.h"
-#include "otpclient.h"
 
 typedef struct _edit_data_t {
     GtkListStore *list_store;
@@ -14,7 +13,7 @@ typedef struct _edit_data_t {
     DatabaseData *db_data;
 } EditData;
 
-static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *acc_lab, gchar *acc_iss);
+static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer);
 
 static gchar *get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_entry, GtkWidget *new_iss_entry);
 

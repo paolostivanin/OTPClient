@@ -1,11 +1,9 @@
 #include <gtk/gtk.h>
 #include "db-misc.h"
-#include "otpclient.h"
 #include "gui-common.h"
 #include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
-#include "imports.h"
 #include "get-builder.h"
 
 static void changed_otp_cb      (GtkWidget *cb,

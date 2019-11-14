@@ -1,10 +1,7 @@
 #include <gtk/gtk.h>
-#include <gcrypt.h>
 #include <jansson.h>
 #include "password-cb.h"
 #include "message-dialogs.h"
-#include "gquarks.h"
-#include "db-misc.h"
 #include "exports.h"
 
 

@@ -85,10 +85,10 @@ activate (GtkApplication    *app,
     gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
     g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
-    gchar *msg = init_libs (max_file_size);
-    if (msg != NULL) {
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
+    gchar *init_msg = init_libs (max_file_size);
+    if (init_msg != NULL) {
+        show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
+        g_free (init_msg);
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
     }

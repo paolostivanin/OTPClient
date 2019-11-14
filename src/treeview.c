@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include <cotp.h>
 #include <jansson.h>
 #include "otpclient.h"
 #include "liststore-misc.h"
@@ -20,7 +19,7 @@ static void     set_json_data      (json_t         *array,
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
-static void     add_columns        (GtkTreeView    *treeview);
+static void     add_columns        (GtkTreeView    *tree_view);
 
 static void     hide_all_otps_cb   (GtkTreeView    *tree_view,
                                     gpointer        user_data);
