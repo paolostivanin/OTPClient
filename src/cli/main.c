@@ -71,7 +71,7 @@ main (gint    argc,
     gboolean show_next_token = FALSE, match_exactly = FALSE;
 
     if (g_strcmp0 (argv[1], "show") == 0) {
-        if (argc < 2 && argc > 4) {
+        if (argc < 2 || argc > 4) {
             g_printerr ("Wrong argument(s). Please type '%s --help-show' to see the available options.\n", argv[0]);
             g_free (db_data);
             return -1;
