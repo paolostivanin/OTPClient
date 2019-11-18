@@ -66,12 +66,12 @@ Author: Paolo Stivanin
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="photo_model_btn_id">
+          <object class="GtkModelButton" id="import_qr_model_btn_id">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="receives_default">True</property>
-            <property name="action_name">add_menu.select_photo</property>
-            <property name="text" translatable="yes">Select photo</property>
+            <property name="text" translatable="yes">Using a QR Code</property>
+            <property name="menu_name">import_qr_menu</property>
             <accelerator key="p" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
@@ -98,6 +98,45 @@ Author: Paolo Stivanin
       </object>
       <packing>
         <property name="submenu">main</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="add_qr_file_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">add_menu.import_qr_file</property>
+            <property name="text" translatable="yes">From file</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="add_qr_clipboard_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">add_menu.import_qr_clipboard</property>
+            <property name="text" translatable="yes">From clipboard</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">submenu1</property>
         <property name="position">1</property>
       </packing>
     </child>

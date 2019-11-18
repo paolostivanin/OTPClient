@@ -95,7 +95,7 @@ set(GUI_SOURCE_FILES
         src/password-cb.c
         src/qrcode-parser.c
         src/screenshot-add-cb.c
-        src/select-photo-add-cb.c
+        src/add-from-qr.c
         src/settings.c
         src/shortcuts.c
         src/treeview.c

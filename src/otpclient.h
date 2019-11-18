@@ -23,9 +23,13 @@ void screenshot_cb         (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
 
-void select_photo_cb       (GSimpleAction  *simple,
+void add_qr_from_file      (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
+
+void add_qr_from_clipboard (GSimpleAction *simple,
+                            GVariant      *parameter,
+                            gpointer       user_data);
 
 void edit_selected_row_cb  (GSimpleAction  *simple,
                             GVariant       *parameter,

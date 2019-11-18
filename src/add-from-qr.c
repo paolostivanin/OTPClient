@@ -5,15 +5,18 @@
 #include "message-dialogs.h"
 #include "add-common.h"
 
-static void
-parse_file_and_update_db (const gchar *filename,
-                          AppData     *app_data);
+static void parse_file_and_update_db (const gchar   *filename,
+                                      AppData       *app_data);
+
+static void uri_received_func        (GtkClipboard  *clipboard,
+                                      gchar        **uris,
+                                      gpointer       user_data);
 
 
 void
-select_photo_cb (GSimpleAction *simple    __attribute__((unused)),
-                 GVariant      *parameter __attribute__((unused)),
-                 gpointer       user_data)
+add_qr_from_file (GSimpleAction *simple    __attribute__((unused)),
+                  GVariant      *parameter __attribute__((unused)),
+                  gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
 
@@ -54,6 +57,28 @@ select_photo_cb (GSimpleAction *simple    __attribute__((unused)),
 }
 
 
+void
+add_qr_from_clipboard (GSimpleAction *simple    __attribute__((unused)),
+                       GVariant      *parameter __attribute__((unused)),
+                       gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    gint timeout = 0;
+    gboolean uris_available = FALSE;
+    while (uris_available == FALSE || timeout < 30) {
+        uris_available = gtk_clipboard_wait_is_uris_available (app_data->clipboard);
+        timeout++;
+        g_usleep (1 * G_USEC_PER_SEC);
+    }
+
+    if (uris_available == TRUE) {
+        gtk_clipboard_request_uris (app_data->clipboard, (GtkClipboardURIReceivedFunc)uri_received_func, app_data);
+    } else {
+        show_message_dialog (app_data->main_window, "Operation timed out after 30 seconds.\nNo QR code could be found in the clipboard.", GTK_MESSAGE_ERROR);
+    }
+}
+
+
 static void
 parse_file_and_update_db (const gchar *filename,
                           AppData     *app_data)
@@ -74,4 +99,22 @@ parse_file_and_update_db (const gchar *filename,
         show_message_dialog (app_data->main_window, "QRCode successfully imported from the screenshot", GTK_MESSAGE_INFO);
     }
     gcry_free (otpauth_uri);
+}
+
+
+static void
+uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
+                   gchar        **uris,
+                   gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    if (uris != NULL && uris[0] != NULL) {
+        gint len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
+        gchar *file_path = g_malloc0 (len_fpath);
+        memcpy (file_path + 7, uris[0], len_fpath);
+        parse_file_and_update_db (file_path, app_data);
+        g_free (file_path);
+    } else {
+        show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
+    }
 }
