@@ -136,7 +136,7 @@ Author: Paolo Stivanin
         </child>
       </object>
       <packing>
-        <property name="submenu">submenu1</property>
+        <property name="submenu">import_qr_menu</property>
         <property name="position">1</property>
       </packing>
     </child>
