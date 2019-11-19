@@ -36,6 +36,45 @@ Author: Paolo Stivanin
         <property name="can_focus">False</property>
         <property name="orientation">vertical</property>
         <child>
+          <object class="GtkModelButton" id="add_qr_file_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">add_menu.import_qr_file</property>
+            <property name="text" translatable="yes">From file</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="add_qr_clipboard_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">add_menu.import_qr_clipboard</property>
+            <property name="text" translatable="yes">From clipboard</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">import_qr_menu</property>
+        <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
           <object class="GtkModelButton" id="webcam_model_btn_id">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
@@ -98,46 +137,7 @@ Author: Paolo Stivanin
       </object>
       <packing>
         <property name="submenu">main</property>
-        <property name="position">1</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can_focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="add_qr_file_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">add_menu.import_qr_file</property>
-            <property name="text" translatable="yes">From file</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="add_qr_clipboard_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">add_menu.import_qr_clipboard</property>
-            <property name="text" translatable="yes">From clipboard</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">import_qr_menu</property>
-        <property name="position">1</property>
+        <property name="position">2</property>
       </packing>
     </child>
   </object>
@@ -366,6 +366,69 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <action-widgets>
       <action-widget response="-6">decpwddiag_cancel_btn_id</action-widget>
       <action-widget response="-5">decpwddiag_ok_btn_id</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkDialog" id="diag_qr_clipboard_id">
+    <property name="can_focus">False</property>
+    <property name="title" translatable="yes">Scan using webcam</property>
+    <property name="window_position">center</property>
+    <property name="type_hint">dialog</property>
+    <property name="gravity">center</property>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can_focus">False</property>
+        <property name="margin_top">5</property>
+        <property name="margin_bottom">5</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">5</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can_focus">False</property>
+            <property name="layout_style">end</property>
+            <child>
+              <object class="GtkButton" id="cancel_btn_qrclipb_id">
+                <property name="label" translatable="yes">Cancel</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="label" translatable="yes">Please copy the file with the QR code you want to import
+to the clipboard (select the file and then press CTRL-C)
+This dialog will automatically close as soon as a valid qrcode
+has been found or after 30 seconds if nothing has been detected.</property>
+            <property name="use_markup">True</property>
+            <property name="justify">center</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-6">cancel_btn_qrclipb_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="diag_webcam_id">

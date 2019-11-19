@@ -4,13 +4,24 @@
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
 #include "add-common.h"
+#include "get-builder.h"
 
-static void parse_file_and_update_db (const gchar   *filename,
-                                      AppData       *app_data);
+typedef struct _gtimeout_data {
+    GtkWidget *diag;
+    gboolean uris_available;
+    gboolean gtimeout_exit_value;
+    guint counter;
+    AppData * app_data;
+} GTimeoutCBData;
 
-static void uri_received_func        (GtkClipboard  *clipboard,
-                                      gchar        **uris,
-                                      gpointer       user_data);
+static gboolean check_result             (gpointer data);
+
+static void     parse_file_and_update_db (const gchar   *filename,
+                                          AppData       *app_data);
+
+static void     uri_received_func        (GtkClipboard  *clipboard,
+                                          gchar        **uris,
+                                          gpointer       user_data);
 
 
 void
@@ -63,19 +74,46 @@ add_qr_from_clipboard (GSimpleAction *simple    __attribute__((unused)),
                        gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    gint timeout = 0;
-    gboolean uris_available = FALSE;
-    while (uris_available == FALSE || timeout < 30) {
-        uris_available = gtk_clipboard_wait_is_uris_available (app_data->clipboard);
-        timeout++;
-        g_usleep (1 * G_USEC_PER_SEC);
-    }
+    GTimeoutCBData *gt_cb_data = g_new0 (GTimeoutCBData, 1);
+    gt_cb_data->uris_available = FALSE;
+    gt_cb_data->gtimeout_exit_value = TRUE;
+    gt_cb_data->counter = 0;
+    gt_cb_data->app_data = app_data;
 
-    if (uris_available == TRUE) {
-        gtk_clipboard_request_uris (app_data->clipboard, (GtkClipboardURIReceivedFunc)uri_received_func, app_data);
-    } else {
-        show_message_dialog (app_data->main_window, "Operation timed out after 30 seconds.\nNo QR code could be found in the clipboard.", GTK_MESSAGE_ERROR);
+    guint source_id = g_timeout_add (1000, check_result, gt_cb_data);
+
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    gt_cb_data->diag = GTK_WIDGET(gtk_builder_get_object (builder, "diag_qr_clipboard_id"));
+    gtk_widget_show_all (gt_cb_data->diag);
+
+    gint response = gtk_dialog_run (GTK_DIALOG (gt_cb_data->diag));
+    if (response == GTK_RESPONSE_CANCEL) {
+        if (gt_cb_data->uris_available == TRUE) {
+            gtk_clipboard_request_uris (app_data->clipboard, (GtkClipboardURIReceivedFunc)uri_received_func, app_data);
+        }
+        if (gt_cb_data->gtimeout_exit_value == TRUE) {
+            // only remove if 'check_result' returned TRUE
+            g_source_remove (source_id);
+        }
+        gtk_widget_destroy (gt_cb_data->diag);
+        g_free (gt_cb_data);
     }
+    g_object_unref (builder);
+}
+
+
+static gboolean
+check_result (gpointer data)
+{
+    GTimeoutCBData *gt_cb_data = (GTimeoutCBData *)data;
+    gt_cb_data->uris_available = gtk_clipboard_wait_is_uris_available (gt_cb_data->app_data->clipboard);
+    if (gt_cb_data->counter > 30 || gt_cb_data->uris_available == TRUE) {
+        gtk_dialog_response (GTK_DIALOG (gt_cb_data->diag), GTK_RESPONSE_CANCEL);
+        gt_cb_data->gtimeout_exit_value = FALSE;
+        return FALSE;
+    }
+    gt_cb_data->counter++;
+    return TRUE;
 }
 
 
@@ -111,7 +149,7 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
     if (uris != NULL && uris[0] != NULL) {
         gint len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
         gchar *file_path = g_malloc0 (len_fpath);
-        memcpy (file_path + 7, uris[0], len_fpath);
+        memcpy (file_path, uris[0] + 7, len_fpath);
         parse_file_and_update_db (file_path, app_data);
         g_free (file_path);
     } else {
