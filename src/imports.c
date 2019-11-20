@@ -105,9 +105,13 @@ parse_data_and_update_db (AppData       *app_data,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
-    if (pwd == NULL) {
-        return FALSE;
+
+    gchar *pwd = NULL;
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) != 0) {
+        pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
+        if (pwd == NULL) {
+            return FALSE;
+        }
     }
 
     if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) == 0) {
@@ -131,7 +135,9 @@ parse_data_and_update_db (AppData       *app_data,
         return FALSE;
     }
 
-    gcry_free (pwd);
+    if (pwd != NULL) {
+        gcry_free (pwd);
+    }
     free_otps_gslist (content, g_slist_length (content));
 
     return TRUE;
