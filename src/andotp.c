@@ -177,7 +177,8 @@ export_andotp (const gchar *export_path,
     json_array_foreach (json_db_data, index, db_obj) {
         export_obj = json_object ();
 
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "issuer")), "steam") == 0) {
+        const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
+        if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
             json_object_set (export_obj, "type", json_string ("STEAM"));
         } else {
             json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
