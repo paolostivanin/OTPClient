@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <string.h>
 #include <gcrypt.h>
+#include <termios.h>
 #include "help.h"
 #include "get-data.h"
 #include "../common/common.h"
@@ -14,6 +15,7 @@ static gchar    *get_db_path    (void);
 #endif
 
 static gchar    *get_pwd        (void);
+
 
 gint
 main (gint    argc,
@@ -71,7 +73,7 @@ main (gint    argc,
     gboolean show_next_token = FALSE, match_exactly = FALSE;
 
     if (g_strcmp0 (argv[1], "show") == 0) {
-        if (argc < 2 || argc > 4) {
+        if (argc < 4 || argc > 8) {
             g_printerr ("Wrong argument(s). Please type '%s --help-show' to see the available options.\n", argv[0]);
             g_free (db_data);
             return -1;
@@ -95,7 +97,8 @@ main (gint    argc,
     } else if (g_strcmp0 (argv[1], "list") == 0) {
         list_all_acc_iss (db_data);
     } else {
-        // TODO show help and exit
+        show_help (argv[0], "help");
+        return -1;
     }
 
     end:
@@ -139,12 +142,16 @@ get_db_path ()
     g_print ("Type the absolute path to the database: ");
     db_path = g_malloc0 (MAX_ABS_PATH_LEN);
     if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
-        // TODO: error
+        g_printerr ("Couldn't get db path from stdin\n");
+        g_free (cfg_file_path);
+        return NULL;
     } else {
         // remove the newline char
         db_path[g_utf8_strlen (db_path, -1) - 1] = '\0';
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            // TODO error
+            g_printerr ("File '%s' does not exist\n", db_path);
+            g_free (cfg_file_path);
+            return NULL;
         }
     }
 
@@ -161,12 +168,28 @@ get_pwd ()
 {
     gchar *pwd = gcry_calloc_secure (256, 1);
     g_print ("Type the password: ");
+
+    struct termios old, new;
+    if (tcgetattr (STDIN_FILENO, &old) != 0) {
+        g_printerr ("Couldn't get termios info\n");
+        gcry_free (pwd);
+        return NULL;
+    }
+    new = old;
+    new.c_lflag &= ~ECHO;
+    if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) != 0) {
+        g_printerr ("Couldn't turn echoing off\n");
+        gcry_free (pwd);
+        return NULL;
+    }
     if (fgets (pwd, 256, stdin) == NULL) {
-        // TODO: error
-        g_printerr ("error fgets\n");
+        g_printerr ("Couldn't read password from stdin\n");
+        gcry_free (pwd);
         return NULL;
     }
     g_print ("\n");
+    tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
+
     pwd[g_utf8_strlen (pwd, -1) - 1] = '\0';
 
     gchar *realloc_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);

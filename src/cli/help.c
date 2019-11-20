@@ -10,7 +10,7 @@ gboolean show_help (const gchar *prg_name,
                     const gchar *help_command)
 {
     gboolean help_displayed = FALSE;
-    if (g_strcmp0 (help_command, "-h") == 0 || g_strcmp0 (help_command, "--help") == 0) {
+    if (g_strcmp0 (help_command, "-h") == 0 || g_strcmp0 (help_command, "--help") == 0 || g_strcmp0 (help_command, "help") == 0) {
         print_main_help (prg_name);
         help_displayed = TRUE;
     } else if (g_strcmp0 (help_command, "-v") == 0 || g_strcmp0 (help_command, "--version") == 0) {
@@ -20,7 +20,7 @@ gboolean show_help (const gchar *prg_name,
     else if (g_strcmp0 (help_command, "--help-show") == 0) {
         print_show_help (prg_name);
         help_displayed = TRUE;
-    } else if (help_command == NULL || (g_utf8_strlen (help_command, -1) < 2 && help_command != NULL)) {
+    } else if (help_command == NULL || g_utf8_strlen (help_command, -1) < 2) {
         print_main_help (prg_name);
         help_displayed = TRUE;
     }
