@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <time.h>
 #include "file-size.h"
 #include "imports.h"
 #include "gui-common.h"
@@ -230,6 +231,8 @@ export_andotp (const gchar *export_path,
     }
     gsize json_data_size = g_utf8_strlen (json_data, -1);
 
+    time_t t;
+    srand((unsigned) time(&t));
     // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
     int32_t le_iterations = (rand () % (5000 - 1000 + 1)) + 1000;
     int32_t be_iterations = __builtin_bswap32 (le_iterations);
@@ -242,7 +245,7 @@ export_andotp (const gchar *export_path,
 
     gcry_cipher_hd_t hd;
     gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
-    guchar *derived_key = get_derived_key (password, salt, be_iterations);
+    guchar *derived_key = get_derived_key (password, salt, le_iterations);
     gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
     gcry_cipher_setiv (hd, iv, ANDOTP_IV_SIZE);
 
