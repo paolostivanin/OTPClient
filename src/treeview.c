@@ -253,14 +253,14 @@ add_columns (GtkTreeView *tree_view)
     column = gtk_tree_view_column_new_with_attributes ("Account", renderer, "text", COLUMN_ACC_LABEL, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
     gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
-    gtk_tree_view_column_set_reorderable (GTK_TREE_VIEW_COLUMN (column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 1); // 1 is the account column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
     gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
-    gtk_tree_view_column_set_reorderable (GTK_TREE_VIEW_COLUMN (column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 2); // 2 is the issuer column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
