@@ -412,9 +412,12 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           <object class="GtkLabel">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Please copy the file with the QR code you want to import
-to the clipboard (select the file and then press CTRL-C)
-This dialog will automatically close as soon as a valid qrcode
+            <property name="label" translatable="yes">Select the file with the QR code and copy it (CTRL-C).
+
+If you are using &lt;b&gt;KDE&lt;/b&gt;, then you must copy the file &lt;b&gt;before&lt;/b&gt;
+selecting this option, otherwise the content won't be parsed.
+
+This dialog will close automatically as soon as a valid qrcode
 has been found or after 30 seconds if nothing has been detected.</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>

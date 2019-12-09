@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <glib/gstdio.h>
 #include "imports.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
@@ -9,6 +10,7 @@
 typedef struct _gtimeout_data {
     GtkWidget *diag;
     gboolean uris_available;
+    gboolean image_available;
     gboolean gtimeout_exit_value;
     guint counter;
     AppData * app_data;
@@ -22,6 +24,10 @@ static void     parse_file_and_update_db (const gchar   *filename,
 static void     uri_received_func        (GtkClipboard  *clipboard,
                                           gchar        **uris,
                                           gpointer       user_data);
+
+static void     image_received_func (GtkClipboard       *clipboard,
+                                     GdkPixbuf          *pixbuf,
+                                     gpointer            user_data);
 
 
 void
@@ -76,6 +82,7 @@ add_qr_from_clipboard (GSimpleAction *simple    __attribute__((unused)),
     AppData *app_data = (AppData *)user_data;
     GTimeoutCBData *gt_cb_data = g_new0 (GTimeoutCBData, 1);
     gt_cb_data->uris_available = FALSE;
+    gt_cb_data->image_available = FALSE;
     gt_cb_data->gtimeout_exit_value = TRUE;
     gt_cb_data->counter = 0;
     gt_cb_data->app_data = app_data;
@@ -90,6 +97,9 @@ add_qr_from_clipboard (GSimpleAction *simple    __attribute__((unused)),
     if (response == GTK_RESPONSE_CANCEL) {
         if (gt_cb_data->uris_available == TRUE) {
             gtk_clipboard_request_uris (app_data->clipboard, (GtkClipboardURIReceivedFunc)uri_received_func, app_data);
+        }
+        if (gt_cb_data->image_available == TRUE) {
+            gtk_clipboard_request_image (app_data->clipboard, (GtkClipboardImageReceivedFunc)image_received_func, app_data);
         }
         if (gt_cb_data->gtimeout_exit_value == TRUE) {
             // only remove if 'check_result' returned TRUE
@@ -107,7 +117,8 @@ check_result (gpointer data)
 {
     GTimeoutCBData *gt_cb_data = (GTimeoutCBData *)data;
     gt_cb_data->uris_available = gtk_clipboard_wait_is_uris_available (gt_cb_data->app_data->clipboard);
-    if (gt_cb_data->counter > 30 || gt_cb_data->uris_available == TRUE) {
+    gt_cb_data->image_available = gtk_clipboard_wait_is_image_available (gt_cb_data->app_data->clipboard);
+    if (gt_cb_data->counter > 30 || gt_cb_data->uris_available == TRUE || gt_cb_data->image_available == TRUE) {
         gtk_dialog_response (GTK_DIALOG (gt_cb_data->diag), GTK_RESPONSE_CANCEL);
         gt_cb_data->gtimeout_exit_value = FALSE;
         return FALSE;
@@ -154,5 +165,30 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
         g_free (file_path);
     } else {
         show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
+    }
+}
+
+
+static void
+image_received_func (GtkClipboard  *clipboard __attribute__((unused)),
+                     GdkPixbuf     *pixbuf,
+                     gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    GError  *err = NULL;
+    if (pixbuf != NULL) {
+        gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb.png", NULL);
+        gdk_pixbuf_save (pixbuf, filename, "png", &err, NULL);
+        if (err != NULL) {
+            gchar *msg = g_strconcat ("Couldn't save clipboard to png:\n", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+        } else {
+            parse_file_and_update_db (filename, app_data);
+        }
+        g_unlink (filename);
+        g_free (filename);
+    } else {
+        show_message_dialog (app_data->main_window, "Couldn't get QR code image from clipboard", GTK_MESSAGE_ERROR);
     }
 }
