@@ -88,9 +88,10 @@ It's also possible to import/export backups from/to andOTP and import backups fr
         <p>OTPClient 2.0.0 is a major release that brings tons of new features</p>
         <ul>
           <li>add plain text import/export for andOTP</li>
-          <li>update encryption code for andOTP import/export to support v0.6.3 and greater</li>
+          <li>add lock feature</li>
           <li>add CLI (currently supports list and show commands)</li>
-          <li>treeview can now be sorted by clicking on the column header for account/issuer</li>
+          <li>support import/export of encrypted andOTP backups generated with version >=0.6.3</li>
+          <li>treeview can now be sorted by clicking on the account/issuer column header</li>
           <li>QR code can be added from clipboard (supports both gnome and kde)</li>
           <li>minor fixes</li>
         </ul>
