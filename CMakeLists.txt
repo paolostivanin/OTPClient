@@ -8,7 +8,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_GUI "Build the GUI" ON)
-option(BUILD_CLI "Build the CLI" OFF)
+option(BUILD_CLI "Build the CLI" ON)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "-Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef -Wmissing-format-attribute")
