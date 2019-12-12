@@ -17,7 +17,7 @@ gboolean show_help (const gchar *prg_name,
         g_print ("%s v%s\n", PROJECT_NAME, PROJECT_VER);
         help_displayed = TRUE;
     }
-    else if (g_strcmp0 (help_command, "--help-show") == 0) {
+    else if (g_strcmp0 (help_command, "--help-show") == 0 || g_strcmp0 (help_command, "help-show") == 0) {
         print_show_help (prg_name);
         help_displayed = TRUE;
     } else if (help_command == NULL || g_utf8_strlen (help_command, -1) < 2) {
@@ -32,7 +32,7 @@ gboolean show_help (const gchar *prg_name,
 static void
 print_main_help (const gchar *prg_name)
 {
-    g_print ("Usage:\n  %s <main option> [option 1], [option 2], ...\n", prg_name);
+    g_print ("Usage:\n  %s <main option> [option 1] [option 2] ...\n", prg_name);
     g_print ("\n");
     g_print ("Help Options:\n");
     g_print ("  -h, --help\t\tShow this help\n");
