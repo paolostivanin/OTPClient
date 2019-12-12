@@ -59,9 +59,9 @@ workflows:
   version: 2
   build:
     jobs:
-      - ubuntu1604
       - ubuntu1804
+      - ubuntuLatestRolling
       - debianLatestStable
-      - fedora30
+      - fedoraLatestStable
       - archlinux
       - opensuseLeap
