@@ -1,11 +1,7 @@
 #include <glib.h>
-#include <errno.h>
 #include <zip.h>
 #include <gcrypt.h>
-#include "imports.h"
-#include "common.h"
 #include "gquarks.h"
-#include "otpclient.h"
 #include "parse-uri.h"
 
 

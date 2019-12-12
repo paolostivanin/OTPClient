@@ -4,9 +4,8 @@
 #include "db-misc.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
-#include "common.h"
+#include "gui-common.h"
 #include "gquarks.h"
-#include "otpclient.h"
 
 typedef struct _edit_data_t {
     GtkListStore *list_store;
@@ -14,7 +13,7 @@ typedef struct _edit_data_t {
     DatabaseData *db_data;
 } EditData;
 
-static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *acc_lab, gchar *acc_iss);
+static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer);
 
 static gchar *get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_entry, GtkWidget *new_iss_entry);
 
@@ -43,7 +42,7 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, TRUE, &err);
+    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
     }

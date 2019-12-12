@@ -19,6 +19,7 @@ void load_db                (DatabaseData   *db_data,
                              GError        **error);
 
 void update_and_reload_db   (AppData        *app_data,
+                             DatabaseData   *db_data,
                              gboolean        regenerate_model,
                              GError        **err);
 

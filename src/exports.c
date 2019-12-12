@@ -1,10 +1,7 @@
 #include <gtk/gtk.h>
-#include <gcrypt.h>
 #include <jansson.h>
 #include "password-cb.h"
 #include "message-dialogs.h"
-#include "gquarks.h"
-#include "db-misc.h"
 #include "exports.h"
 
 
@@ -23,11 +20,14 @@ export_data_cb (GSimpleAction *simple,
     base_dir = g_get_user_data_dir ();
 #endif
 
-    gchar *password = prompt_for_password (app_data, NULL, NULL, TRUE);
-
+    gchar *password = NULL;
+    gboolean encrypted = (g_strcmp0 (action_name, "export_andotp") == 0) ? TRUE : FALSE;
     gchar *exported_file_path = NULL;
-    if (g_strcmp0 (action_name, "export_andotp") == 0) {
-        exported_file_path = g_build_filename (base_dir, "andotp_exports.json.aes", NULL);
+    if (g_strcmp0 (action_name, "export_andotp") == 0 || g_strcmp0 (action_name, "export_andotp_plain") == 0) {
+        if (encrypted == TRUE) {
+            password = prompt_for_password (app_data, NULL, NULL, TRUE);
+        }
+        exported_file_path = g_build_filename (base_dir, encrypted == TRUE ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
         gchar *message = NULL;
         GtkMessageType msg_type;
         gchar *ret_msg = export_andotp (exported_file_path, password, app_data->db_data->json_data);

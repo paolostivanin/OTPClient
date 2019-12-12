@@ -4,7 +4,7 @@ tests/
 .flatpak-builder/
 flatpak/repo/
 TODO
-.vscode/
+.idea/
 
 # Object files
 *.o
@@ -38,3 +38,7 @@ TODO
 
 # Debug files
 *.dSYM/
+
+# Backup files
+*.ui~
+*.c~

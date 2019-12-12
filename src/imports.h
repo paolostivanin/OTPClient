@@ -6,10 +6,8 @@
 G_BEGIN_DECLS
 
 #define ANDOTP_IMPORT_ACTION_NAME   "import_andotp"
+#define ANDOTP_IMPORT_PLAIN_ACTION_NAME   "import_andotp_plain"
 #define AUTHPLUS_IMPORT_ACTION_NAME "import_authplus"
-#define AUTHY_IMPORT_ACTION_NAME    "import_authy"
-#define WINAUTH_IMPORT_ACTION_NAME  "import_winauth"
-
 
 typedef struct _otp_t {
     gchar *type;
@@ -42,6 +40,7 @@ GSList *get_authplus_data   (const gchar     *zip_path,
 GSList *get_andotp_data     (const gchar     *path,
                              const gchar     *password,
                              gint32           max_file_size,
+                             gboolean         encrypted,
                              GError         **err);
 
 gchar  *update_db_from_otps (GSList          *otps,

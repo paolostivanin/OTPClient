@@ -1,7 +1,7 @@
 #include <gtk/gtk.h>
 #include <zbar.h>
 #include <gcrypt.h>
-#include "common.h"
+#include "gui-common.h"
 #include "imports.h"
 #include "parse-uri.h"
 #include "message-dialogs.h"

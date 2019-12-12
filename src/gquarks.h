@@ -12,8 +12,6 @@ G_BEGIN_DECLS
 
 GQuark missing_file_gquark   (void);
 
-GQuark invalid_input_gquark  (void);
-
 GQuark bad_tag_gquark        (void);
 
 GQuark key_deriv_gquark      (void);

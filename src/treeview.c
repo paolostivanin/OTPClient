@@ -1,9 +1,8 @@
 #include <gtk/gtk.h>
-#include <cotp.h>
 #include <jansson.h>
 #include "otpclient.h"
 #include "liststore-misc.h"
-#include "common.h"
+#include "gui-common.h"
 #include "message-dialogs.h"
 
 
@@ -20,7 +19,7 @@ static void     set_json_data      (json_t         *array,
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
-static void     add_columns        (GtkTreeView    *treeview);
+static void     add_columns        (GtkTreeView    *tree_view);
 
 static void     hide_all_otps_cb   (GtkTreeView    *tree_view,
                                     gpointer        user_data);
@@ -36,24 +35,22 @@ static void     free_pjd           (ParsedData     *pjd);
 void
 create_treeview (AppData *app_data)
 {
-    // Because we rely on the order in which data has been added to the model when deleting a row, columns must NOT be clickable/reordable
-
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 
     app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (app_data->builder, "treeview_id"));
 
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
-    
+
     GtkListStore *list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-                                                   G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN);
+                                                   G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_INT);
 
     add_columns (app_data->tree_view);
 
     add_data_to_model (app_data->db_data, list_store);
 
     gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(list_store));
-    
+
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
 
@@ -87,19 +84,33 @@ delete_rows_cb (GtkTreeView        *tree_view,
     AppData *app_data = (AppData *)user_data;
 
     g_return_if_fail (tree_view != NULL);
-  
+
     GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
     GtkListStore *list_store = GTK_LIST_STORE(model);
 
     GtkTreeIter  iter;
     gtk_tree_model_get_iter (model, &iter, path);
 
-    guint row_number = get_row_number_from_iter (list_store, iter);
-    json_array_remove (app_data->db_data->json_data, row_number);
+    gint db_item_position_to_delete;
+    gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
+
+    json_array_remove (app_data->db_data->json_data, db_item_position_to_delete);
     gtk_list_store_remove (list_store, &iter);
-    
+
+    // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
+    gint row_db_pos;
+    gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+    while (valid) {
+        gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
+        if (row_db_pos > db_item_position_to_delete) {
+            gint shifted_position = row_db_pos - 1;
+            gtk_list_store_set (list_store, &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
+        }
+        valid = gtk_tree_model_iter_next(model, &iter);
+    }
+
     GError *err = NULL;
-    update_and_reload_db (app_data, FALSE, &err);
+    update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
     if (err != NULL) {
         gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
@@ -223,6 +234,7 @@ add_data_to_model (DatabaseData *db_data,
                             COLUMN_PERIOD, g_array_index (pjd->periods, gint, i),
                             COLUMN_UPDATED, FALSE,
                             COLUMN_LESS_THAN_A_MINUTE, FALSE,
+                            COLUMN_POSITION_IN_DB, i,
                             -1);
         i++;
     }
@@ -240,11 +252,15 @@ add_columns (GtkTreeView *tree_view)
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Account", renderer, "text", COLUMN_ACC_LABEL, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 1); // 1 is the account column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 2); // 2 is the issuer column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
@@ -269,6 +285,11 @@ add_columns (GtkTreeView *tree_view)
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Less Than a Minute", renderer, "text", COLUMN_LESS_THAN_A_MINUTE, NULL);
+    gtk_tree_view_column_set_visible (column, FALSE);
+    gtk_tree_view_append_column (tree_view, column);
+
+    renderer = gtk_cell_renderer_text_new ();
+    column = gtk_tree_view_column_new_with_attributes ("Position in Database", renderer, "text", COLUMN_POSITION_IN_DB, NULL);
     gtk_tree_view_column_set_visible (column, FALSE);
     gtk_tree_view_append_column (tree_view, column);
 }

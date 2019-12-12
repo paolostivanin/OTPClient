@@ -1,18 +1,18 @@
 version: 2.0
 
 jobs:
-  ubuntu1604:
+  ubuntu1804:
     docker:
-      - image: ubuntu:16.04
+      - image: ubuntu:18.04
     steps:
       - checkout
       - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
-  ubuntu1804:
+  ubuntuLatestRolling:
     docker:
-      - image: ubuntu:18.04
+      - image: ubuntu:rolling
     steps:
       - checkout
       - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
@@ -28,9 +28,9 @@ jobs:
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
-  fedora30:
+  fedoraLatestStable:
     docker:
-      - image: fedora:30
+      - image: fedora:latest
     steps:
       - checkout
       - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk3-devel libzip-devel jansson-devel libpng-devel zbar-devel
@@ -59,9 +59,9 @@ workflows:
   version: 2
   build:
     jobs:
-      - ubuntu1604
       - ubuntu1804
+      - ubuntuLatestRolling
       - debianLatestStable
-      - fedora30
+      - fedoraLatestStable
       - archlinux
       - opensuseLeap

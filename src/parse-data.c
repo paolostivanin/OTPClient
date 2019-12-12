@@ -6,7 +6,8 @@
 #include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
-#include "common.h"
+#include "gui-common.h"
+#include "common/common.h"
 
 
 static gboolean  is_input_valid            (GtkWidget   *dialog,

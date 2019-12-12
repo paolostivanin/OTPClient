@@ -3,7 +3,7 @@
 #include <jansson.h>
 #include <glib/gstdio.h>
 #include "otpclient.h"
-#include "common.h"
+#include "gui-common.h"
 #include "gquarks.h"
 #include "imports.h"
 #include "exports.h"
@@ -12,6 +12,8 @@
 #include "get-builder.h"
 #include "liststore-misc.h"
 #include "lock-app.h"
+#include "common/common.h"
+#include "version.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -53,19 +55,9 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
 
 void
 activate (GtkApplication    *app,
-          gpointer           user_data)
+          gpointer           user_data __attribute__((unused)))
 {
-    gint64 memlock_limit = (gint64) user_data;
-    gint32 max_file_size;
-    if (memlock_limit == -1 || memlock_limit > 256000) {
-        max_file_size = 256000; // memlock is either unlimited or bigger than needed
-    } else if (memlock_limit == -5) {
-        max_file_size = 64000; // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
-    } else {
-        max_file_size = (gint32) memlock_limit; // memlock is less than 256 KB
-        g_print ("[WARNING] your OS's memlock limit may be too low for you. Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
-    }
+    gint32 max_file_size = get_max_file_size_from_memlock ();
 
     AppData *app_data = g_new0 (AppData, 1);
 
@@ -93,22 +85,13 @@ activate (GtkApplication    *app,
     gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
     g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
-    if (!gcry_check_version ("1.6.0")) {
-        show_message_dialog (app_data->main_window, "The required version of GCrypt is 1.6.0 or greater.", GTK_MESSAGE_ERROR);
+    gchar *init_msg = init_libs (max_file_size);
+    if (init_msg != NULL) {
+        show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
+        g_free (init_msg);
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
-        return;
     }
-
-    if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
-        show_message_dialog (app_data->main_window, "Couldn't initialize secure memory.\n", GTK_MESSAGE_ERROR);
-        g_free (app_data->db_data);
-        g_application_quit (G_APPLICATION(app));
-        return;
-    }
-    gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
-
-    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
 #ifdef USE_FLATPAK_APP_FOLDER
     app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
@@ -249,7 +232,7 @@ create_main_window (gint             width,
     gtk_window_set_default_size (GTK_WINDOW(app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
 
     GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (app_data->builder, "headerbar_id"));
-    gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), APP_VERSION);
+    gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), PROJECT_VER);
 
     set_action_group (app_data->builder, app_data);
 }
@@ -261,8 +244,10 @@ set_action_group (GtkBuilder *builder,
 {
     static GActionEntry settings_menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
+            { .name = ANDOTP_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
+            { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
@@ -272,7 +257,8 @@ set_action_group (GtkBuilder *builder,
     static GActionEntry add_menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "screenshot", .activate = screenshot_cb },
-            { .name = "select_photo", .activate = select_photo_cb },
+            { .name = "import_qr_file", .activate = add_qr_from_file },
+            { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
             { .name = "manual", .activate = add_data_dialog }
     };
 
@@ -388,7 +374,6 @@ del_data_cb (GtkToggleButton *btn,
         app_data->css_provider = gtk_css_provider_new ();
         gtk_css_provider_load_from_data (app_data->css_provider, "#delbtn { background: #ff0033; }", -1, NULL);
         gtk_style_context_add_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
-        AppData *app_data = (AppData *)user_data;
         const gchar *msg = "You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
             "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>";
 
@@ -422,7 +407,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (app_data, FALSE, &err);
+        update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));

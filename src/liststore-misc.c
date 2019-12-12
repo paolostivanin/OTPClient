@@ -4,7 +4,8 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "gquarks.h"
-#include "common.h"
+#include "gui-common.h"
+#include "common/common.h"
 
 
 typedef struct _otp_data {
@@ -45,14 +46,7 @@ set_otp (GtkListStore   *list_store,
 
     set_otp_data (otp_data, app_data, row_number);
 
-    gint algo;
-    if (g_strcmp0 (otp_data->algo, "SHA1") == 0) {
-        algo = SHA1;
-    } else if (g_strcmp0 (otp_data->algo, "SHA256") == 0) {
-        algo = SHA256;
-    } else {
-        algo = SHA512;
-    }
+    gint algo = get_algo_int_from_str (otp_data->algo);
 
     cotp_error_t otp_err;
     gchar *otp;
@@ -151,7 +145,7 @@ set_otp_data (OtpData  *otp_data,
         otp_data->counter = json_integer_value (json_object_get (obj, "counter"));
         // every time HOTP is accessed, counter must be increased
         json_object_set (obj, "counter", json_integer (otp_data->counter + 1));
-        update_and_reload_db (app_data, FALSE, &err);
+        update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
             g_printerr ("%s\n", err->message);
         }

@@ -5,7 +5,7 @@
 #include "otpclient.h"
 #include "file-size.h"
 #include "gquarks.h"
-#include "common.h"
+#include "common/common.h"
 
 typedef struct _header_data {
     guint8 iv[IV_SIZE];
@@ -73,21 +73,24 @@ load_db (DatabaseData    *db_data,
 
 
 void
-update_and_reload_db (AppData   *app_data,
-                      gboolean   regenerate_model,
-                      GError   **err)
+update_and_reload_db (AppData       *app_data,
+                      DatabaseData  *db_data,
+                      gboolean       regenerate_model,
+                      GError       **err)
 {
-    update_db (app_data->db_data);
-    reload_db (app_data->db_data, err);
+    update_db (db_data);
+    reload_db (db_data, err);
     if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
         g_printerr("%s\n", (*err)->message);
         return;
     }
+#ifdef BUILD_GUI
     if (regenerate_model) {
         update_model (app_data);
         g_slist_free_full (app_data->db_data->data_to_add, json_free);
         app_data->db_data->data_to_add = NULL;
     }
+#endif
 }
 
 

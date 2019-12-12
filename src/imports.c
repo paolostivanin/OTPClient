@@ -5,7 +5,8 @@
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
-#include "common.h"
+#include "common/common.h"
+#include "gui-common.h"
 #include "db-misc.h"
 
 
@@ -70,7 +71,7 @@ update_db_from_otps (GSList *otps, AppData *app_data)
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, TRUE, &err);
+    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         return g_strdup (err->message);
     }
@@ -104,13 +105,17 @@ parse_data_and_update_db (AppData       *app_data,
 {
     GError *err = NULL;
     GSList *content = NULL;
-    gchar *pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
-    if (pwd == NULL) {
-        return FALSE;
+
+    gchar *pwd = NULL;
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) != 0) {
+        pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
+        if (pwd == NULL) {
+            return FALSE;
+        }
     }
 
-    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0) {
-        content = get_andotp_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) == 0) {
+        content = get_andotp_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 ? TRUE : FALSE , &err);
     } else {
         content = get_authplus_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     }
@@ -130,7 +135,9 @@ parse_data_and_update_db (AppData       *app_data,
         return FALSE;
     }
 
-    gcry_free (pwd);
+    if (pwd != NULL) {
+        gcry_free (pwd);
+    }
     free_otps_gslist (content, g_slist_length (content));
 
     return TRUE;

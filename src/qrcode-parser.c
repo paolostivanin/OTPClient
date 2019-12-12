@@ -2,7 +2,7 @@
 #include <zbar.h>
 #include <png.h>
 #include <glib/gstdio.h>
-#include "common.h"
+#include "gui-common.h"
 
 typedef struct _image_data_t {
     guint width;

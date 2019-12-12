@@ -4,9 +4,6 @@
 
 G_BEGIN_DECLS
 
-#define APP_NAME                "OTPClient"
-#define APP_VERSION             "1.5.1"
-
 #define HOTP_RATE_LIMIT_IN_SEC  3
 
 #define NOTIFICATION_ID "otp-copied"
@@ -26,9 +23,13 @@ void screenshot_cb         (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
 
-void select_photo_cb       (GSimpleAction  *simple,
+void add_qr_from_file      (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
+
+void add_qr_from_clipboard (GSimpleAction *simple,
+                            GVariant      *parameter,
+                            gpointer       user_data);
 
 void edit_selected_row_cb  (GSimpleAction  *simple,
                             GVariant       *parameter,

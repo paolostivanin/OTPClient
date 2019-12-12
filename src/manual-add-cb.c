@@ -1,11 +1,9 @@
 #include <gtk/gtk.h>
 #include "db-misc.h"
-#include "otpclient.h"
-#include "common.h"
+#include "gui-common.h"
 #include "manual-add-cb.h"
 #include "gquarks.h"
 #include "message-dialogs.h"
-#include "imports.h"
 #include "get-builder.h"
 
 static void changed_otp_cb      (GtkWidget *cb,
@@ -49,7 +47,7 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
         result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
         if (result == GTK_RESPONSE_OK) {
             if (parse_user_data (widgets, app_data->db_data)) {
-                update_and_reload_db (app_data, TRUE, &err);
+                update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }

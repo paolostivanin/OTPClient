@@ -4,7 +4,7 @@
 #include <gtk/gtk.h>
 #include "data.h"
 #include "get-builder.h"
-#include "common.h"
+#include "gui-common.h"
 #include "message-dialogs.h"
 #include "otpclient.h"
 #include "lock-app.h"
@@ -85,7 +85,7 @@ check_inactivity (gpointer user_data)
     if (app_data->inactivity_timeout > 0 && app_data->app_locked == FALSE) {
         GDateTime *now = g_date_time_new_now_local ();
         GTimeSpan diff = g_date_time_difference (now, app_data->last_user_activity);
-        if (diff >= (G_USEC_PER_SEC * app_data->inactivity_timeout)) {
+        if (diff >= (G_USEC_PER_SEC * (GTimeSpan)app_data->inactivity_timeout)) {
             g_signal_emit_by_name (app_data->main_window, "lock-app");
             g_date_time_unref (now);
             return FALSE;

@@ -6,8 +6,7 @@
 G_BEGIN_DECLS
 
 #define ANDOTP_EXPORT_ACTION_NAME   "export_andotp"
-#define AUTHY_EXPORT_ACTION_NAME    "export_authy"
-#define WINAUTH_EXPORT_ACTION_NAME  "export_winauth"
+#define ANDOTP_EXPORT_PLAIN_ACTION_NAME   "export_andotp_plain"
 
 void
 export_data_cb (GSimpleAction *simple,
