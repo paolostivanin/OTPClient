@@ -64,4 +64,4 @@ workflows:
       - debianLatestStable
       - fedoraLatestStable
       - archlinux
-      - opensuseLeap
+#      - opensuseLeap
