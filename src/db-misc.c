@@ -59,7 +59,8 @@ load_db (DatabaseData    *db_data,
     db_data->json_data = json_loads (in_memory_json, 0, &jerr);
     gcry_free (in_memory_json);
     if (db_data->json_data == NULL) {
-        g_printerr ("Error while loading json data: %s\n", jerr.text);
+        gchar *msg = g_strconcat ("Error while loading json data: ", jerr.text, NULL);
+        g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE, "%s", msg);
         return;
     }
 
