@@ -34,3 +34,10 @@ generic_error_gquark (void)
 {
     return g_quark_from_static_string ("generic_error");
 }
+
+
+GQuark
+memlock_error_gquark (void)
+{
+    return g_quark_from_static_string ("memlock_error");
+}

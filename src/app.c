@@ -91,6 +91,7 @@ activate (GtkApplication    *app,
         g_free (init_msg);
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
+        return;
     }
 
 #ifdef USE_FLATPAK_APP_FOLDER
@@ -129,6 +130,12 @@ activate (GtkApplication    *app,
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (app_data->db_data->key);
+        if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
+            g_free (app_data->db_data);
+            g_clear_error (&err);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        }
         goto retry;
     }
 
