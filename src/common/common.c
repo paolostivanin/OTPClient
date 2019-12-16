@@ -7,10 +7,11 @@
 gint32
 get_max_file_size_from_memlock (void)
 {
+    const gchar *link = "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations";
     struct rlimit r;
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
         // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your OS's memlock limit may be too low for you (64000 bytes). Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n");
+        g_print ("[WARNING] your OS's memlock limit may be too low for you (64000 bytes). Please have a look at %s\n", link);
         return 64000;
     } else {
         if (r.rlim_cur == -1 || r.rlim_cur > 4194304) {
@@ -18,7 +19,7 @@ get_max_file_size_from_memlock (void)
             return 4194304;
         } else {
             // memlock is less than 4 MB
-            g_print ("[WARNING] your OS's memlock limit may be too low for you (%d bytes). Please have a look at https://github.com/paolostivanin/OTPClient#limitations\n", (gint32)r.rlim_cur);
+            g_print ("[WARNING] your OS's memlock limit may be too low for you (%d bytes). Please have a look at %s\n", (gint32)r.rlim_cur, link);
             return (gint32)r.rlim_cur;
         }
     }
