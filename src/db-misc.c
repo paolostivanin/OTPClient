@@ -15,9 +15,9 @@ typedef struct _header_data {
 
 static void         reload_db       (DatabaseData *db_data, GError **err);
 
-static void         update_db       (DatabaseData *data);
+static void         update_db       (DatabaseData *db_data, GError **err);
 
-static gpointer     encrypt_db      (const gchar *db_path, const gchar *in_memory_json, const gchar *password);
+static gpointer     encrypt_db      (const gchar *db_path, const gchar *in_memory_json, const gchar *password, GError **err);
 
 static inline void  add_to_json     (gpointer list_elem, gpointer json_array);
 
@@ -80,10 +80,10 @@ update_and_reload_db (AppData       *app_data,
                       gboolean       regenerate_model,
                       GError       **err)
 {
-    update_db (db_data);
+    update_db (db_data, err);
     reload_db (db_data, err);
     if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
-        g_printerr("%s\n", (*err)->message);
+        g_printerr ("%s\n", (*err)->message);
         return;
     }
 #ifdef BUILD_GUI
@@ -124,33 +124,34 @@ reload_db (DatabaseData  *db_data,
 
 
 static void
-update_db (DatabaseData *data)
+update_db (DatabaseData  *db_data,
+           GError       **err)
 {
-    gboolean first_run = (data->json_data == NULL) ? TRUE : FALSE;
+    gboolean first_run = (db_data->json_data == NULL) ? TRUE : FALSE;
     if (first_run == TRUE) {
-        data->json_data = json_array ();
+        db_data->json_data = json_array ();
     } else {
         // database is backed-up only if this is not the first run
-        backup_db (data->db_path);
+        backup_db (db_data->db_path);
     }
 
-    g_slist_foreach (data->data_to_add, add_to_json, data->json_data);
+    g_slist_foreach (db_data->data_to_add, add_to_json, db_data->json_data);
 
-    gchar *plain_data = json_dumps (data->json_data, JSON_COMPACT);
+    gchar *plain_data = json_dumps (db_data->json_data, JSON_COMPACT);
 
-    if (encrypt_db (data->db_path, plain_data, data->key) != NULL) {
+    if (encrypt_db (db_data->db_path, plain_data, db_data->key, err) != NULL) {
         if (!first_run) {
-            g_print ("Couldn't update the database, restoring original copy...\n");
-            restore_db (data->db_path);
+            g_printerr ("Encrypting the new data failed, restoring original copy...\n");
+            restore_db (db_data->db_path);
         } else {
-            g_print ("Couldn't update the database.\n");
-            if (g_file_test (data->db_path, G_FILE_TEST_EXISTS)) {
-                g_unlink (data->db_path);
+            g_printerr ("Couldn't update the database (encrypt_db failed)\n");
+            if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
+                g_unlink (db_data->db_path);
             }
         }
     } else {
         // database must be backed-up both before and after the update
-        backup_db (data->db_path);
+        backup_db (db_data->db_path);
     }
 
     gcry_free (plain_data);
@@ -166,11 +167,12 @@ add_to_json (gpointer list_elem,
 
 
 static gpointer
-encrypt_db (const gchar *db_path,
-            const gchar *in_memory_json,
-            const gchar *password)
+encrypt_db (const gchar  *db_path,
+            const gchar  *in_memory_json,
+            const gchar  *password,
+            GError      **err)
 {
-    GError *err = NULL;
+    GError *local_err = NULL;
     gcry_cipher_hd_t hd;
     HeaderData *header_data = g_new0 (HeaderData, 1);
 
@@ -178,21 +180,24 @@ encrypt_db (const gchar *db_path,
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
 
     GFile *out_file = g_file_new_for_path (db_path);
-    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
+    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &local_err);
     if (err != NULL) {
-        g_printerr ("%s\n", err->message);
-        cleanup (out_file, NULL, header_data, err);
+        g_printerr ("%s\n", local_err->message);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to replace existing file");
+        cleanup (out_file, NULL, header_data, local_err);
         return GENERIC_ERROR;
     }
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), header_data, sizeof (HeaderData), NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
-        cleanup (out_file, out_stream, header_data, err);
+    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), header_data, sizeof (HeaderData), NULL, &local_err) == -1) {
+        g_printerr ("%s\n", local_err->message);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing header data to file");
+        cleanup (out_file, out_stream, header_data, local_err);
         return GENERIC_ERROR;
     }
 
     guchar *derived_key = get_derived_key (password, header_data);
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
-        cleanup (out_file, out_stream, header_data, err);
+        cleanup (out_file, out_stream, header_data, local_err);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to derive key.\nPlease check https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations");
         return (gpointer)derived_key;
     }
 
@@ -208,15 +213,17 @@ encrypt_db (const gchar *db_path,
     guchar tag[TAG_SIZE];
     gcry_cipher_gettag (hd, tag, TAG_SIZE); //append tag to outfile
 
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), enc_buffer, input_data_len, NULL, &err) == -1) {
-        cleanup (out_file, out_stream, header_data, err);
+    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buffer, input_data_len, NULL, &local_err) == -1) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing encrypted buffer to file");
+        cleanup (out_file, out_stream, header_data, local_err);
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
         return GENERIC_ERROR;
     }
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), tag, TAG_SIZE, NULL, &err) == -1) {
-        cleanup (out_file, out_stream, header_data, err);
+    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, TAG_SIZE, NULL, &local_err) == -1) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing tag data to file");
+        cleanup (out_file, out_stream, header_data, local_err);
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
