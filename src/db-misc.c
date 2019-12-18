@@ -99,8 +99,8 @@ gint
 check_duplicate (gconstpointer data,
                  gconstpointer user_data)
 {
-    guint list_elem = *(guint *) data;
-    if (list_elem == GPOINTER_TO_UINT (user_data)) {
+    guint list_elem = *(guint *)data;
+    if (list_elem == GPOINTER_TO_UINT(user_data)) {
         return 0;
     }
     return -1;
@@ -186,8 +186,7 @@ encrypt_db (const gchar *db_path,
     guchar *derived_key = get_derived_key (password, header_data);
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
         cleanup (out_file, out_stream, header_data, err);
-        g_free (header_data);
-        return (gpointer) derived_key;
+        return (gpointer)derived_key;
     }
 
     gsize input_data_len = strlen (in_memory_json) + 1;
@@ -207,7 +206,6 @@ encrypt_db (const gchar *db_path,
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
-        g_free (header_data);
         return GENERIC_ERROR;
     }
     if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), tag, TAG_SIZE, NULL, &err) == -1) {
@@ -215,16 +213,13 @@ encrypt_db (const gchar *db_path,
         gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
-        g_free (header_data);
         return GENERIC_ERROR;
     }
-    g_object_unref (out_file);
-    g_object_unref (out_stream);
 
     gcry_cipher_close (hd);
     gcry_free (derived_key);
     g_free (enc_buffer);
-    g_free (header_data);
+    cleanup (out_file, out_stream, header_data, NULL);
 
     return NULL;
 }
@@ -287,7 +282,7 @@ decrypt_db (const gchar *db_path,
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
         g_free (header_data);
         g_free (enc_buf);
-        return (gpointer) derived_key;
+        return (gpointer)derived_key;
     }
 
     gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
@@ -302,6 +297,7 @@ decrypt_db (const gchar *db_path,
         gcry_free (derived_key);
         g_free (header_data);
         g_free (enc_buf);
+        gcry_free (dec_buf);
         return TAG_MISMATCH;
     }
 
@@ -387,6 +383,8 @@ cleanup (GFile      *in_file,
     g_object_unref (in_file);
     if (in_stream != NULL)
         g_object_unref (in_stream);
-    g_free (header_data);
-    g_clear_error (&err);
+    if (header_data != NULL)
+        g_free (header_data);
+    if (err != NULL)
+        g_clear_error (&err);
 }
