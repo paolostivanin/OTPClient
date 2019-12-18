@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <glib/gstdio.h>
 #include "db-misc.h"
 #include "otpclient.h"
 #include "file-size.h"
@@ -125,9 +126,8 @@ reload_db (DatabaseData  *db_data,
 static void
 update_db (DatabaseData *data)
 {
-    gboolean first_run = FALSE;
-    if (data->json_data == NULL) {
-        first_run = TRUE;
+    gboolean first_run = (data->json_data == NULL) ? TRUE : FALSE;
+    if (first_run == TRUE) {
         data->json_data = json_array ();
     } else {
         // database is backed-up only if this is not the first run
@@ -139,11 +139,18 @@ update_db (DatabaseData *data)
     gchar *plain_data = json_dumps (data->json_data, JSON_COMPACT);
 
     if (encrypt_db (data->db_path, plain_data, data->key) != NULL) {
-        g_printerr ("Couldn't update the database.\n");
         if (!first_run) {
-            g_print ("Restoring original database..\n");
+            g_print ("Couldn't update the database, restoring original copy...\n");
             restore_db (data->db_path);
+        } else {
+            g_print ("Couldn't update the database.\n");
+            if (g_file_test (data->db_path, G_FILE_TEST_EXISTS)) {
+                g_unlink (data->db_path);
+            }
         }
+    } else {
+        // database must be backed-up both before and after the update
+        backup_db (data->db_path);
     }
 
     gcry_free (plain_data);
@@ -361,6 +368,8 @@ restore_db (const gchar *path)
     if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
         g_printerr ("Couldn't restore the backup file: %s\n", err->message);
         g_clear_error (&err);
+    } else {
+        g_print ("Backup copy successfully restored.\n");
     }
     g_object_unref (src);
     g_object_unref (dst);
