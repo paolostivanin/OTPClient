@@ -218,6 +218,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkEntry" id="changepwd_diag_currententry_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -234,6 +236,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkEntry" id="changepwd_diag_newentry1_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -250,6 +254,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkEntry" id="changepwd_diag_newentry2_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -349,6 +355,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           <object class="GtkEntry" id="decpwddiag_entry_id">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
+            <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+            <property name="max_length">255</property>
             <property name="visibility">False</property>
             <property name="secondary_icon_name">dialog-password-symbolic</property>
             <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -589,7 +597,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                         <property name="can_focus">True</property>
                         <property name="margin_right">5</property>
                         <property name="margin_bottom">5</property>
-                        <property name="max_length">80</property>
+                        <property name="max_length">64</property>
                       </object>
                     </child>
                   </object>
@@ -625,7 +633,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                         <property name="can_focus">True</property>
                         <property name="margin_right">5</property>
                         <property name="margin_bottom">5</property>
-                        <property name="max_length">80</property>
+                        <property name="max_length">64</property>
                       </object>
                     </child>
                   </object>
@@ -1047,6 +1055,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkEntry" id="newdb_pwd_diag_entry1_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -1063,6 +1073,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
               <object class="GtkEntry" id="newdb_pwd_diag_entry2_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
@@ -1661,6 +1673,8 @@ Please type your password to unlock it</property>
               <object class="GtkEntry" id="unlock_entry_id">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="tooltip_text" translatable="yes">Max 255 chars</property>
+                <property name="max_length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary_icon_name">dialog-password-symbolic</property>
                 <property name="secondary_icon_tooltip_text" translatable="yes">Show password</property>
