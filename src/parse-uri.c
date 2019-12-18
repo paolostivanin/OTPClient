@@ -48,6 +48,7 @@ parse_uri (const gchar   *uri,
     } else if (g_ascii_strncasecmp (uri_copy, "hotp/", 5) == 0) {
         otp->type = g_strdup ("HOTP");
     } else {
+        g_free (otp);
         return;
     }
     uri_copy += 5;
