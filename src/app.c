@@ -136,6 +136,7 @@ activate (GtkApplication    *app,
             g_application_quit (G_APPLICATION(app));
             return;
         }
+        g_clear_error (&err);
         goto retry;
     }
 
@@ -307,7 +308,7 @@ get_db_path (GtkWidget *window)
             goto new_db;
         }
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.\nA new database will be created.", NULL);
+            gchar *msg = g_strconcat ("Database file/location:\n<b>", db_path, "</b>\ndoes not exist. A new database will be created.", NULL);
             show_message_dialog (window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
             goto new_db;

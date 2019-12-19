@@ -81,6 +81,10 @@ update_and_reload_db (AppData       *app_data,
                       GError       **err)
 {
     update_db (db_data, err);
+    if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        g_printerr ("%s\n", (*err)->message);
+        return;
+    }
     reload_db (db_data, err);
     if (*err != NULL && !g_error_matches (*err, missing_file_gquark (), MISSING_FILE_CODE)) {
         g_printerr ("%s\n", (*err)->message);
@@ -181,7 +185,7 @@ encrypt_db (const gchar  *db_path,
 
     GFile *out_file = g_file_new_for_path (db_path);
     GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &local_err);
-    if (err != NULL) {
+    if (local_err != NULL) {
         g_printerr ("%s\n", local_err->message);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to replace existing file");
         cleanup (out_file, NULL, header_data, local_err);
@@ -197,7 +201,7 @@ encrypt_db (const gchar  *db_path,
     guchar *derived_key = get_derived_key (password, header_data);
     if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
         cleanup (out_file, out_stream, header_data, local_err);
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to derive key.\nPlease check https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations");
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to derive key.\nPlease check <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">Secure Memory wiki page</a>");
         return (gpointer)derived_key;
     }
 
