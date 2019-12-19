@@ -1,7 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
-#include <glib/gstdio.h>
 #include "otpclient.h"
 #include "gui-common.h"
 #include "gquarks.h"
@@ -20,9 +19,15 @@
 static gchar     *get_db_path               (GtkWidget          *window);
 #endif
 
-static void       get_config_data           (gint               *width,
+static GKeyFile  *get_kf_ptr                (void);
+
+static void       get_wh_data               (gint               *width,
                                              gint               *height,
                                              AppData            *app_data);
+
+static gboolean   get_warn_data             (void);
+
+static void       set_warn_data             (gboolean            show_warning);
 
 static void       create_main_window        (gint                width,
                                              gint                height,
@@ -52,6 +57,9 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
                                              GdkEventKey        *event_key,
                                              gpointer            user_data);
 
+static gboolean   show_memlock_warn_dialog  (gint32              max_file_size,
+                                             GtkBuilder         *builder);
+
 
 void
 activate (GtkApplication    *app,
@@ -69,7 +77,7 @@ activate (GtkApplication    *app,
     app_data->search_column = 0; // account
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
-    get_config_data (&width, &height, app_data);
+    get_wh_data (&width, &height, app_data);
 
     app_data->db_data = g_new0 (DatabaseData, 1);
 
@@ -111,6 +119,14 @@ activate (GtkApplication    *app,
     }
 #endif
 
+    if (max_file_size < (96 * 1024) && get_warn_data () == TRUE) {
+        if (show_memlock_warn_dialog (max_file_size, app_data->builder) == TRUE) {
+            g_free (app_data->db_data);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        }
+    }
+
     app_data->db_data->max_file_size_from_memlock = max_file_size;
     app_data->db_data->objects_hash = NULL;
     app_data->db_data->data_to_add = NULL;
@@ -140,12 +156,15 @@ activate (GtkApplication    *app,
         goto retry;
     }
 
-    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE) || json_array_size (app_data->db_data->json_data) == 0) {
+    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE)) {
         const gchar *msg = "This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
         "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
         "- to <b>import</b> existing tokens, please click the menu button <b>on the top right</b>.\n"
         "\nIf you need more info, please visit the <a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>";
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_INFO);
+        GError *tmp_err = NULL;
+        update_and_reload_db (app_data, app_data->db_data, FALSE, &tmp_err);
+        g_clear_error (&tmp_err);
     }
 
     app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
@@ -183,6 +202,39 @@ activate (GtkApplication    *app,
 
 
 static gboolean
+show_memlock_warn_dialog (gint32      max_file_size,
+                          GtkBuilder *builder)
+{
+    gchar *msg = g_strdup_printf ("Your OS's memlock limit (%d) may be too low for you.\n"
+                                  "This could crash the program when importing data from 3rd party apps\n"
+                                  "or when a certain amount of tokens is reached.\n"
+                                  "Please have a look at the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki</a> page before\n"
+                                  "using this software with the current settings.", max_file_size);
+    GtkWidget *warn_diag = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_id"));
+    GtkLabel *warn_label = GTK_LABEL(gtk_builder_get_object (builder, "warning_diag_label_id"));
+    GtkWidget *warn_chk_btn = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_check_btn_id"));
+    gtk_label_set_label (warn_label, msg);
+    gtk_widget_show_all (warn_diag);
+    gboolean quit = FALSE;
+    gint result = gtk_dialog_run (GTK_DIALOG (warn_diag));
+    switch (result) {
+        case GTK_RESPONSE_OK:
+            set_warn_data (!gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(warn_chk_btn)));
+            break;
+        case GTK_RESPONSE_CLOSE:
+        default:
+            set_warn_data (!gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(warn_chk_btn)));
+            quit = TRUE;
+            break;
+    }
+    gtk_widget_destroy (warn_diag);
+    g_free (msg);
+
+    return quit;
+}
+
+
+static gboolean
 key_pressed_cb (GtkWidget   *window,
                 GdkEventKey *event_key,
                 gpointer     user_data __attribute__((unused)))
@@ -198,10 +250,8 @@ key_pressed_cb (GtkWidget   *window,
 }
 
 
-static void
-get_config_data (gint     *width,
-                 gint     *height,
-                 AppData  *app_data)
+static GKeyFile *
+get_kf_ptr ()
 {
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
@@ -212,20 +262,75 @@ get_config_data (gint     *width,
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-        } else {
-            *width = g_key_file_get_integer (kf, "config", "window_width", NULL);
-            *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
-            app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
-            app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
-            app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
-            app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
-            app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
+        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_free (cfg_file_path);
+            return kf;
         }
+        g_printerr ("%s\n", err->message);
     }
-    g_key_file_free (kf);
     g_free (cfg_file_path);
+    g_key_file_free (kf);
+    return NULL;
+}
+
+
+static void
+get_wh_data (gint     *width,
+             gint     *height,
+             AppData  *app_data)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf != NULL) {
+        *width = g_key_file_get_integer (kf, "config", "window_width", NULL);
+        *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
+        app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
+        app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
+        app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
+        app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
+        app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
+        g_key_file_free (kf);
+    }
+}
+
+
+static gboolean
+get_warn_data ()
+{
+    GKeyFile *kf = get_kf_ptr ();
+    gboolean show_warning = TRUE;
+    GError *err = NULL;
+    if (kf != NULL) {
+        show_warning = g_key_file_get_boolean (kf, "config", "show_memlock_warning", &err);
+        if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
+            // value is not present, so we want to show the warning
+            show_warning = TRUE;
+        }
+        g_key_file_free (kf);
+    }
+
+    return show_warning;
+}
+
+
+static void
+set_warn_data (gboolean show_warning)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    GError *err = NULL;
+    if (kf != NULL) {
+        g_key_file_set_boolean (kf, "config", "show_memlock_warning", show_warning);
+        gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+            g_printerr ("%s\n", err->message);
+        }
+        g_free (cfg_file_path);
+        g_key_file_free (kf);
+    }
 }
 
 
@@ -418,7 +523,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
         update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
         if (err != NULL) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
+            GtkApplication *app = gtk_window_get_application (GTK_WINDOW(app_data->main_window));
             destroy_cb (app_data->main_window, app_data);
             g_application_quit (G_APPLICATION(app));
         }
@@ -435,9 +540,9 @@ get_window_size_cb (GtkWidget      *window,
                     gpointer        user_data  __attribute__((unused)))
 {
     gint w, h;
-    gtk_window_get_size (GTK_WINDOW (window), &w, &h);
-    g_object_set_data (G_OBJECT (window), "width", GINT_TO_POINTER (w));
-    g_object_set_data (G_OBJECT (window), "height", GINT_TO_POINTER (h));
+    gtk_window_get_size (GTK_WINDOW(window), &w, &h);
+    g_object_set_data (G_OBJECT(window), "width", GINT_TO_POINTER(w));
+    g_object_set_data (G_OBJECT(window), "height", GINT_TO_POINTER(h));
 }
 
 
@@ -463,8 +568,8 @@ destroy_cb (GtkWidget   *window,
     g_object_unref (app_data->notification);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbad-function-cast"
-    gint w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));
-    gint h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
+    gint w = GPOINTER_TO_INT(g_object_get_data (G_OBJECT(window), "width"));
+    gint h = GPOINTER_TO_INT(g_object_get_data (G_OBJECT(window), "height"));
 #pragma GCC diagnostic pop
     save_window_size (w, h);
     g_object_unref (app_data->builder);
