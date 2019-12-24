@@ -6,7 +6,6 @@
   <img alt="CircleCI" src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
 </a>
 
-
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
@@ -41,7 +40,7 @@ If OTPClient hasn't been packaged for your distro ([check here](https://github.c
 1. install all the needed libraries listed under [requirements](#requirements)
 2. clone and install OTPClient:
 ```
-$ git clone https://github.com/paolostivanin/otpclient OTPClient
+$ git clone https://github.com/paolostivanin/OTPClient.git
 $ cd OTPClient
 $ mkdir build && cd $_
 $ cmake -DCMAKE_INSTALL_PREFIX=/usr ..
@@ -51,4 +50,3 @@ $ sudo make install
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
- 
