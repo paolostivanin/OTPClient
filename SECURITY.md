@@ -4,11 +4,11 @@
 
 The following list describes whether a version is eligible or not for security updates.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 2.0.x   | :heavy_check_mark: |
-| 1.5.x   | :heavy_check_mark: |
-| < 1.5.0 | :x: |
+| Version | Supported          | EOL  |
+| ------- | ------------------ |------|
+| 2.0.x   | :heavy_check_mark: | TBD  |
+| 1.5.x   | :heavy_check_mark: | 31-03-2020 |
+| < 1.5.0 | :x: | 27-06-2019 |
 
 ## Reporting a Vulnerability
 
