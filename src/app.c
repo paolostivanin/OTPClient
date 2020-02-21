@@ -16,7 +16,7 @@
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
-static gchar     *get_db_path               (GtkWidget          *window);
+static gchar     *get_db_path               (AppData            *app_data);
 #endif
 
 static GKeyFile  *get_kf_ptr                (void);
@@ -59,6 +59,9 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
 
 static gboolean   show_memlock_warn_dialog  (gint32              max_file_size,
                                              GtkBuilder         *builder);
+
+static void       set_open_db_action        (GtkWidget          *btn,
+                                             gpointer            user_data);
 
 
 void
@@ -111,7 +114,25 @@ activate (GtkApplication    *app,
     }
     g_free (cfg_file_path);
 #else
-    app_data->db_data->db_path = get_db_path (app_data->main_window);
+    app_data->diag_rcdb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
+    GtkWidget *restore_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_restoredb_btn_id"));
+    GtkWidget *create_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_createdb_btn_id"));
+    g_signal_connect (restore_btn, "clicked", G_CALLBACK(set_open_db_action), app_data);
+    g_signal_connect (create_btn, "clicked", G_CALLBACK(set_open_db_action), app_data);
+
+    gint response = gtk_dialog_run (GTK_DIALOG(app_data->diag_rcdb));
+    switch (response) {
+        case GTK_RESPONSE_CANCEL:
+        default:
+            gtk_widget_destroy (app_data->diag_rcdb);
+            g_free (app_data->db_data);
+            g_application_quit (G_APPLICATION(app));
+            break;
+        case GTK_RESPONSE_OK:
+            gtk_widget_destroy (app_data->diag_rcdb);
+    }
+
+    app_data->db_data->db_path = get_db_path (app_data);
     if (app_data->db_data->db_path == NULL) {
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
@@ -396,7 +417,7 @@ set_action_group (GtkBuilder *builder,
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar *
-get_db_path (GtkWidget *window)
+get_db_path (AppData *app_data)
 {
     gchar *db_path = NULL;
     GError *err = NULL;
@@ -404,7 +425,7 @@ get_db_path (GtkWidget *window)
     gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            show_message_dialog (window, err->message, GTK_MESSAGE_ERROR);
+            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             g_key_file_free (kf);
             return NULL;
         }
@@ -414,7 +435,7 @@ get_db_path (GtkWidget *window)
         }
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
             gchar *msg = g_strconcat ("Database file/location:\n<b>", db_path, "</b>\ndoes not exist. A new database will be created.", NULL);
-            show_message_dialog (window, msg, GTK_MESSAGE_ERROR);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
             goto new_db;
         }
@@ -423,14 +444,14 @@ get_db_path (GtkWidget *window)
     new_db: ; // empty statement workaround
 #if GTK_CHECK_VERSION(3, 20, 0)
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
-                                                                GTK_WINDOW (window),
-                                                                GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                                GTK_WINDOW (app_data->main_window),
+                                                                app_data->open_db_file_action,
                                                                 "OK",
                                                                 "Cancel");
 #else
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
-                                                        GTK_WINDOW (window),
-                                                        GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                        GTK_WINDOW (app_data->main_window),
+                                                        app_data->open_db_file_action,
                                                         "Cancel", GTK_RESPONSE_CANCEL,
                                                         "OK", GTK_RESPONSE_ACCEPT,
                                                         NULL);
@@ -438,7 +459,9 @@ get_db_path (GtkWidget *window)
     GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
     gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
     gtk_file_chooser_set_select_multiple (chooser, FALSE);
-    gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
+    if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
+        gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
+    }
 #if GTK_CHECK_VERSION(3, 20, 0)
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
 #else
@@ -602,4 +625,14 @@ save_window_size (gint width,
     }
     g_key_file_free (kf);
     g_free (cfg_file_path);
+}
+
+
+static void
+set_open_db_action (GtkWidget *btn,
+                    gpointer   user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    app_data->open_db_file_action = g_strcmp0 (gtk_widget_get_name (btn), "diag_rc_restoredb_btn") == 0 ? GTK_FILE_CHOOSER_ACTION_OPEN : GTK_FILE_CHOOSER_ACTION_SAVE;
+    gtk_dialog_response (GTK_DIALOG(app_data->diag_rcdb), GTK_RESPONSE_OK);
 }
