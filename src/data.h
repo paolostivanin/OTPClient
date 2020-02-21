@@ -54,6 +54,9 @@ typedef struct _app_data_t {
     gboolean app_locked;
 
     GDateTime *last_user_activity;
+
+    GtkWidget *diag_rcdb;
+    GtkFileChooserAction open_db_file_action;
 } AppData;
 
 G_END_DECLS
