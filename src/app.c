@@ -50,8 +50,15 @@ static void       change_password_cb        (GSimpleAction      *simple,
                                              GVariant           *parameter,
                                              gpointer            user_data);
 
+static void       save_sort_order           (GtkTreeView        *tree_view);
+
 static void       save_window_size          (gint                width,
                                              gint                height);
+
+static void       store_data                (const gchar        *param1_name,
+                                             gint                param1_value,
+                                             const gchar        *param2_name,
+                                             gint                param2_value);
 
 static gboolean   key_pressed_cb            (GtkWidget          *window,
                                              GdkEventKey        *event_key,
@@ -392,7 +399,8 @@ set_action_group (GtkBuilder *builder,
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
-            { .name = "shortcuts", .activate = shortcuts_window_cb }
+            { .name = "shortcuts", .activate = shortcuts_window_cb },
+            { .name = "reset_sort", .activate = reset_column_sorting_cb }
     };
 
     static GActionEntry add_menu_entries[] = {
@@ -581,6 +589,7 @@ destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     AppData *app_data = (AppData *)user_data;
+    save_sort_order (app_data->tree_view);
     g_source_remove (app_data->source_id);
     g_source_remove (app_data->source_id_last_activity);
     g_date_time_unref (app_data->last_user_activity);
@@ -608,8 +617,31 @@ destroy_cb (GtkWidget   *window,
 
 
 static void
+save_sort_order (GtkTreeView *tree_view)
+{
+    gint id;
+    GtkSortType order;
+    gtk_tree_sortable_get_sort_column_id (GTK_TREE_SORTABLE(GTK_LIST_STORE(gtk_tree_view_get_model (tree_view))), &id, &order);
+    // store data only if it was changed
+    if (id >= 0) {
+        store_data ("column_id", id, "sort_order", order);
+    }
+}
+
+
+static void
 save_window_size (gint width,
                   gint height)
+{
+    store_data ("window_width", width, "window_height", height);
+}
+
+
+static void
+store_data (const gchar *param1_name,
+            gint         param1_value,
+            const gchar *param2_name,
+            gint         param2_value)
 {
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
@@ -623,8 +655,8 @@ save_window_size (gint width,
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             g_printerr ("%s\n", err->message);
         } else {
-            g_key_file_set_integer (kf, "config", "window_width", width);
-            g_key_file_set_integer (kf, "config", "window_height", height);
+            g_key_file_set_integer (kf, "config", param1_name, param1_value);
+            g_key_file_set_integer (kf, "config", param2_name, param2_value);
             if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
                 g_printerr ("%s\n", err->message);
             }

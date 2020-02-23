@@ -14,7 +14,7 @@ typedef struct _parsed_json_data {
 } ParsedData;
 
 static void     set_json_data      (json_t         *array,
-                                         ParsedData     *pjd);
+                                    ParsedData     *pjd);
 
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
@@ -31,6 +31,8 @@ static gboolean clear_all_otps     (GtkTreeModel   *model,
 
 static void     free_pjd           (ParsedData     *pjd);
 
+static void     get_sort_data      (gint *column_id, GtkSortType *sort_order);
+
 
 void
 create_treeview (AppData *app_data)
@@ -39,7 +41,7 @@ create_treeview (AppData *app_data)
 
     app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (app_data->builder, "treeview_id"));
 
-    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS (app_data->tree_view));
+    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS(app_data->tree_view));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_h, GDK_CONTROL_MASK, "hide-all-otps", 0);
 
     GtkListStore *list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
@@ -50,6 +52,13 @@ create_treeview (AppData *app_data)
     add_data_to_model (app_data->db_data, list_store);
 
     gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(list_store));
+
+    gint column_id = -1;
+    GtkSortType sort_order = -1;
+    get_sort_data (&column_id, &sort_order);
+    if (column_id >= 0 && sort_order >= 0) {
+        gtk_tree_sortable_set_sort_column_id (GTK_TREE_SORTABLE(list_store), column_id, sort_order);
+    }
 
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
@@ -164,6 +173,59 @@ row_selected_cb (GtkTreeView        *tree_view,
 }
 
 
+void
+reset_column_sorting_cb (GSimpleAction *simple    __attribute__((unused)),
+                         GVariant      *parameter __attribute__((unused)),
+                         gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    GError *err = NULL;
+    gchar *err_msg;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+        } else {
+            if (g_key_file_has_key (kf, "config", "column_id", NULL)) {
+                if (!g_key_file_remove_key (kf, "config", "column_id", &err) && err != NULL) {
+                    err_msg = g_strconcat ("Couldn't reset the column id: ", err->message, NULL);
+                    show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                    g_free (err_msg);
+                    g_clear_error (&err);
+                }
+            }
+            if (g_key_file_has_key (kf, "config", "sort_order", NULL)) {
+                if (!g_key_file_remove_key (kf, "config", "sort_order", &err) && err != NULL) {
+                    err_msg = g_strconcat ("Couldn't reset the sorting order: ", err->message, NULL);
+                    show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                    g_free (err_msg);
+                    g_clear_error (&err);
+                }
+            }
+            if (!g_key_file_save_to_file (kf, cfg_file_path, &err) && err != NULL) {
+                err_msg = g_strconcat ("Couldn't save the configuration file: ", err->message, NULL);
+                show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                g_free (err_msg);
+                g_clear_error (&err);
+            }
+        }
+    }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
+
+    // set default sorting value
+    gtk_tree_sortable_set_sort_column_id (GTK_TREE_SORTABLE(GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view))), -2, 0);
+
+    show_message_dialog (app_data->main_window, "Sorting order has been correctly reset.\nPlease close and open the program again to apply the changes.", GTK_MESSAGE_INFO);
+}
+
+
 static void
 hide_all_otps_cb (GtkTreeView *tree_view,
                   gpointer     user_data)
@@ -182,7 +244,7 @@ clear_all_otps (GtkTreeModel *model,
     gtk_tree_model_get (model, iter, COLUMN_OTP, &otp, -1);
 
     if (otp != NULL && g_utf8_strlen (otp, -1) > 4) {
-        gtk_list_store_set (GTK_LIST_STORE (model), iter, COLUMN_OTP, "", COLUMN_VALIDITY, 0, COLUMN_UPDATED, FALSE, COLUMN_LESS_THAN_A_MINUTE, FALSE, -1);
+        gtk_list_store_set (GTK_LIST_STORE(model), iter, COLUMN_OTP, "", COLUMN_VALIDITY, 0, COLUMN_UPDATED, FALSE, COLUMN_LESS_THAN_A_MINUTE, FALSE, -1);
     }
 
     g_free (otp);
@@ -251,26 +313,26 @@ add_columns (GtkTreeView *tree_view)
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Account", renderer, "text", COLUMN_ACC_LABEL, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
-    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 1); // 1 is the account column
+    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN(column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN(column), 1); // 1 is the account column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN (column), TRUE);
-    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN (column), 2); // 2 is the issuer column
+    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN(column), TRUE);
+    gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN(column), 2); // 2 is the issuer column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("OTP Value", renderer, "text", COLUMN_OTP, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Validity", renderer, "text", COLUMN_VALIDITY, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN (column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
+    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
@@ -303,4 +365,38 @@ free_pjd (ParsedData *pjd)
     g_strfreev (pjd->issuers);
     g_array_free (pjd->periods, TRUE);
     g_free (pjd);
+}
+
+
+static void
+get_sort_data (gint         *column_id,
+               GtkSortType  *sort_order)
+{
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+        } else {
+            *column_id = g_key_file_get_integer (kf, "config", "column_id", &err);
+            if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
+                *column_id = -1;
+                *sort_order = -1;
+            } else {
+                *sort_order = g_key_file_get_integer (kf, "config", "sort_order", &err);
+                if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
+                    *column_id = -1;
+                    *sort_order = -1;
+                }
+            }
+        }
+    }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
 }
