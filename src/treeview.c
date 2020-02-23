@@ -173,6 +173,59 @@ row_selected_cb (GtkTreeView        *tree_view,
 }
 
 
+void
+reset_column_sorting_cb (GSimpleAction *simple    __attribute__((unused)),
+                         GVariant      *parameter __attribute__((unused)),
+                         gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    GError *err = NULL;
+    gchar *err_msg;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+        } else {
+            if (g_key_file_has_key (kf, "config", "column_id", NULL)) {
+                if (!g_key_file_remove_key (kf, "config", "column_id", &err) && err != NULL) {
+                    err_msg = g_strconcat ("Couldn't reset the column id: ", err->message, NULL);
+                    show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                    g_free (err_msg);
+                    g_clear_error (&err);
+                }
+            }
+            if (g_key_file_has_key (kf, "config", "sort_order", NULL)) {
+                if (!g_key_file_remove_key (kf, "config", "sort_order", &err) && err != NULL) {
+                    err_msg = g_strconcat ("Couldn't reset the sorting order: ", err->message, NULL);
+                    show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                    g_free (err_msg);
+                    g_clear_error (&err);
+                }
+            }
+            if (!g_key_file_save_to_file (kf, cfg_file_path, &err) && err != NULL) {
+                err_msg = g_strconcat ("Couldn't save the configuration file: ", err->message, NULL);
+                show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                g_free (err_msg);
+                g_clear_error (&err);
+            }
+        }
+    }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
+
+    // set default sorting value
+    gtk_tree_sortable_set_sort_column_id (GTK_TREE_SORTABLE(GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view))), -2, 0);
+
+    show_message_dialog (app_data->main_window, "Sorting order has been correctly reset.\nPlease close and open the program again to apply the changes.", GTK_MESSAGE_INFO);
+}
+
+
 static void
 hide_all_otps_cb (GtkTreeView *tree_view,
                   gpointer     user_data)

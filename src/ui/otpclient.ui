@@ -1587,6 +1587,20 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="position">5</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="resetsort_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.reset_sort</property>
+            <property name="text" translatable="yes">Reset column sorting</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">6</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">main</property>
