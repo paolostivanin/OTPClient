@@ -114,27 +114,31 @@ activate (GtkApplication    *app,
     }
     g_free (cfg_file_path);
 #else
-    app_data->diag_rcdb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
-    GtkWidget *restore_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_restoredb_btn_id"));
-    GtkWidget *create_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_createdb_btn_id"));
-    g_signal_connect (restore_btn, "clicked", G_CALLBACK(set_open_db_action), app_data);
-    g_signal_connect (create_btn, "clicked", G_CALLBACK(set_open_db_action), app_data);
+    if (!g_file_test (g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL), G_FILE_TEST_EXISTS)) {
+        app_data->diag_rcdb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
+        GtkWidget *restore_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_restoredb_btn_id"));
+        GtkWidget *create_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_rc_createdb_btn_id"));
+        g_signal_connect (restore_btn, "clicked", G_CALLBACK (set_open_db_action), app_data);
+        g_signal_connect (create_btn, "clicked", G_CALLBACK (set_open_db_action), app_data);
 
-    gint response = gtk_dialog_run (GTK_DIALOG(app_data->diag_rcdb));
-    switch (response) {
-        case GTK_RESPONSE_CANCEL:
-        default:
-            gtk_widget_destroy (app_data->diag_rcdb);
-            g_free (app_data->db_data);
-            g_application_quit (G_APPLICATION(app));
-            break;
-        case GTK_RESPONSE_OK:
-            gtk_widget_destroy (app_data->diag_rcdb);
+        gint response = gtk_dialog_run (GTK_DIALOG(app_data->diag_rcdb));
+        switch (response) {
+            case GTK_RESPONSE_CANCEL:
+            default:
+                gtk_widget_destroy (app_data->diag_rcdb);
+                g_free (app_data->db_data);
+                g_free (app_data);
+                g_application_quit (G_APPLICATION(app));
+                return;
+            case GTK_RESPONSE_OK:
+                gtk_widget_destroy (app_data->diag_rcdb);
+        }
     }
 
     app_data->db_data->db_path = get_db_path (app_data);
     if (app_data->db_data->db_path == NULL) {
         g_free (app_data->db_data);
+        g_free (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -143,6 +147,7 @@ activate (GtkApplication    *app,
     if (max_file_size < (96 * 1024) && get_warn_data () == TRUE) {
         if (show_memlock_warn_dialog (max_file_size, app_data->builder) == TRUE) {
             g_free (app_data->db_data);
+            g_free (app_data);
             g_application_quit (G_APPLICATION(app));
             return;
         }
@@ -158,6 +163,7 @@ activate (GtkApplication    *app,
     app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
     if (app_data->db_data->key == NULL) {
         g_free (app_data->db_data);
+        g_free (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -169,6 +175,7 @@ activate (GtkApplication    *app,
         gcry_free (app_data->db_data->key);
         if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
             g_free (app_data->db_data);
+            g_free (app_data);
             g_clear_error (&err);
             g_application_quit (G_APPLICATION(app));
             return;
