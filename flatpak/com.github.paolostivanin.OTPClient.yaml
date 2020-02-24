@@ -27,8 +27,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://libzip.org/download/libzip-1.5.2.tar.xz
-    sha256: b3de4d4bd49a01e0cab3507fc163f88e1651695b6b9cb25ad174dbe319d4a3b4
+    url: https://libzip.org/download/libzip-1.6.1.tar.xz
+    sha256: 705dac7a671b3f440181481e607b0908129a9cf1ddfcba75d66436c0e7d33641
 - name: jansson
   cleanup:
   - "/include"

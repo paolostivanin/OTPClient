@@ -83,6 +83,15 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.1.0" date="2020-02-24">
+      <description>
+        <p>OTPClient 2.1.0 brings some minor enhancements to the UX</p>
+        <ul>
+          <li>save sort order on exit and allow user to reset it to the default value using the button located in the settings menu</li>
+          <li>on first start, allow user select whether a new database has to be created or an existing one has to be imported</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.1" date="2019-12-19">
       <description>
         <p>OTPClient 2.0.1 is a minor release that brings some fixes</p>

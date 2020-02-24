@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(OTPClient VERSION "2.0.1" LANGUAGES "C")
+project(OTPClient VERSION "2.1.0" LANGUAGES "C")
 
 configure_file("src/common/version.h.in" "version.h")
 include_directories(${PROJECT_BINARY_DIR})
