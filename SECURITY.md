@@ -6,7 +6,8 @@ The following list describes whether a version is eligible or not for security u
 
 | Version | Supported          | EOL  |
 | ------- | ------------------ |------|
-| 2.0.x   | :heavy_check_mark: | TBD  |
+| 2.1.x   | :heavy_check_mark: | TBD  |
+| 2.0.x   | :heavy_check_mark: | 08-03-2020  |
 | 1.5.x   | :heavy_check_mark: | 31-03-2020 |
 | < 1.5.0 | :x: | 27-06-2019 |
 
