@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 
+<!-- Generated with glade 3.22.2 
 
 Copyright (C) 2019
 
@@ -148,7 +148,7 @@ Author: Paolo Stivanin
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -291,7 +291,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -513,7 +513,7 @@ has been found or after 30 seconds if nothing has been detected.</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -570,11 +570,12 @@ restore an existing database or create a new one.</property>
             </child>
             <child>
               <object class="GtkButton" id="diag_rc_restoredb_btn_id">
-                <property name="label" translatable="yes">Restore existing database</property>
+                <property name="label" translatable="yes">Restore existing OTPClient database</property>
                 <property name="name">diag_rc_restoredb_btn</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
+                <property name="tooltip_text" translatable="yes">Do NOT use to import third party databases (e.g. andOTP)</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -617,7 +618,7 @@ restore an existing database or create a new one.</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -781,7 +782,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -1088,7 +1089,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -1211,7 +1212,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
@@ -1824,7 +1825,7 @@ Please type your password to unlock it</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
-    <child>
+    <child type="titlebar">
       <placeholder/>
     </child>
     <child internal-child="vbox">
