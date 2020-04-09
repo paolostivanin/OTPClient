@@ -83,6 +83,15 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.2.0" date="2020-04-10">
+      <description>
+        <p>OTPClient 2.2.0 brings support for FreeOTP+</p>
+        <ul>
+          <li>it's now possible to import and export FreeOTP+ backup (key URI format only)</li>
+          <li>minor fixes to the first startup dialog</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.0" date="2020-02-24">
       <description>
         <p>OTPClient 2.1.0 brings some minor enhancements to the UX</p>
