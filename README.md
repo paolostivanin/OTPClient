@@ -28,6 +28,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
 - import and export encrypted and/or plain [andOTP](https://github.com/flocke/andOTP) backup
+- import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
