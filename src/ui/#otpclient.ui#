@@ -1449,18 +1449,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="import_freeotpplus_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.import_freeotpplus</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
+          <placeholder/>
         </child>
       </object>
       <packing>
@@ -1502,20 +1491,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="export_freeotpplus_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.export_freeotpplus</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
+          <placeholder/>
         </child>
-
       </object>
       <packing>
         <property name="submenu">export_menu</property>
