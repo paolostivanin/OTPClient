@@ -46,15 +46,6 @@ jobs:
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
-  opensuseLeap:
-    docker:
-      - image: opensuse/leap
-    steps:
-      - checkout
-      - run: zypper -n ref && zypper -n dup && zypper -n in git gcc clang cmake make libgcrypt-devel libpng-devel gtk3-devel libzip-devel libzbar-devel libjansson-devel
-      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
-      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
-
 workflows:
   version: 2
   build:
@@ -64,4 +55,3 @@ workflows:
       - debianLatestStable
       - fedoraLatestStable
       - archlinux
-#      - opensuseLeap
