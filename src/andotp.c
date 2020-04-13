@@ -300,7 +300,7 @@ get_derived_key (const gchar  *password,
                  gint          iterations)
 {
     guchar *derived_key = gcry_malloc_secure (32);
-    if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1) + 1, GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
+    if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
                          salt, ANDOTP_SALT_SIZE, iterations, 32, derived_key) != 0) {
         return NULL;
     }
