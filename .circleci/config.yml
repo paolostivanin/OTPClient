@@ -6,7 +6,7 @@ jobs:
       - image: ubuntu:18.04
     steps:
       - checkout
-      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -15,7 +15,7 @@ jobs:
       - image: ubuntu:rolling
     steps:
       - checkout
-      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 

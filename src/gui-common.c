@@ -56,7 +56,7 @@ build_json_obj (const gchar *type,
 
     json_object_set (obj, "secret", json_string (acc_key));
 
-    if (g_strcmp0 (type, "TOTP") == 0) {
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));
     } else {
         json_object_set (obj, "counter", json_integer (ctr));

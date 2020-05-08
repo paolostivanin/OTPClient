@@ -4,15 +4,24 @@ runtime-version: '3.36'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
-- "--share=ipc"
-- "--socket=x11"
-- "--socket=wayland"
-- "--filesystem=xdg-run/dconf"
-- "--filesystem=~/.config/dconf:ro"
-- "--device=all"
-- "--talk-name=ca.desrt.dconf"
-- "--talk-name=org.gnome.Shell.Screenshot"
-- "--env=DCONF_USER_CONFIG_DIR=.config/dconf"
+# X11 + XShm access
+- --share=ipc
+- --socket=x11
+# Wayland access
+- --socket=wayland
+# Notification access
+- --talk-name=org.freedesktop.Notifications
+# Screen Lock Listener
+- --talk-name=org.freedesktop.ScreenSaver
+- --talk-name=org.freedesktop.login1.Manager
+- --talk-name=org.freedesktop.login1.Session
+- --talk-name=org.gnome.ScreenSaver
+- --talk-name=org.gnome.SessionManager
+- --talk-name=org.gnome.SessionManager.Presence
+- --talk-name=com.canonical.Unity.Session
+# Other
+- --device=all
+- --talk-name=org.gnome.Shell.Screenshot
 modules:
 - name: libzip
   buildsystem: cmake-ninja
@@ -38,8 +47,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
-    sha256: 5f8dec765048efac5d919aded51b26a32a05397ea207aa769ff6b53c7027d2c9
+    url: https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz
+    sha256: f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f
 - name: zbar
   config-opts:
   - "--without-qt"
@@ -85,4 +94,4 @@ modules:
   sources:
   - type: git
     url: https://github.com/paolostivanin/OTPClient.git
-    branch: master
+    branch: master 

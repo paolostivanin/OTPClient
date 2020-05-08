@@ -83,6 +83,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.3.0" date="2020-05-08">
+      <description>
+        <p>OTPClient 2.3.0 brings support for a new provider</p>
+        <ul>
+          <li>add support for importing and exporting plain json Aegis backups</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.2.1" date="2020-04-13">
       <description>
         <p>OTPClient 2.2.1 fixes a long standing bug</p>

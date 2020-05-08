@@ -148,7 +148,7 @@ row_selected_cb (GtkTreeView        *tree_view,
     GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
     if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 3) {
         // OTP is already set, so we update the value only if it is an HOTP
-        if (g_strcmp0 (otp_type, "HOTP") == 0) {
+        if (g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
             if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
                 set_otp (GTK_LIST_STORE (model), iter, app_data);
                 g_free (otp_value);

@@ -29,6 +29,7 @@ select_file_cb (GSimpleAction *simple,
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
                                                      "Open",
                                                      "Cancel");
+
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
 #else
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Open File",
@@ -37,6 +38,7 @@ select_file_cb (GSimpleAction *simple,
                                                      "Cancel", GTK_RESPONSE_CANCEL,
                                                      "Open", GTK_RESPONSE_ACCEPT,
                                                      NULL);
+
     gint res = gtk_dialog_run (GTK_DIALOG(dialog));
 #endif
     if (res == GTK_RESPONSE_ACCEPT) {
@@ -120,11 +122,12 @@ parse_data_and_update_db (AppData       *app_data,
         content = get_authplus_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
         content = get_freeotpplus_data (filename, &err);
+    } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0) {
+        content = get_aegis_data (filename, &err);
     }
 
     if (content == NULL && err != NULL) {
-        gchar *msg = g_strconcat ("An error occurred while importing, so nothing has been added to the database.\n"
-                                  "The error is: ", err->message, NULL);
+        gchar *msg = g_strconcat ("An error occurred while importing, so nothing has been added to the database. The error is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
         return FALSE;

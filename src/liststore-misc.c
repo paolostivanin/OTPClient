@@ -50,7 +50,7 @@ set_otp (GtkListStore   *list_store,
 
     cotp_error_t otp_err;
     gchar *otp;
-    if (g_strcmp0 (otp_data->type, "TOTP") == 0) {
+    if (g_ascii_strcasecmp (otp_data->type, "TOTP") == 0) {
         if (otp_data->steam) {
             otp = get_steam_totp (otp_data->secret, otp_data->period, &otp_err);
         } else {
@@ -98,7 +98,7 @@ foreach_func_update_otps (GtkTreeModel *model,
                         COLUMN_LESS_THAN_A_MINUTE, &only_a_minute_left,
                         -1);
 
-    if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_strcmp0 (otp_type, "TOTP") == 0) {
+    if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_ascii_strcasecmp (otp_type, "TOTP") == 0) {
         gboolean short_countdown = (period <= 60 || only_a_minute_left) ? TRUE : FALSE;
         gint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
         gint token_validity = remaining_seconds % period;
