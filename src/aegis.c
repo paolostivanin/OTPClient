@@ -37,39 +37,45 @@ export_aegis (const gchar *export_path,
     json_object_set (root, "version", json_integer(1));
 
     json_t *aegis_header_obj = json_object ();
-    json_object_set (aegis_header_obj, "slots", json_string(""));
-    json_object_set (aegis_header_obj, "params", json_string(""));
+    json_object_set (aegis_header_obj, "slots", json_null ());
+    json_object_set (aegis_header_obj, "params", json_null ());
     json_object_set (root, "header", aegis_header_obj);
 
     json_t *aegis_db_obj = json_object ();
     json_t *array = json_array ();
     json_object_set (aegis_db_obj, "version", json_integer(1));
     json_object_set (aegis_db_obj, "entries", array);
+    json_object_set (root, "db", aegis_db_obj);
 
     json_t *db_obj, *export_obj, *info_obj;
     gsize index;
     json_array_foreach (json_db_data, index, db_obj) {
         export_obj = json_object ();
         info_obj = json_object ();
+        json_t *otp_type = json_object_get (db_obj, "type");
 
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         // TODO: must verify this
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
             json_object_set (export_obj, "type", json_string ("STEAM"));
         } else {
-            json_object_set (export_obj, "type", json_object_get (db_obj, "type"));
+            json_object_set (export_obj, "type", json_string (g_utf8_strdown (json_string_value (otp_type), -1)));
         }
 
-        json_object_set (export_obj, "name", json_object_get (db_obj, "type"));
+        json_object_set (export_obj, "name", json_object_get (db_obj, "label"));
         const gchar *issuer_from_db = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer_from_db != NULL && g_utf8_strlen (issuer_from_db, -1) > 0) {
             json_object_set (export_obj, "issuer", json_string (issuer_from_db));
+        } else {
+            json_object_set (export_obj, "issuer", json_null ());
         }
+
+        json_object_set (export_obj, "icon", json_null ());
 
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (info_obj, "algo", json_object_get (db_obj, "algo"));
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        if (g_ascii_strcasecmp (json_string_value (otp_type), "TOTP") == 0) {
             json_object_set (info_obj, "period", json_object_get (db_obj, "period"));
         } else {
             json_object_set (info_obj, "counter", json_object_get (db_obj, "counter"));
@@ -84,7 +90,7 @@ export_aegis (const gchar *export_path,
     if (fp == NULL) {
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
     } else {
-        if (json_dumpf (array, fp, JSON_COMPACT) == -1) {
+        if (json_dumpf (root, fp, JSON_COMPACT) == -1) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
         }
         fclose (fp);
