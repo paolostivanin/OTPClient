@@ -120,6 +120,8 @@ parse_data_and_update_db (AppData       *app_data,
         content = get_authplus_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
         content = get_freeotpplus_data (filename, &err);
+    } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0) {
+        content = get_aegis_data (filename, &err);
     }
 
     if (content == NULL && err != NULL) {

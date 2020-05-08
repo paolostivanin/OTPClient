@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.22.2 
 
-Copyright (C) 2019
+Copyright (C) 2020
 
 This file is part of OTPClient.
 
@@ -1462,6 +1462,20 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="position">3</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="import_aegis_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.import_aegis</property>
+            <property name="text" translatable="yes">Aegis (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">import_menu</property>
@@ -1515,7 +1529,20 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="position">2</property>
           </packing>
         </child>
-
+        <child>
+          <object class="GtkModelButton" id="export_aegis_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can_focus">True</property>
+            <property name="receives_default">True</property>
+            <property name="action_name">settings_menu.export_aegis</property>
+            <property name="text" translatable="yes">Aegis (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">3</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">export_menu</property>

@@ -9,6 +9,7 @@ G_BEGIN_DECLS
 #define ANDOTP_IMPORT_PLAIN_ACTION_NAME     "import_andotp_plain"
 #define AUTHPLUS_IMPORT_ACTION_NAME         "import_authplus"
 #define FREEOTPPLUS_IMPORT_ACTION_NAME      "import_freeotpplus"
+#define AEGIS_IMPORT_ACTION_NAME            "import_aegis"
 
 typedef struct _otp_t {
     gchar *type;
@@ -45,6 +46,9 @@ GSList *get_andotp_data         (const gchar     *path,
                                  GError         **err);
 
 GSList *get_freeotpplus_data    (const gchar     *path,
+                                 GError         **err);
+
+GSList *get_aegis_data          (const gchar     *path,
                                  GError         **err);
 
 gchar  *update_db_from_otps     (GSList          *otps,

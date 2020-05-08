@@ -36,6 +36,10 @@ export_data_cb (GSimpleAction *simple,
         exported_file_path = g_build_filename (base_dir, "freeotpplus-exports.txt", NULL);
         ret_msg = export_freeotpplus (exported_file_path, app_data->db_data->json_data);
         show_ret_msg_dialog (app_data->main_window, exported_file_path, ret_msg);
+    } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0) {
+        exported_file_path = g_build_filename (base_dir, "aegis_export_plain.json", NULL);
+        ret_msg = export_aegis (exported_file_path, app_data->db_data->json_data);
+        show_ret_msg_dialog (app_data->main_window, exported_file_path, ret_msg);
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
