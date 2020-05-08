@@ -38,8 +38,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: http://www.digip.org/jansson/releases/jansson-2.12.tar.gz
-    sha256: 5f8dec765048efac5d919aded51b26a32a05397ea207aa769ff6b53c7027d2c9
+    url: http://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz
+    sha256: f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f
 - name: zbar
   config-opts:
   - "--without-qt"
@@ -53,8 +53,8 @@ modules:
   - "--enable-codes=qrcode"
   sources:
   - type: archive
-    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.tar.gz
-    sha256: ac52763a7dd6ddc53ca6cd75ccee14f7abf6ae46ecb31137d025af123edd33bf
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.1.tar.gz
+    sha256: c72b19eb63f48781ae5ff1830236f4e753f4bd6418cd781aea1cd85d625b119e
 - name: libbaseencode
   buildsystem: cmake-ninja
   config-opts:
