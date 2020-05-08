@@ -200,7 +200,7 @@ export_andotp (const gchar *export_path,
         json_object_set (export_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (export_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (export_obj, "algorithm", json_object_get (db_obj, "algo"));
-        if (g_strcmp0 (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
             json_object_set (export_obj, "period", json_object_get (db_obj, "period"));
         } else {
             json_object_set (export_obj, "counter", json_object_get (db_obj, "counter"));

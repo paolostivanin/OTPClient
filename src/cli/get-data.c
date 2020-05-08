@@ -81,7 +81,7 @@ get_token (json_t       *obj,
     gint algo = get_algo_int_from_str (json_string_value (json_object_get (obj, "algo")));
     gint period;
     gint64 counter;
-    if (g_strcmp0 (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
+    if (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
         period = json_integer_value (json_object_get (obj, "period"));
         gint remaining_seconds = (period > 59 ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
         gint token_validity = remaining_seconds % period;

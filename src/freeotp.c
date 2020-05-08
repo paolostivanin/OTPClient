@@ -69,7 +69,7 @@ export_freeotpplus (const gchar *export_path,
         uri = g_strconcat (uri, "&digits=", g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits"))), NULL);
         uri = g_strconcat (uri, "&algorithm=", json_string_value ( json_object_get (db_obj, "algo")), NULL);
 
-        if (g_strcmp0 (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
             uri = g_strconcat (uri, "&period=", g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "period"))), NULL);
         } else {
             uri = g_strconcat (uri, "&counter=", g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "counter"))), NULL);
