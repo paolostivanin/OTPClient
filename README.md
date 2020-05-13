@@ -1,7 +1,4 @@
 # OTPClient
-<a href="https://scan.coverity.com/projects/paolostivanin-otpclient">
-  <img alt="Coverity Scan Build Status" src="https://img.shields.io/coverity/scan/12749.svg"/>
-</a>
 <a href="https://circleci.com/gh/paolostivanin/OTPClient">
   <img alt="CircleCI" src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
 </a>
@@ -33,6 +30,10 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
+
+## Testing
+* Before each release, I run PVS Studio in order to catch even more errors and/or corner cases
+* With every commit to master, OTPClient is compiled in CircleCI against different distros
 
 ## Wiki
 For things like roadmap, screenshots, how to use OTPClient, etc, please have a lookt at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.
