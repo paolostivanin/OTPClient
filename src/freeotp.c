@@ -29,7 +29,7 @@ gchar *
 export_freeotpplus (const gchar *export_path,
                     json_t      *json_db_data)
 {
-    gchar *uri, *constructed_label;
+    gchar *constructed_label;
     json_t *db_obj;
     gsize index;
 
@@ -39,13 +39,15 @@ export_freeotpplus (const gchar *export_path,
     }
 
     json_array_foreach (json_db_data, index, db_obj) {
-        uri = g_strconcat ("otpauth://", NULL);
+        GString *uri = g_string_new (NULL);
+        g_string_append (uri, "otpauth://");
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
-            uri = g_strconcat (uri, "totp/", NULL);
+            g_string_append (uri, "totp/");
             constructed_label = g_strconcat ("Steam:", json_string_value (json_object_get (db_obj, "label")), NULL);
         } else {
-            uri = g_strconcat (uri, g_utf8_strdown (json_string_value (json_object_get (db_obj, "type")),  -1), "/", NULL);
+            g_string_append (uri, g_utf8_strdown (json_string_value (json_object_get (db_obj, "type")),  -1));
+            g_string_append (uri, "/");
             if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
                 constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
                                                  ":",
@@ -57,30 +59,36 @@ export_freeotpplus (const gchar *export_path,
         }
 
         gchar *escaped_label = g_uri_escape_string (constructed_label, NULL, FALSE);
-        uri = g_strconcat (uri, escaped_label, NULL);
-        uri = g_strconcat (uri, "?secret=", json_string_value (json_object_get (db_obj, "secret")), NULL);
+        g_string_append (uri, escaped_label);
+        g_string_append (uri, "?secret=");
+        g_string_append (uri,json_string_value (json_object_get (db_obj, "secret")));
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
-            uri = g_strconcat (uri, "&issuer=Steam", NULL);
+            g_string_append (uri, "&issuer=Steam");
         }
         if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
-            uri = g_strconcat (uri, "&issuer=", json_string_value (json_object_get (db_obj, "issuer")), NULL);
+            g_string_append (uri, "&issuer=");
+            g_string_append (uri, json_string_value (json_object_get (db_obj, "issuer")));
         }
 
-        uri = g_strconcat (uri, "&digits=", g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits"))), NULL);
-        uri = g_strconcat (uri, "&algorithm=", json_string_value ( json_object_get (db_obj, "algo")), NULL);
+        g_string_append (uri, "&digits=");
+        g_string_append (uri,g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits"))));
+        g_string_append (uri, "&algorithm=");
+        g_string_append (uri, json_string_value ( json_object_get (db_obj, "algo")));
 
         if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
-            uri = g_strconcat (uri, "&period=", g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "period"))), NULL);
+            g_string_append (uri, "&period=");
+            g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "period"))));
         } else {
-            uri = g_strconcat (uri, "&counter=", g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "counter"))), NULL);
+            g_string_append (uri, "&counter=");
+            g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "counter"))));
         }
 
-        uri = g_strconcat (uri, "\n", NULL);
-        fwrite (uri, strlen (uri), 1, fp);
+        g_string_append (uri, "\n");
+        fwrite (uri->str, strlen (uri->str), 1, fp);
 
         g_free (constructed_label);
         g_free (escaped_label);
-        g_free (uri);
+        g_string_free (uri, TRUE);
     }
 
     fclose (fp);
