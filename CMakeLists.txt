@@ -195,6 +195,9 @@ install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION sh
 install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
 install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
 
+install(FILES otpclient.1.gz DESTINATION share/man/man1)
+install(FILES otpclient-cli.1.gz DESTINATION share/man/man1)
+
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x32.png DESTINATION share/icons/hicolor/32x32/apps RENAME com.github.paolostivanin.OTPClient.png)
@@ -203,4 +206,5 @@ install(FILES data/icons/icon_x64.png DESTINATION share/icons/hicolor/64x64/apps
 install(FILES data/icons/icon_x128.png DESTINATION share/icons/hicolor/128x128/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x256.png DESTINATION share/icons/hicolor/256x256/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x512.png DESTINATION share/icons/hicolor/512x512/apps RENAME com.github.paolostivanin.OTPClient.png)
-install(FILES data/icons/otpclient.svg DESTINATION share/icons/hicolor/scalable/apps RENAME com.github.paolostivanin.OTPClient.svg)
+install(FILES data/icons/com.github.paolostivanin.OTPClient.svg DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES data/icons/com.github.paolostivanin.OTPClient-symbolic.svg DESTINATION share/icons/hicolor/scalable/apps)
