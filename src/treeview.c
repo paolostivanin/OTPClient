@@ -222,7 +222,9 @@ reset_column_sorting_cb (GSimpleAction *simple    __attribute__((unused)),
     // set default sorting value
     gtk_tree_sortable_set_sort_column_id (GTK_TREE_SORTABLE(GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view))), -2, 0);
 
-    show_message_dialog (app_data->main_window, "Sorting order has been correctly reset.\nPlease close and open the program again to apply the changes.", GTK_MESSAGE_INFO);
+    update_model (app_data);
+
+    show_message_dialog (app_data->main_window, "Sorting order has been correctly reset.", GTK_MESSAGE_INFO);
 }
 
 
@@ -314,14 +316,12 @@ add_columns (GtkTreeView *tree_view)
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Account", renderer, "text", COLUMN_ACC_LABEL, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN(column), TRUE);
     gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN(column), 1); // 1 is the account column
     gtk_tree_view_append_column (tree_view, column);
 
     renderer = gtk_cell_renderer_text_new ();
     column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
     gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_column_set_clickable (GTK_TREE_VIEW_COLUMN(column), TRUE);
     gtk_tree_view_column_set_sort_column_id (GTK_TREE_VIEW_COLUMN(column), 2); // 2 is the issuer column
     gtk_tree_view_append_column (tree_view, column);
 

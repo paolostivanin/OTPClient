@@ -18,11 +18,16 @@ typedef struct _otp_data {
     gboolean steam;
 } OtpData;
 
-static void set_otp_data (OtpData *otp_data, AppData *app_data, guint row_number);
+static void     set_otp_data                (OtpData *otp_data,
+                                             AppData *app_data,
+                                             gint     row_db_pos);
 
-static gboolean foreach_func_update_otps (GtkTreeModel *model, GtkTreePath *path, GtkTreeIter *iter, gpointer user_data);
+static gboolean foreach_func_update_otps    (GtkTreeModel *model,
+                                             GtkTreePath *path,
+                                             GtkTreeIter *iter,
+                                             gpointer user_data);
 
-static void clean_otp_data (OtpData *otp_data);
+static void     clean_otp_data              (OtpData *otp_data);
 
 
 gboolean
@@ -42,9 +47,10 @@ set_otp (GtkListStore   *list_store,
 {
     OtpData *otp_data = g_new0 (OtpData, 1);
 
-    guint row_number = get_row_number_from_iter (list_store, iter);
+    gint row_db_pos;
+    gtk_tree_model_get (GTK_TREE_MODEL(list_store), &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
 
-    set_otp_data (otp_data, app_data, row_number);
+    set_otp_data (otp_data, app_data, row_db_pos);
 
     gint algo = get_algo_int_from_str (otp_data->algo);
 
@@ -130,9 +136,9 @@ foreach_func_update_otps (GtkTreeModel *model,
 static void
 set_otp_data (OtpData  *otp_data,
               AppData  *app_data,
-              guint     row_number)
+              gint      row_db_pos)
 {
-    json_t *obj = json_array_get (app_data->db_data->json_data, row_number);
+    json_t *obj = json_array_get (app_data->db_data->json_data, row_db_pos);
 
     otp_data->type = g_strdup (json_string_value (json_object_get (obj, "type")));
     otp_data->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
