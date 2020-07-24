@@ -85,9 +85,10 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   <releases>
     <release version="2.3.2" date="2020-06-xx">
       <description>
-        <p>OTPClient 2.3.2 brings a small fix</p>
+        <p>OTPClient 2.3.2 brings a small fix and a new icon</p>
         <ul>
           <li>fix incorrect code is shown when sorting by label/issuer</li>
+          <li>new icon, thanks a lot @bertob</li>
         </ul>
       </description>
     </release>
