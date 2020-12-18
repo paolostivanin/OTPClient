@@ -195,8 +195,8 @@ install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION sh
 install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
 install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
 
-install(FILES otpclient.1.gz DESTINATION share/man/man1)
-install(FILES otpclient-cli.1.gz DESTINATION share/man/man1)
+install(FILES man/otpclient.1.gz DESTINATION share/man/man1)
+install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
 
 install(FILES data/icons/icon_x16.png DESTINATION share/icons/hicolor/16x16/apps RENAME com.github.paolostivanin.OTPClient.png)
 install(FILES data/icons/icon_x24.png DESTINATION share/icons/hicolor/24x24/apps RENAME com.github.paolostivanin.OTPClient.png)
