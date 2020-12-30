@@ -70,13 +70,13 @@ set(GUI_HEADER_FILES
         src/password-cb.h
         src/qrcode-parser.h
         src/treeview.h
-        src/exports.h
-        src/lock-app.h)
+        src/common/exports.h
+        src/lock-app.h src/common/get-providers-data.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
         src/add-common.c
-        src/andotp.c
+        src/common/andotp.c
         src/app.c
         src/authplus.c
         src/gui-common.c
@@ -102,8 +102,8 @@ set(GUI_SOURCE_FILES
         src/webcam-add-cb.c
         src/exports.c
         src/lock-app.c
-        src/freeotp.c
-        src/aegis.c)
+        src/common/freeotp.c
+        src/common/aegis.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
@@ -111,7 +111,10 @@ set(CLI_HEADER_FILES
         src/common/common.h
         src/db-misc.h
         src/gquarks.h
-        src/file-size.h)
+        src/file-size.h
+        src/common/exports.h
+        src/parse-uri.h
+        src/common/get-providers-data.h)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
@@ -120,7 +123,12 @@ set(CLI_SOURCE_FILES
         src/common/common.c
         src/db-misc.c
         src/gquarks.c
-        src/file-size.c)
+        src/file-size.c
+        src/parse-uri.c
+        src/common/andotp.c
+        src/common/aegis.c
+        src/common/freeotp.c)
+
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES
                 src/treeview.c

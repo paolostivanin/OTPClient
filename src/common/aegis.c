@@ -2,9 +2,9 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
-#include "imports.h"
-#include "gui-common.h"
-#include "gquarks.h"
+#include "../imports.h"
+#include "../gui-common.h"
+#include "../gquarks.h"
 
 
 static GSList *parse_json_data                (const gchar          *data,

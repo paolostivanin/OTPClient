@@ -7,6 +7,9 @@
 #include "../common/common.h"
 #include "../db-misc.h"
 #include "../otpclient.h"
+#include "../common/exports.h"
+#include "../common/get-providers-data.h"
+#include "../parse-uri.h"
 
 #define MAX_ABS_PATH_LEN 256
 
@@ -14,7 +17,7 @@
 static gchar    *get_db_path    (void);
 #endif
 
-static gchar    *get_pwd        (void);
+static gchar    *get_pwd        (const gchar *pwd_msg);
 
 
 gint
@@ -52,7 +55,7 @@ main (gint    argc,
     }
 #endif
 
-    db_data->key = get_pwd ();
+    db_data->key = get_pwd ("Type the DB decryption password: ");
     if (db_data->key == NULL) {
         g_free (db_data);
         return -1;
@@ -96,6 +99,45 @@ main (gint    argc,
         show_token (db_data, account, issuer, match_exactly, show_next_token);
     } else if (g_strcmp0 (argv[1], "list") == 0) {
         list_all_acc_iss (db_data);
+    } else if (g_strcmp0 (argv[1], "export") == 0) {
+        if (g_ascii_strcasecmp (argv[3], "andotp") != 0 && g_ascii_strcasecmp (argv[3], "freeotpplus") != 0 && g_ascii_strcasecmp (argv[3], "aegis") != 0) {
+            g_printerr ("Wrong argument(s). Please type '%s --help-export' to see the available options.\n", argv[0]);
+            g_free (db_data);
+            return -1;
+        }
+        const gchar *base_dir = NULL;
+#ifndef USE_FLATPAK_APP_FOLDER
+        base_dir = g_get_home_dir ();
+#else
+        base_dir = g_get_user_data_dir ();
+#endif
+        gchar *andotp_export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
+        if (g_ascii_strcasecmp (argv[3], "andotp") == 0) {
+            if (argc == 5 && (g_strcmp0 (argv[4], "-e") == 0 || g_strcmp0 (argv[4], "--encrypt") == 0)) {
+                andotp_export_pwd = get_pwd ("Type the export encryption password: ");
+                if (andotp_export_pwd == NULL) {
+                    goto end;
+                }
+            }
+            exported_file_path = g_build_filename (base_dir, andotp_export_pwd != NULL ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
+            ret_msg = export_andotp (exported_file_path, andotp_export_pwd, db_data->json_data);
+            gcry_free (andotp_export_pwd);
+        }
+        if (g_ascii_strcasecmp (argv[3], "freeotpplus") == 0) {
+            exported_file_path = g_build_filename (base_dir, "freeotpplus-exports.txt", NULL);
+            ret_msg = export_freeotpplus (exported_file_path, db_data->json_data);
+        }
+        if (g_ascii_strcasecmp (argv[3], "aegis") == 0) {
+            exported_file_path = g_build_filename (base_dir, "aegis_export_plain.json", NULL);
+            ret_msg = export_aegis (exported_file_path, db_data->json_data);
+        }
+        if (ret_msg != NULL) {
+            g_printerr ("An error occurred while exporting the data: %s\n", ret_msg);
+            g_free (ret_msg);
+        } else {
+            g_print ("Data successfully exported to: %s\n", exported_file_path);
+        }
+        g_free (exported_file_path);
     } else {
         show_help (argv[0], "help");
         return -1;
@@ -164,10 +206,10 @@ get_db_path ()
 
 
 static gchar *
-get_pwd ()
+get_pwd (const gchar *pwd_msg)
 {
     gchar *pwd = gcry_calloc_secure (256, 1);
-    g_print ("Type the password: ");
+    g_print ("%s", pwd_msg);
 
     struct termios old, new;
     if (tcgetattr (STDIN_FILENO, &old) != 0) {

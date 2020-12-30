@@ -3,10 +3,10 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
-#include "file-size.h"
-#include "imports.h"
-#include "gui-common.h"
-#include "gquarks.h"
+#include "../file-size.h"
+#include "../imports.h"
+#include "../gui-common.h"
+#include "../gquarks.h"
 
 #define ANDOTP_IV_SIZE   12
 #define ANDOTP_SALT_SIZE 12

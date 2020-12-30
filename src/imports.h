@@ -34,23 +34,6 @@ void    select_file_cb          (GSimpleAction   *simple,
                                  GVariant        *parameter,
                                  gpointer         user_data);
 
-GSList *get_authplus_data       (const gchar     *zip_path,
-                                 const gchar     *password,
-                                 gint32           max_file_size,
-                                 GError         **err);
-
-GSList *get_andotp_data         (const gchar     *path,
-                                 const gchar     *password,
-                                 gint32           max_file_size,
-                                 gboolean         encrypted,
-                                 GError         **err);
-
-GSList *get_freeotpplus_data    (const gchar     *path,
-                                 GError         **err);
-
-GSList *get_aegis_data          (const gchar     *path,
-                                 GError         **err);
-
 gchar  *update_db_from_otps     (GSList          *otps,
                                  AppData         *app_data);
 

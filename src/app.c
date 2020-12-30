@@ -5,7 +5,7 @@
 #include "gui-common.h"
 #include "gquarks.h"
 #include "imports.h"
-#include "exports.h"
+#include "common/exports.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "get-builder.h"
