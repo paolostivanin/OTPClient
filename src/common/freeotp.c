@@ -2,8 +2,8 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
-#include "file-size.h"
-#include "parse-uri.h"
+#include "../file-size.h"
+#include "../parse-uri.h"
 
 
 GSList *

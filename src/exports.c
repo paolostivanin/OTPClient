@@ -2,7 +2,7 @@
 #include <jansson.h>
 #include "password-cb.h"
 #include "message-dialogs.h"
-#include "exports.h"
+#include "common/exports.h"
 
 
 static void show_ret_msg_dialog (GtkWidget  *mainwin, gchar *fpath, gchar *ret_msg);
