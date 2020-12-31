@@ -5,11 +5,8 @@
 #include "help.h"
 #include "get-data.h"
 #include "../common/common.h"
-#include "../db-misc.h"
-#include "../otpclient.h"
 #include "../common/exports.h"
 #include "../common/get-providers-data.h"
-#include "../parse-uri.h"
 
 #define MAX_ABS_PATH_LEN 256
 
@@ -100,20 +97,35 @@ main (gint    argc,
     } else if (g_strcmp0 (argv[1], "list") == 0) {
         list_all_acc_iss (db_data);
     } else if (g_strcmp0 (argv[1], "export") == 0) {
-        if (g_ascii_strcasecmp (argv[3], "andotp") != 0 && g_ascii_strcasecmp (argv[3], "freeotpplus") != 0 && g_ascii_strcasecmp (argv[3], "aegis") != 0) {
-            g_printerr ("Wrong argument(s). Please type '%s --help-export' to see the available options.\n", argv[0]);
-            g_free (db_data);
-            return -1;
+        if (g_ascii_strcasecmp (argv[3], "andotp_plain") != 0 && g_ascii_strcasecmp (argv[3], "andotp_encrypted") != 0 &&
+            g_ascii_strcasecmp (argv[3], "freeotpplus") != 0 && g_ascii_strcasecmp (argv[3], "aegis") != 0) {
+                g_printerr ("Wrong argument(s). Please type '%s --help-export' to see the available options.\n", argv[0]);
+                g_free (db_data);
+                return -1;
         }
         const gchar *base_dir = NULL;
 #ifndef USE_FLATPAK_APP_FOLDER
-        base_dir = g_get_home_dir ();
+        if (argv[4] == NULL) {
+            base_dir = g_get_home_dir ();
+        } else {
+            if (g_ascii_strcasecmp (argv[4], "-d") == 0 && argv[5] != NULL) {
+                if (!g_file_test (argv[5], G_FILE_TEST_IS_DIR)) {
+                    g_printerr ("%s is not a directory or the folder doesn't exist. The output will be saved into the HOME directory.\n", argv[5]);
+                    base_dir = g_get_home_dir ();
+                } else {
+                    base_dir = argv[5];
+                }
+            } else {
+                g_printerr ("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory.\n");
+                base_dir = g_get_home_dir ();
+            }
+        }
 #else
         base_dir = g_get_user_data_dir ();
 #endif
         gchar *andotp_export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
-        if (g_ascii_strcasecmp (argv[3], "andotp") == 0) {
-            if (argc == 5 && (g_strcmp0 (argv[4], "-e") == 0 || g_strcmp0 (argv[4], "--encrypt") == 0)) {
+        if (g_ascii_strcasecmp (argv[3], "andotp_plain") == 0 || g_ascii_strcasecmp (argv[3], "andotp_encrypted") == 0) {
+            if (g_ascii_strcasecmp (argv[3], "andotp_encrypted")) {
                 andotp_export_pwd = get_pwd ("Type the export encryption password: ");
                 if (andotp_export_pwd == NULL) {
                     goto end;
