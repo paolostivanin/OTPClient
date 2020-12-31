@@ -1,6 +1,6 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '3.36'
+runtime-version: '3.38'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
@@ -36,8 +36,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://libzip.org/download/libzip-1.6.1.tar.xz
-    sha256: 705dac7a671b3f440181481e607b0908129a9cf1ddfcba75d66436c0e7d33641
+    url: https://libzip.org/download/libzip-1.7.3.tar.xz
+    sha256: a60473ffdb7b4260c08bfa19c2ccea0438edac11193c3afbbb1f17fbcf6c6132
 - name: jansson
   cleanup:
   - "/include"
