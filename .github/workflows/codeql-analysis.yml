@@ -29,9 +29,8 @@ jobs:
         languages: ${{ matrix.language }}
 
     - name: Install Dependencies
-    - run: |
-        sudo apt update && DEBIAN_FRONTEND=noninteractive \
-          apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
+      run: |
+        apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev
         git clone https://github.com/paolostivanin/OTPClient ./OTPClient
         cd OTPClient && chmod +x .ci/install_deps.sh && .ci/install_deps.sh
 
