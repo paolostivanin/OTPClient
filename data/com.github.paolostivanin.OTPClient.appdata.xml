@@ -83,6 +83,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.4.2" date="2021-02-12">
+      <description>
+        <p>OTPClient 2.4.2 contains a small fix to andOTP handling</p>
+        <ul>
+          <li>fix handling of andOTP data when importing/exporting, thanks to Michal Borek for the contribution</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.4.1" date="2020-12-31">
       <description>
         <p>OTPClient 2.4.1 bring a new feature to the CLI</p>
