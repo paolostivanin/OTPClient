@@ -54,4 +54,4 @@ workflows:
       - ubuntuLatestRolling
       - debianLatestStable
       - fedoraLatestStable
-      - archlinux
+      #- archlinux
