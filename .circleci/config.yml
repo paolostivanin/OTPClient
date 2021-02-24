@@ -39,7 +39,7 @@ jobs:
 
   archlinux:
     docker:
-      - image: archlinux/base:latest
+      - image: archlinux:latest
     steps:
       - checkout
       - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk3 libgcrypt zbar gcc clang cmake make libzip jansson libpng
