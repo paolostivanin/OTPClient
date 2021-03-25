@@ -317,18 +317,18 @@ parse_json_data (const gchar *data,
         otp->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
 
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
-        otp->issuer = g_strdup (g_strstrip (issuer));
+        otp->issuer = g_strstrip (g_strdup (issuer));
         
         const gchar *label_with_prefix = json_string_value (json_object_get (obj, "label"));
         gchar **tokens = g_strsplit (label_with_prefix, ":", -1);
         if (tokens[0] && tokens[1]) {
             if(issuer != NULL && g_ascii_strcasecmp(issuer, tokens[0]) == 0) {
-                otp->account_name = g_strdup (g_strstrip (tokens[1]));
+                otp->account_name = g_strstrip (g_strdup (tokens[1]));
             } else {
-                otp->account_name = g_strdup (g_strstrip (label_with_prefix));
+                otp->account_name = g_strstrip (g_strdup (label_with_prefix));
             }
         } else {
-            otp->account_name = g_strdup (g_strstrip (tokens[0]));
+            otp->account_name = g_strstrip (g_strdup (tokens[0]));
         }
         g_strfreev (tokens);
 
