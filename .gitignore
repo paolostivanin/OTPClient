@@ -3,7 +3,7 @@ build/
 tests/
 .flatpak-builder/
 flatpak/repo/
-TODO
+TODO*
 .idea/
 
 # Object files
