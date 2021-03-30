@@ -83,6 +83,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.4.4" date="2021-03-30">
+      <description>
+        <p>OTPClient 2.4.4 disabled a broken feature</p>
+        <ul>
+          <li>remove possibility to sort columns by either account or issuer due to GtkTreeView issues. This feature will come back with 3.0.0</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.4.3" date="2021-03-25">
       <description>
         <p>OTPClient 2.4.3 contains some small fixes</p>

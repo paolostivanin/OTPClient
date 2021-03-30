@@ -1,33 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.2 
-
-Copyright (C) 2020
-
-This file is part of OTPClient.
-
-OTPClient is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-OTPClient is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with OTPClient.  If not, see <http://www.gnu.org/licenses/>.
-
-Author: Paolo Stivanin
-
--->
 <interface>
   <requires lib="gtk+" version="3.18"/>
-  <!-- interface-license-type gplv3 -->
-  <!-- interface-name OTPClient -->
-  <!-- interface-description Highly secure and easy to use GTK+ OTP client -->
-  <!-- interface-copyright 2019 -->
-  <!-- interface-authors Paolo Stivanin -->
   <object class="GtkPopoverMenu" id="add_pop_id">
     <property name="can_focus">False</property>
     <child>
@@ -1642,20 +1615,6 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">5</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="resetsort_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can_focus">True</property>
-            <property name="receives_default">True</property>
-            <property name="action_name">settings_menu.reset_sort</property>
-            <property name="text" translatable="yes">Reset column sorting</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">6</property>
           </packing>
         </child>
       </object>

@@ -31,8 +31,4 @@ void row_selected_cb            (GtkTreeView        *tree_view,
                                 GtkTreeViewColumn  *column,
                                 gpointer            user_data);
 
-void reset_column_sorting_cb  (GSimpleAction      *simple ,
-                                GVariant           *parameter,
-                                gpointer            user_data);
-
 G_END_DECLS
