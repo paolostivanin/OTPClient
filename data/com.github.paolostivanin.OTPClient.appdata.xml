@@ -282,4 +282,8 @@ It's also possible to import/export backups from/to andOTP and import backups fr
       </description>
     </release>
   </releases>
+  <custom>
+    <value key="Purism::form_factor">workstation</value>
+    <value key="Purism::form_factor">mobile</value>
+  </custom>
 </component>
