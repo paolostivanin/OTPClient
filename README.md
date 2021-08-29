@@ -37,7 +37,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 * With every commit to master, OTPClient is compiled in CircleCI against different distros
 
 ## Wiki
-For things like roadmap, screenshots, how to use OTPClient, etc, please have a lookt at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.
+For things like roadmap, screenshots, how to use OTPClient, etc, please have a look at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.
 
 ## Manual installation
 If OTPClient hasn't been packaged for your distro ([check here](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages)) and your distro doesn't support Flatpak, then you'll have to manually compile and install OTPClient.
