@@ -8,3 +8,4 @@ Name=OTPClient
 Comment=GTK+ TOTP and HOTP client
 Categories=GTK;GNOME;Utility;
 StartupWMClass=otpclient
+X-Purism-FormFactor=Workstation;Mobile;
