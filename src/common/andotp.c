@@ -318,7 +318,7 @@ parse_json_data (const gchar *data,
 
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         otp->issuer = g_strstrip (g_strdup (issuer));
-        
+
         const gchar *label_with_prefix = json_string_value (json_object_get (obj, "label"));
         gchar **tokens = g_strsplit (label_with_prefix, ":", -1);
         if (tokens[0] && tokens[1]) {

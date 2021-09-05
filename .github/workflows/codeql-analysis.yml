@@ -35,7 +35,7 @@ jobs:
         cd OTPClient && chmod +x .ci/install_deps.sh && sudo .ci/install_deps.sh
 
     - name: Build
-      run: | 
+      run: |
        mkdir build && cd $_
        cmake ..
        make
