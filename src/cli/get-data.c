@@ -24,7 +24,7 @@ show_token (DatabaseData *db_data,
     json_t *obj;
     gboolean found = FALSE;
     json_array_foreach (db_data->json_data, index, obj) {
-        if (compare_strings (json_string_value (json_object_get (obj, "label")), account, match_exactly) == 0){
+        if (compare_strings (json_string_value (json_object_get (obj, "label")), account, match_exactly) == 0) {
             if (issuer != NULL) {
                 if (compare_strings (json_string_value (json_object_get (obj, "issuer")), issuer, match_exactly) == 0) {
                     get_token (obj, db_data, show_next_token);

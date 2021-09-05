@@ -17,7 +17,7 @@ add_data_to_db (const gchar *otp_uri,
     }
 
     gchar *err_msg = check_params (otps);
-    if (err_msg != NULL){
+    if (err_msg != NULL) {
         return err_msg;
     }
 

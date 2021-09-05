@@ -64,7 +64,7 @@ guint32
 jenkins_one_at_a_time_hash (const gchar *key, gsize len)
 {
     guint32 hash, i;
-    for(hash = i = 0; i < len; ++i) {
+    for (hash = i = 0; i < len; ++i) {
         hash += key[i];
         hash += (hash << 10);
         hash ^= (hash >> 6);
