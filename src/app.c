@@ -242,10 +242,10 @@ static gboolean
 show_memlock_warn_dialog (gint32      max_file_size,
                           GtkBuilder *builder)
 {
-    gchar *msg = g_strdup_printf ("Your OS's memlock limit (%d) may be too low for you.\n"
-                                  "This could crash the program when importing data from 3rd party apps\n"
-                                  "or when a certain amount of tokens is reached.\n"
-                                  "Please have a look at the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki</a> page before\n"
+    gchar *msg = g_strdup_printf ("Your OS's memlock limit (%d) may be too low for you. "
+                                  "This could crash the program when importing data from 3rd party apps "
+                                  "or when a certain amount of tokens is reached. "
+                                  "Please have a look at the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki</a> page before "
                                   "using this software with the current settings.", max_file_size);
     GtkWidget *warn_diag = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_id"));
     GtkLabel *warn_label = GTK_LABEL(gtk_builder_get_object (builder, "warning_diag_label_id"));
