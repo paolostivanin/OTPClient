@@ -753,6 +753,7 @@ This dialog will automatically close as soon as a valid qrcode has been found or
     <property name="border_width">10</property>
     <property name="title" translatable="yes">Add Token</property>
     <property name="window_position">center</property>
+    <property name="default_width">500</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
     <child type="titlebar">
@@ -811,7 +812,6 @@ This dialog will automatically close as soon as a valid qrcode has been found or
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="spacing">2</property>
-                <property name="homogeneous">True</property>
                 <child>
                   <object class="GtkComboBoxText" id="otp_combotext_id">
                     <property name="name">otp_cb</property>
@@ -942,7 +942,9 @@ This dialog will automatically close as soon as a valid qrcode has been found or
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">Between 4 and 10</property>
                         <property name="max_length">10</property>
+                        <property name="width_chars">10</property>
                         <property name="text" translatable="yes">6</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
@@ -981,7 +983,9 @@ This dialog will automatically close as soon as a valid qrcode has been found or
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">In seconds between 10 and 120</property>
                         <property name="max_length">3</property>
+                        <property name="width_chars">10</property>
                         <property name="text" translatable="yes">30</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
@@ -1019,6 +1023,8 @@ This dialog will automatically close as soon as a valid qrcode has been found or
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">Value decided by the server (HOTP only)</property>
+                        <property name="width_chars">10</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
