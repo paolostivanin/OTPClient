@@ -5,8 +5,8 @@
 #include "gui-common.h"
 
 typedef struct _image_data_t {
-    guint width;
-    guint height;
+    gulong width;
+    gulong height;
     guchar *raw_data;
 } ImageData;
 
