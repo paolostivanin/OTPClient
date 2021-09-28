@@ -5,6 +5,6 @@ flatpak-builder \
   --ccache \
   --require-changes \
   --repo=repo \
-  --arch=$(flatpak --default-arch) \
+  --arch="$(flatpak --default-arch)" \
   --subject="build of com.github.paolostivanin.OTPClient, $(date)" \
   build com.github.paolostivanin.OTPClient.yaml
