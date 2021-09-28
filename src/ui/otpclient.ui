@@ -180,6 +180,7 @@
 Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b&gt;</property>
                 <property name="use_markup">True</property>
                 <property name="justify">center</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -256,8 +257,8 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     </action-widgets>
   </object>
   <object class="GtkDialog" id="decpwd_diag_id">
-    <property name="width_request">400</property>
-    <property name="height_request">150</property>
+    <property name="default-width">400</property>
+    <property name="default-height">150</property>
     <property name="can_focus">False</property>
     <property name="border_width">5</property>
     <property name="title" translatable="yes">Password</property>
@@ -317,6 +318,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="margin_bottom">5</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
+            <property name="wrap">True</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -395,13 +397,12 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
             <property name="can_focus">False</property>
             <property name="label" translatable="yes">Select the file with the QR code and copy it (CTRL-C).
 
-If you are using &lt;b&gt;KDE&lt;/b&gt;, then you must copy the file &lt;b&gt;before&lt;/b&gt;
-selecting this option, otherwise the content won't be parsed.
+If you are using &lt;b&gt;KDE&lt;/b&gt;, then you must copy the file &lt;b&gt;before&lt;/b&gt; selecting this option, otherwise the content won't be parsed.
 
-This dialog will close automatically as soon as a valid qrcode
-has been found or after 30 seconds if nothing has been detected.</property>
+This dialog will close automatically as soon as a valid qrcode has been found or after 30 seconds if nothing has been detected.</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
+            <property name="wrap">True</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -462,10 +463,10 @@ has been found or after 30 seconds if nothing has been detected.</property>
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="label" translatable="yes">Please place the qrcode &lt;b&gt;in front of the webcam&lt;/b&gt;.
-This dialog will automatically close as soon as a valid qrcode
-has been found or after 30 seconds if nothing has been detected.</property>
+This dialog will automatically close as soon as a valid qrcode has been found or after 30 seconds if nothing has been detected.</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
+            <property name="wrap">True</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -530,10 +531,9 @@ has been found or after 30 seconds if nothing has been detected.</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="margin_bottom">5</property>
-                <property name="label" translatable="yes">This seems to be the first time you run OTPClient
-on this device. Please select whether you want to
-restore an existing database or create a new one.</property>
+                <property name="label" translatable="yes">This seems to be the first time you run OTPClient on this device. Please select whether you want to restore an existing database or create a new one.</property>
                 <property name="justify">center</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -640,10 +640,10 @@ restore an existing database or create a new one.</property>
           <object class="GtkLabel">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">Please note that "account" is &lt;b&gt;mandatory&lt;/b&gt; and "issuer", while optional,
-is &lt;b&gt;highly recommended&lt;/b&gt;</property>
+            <property name="label" translatable="yes">Please note that "account" is &lt;b&gt;mandatory&lt;/b&gt; and "issuer", while optional, is &lt;b&gt;highly recommended&lt;/b&gt;</property>
             <property name="use_markup">True</property>
             <property name="justify">center</property>
+            <property name="wrap">True</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -753,6 +753,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
     <property name="border_width">10</property>
     <property name="title" translatable="yes">Add Token</property>
     <property name="window_position">center</property>
+    <property name="default_width">500</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
     <child type="titlebar">
@@ -811,7 +812,6 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="spacing">2</property>
-                <property name="homogeneous">True</property>
                 <child>
                   <object class="GtkComboBoxText" id="otp_combotext_id">
                     <property name="name">otp_cb</property>
@@ -942,7 +942,9 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">Between 4 and 10</property>
                         <property name="max_length">10</property>
+                        <property name="width_chars">10</property>
                         <property name="text" translatable="yes">6</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
@@ -981,7 +983,9 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">In seconds between 10 and 120</property>
                         <property name="max_length">3</property>
+                        <property name="width_chars">10</property>
                         <property name="text" translatable="yes">30</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
@@ -1019,6 +1023,8 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                         <property name="tooltip_text" translatable="yes">Value decided by the server (HOTP only)</property>
+                        <property name="width_chars">10</property>
+                        <property name="caps_lock_warning">False</property>
                         <property name="input_purpose">digits</property>
                       </object>
                       <packing>
@@ -1121,6 +1127,7 @@ is &lt;b&gt;highly recommended&lt;/b&gt;</property>
 Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b&gt;</property>
                 <property name="use_markup">True</property>
                 <property name="justify">center</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -1795,6 +1802,7 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
 Please type your password to unlock it</property>
                 <property name="use_markup">True</property>
                 <property name="justify">center</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -1840,6 +1848,7 @@ Please type your password to unlock it</property>
     <property name="window_position">center</property>
     <property name="type_hint">dialog</property>
     <property name="gravity">center</property>
+    <property name="default-width">400</property>
     <child type="titlebar">
       <placeholder/>
     </child>
@@ -1897,6 +1906,7 @@ Please type your password to unlock it</property>
                 <property name="can_focus">False</property>
                 <property name="use_markup">True</property>
                 <property name="justify">center</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">True</property>
