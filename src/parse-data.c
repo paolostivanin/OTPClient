@@ -51,7 +51,7 @@ parse_user_data (Widgets        *widgets,
         obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, digits, period, counter);
         guint32 hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
-            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdupX (&hash, sizeof (guint)));
             db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");

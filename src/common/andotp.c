@@ -7,6 +7,7 @@
 #include "../imports.h"
 #include "../gui-common.h"
 #include "../gquarks.h"
+#include "common.h"
 
 #define ANDOTP_IV_SIZE   12
 #define ANDOTP_SALT_SIZE 12
@@ -374,7 +375,7 @@ parse_json_data (const gchar *data,
             return NULL;
         }
 
-        otps = g_slist_append (otps, g_memdup (otp, sizeof (otp_t)));
+        otps = g_slist_append (otps, g_memdupX (otp, sizeof (otp_t)));
         g_free (otp);
     }
 

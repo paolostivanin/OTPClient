@@ -5,6 +5,12 @@
 
 G_BEGIN_DECLS
 
+#if GLIB_CHECK_VERSION(2, 68, 0)
+    #define g_memdupX g_memdup2
+#else
+    #define g_memdupX g_memdup
+#endif
+
 gint32      get_max_file_size_from_memlock  (void);
 
 gchar      *init_libs                       (gint32 max_file_size);

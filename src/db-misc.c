@@ -69,7 +69,7 @@ load_db (DatabaseData    *db_data,
     json_t *obj;
     json_array_foreach (db_data->json_data, index, obj) {
         guint32 hash = json_object_get_hash (obj);
-        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup (&hash, sizeof (guint32)));
+        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdupX (&hash, sizeof (guint32)));
     }
 }
 

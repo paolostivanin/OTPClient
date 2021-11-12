@@ -66,7 +66,7 @@ update_db_from_otps (GSList *otps, AppData *app_data)
         obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
         guint hash = json_object_get_hash (obj);
         if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER(hash), check_duplicate) == NULL) {
-            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdup (&hash, sizeof (guint)));
+            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdupX (&hash, sizeof (guint)));
             app_data->db_data->data_to_add = g_slist_append (app_data->db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");
