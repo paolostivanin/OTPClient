@@ -7,6 +7,7 @@
 #include "../imports.h"
 #include "../gui-common.h"
 #include "../gquarks.h"
+#include "common.h"
 
 #define ANDOTP_IV_SIZE   12
 #define ANDOTP_SALT_SIZE 12
@@ -317,7 +318,9 @@ parse_json_data (const gchar *data,
         otp->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
 
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
-        otp->issuer = g_strstrip (g_strdup (issuer));
+        if (issuer != NULL && g_utf8_strlen (issuer, -1) > 1) {
+            otp->issuer = g_strstrip (g_strdup (issuer));
+        }
 
         const gchar *label_with_prefix = json_string_value (json_object_get (obj, "label"));
         gchar **tokens = g_strsplit (label_with_prefix, ":", -1);
@@ -325,7 +328,8 @@ parse_json_data (const gchar *data,
             if (issuer != NULL && g_ascii_strcasecmp(issuer, tokens[0]) == 0) {
                 otp->account_name = g_strstrip (g_strdup (tokens[1]));
             } else {
-                otp->account_name = g_strstrip (g_strdup (label_with_prefix));
+                otp->issuer = g_strstrip (g_strdup (tokens[0]));
+                otp->account_name = g_strstrip (g_strdup (tokens[1]));
             }
         } else {
             otp->account_name = g_strstrip (g_strdup (tokens[0]));
@@ -371,7 +375,7 @@ parse_json_data (const gchar *data,
             return NULL;
         }
 
-        otps = g_slist_append (otps, g_memdup (otp, sizeof (otp_t)));
+        otps = g_slist_append (otps, g_memdupX (otp, sizeof (otp_t)));
         g_free (otp);
     }
 

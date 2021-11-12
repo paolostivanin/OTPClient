@@ -1,6 +1,7 @@
 #include <glib.h>
 #include "gui-common.h"
 #include "imports.h"
+#include "common/common.h"
 
 
 static void parse_uri           (const gchar   *uri,
@@ -59,7 +60,7 @@ parse_uri (const gchar   *uri,
     }
     parse_parameters (uri_copy, otp);
 
-    *otps = g_slist_append (*otps, g_memdup (otp, sizeof (otp_t)));
+    *otps = g_slist_append (*otps, g_memdupX (otp, sizeof (otp_t)));
     g_free (otp);
 }
 
