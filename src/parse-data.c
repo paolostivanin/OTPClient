@@ -47,6 +47,7 @@ parse_user_data (Widgets        *widgets,
     const gchar *counter = gtk_entry_get_text (GTK_ENTRY (widgets->counter_entry));
     gboolean period_active = gtk_widget_get_sensitive (widgets->period_entry);
     gboolean counter_active = gtk_widget_get_sensitive (widgets->counter_entry);
+    g_trim_whitespace (acc_key);
     if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, digits, period, period_active, counter, counter_active)) {
         obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, digits, period, counter);
         guint32 hash = json_object_get_hash (obj);
