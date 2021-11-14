@@ -98,3 +98,18 @@ json_object_get_hash (json_t *obj)
 
     return hash;
 }
+
+void
+g_trim_whitespace (gchar *str)
+{
+    if (g_utf8_strlen (str, -1) == 0) {
+        return;
+    }
+    int pos = 0;
+    for (int i = 0; str[i]; i++) {
+        if (str[i] != ' ') {
+            str[pos++] = str[i];
+        }
+    }
+    str[pos] = '\0';
+}
