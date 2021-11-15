@@ -22,6 +22,8 @@ guint32     jenkins_one_at_a_time_hash      (const gchar    *key,
 
 guint32     json_object_get_hash            (json_t *obj);
 
-void        g_trim_whitespace               (gchar *str);
+gchar      *secure_strdup                   (const gchar    *src);
+
+gchar      *g_trim_whitespace               (const gchar *str);
 
 G_END_DECLS

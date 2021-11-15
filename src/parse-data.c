@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <string.h>
 #include <jansson.h>
+#include <gcrypt.h>
 #include "otpclient.h"
 #include "db-misc.h"
 #include "manual-add-cb.h"
@@ -47,9 +48,9 @@ parse_user_data (Widgets        *widgets,
     const gchar *counter = gtk_entry_get_text (GTK_ENTRY (widgets->counter_entry));
     gboolean period_active = gtk_widget_get_sensitive (widgets->period_entry);
     gboolean counter_active = gtk_widget_get_sensitive (widgets->counter_entry);
-    g_trim_whitespace (acc_key);
-    if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key, digits, period, period_active, counter, counter_active)) {
-        obj = get_json_obj (widgets, acc_label, acc_iss, acc_key, digits, period, counter);
+    gchar *acc_key_trimmed = g_trim_whitespace (acc_key);
+    if (is_input_valid (widgets->dialog, acc_label, acc_iss, acc_key_trimmed, digits, period, period_active, counter, counter_active)) {
+        obj = get_json_obj (widgets, acc_label, acc_iss, acc_key_trimmed, digits, period, counter);
         guint32 hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER (hash), check_duplicate) == NULL) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdupX (&hash, sizeof (guint)));
@@ -58,8 +59,10 @@ parse_user_data (Widgets        *widgets,
             g_print ("[INFO] Duplicate element not added\n");
         }
     } else {
+        gcry_free (acc_key_trimmed);
         return FALSE;
     }
+    gcry_free (acc_key_trimmed);
     return TRUE;
 }
 

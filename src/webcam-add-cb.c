@@ -7,6 +7,7 @@
 #include "message-dialogs.h"
 #include "add-common.h"
 #include "get-builder.h"
+#include "common/common.h"
 
 
 typedef struct _config_data {

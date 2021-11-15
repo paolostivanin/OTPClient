@@ -99,17 +99,31 @@ json_object_get_hash (json_t *obj)
     return hash;
 }
 
-void
-g_trim_whitespace (gchar *str)
+gchar *
+secure_strdup (const gchar *src)
+{
+    gchar *sec_buf = gcry_calloc_secure (strlen (src) + 1, 1);
+    memcpy (sec_buf, src, strlen (src) + 1);
+
+    return sec_buf;
+}
+
+
+gchar *
+g_trim_whitespace (const gchar *str)
 {
     if (g_utf8_strlen (str, -1) == 0) {
-        return;
+        return NULL;
     }
+    gchar *sec_buf = gcry_calloc_secure (strlen (str) + 1, 1);
     int pos = 0;
     for (int i = 0; str[i]; i++) {
         if (str[i] != ' ') {
-            str[pos++] = str[i];
+            sec_buf[pos++] = str[i];
         }
     }
-    str[pos] = '\0';
+    sec_buf[pos] = '\0';
+    gcry_realloc (sec_buf, g_utf8_strlen(sec_buf, -1) + 1);
+
+    return sec_buf;
 }

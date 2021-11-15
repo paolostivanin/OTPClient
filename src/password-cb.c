@@ -4,6 +4,7 @@
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "otpclient.h"
+#include "common/common.h"
 
 typedef struct _entrywidgets {
     GtkWidget *entry_old;

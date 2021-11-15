@@ -26,16 +26,6 @@ get_row_number_from_iter (GtkListStore *list_store,
 }
 
 
-gchar *
-secure_strdup (const gchar *src)
-{
-    gchar *sec_buf = gcry_calloc_secure (strlen (src) + 1, 1);
-    memcpy (sec_buf, src, strlen (src) + 1);
-
-    return sec_buf;
-}
-
-
 json_t *
 build_json_obj (const gchar *type,
                 const gchar *acc_label,

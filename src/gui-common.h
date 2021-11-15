@@ -13,8 +13,6 @@ void         icon_press_cb              (GtkEntry       *entry,
 guint        get_row_number_from_iter   (GtkListStore   *list_store,
                                          GtkTreeIter     iter);
 
-gchar       *secure_strdup              (const gchar    *src);
-
 json_t      *build_json_obj             (const gchar *type,
                                          const gchar *acc_label,
                                          const gchar *acc_iss,
