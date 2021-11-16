@@ -5,6 +5,7 @@ tests/
 flatpak/repo/
 TODO*
 .idea/
+.PVS-Studio/
 
 # Object files
 *.o
