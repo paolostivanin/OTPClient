@@ -83,6 +83,15 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.4.7" date="2021-11-16">
+      <description>
+        <p>OTPClient 2.4.7 implements some small code optimization</p>
+        <ul>
+          <li>do not use strlen in for loop</li>
+          <li>do not use strlen to check for empty string</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.4.6" date="2021-11-15">
       <description>
         <p>OTPClient 2.4.6 fixes some small issues</p>

@@ -124,7 +124,8 @@ is_input_valid (GtkWidget   *dialog,
 static gboolean
 str_is_only_num_or_alpha (const gchar *string)
 {
-    for (gint i = 0; i < strlen (string); i++) {
+    size_t s_len = strlen (string);
+    for (gint i = 0; i < s_len; i++) {
         if (!g_ascii_isalnum (string[i])) {
             return FALSE;
         }
@@ -136,7 +137,8 @@ str_is_only_num_or_alpha (const gchar *string)
 static gboolean
 str_is_only_num (const gchar *string)
 {
-    for (gint i = 0; i < strlen (string); i++) {
+    size_t s_len = strlen (string);
+    for (gint i = 0; i < s_len; i++) {
         if (!g_ascii_isdigit (string[i])) {
             return FALSE;
         }

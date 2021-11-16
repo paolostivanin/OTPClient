@@ -40,7 +40,7 @@ check_params (GSList *otps)
         return g_strdup ("Label can not be empty, otp not imported");
     }
 
-    if (strlen (otp->secret) == 0) {
+    if (otp->secret[0] == '\0') {
         return g_strdup ("Secret can not be empty, otp not imported");
     }
 
