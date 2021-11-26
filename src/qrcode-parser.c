@@ -51,7 +51,7 @@ parse_qrcode (const gchar    *png_path,
 
     const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
     for (; symbol; symbol = zbar_symbol_next (symbol)) {
-        *otpauth_uri = secure_strdup (zbar_symbol_get_data (symbol));
+        *otpauth_uri = secure_strdup (g_uri_unescape_string (zbar_symbol_get_data (symbol), NULL));
     }
 
     zbar_image_destroy (image);
