@@ -87,6 +87,7 @@ activate (GtkApplication    *app,
     app_data->search_column = 0; // account
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
+    app_data->use_dark_theme = FALSE; // light theme by default
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     get_wh_data (&width, &height, app_data);
@@ -325,6 +326,8 @@ get_wh_data (gint     *width,
         app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
+        app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+        g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
 }

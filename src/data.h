@@ -53,6 +53,8 @@ typedef struct _app_data_t {
 
     gboolean app_locked;
 
+    gboolean use_dark_theme;
+
     GDateTime *last_user_activity;
 
     GtkWidget *diag_rcdb;
