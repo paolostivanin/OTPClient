@@ -100,6 +100,22 @@ update_and_reload_db (AppData       *app_data,
 }
 
 
+void
+load_new_db (AppData  *app_data,
+             GError  **err)
+{
+    reload_db (app_data->db_data, err);
+    if (*err != NULL) {
+        return;
+    }
+#ifdef BUILD_GUI
+    update_model (app_data);
+    g_slist_free_full (app_data->db_data->data_to_add, json_free);
+    app_data->db_data->data_to_add = NULL;
+#endif
+}
+
+
 gint
 check_duplicate (gconstpointer data,
                  gconstpointer user_data)
