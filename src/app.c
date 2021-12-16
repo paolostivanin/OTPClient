@@ -2,7 +2,6 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include "otpclient.h"
-#include "gui-common.h"
 #include "gquarks.h"
 #include "imports.h"
 #include "common/exports.h"
@@ -11,6 +10,7 @@
 #include "get-builder.h"
 #include "liststore-misc.h"
 #include "lock-app.h"
+#include "change-db.h"
 #include "common/common.h"
 #include "version.h"
 
@@ -406,6 +406,7 @@ set_action_group (GtkBuilder *builder,
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = "change_pwd", .activate = change_password_cb },
+            { .name = "change_db", .activate = change_db_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb }
@@ -496,7 +497,6 @@ get_db_path (AppData *app_data)
         g_key_file_save_to_file (kf, cfg_file_path, &err);
         if (err != NULL) {
             g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
         }
     }
 #if GTK_CHECK_VERSION(3, 20, 0)
@@ -506,6 +506,7 @@ get_db_path (AppData *app_data)
 #endif
     end:
     g_free (cfg_file_path);
+    g_key_file_free (kf);
 
     return db_path;
 }
