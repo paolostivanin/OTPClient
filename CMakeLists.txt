@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(OTPClient VERSION "2.4.9.1" LANGUAGES "C")
+project(OTPClient VERSION "2.5.0" LANGUAGES "C")
 
 configure_file("src/common/version.h.in" "version.h")
 include_directories(${PROJECT_BINARY_DIR})
@@ -71,7 +71,7 @@ set(GUI_HEADER_FILES
         src/qrcode-parser.h
         src/treeview.h
         src/common/exports.h
-        src/lock-app.h src/common/get-providers-data.h)
+        src/lock-app.h src/common/get-providers-data.h src/change-db.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -103,7 +103,7 @@ set(GUI_SOURCE_FILES
         src/exports.c
         src/lock-app.c
         src/common/freeotp.c
-        src/common/aegis.c)
+        src/common/aegis.c src/change-db.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
