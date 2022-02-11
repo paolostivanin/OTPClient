@@ -71,7 +71,7 @@ set(GUI_HEADER_FILES
         src/qrcode-parser.h
         src/treeview.h
         src/common/exports.h
-        src/lock-app.h src/common/get-providers-data.h src/change-db.h)
+        src/lock-app.h src/common/get-providers-data.h src/change-db-cb.h src/new-db-cb.h src/db-actions.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -103,7 +103,7 @@ set(GUI_SOURCE_FILES
         src/exports.c
         src/lock-app.c
         src/common/freeotp.c
-        src/common/aegis.c src/change-db.c)
+        src/common/aegis.c src/change-db-cb.c src/new-db-cb.c src/db-actions.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
