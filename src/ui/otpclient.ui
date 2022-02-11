@@ -131,7 +131,7 @@
             <property name="can-focus">False</property>
             <property name="layout-style">end</property>
             <child>
-              <object class="GtkButton" id="changepwd_diag_cancel_btn_id1">
+              <object class="GtkButton" id="changedb_diag_cancel_btn_id">
                 <property name="label" translatable="yes">Cancel</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
@@ -144,7 +144,7 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="changepwd_diag_ok_btn_id1">
+              <object class="GtkButton" id="changedb_diag_ok_btn_id">
                 <property name="label" translatable="yes">OK</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
@@ -194,7 +194,6 @@
                 <property name="max-length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
-                <property name="input-purpose">password</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -214,7 +213,6 @@
                 <property name="secondary-icon-name">document-open-symbolic</property>
                 <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
                 <property name="placeholder-text" translatable="yes">New DB path...</property>
-                <property name="input-purpose">password</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -232,8 +230,8 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="-6">changepwd_diag_cancel_btn_id1</action-widget>
-      <action-widget response="-5">changepwd_diag_ok_btn_id1</action-widget>
+      <action-widget response="-6">changedb_diag_cancel_btn_id</action-widget>
+      <action-widget response="-5">changedb_diag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="changepwd_diag_id">
@@ -1160,6 +1158,109 @@ This dialog will automatically close as soon as a valid qrcode has been found or
     <action-widgets>
       <action-widget response="-6">manual_diag_cancel_btn_id</action-widget>
       <action-widget response="-5">manual_diag_ok_btn_id</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkDialog" id="newdb_diag_id">
+    <property name="can-focus">False</property>
+    <property name="border-width">5</property>
+    <property name="title" translatable="yes">New empty database</property>
+    <property name="window-position">center</property>
+    <property name="type-hint">dialog</property>
+    <property name="gravity">center</property>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <object class="GtkButton" id="newdb_diag_cancel_btn_id">
+                <property name="label" translatable="yes">Cancel</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="newdb_diag_ok_btn_id">
+                <property name="label" translatable="yes">OK</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">5</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">This will create and load a new empty database.
+The current database will &lt;b&gt;neither&lt;/b&gt; be overwritten &lt;b&gt;nor&lt;/b&gt; deleted.</property>
+                <property name="use-markup">True</property>
+                <property name="justify">center</property>
+                <property name="wrap">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="newdb_entry_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="tooltip-text" translatable="yes">Max 255 chars</property>
+                <property name="editable">False</property>
+                <property name="max-length">255</property>
+                <property name="visibility">False</property>
+                <property name="secondary-icon-name">document-open-symbolic</property>
+                <property name="secondary-icon-tooltip-text" translatable="yes">Show password</property>
+                <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
+                <property name="placeholder-text" translatable="yes">Full path to the new database...</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-6">newdb_diag_cancel_btn_id</action-widget>
+      <action-widget response="-5">newdb_diag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="newdb_pwd_diag_id">
