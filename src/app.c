@@ -10,7 +10,8 @@
 #include "get-builder.h"
 #include "liststore-misc.h"
 #include "lock-app.h"
-#include "change-db.h"
+#include "change-db-cb.h"
+#include "new-db-cb.h"
 #include "common/common.h"
 #include "version.h"
 
@@ -405,8 +406,9 @@ set_action_group (GtkBuilder *builder,
             { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
-            { .name = "change_pwd", .activate = change_password_cb },
+            { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
+            { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb }
