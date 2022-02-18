@@ -2,7 +2,6 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include "otpclient.h"
-#include "gui-common.h"
 #include "gquarks.h"
 #include "imports.h"
 #include "common/exports.h"
@@ -226,7 +225,7 @@ activate (GtkApplication    *app,
 
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
-    app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 500, traverse_liststore, app_data, NULL);
+    app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 1000, traverse_liststore, app_data, NULL);
 
     setup_dbus_listener (app_data);
 

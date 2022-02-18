@@ -4,7 +4,6 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "gquarks.h"
-#include "gui-common.h"
 #include "common/common.h"
 
 
@@ -106,8 +105,8 @@ foreach_func_update_otps (GtkTreeModel *model,
 
     if (otp != NULL && g_utf8_strlen (otp, -1) > 4 && g_ascii_strcasecmp (otp_type, "TOTP") == 0) {
         gboolean short_countdown = (period <= 60 || only_a_minute_left) ? TRUE : FALSE;
-        gint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
-        gint token_validity = remaining_seconds % period;
+        guint remaining_seconds = (!short_countdown ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
+        guint token_validity = remaining_seconds % period;
         if (remaining_seconds % period == 60) {
             short_countdown = TRUE;
         }
