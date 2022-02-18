@@ -19,6 +19,7 @@ lock_app (GtkWidget *w __attribute__((unused)),
     app_data->app_locked = TRUE;
 
     g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
+    gtk_widget_hide (GTK_WIDGET(app_data->tree_view));
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 
@@ -47,6 +48,7 @@ lock_app (GtkWidget *w __attribute__((unused)),
                 app_data->last_user_activity = g_date_time_new_now_local ();
                 app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
                 gtk_widget_destroy (dialog);
+                gtk_widget_show (GTK_WIDGET(app_data->tree_view));
                 g_object_unref (builder);
             }
         } else {
@@ -101,6 +103,11 @@ setup_dbus_listener (AppData *app_data)
 {
     g_signal_new ("lock-app", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     g_signal_connect (app_data->main_window, "lock-app", G_CALLBACK(lock_app), app_data);
+
+    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (builder, "lock_btn_id"));
+    g_signal_connect (lock_btn, "lock-app", G_CALLBACK(lock_app), app_data);
+    g_object_unref (builder);
 
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS (app_data->main_window));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
