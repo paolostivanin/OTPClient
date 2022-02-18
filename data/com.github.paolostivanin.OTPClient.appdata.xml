@@ -83,6 +83,15 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.4.8" date="2022-02-18">
+      <description>
+        <p>OTPClient 2.4.8 brings a couple of fixes</p>
+        <ul>
+          <li>fix show next OTP option (issue#234)</li>
+          <li>correctly decode URIs from QR codes</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.4.7" date="2021-11-16">
       <description>
         <p>OTPClient 2.4.7 implements some small code optimization</p>

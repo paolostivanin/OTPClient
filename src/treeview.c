@@ -2,7 +2,6 @@
 #include <jansson.h>
 #include "otpclient.h"
 #include "liststore-misc.h"
-#include "gui-common.h"
 #include "message-dialogs.h"
 
 
