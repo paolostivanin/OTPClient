@@ -19,10 +19,6 @@ void webcam_cb             (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
 
-void screenshot_cb         (GSimpleAction  *simple,
-                            GVariant       *parameter,
-                            gpointer        user_data);
-
 void add_qr_from_file      (GSimpleAction  *simple,
                             GVariant       *parameter,
                             gpointer        user_data);
