@@ -636,7 +636,8 @@ This dialog will automatically close as soon as a valid qrcode has been found or
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="margin-bottom">5</property>
-                <property name="label" translatable="yes">This seems to be the first time you run OTPClient on this device. Please select whether you want to restore an existing database or create a new one.</property>
+                <property name="label" translatable="yes">This seems to be the first time you run OTPClient on this device.
+Please select whether you want to restore an existing database or create a new one.</property>
                 <property name="justify">center</property>
                 <property name="wrap">True</property>
               </object>
@@ -648,12 +649,19 @@ This dialog will automatically close as soon as a valid qrcode has been found or
             </child>
             <child>
               <object class="GtkButton" id="diag_rc_restoredb_btn_id">
-                <property name="label" translatable="yes">Restore existing OTPClient database</property>
                 <property name="name">diag_rc_restoredb_btn</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">True</property>
                 <property name="tooltip-text" translatable="yes">Do NOT use to import third party databases (e.g. andOTP)</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="label" translatable="yes">Restore existing &lt;b&gt;OTPClient&lt;/b&gt; database</property>
+                    <property name="use-markup">True</property>
+                  </object>
+                </child>
               </object>
               <packing>
                 <property name="expand">False</property>
