@@ -40,10 +40,9 @@ check_params (GSList *otps)
         return g_strdup ("Label can not be empty, otp not imported");
     }
 
-    if (otp->secret[0] == '\0') {
+    if (otp->secret == NULL || otp->secret[0] == '\0') {
         return g_strdup ("Secret can not be empty, otp not imported");
     }
-
     if (g_ascii_strcasecmp (otp->type, "TOTP") == 0) {
         if (otp->period < 10 || otp->period > 120) {
             gchar *msg = g_strconcat("[INFO]: invalid period for '", otp->account_name, "'. Defaulting back to 30 seconds.", NULL);
