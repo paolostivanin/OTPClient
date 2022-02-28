@@ -72,7 +72,7 @@ parse_parameters (const gchar   *modified_uri,
     const gchar *mod_uri_copy = modified_uri;
     gchar **tokens = g_strsplit (mod_uri_copy, "?", -1);
     gchar *escaped_issuer_and_label = g_uri_unescape_string (tokens[0], NULL);
-    mod_uri_copy += g_utf8_strlen (tokens[0], -1) + 1; // "issuer:label?"
+    mod_uri_copy += g_utf8_strlen (tokens[0], -1) + 2; // "issuer:label?"
     g_strfreev (tokens);
 
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
@@ -88,6 +88,7 @@ parse_parameters (const gchar   *modified_uri,
     tokens = g_strsplit (mod_uri_copy, "&", -1);
     gint i = 0;
     while (tokens[i]) {
+
         if (g_ascii_strncasecmp (tokens[i], "secret=", 7) == 0) {
             tokens[i] += 7;
             otp->secret = secure_strdup (tokens[i]);
