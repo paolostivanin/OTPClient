@@ -431,10 +431,8 @@ set_action_group (GtkBuilder *builder,
     g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
 
-#if GTK_CHECK_VERSION(3, 20, 0)
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
-#endif
 
     return TRUE;
 }
@@ -467,31 +465,21 @@ get_db_path (AppData *app_data)
         goto end;
     }
     new_db: ; // empty statement workaround
-#if GTK_CHECK_VERSION(3, 20, 0)
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
                                                                 GTK_WINDOW (app_data->main_window),
                                                                 app_data->open_db_file_action,
                                                                 "OK",
                                                                 "Cancel");
-#else
-    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
-                                                        GTK_WINDOW (app_data->main_window),
-                                                        app_data->open_db_file_action,
-                                                        "Cancel", GTK_RESPONSE_CANCEL,
-                                                        "OK", GTK_RESPONSE_ACCEPT,
-                                                        NULL);
-#endif
+
     GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
     gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
     gtk_file_chooser_set_select_multiple (chooser, FALSE);
     if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
         gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
     }
-#if GTK_CHECK_VERSION(3, 20, 0)
+
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
-#else
-    gint res = gtk_dialog_run (GTK_DIALOG (dialog));
-#endif
+
     if (res == GTK_RESPONSE_ACCEPT) {
         db_path = gtk_file_chooser_get_filename (chooser);
         g_key_file_set_string (kf, "config", "db_path", db_path);
@@ -500,11 +488,9 @@ get_db_path (AppData *app_data)
             g_printerr ("%s\n", err->message);
         }
     }
-#if GTK_CHECK_VERSION(3, 20, 0)
+
     g_object_unref (dialog);
-#else
-    gtk_widget_destroy (dialog);
-#endif
+
     end:
     g_free (cfg_file_path);
     g_key_file_free (kf);
