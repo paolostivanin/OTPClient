@@ -14,7 +14,6 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
     gint action_int = GPOINTER_TO_INT(g_object_get_data (G_OBJECT(entry), "action"));
     GtkFileChooserAction action = (action_int == ACTION_OPEN) ? GTK_FILE_CHOOSER_ACTION_OPEN : GTK_FILE_CHOOSER_ACTION_SAVE;
 
-#if GTK_CHECK_VERSION(3, 20, 0)
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database",
                                                                 GTK_WINDOW(app_data->main_window),
                                                                 action,
@@ -22,24 +21,12 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
                                                                 "Cancel");
 
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
-#else
-    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database",
-                                                     GTK_WINDOW(app_data->main_window),
-                                                     action,
-                                                     "Cancel", GTK_RESPONSE_CANCEL,
-                                                     "OK", GTK_RESPONSE_ACCEPT,
-                                                     NULL);
 
-    gint res = gtk_dialog_run (GTK_DIALOG(dialog));
-#endif
     if (res == GTK_RESPONSE_ACCEPT) {
         gtk_entry_set_text (entry, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(dialog)));
     }
-#if GTK_CHECK_VERSION(3, 20, 0)
+
     g_object_unref (dialog);
-#else
-    gtk_widget_destroy (dialog);
-#endif
 }
 
 
