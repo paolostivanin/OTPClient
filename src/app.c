@@ -173,10 +173,14 @@ activate (GtkApplication    *app,
     retry:
     app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
     if (app_data->db_data->key == NULL) {
-        g_free (app_data->db_data);
-        g_free (app_data);
-        g_application_quit (G_APPLICATION(app));
-        return;
+        if (change_file (app_data) == FALSE) {
+            g_free (app_data->db_data);
+            g_free (app_data);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        } else {
+            goto retry;
+        }
     }
 
     GError *err = NULL;

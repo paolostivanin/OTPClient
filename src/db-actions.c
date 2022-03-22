@@ -11,7 +11,10 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
 {
     AppData *app_data = (AppData *)data;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wbad-function-cast"
     gint action_int = GPOINTER_TO_INT(g_object_get_data (G_OBJECT(entry), "action"));
+#pragma GCC diagnostic pop
     GtkFileChooserAction action = (action_int == ACTION_OPEN) ? GTK_FILE_CHOOSER_ACTION_OPEN : GTK_FILE_CHOOSER_ACTION_SAVE;
 
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database",
