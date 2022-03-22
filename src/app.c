@@ -392,6 +392,9 @@ create_main_window (gint             width,
     GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (app_data->builder, "headerbar_id"));
     gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), PROJECT_VER);
 
+    GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id"));
+    g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
+
     set_action_group (app_data->builder, app_data);
 }
 

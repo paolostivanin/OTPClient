@@ -1,5 +1,4 @@
 #include <glib.h>
-#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "data.h"
@@ -10,7 +9,7 @@
 #include "lock-app.h"
 
 
-static void
+void
 lock_app (GtkWidget *w __attribute__((unused)),
           gpointer user_data)
 {
@@ -103,11 +102,6 @@ setup_dbus_listener (AppData *app_data)
 {
     g_signal_new ("lock-app", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     g_signal_connect (app_data->main_window, "lock-app", G_CALLBACK(lock_app), app_data);
-
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (builder, "lock_btn_id"));
-    g_signal_connect (lock_btn, "lock-app", G_CALLBACK(lock_app), app_data);
-    g_object_unref (builder);
 
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS (app_data->main_window));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
