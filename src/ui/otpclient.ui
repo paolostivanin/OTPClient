@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.38.2 -->
 <interface>
-  <requires lib="gtk+" version="3.18"/>
+  <requires lib="gtk+" version="3.20"/>
   <object class="GtkPopoverMenu" id="add_pop_id">
     <property name="can-focus">False</property>
     <child>
@@ -448,6 +448,73 @@ Please note that &lt;b&gt;there is no way to recover a forgotten password.&lt;/b
     <action-widgets>
       <action-widget response="-6">decpwddiag_cancel_btn_id</action-widget>
       <action-widget response="-5">decpwddiag_ok_btn_id</action-widget>
+    </action-widgets>
+  </object>
+  <object class="GtkDialog" id="diag_changefile_id">
+    <property name="can-focus">False</property>
+    <property name="type-hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">10</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <object class="GtkButton" id="btn_changefile_no_id">
+                <property name="label" translatable="yes">No</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="btn_changefile_yes_id">
+                <property name="label" translatable="yes">Yes</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel" id="diag_changefile_label_id">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-top">5</property>
+            <property name="margin-bottom">5</property>
+            <property name="use-markup">True</property>
+            <property name="justify">center</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-6">btn_changefile_no_id</action-widget>
+      <action-widget response="-5">btn_changefile_yes_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="diag_qr_clipboard_id">
@@ -1233,7 +1300,6 @@ The current database will &lt;b&gt;neither&lt;/b&gt; be overwritten &lt;b&gt;nor
                 <property name="visibility">False</property>
                 <property name="secondary-icon-name">document-open-symbolic</property>
                 <property name="secondary-icon-tooltip-text" translatable="yes">Show password</property>
-                <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
                 <property name="placeholder-text" translatable="yes">Full path to the new database...</property>
               </object>
               <packing>

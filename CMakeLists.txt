@@ -98,7 +98,7 @@ set(GUI_SOURCE_FILES
         src/exports.c
         src/lock-app.c
         src/common/freeotp.c
-        src/common/aegis.c src/change-db-cb.c src/new-db-cb.c src/db-actions.c)
+        src/common/aegis.c src/change-db-cb.c src/new-db-cb.c src/db-actions.c src/change-file-cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
