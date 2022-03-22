@@ -63,6 +63,13 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_object_unref (in_file);
         return NULL;
     }
+    if (le_iterations < 1000 || le_iterations > 5000) {
+        // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Number of iterations is invalid. It's likely this is not an andOTP encrypted database.\n");
+        return NULL;
+    }
     int32_t be_iterations = __builtin_bswap32(le_iterations);
 
     guchar salt[ANDOTP_SALT_SIZE];
