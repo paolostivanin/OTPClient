@@ -7,7 +7,7 @@
 
 G_BEGIN_DECLS
 
-typedef struct _db_data {
+typedef struct db_data_t {
     gchar *db_path;
 
     gchar *key;
@@ -25,7 +25,7 @@ typedef struct _db_data {
 } DatabaseData;
 
 
-typedef struct _app_data_t {
+typedef struct app_data_t {
     GtkBuilder *builder;
 
     GtkWidget *main_window;
@@ -55,10 +55,18 @@ typedef struct _app_data_t {
 
     gboolean use_dark_theme;
 
+    gboolean is_reorder_active;
+
     GDateTime *last_user_activity;
 
     GtkWidget *diag_rcdb;
     GtkFileChooserAction open_db_file_action;
 } AppData;
+
+
+typedef struct node_info_t {
+    guint hash;
+    guint newpos;
+} NodeInfo;
 
 G_END_DECLS

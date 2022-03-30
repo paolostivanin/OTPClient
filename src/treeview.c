@@ -3,9 +3,10 @@
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "message-dialogs.h"
+#include "common/common.h"
 
 
-typedef struct _parsed_json_data {
+typedef struct parsed_json_data_t {
     gchar **types;
     gchar **labels;
     gchar **issuers;
@@ -125,41 +126,103 @@ row_selected_cb (GtkTreeView        *tree_view,
                  gpointer            user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
+    if (app_data->is_reorder_active == FALSE) {
+        GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
 
-    GtkTreeIter  iter;
-    gtk_tree_model_get_iter (model, &iter, path);
+        GtkTreeIter iter;
+        gtk_tree_model_get_iter (model, &iter, path);
 
-    gchar *otp_type, *otp_value;
-    gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
-    gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+        gchar *otp_type, *otp_value;
+        gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
+        gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
 
-    GDateTime *now = g_date_time_new_now_local ();
-    GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
-    if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 3) {
-        // OTP is already set, so we update the value only if it is an HOTP
-        if (g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
-            if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
-                set_otp (GTK_LIST_STORE (model), iter, app_data);
-                g_free (otp_value);
-                gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+        GDateTime *now = g_date_time_new_now_local ();
+        GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
+        if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 3) {
+            // OTP is already set, so we update the value only if it is an HOTP
+            if (g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
+                if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
+                    set_otp (GTK_LIST_STORE (model), iter, app_data);
+                    g_free (otp_value);
+                    gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+                }
+            }
+        } else {
+            // OTP is not already set, so we set it
+            set_otp (GTK_LIST_STORE (model), iter, app_data);
+            g_free (otp_value);
+            gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+        }
+        // and, in any case, we copy the otp to the clipboard and send a notification
+        gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
+        if (!app_data->disable_notifications) {
+            g_application_send_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW (app_data->main_window))), NOTIFICATION_ID,
+                                             app_data->notification);
+        }
+
+        g_date_time_unref (now);
+        g_free (otp_type);
+        g_free (otp_value);
+    }
+}
+
+
+void
+reorder_db (AppData *app_data)
+{
+    // Iter through all rows. If the position in treeview is different from current_db_pos, then compute hash and add (hash,newpos) to the list
+    GSList *nodes_order_slist = NULL;
+    GtkTreeIter iter;
+    guint current_db_pos;
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+
+    gint slist_len = 0;
+    gboolean valid = gtk_tree_model_get_iter_first (model, &iter);
+    while (valid) {
+        GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
+        gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &current_db_pos, -1);
+        if (gtk_tree_path_get_indices (path)[0] != current_db_pos) {
+            NodeInfo *node_info = g_new0 (NodeInfo, 1);
+            json_t *obj = json_array_get (app_data->db_data->json_data, current_db_pos);
+            node_info->newpos = gtk_tree_path_get_indices (path)[0];
+            node_info->hash = json_object_get_hash (obj);
+            nodes_order_slist = g_slist_append (nodes_order_slist, g_memdupX (node_info, sizeof (NodeInfo)));
+            slist_len++;
+            g_free (node_info);
+        }
+        gtk_tree_path_free (path);
+        valid = gtk_tree_model_iter_next(model, &iter);
+    }
+
+    // move the reordered items to their new position in the database
+    gsize index;
+    json_t *obj;
+    for (gint i = 0; i < slist_len; i++) {
+        NodeInfo *ni = g_slist_nth_data (nodes_order_slist, i);
+        json_array_foreach (app_data->db_data->json_data, index, obj) {
+            guint32 db_obj_hash = json_object_get_hash (obj);
+            if (db_obj_hash == ni->hash) {
+                // remove the obj from the current position...
+                json_incref (obj);
+                json_array_remove (app_data->db_data->json_data, index);
+                // ...and add it to the desired one
+                json_array_insert (app_data->db_data->json_data, ni->newpos, obj);
+                json_decref (obj);
             }
         }
-    } else {
-        // OTP is not already set, so we set it
-        set_otp (GTK_LIST_STORE (model), iter, app_data);
-        g_free (otp_value);
-        gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
-    }
-    // and, in any case, we copy the otp to the clipboard and send a notification
-    gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
-    if (!app_data->disable_notifications) {
-        g_application_send_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW(app_data->main_window))), NOTIFICATION_ID, app_data->notification);
+        g_free (ni);
     }
 
-    g_date_time_unref (now);
-    g_free (otp_type);
-    g_free (otp_value);
+    // update the database and reload the changes
+    GError *err = NULL;
+    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
+    if (err != NULL) {
+        gchar *msg = g_strconcat ("[ERROR] Failed to update_and_reload_db: ", err->message, NULL);
+        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        g_clear_error (&err);
+    }
+    g_slist_free (nodes_order_slist);
 }
 
 
