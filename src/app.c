@@ -10,6 +10,8 @@
 #include "get-builder.h"
 #include "liststore-misc.h"
 #include "lock-app.h"
+#include "change-db-cb.h"
+#include "new-db-cb.h"
 #include "common/common.h"
 #include "version.h"
 
@@ -39,8 +41,11 @@ static void       get_window_size_cb        (GtkWidget          *window,
                                              GtkAllocation      *allocation,
                                              gpointer            user_data);
 
-static void       toggle_delete_button_cb   (GtkWidget          *main_window,
+static void       toggle_button_cb          (GtkWidget          *main_window,
                                              gpointer            user_data);
+
+static void       reorder_rows_cb           (GtkToggleButton *btn,
+                                             gpointer         user_data);
 
 static void       del_data_cb               (GtkToggleButton    *btn,
                                              gpointer            user_data);
@@ -86,6 +91,8 @@ activate (GtkApplication    *app,
     app_data->search_column = 0; // account
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
+    app_data->use_dark_theme = FALSE; // light theme by default
+    app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     get_wh_data (&width, &height, app_data);
@@ -170,10 +177,14 @@ activate (GtkApplication    *app,
     retry:
     app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
     if (app_data->db_data->key == NULL) {
-        g_free (app_data->db_data);
-        g_free (app_data);
-        g_application_quit (G_APPLICATION(app));
-        return;
+        if (change_file (app_data) == FALSE) {
+            g_free (app_data->db_data);
+            g_free (app_data);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        } else {
+            goto retry;
+        }
     }
 
     GError *err = NULL;
@@ -214,12 +225,19 @@ activate (GtkApplication    *app,
     g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
     g_object_unref (icon);
 
-    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
+    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
 
+    GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
+    g_signal_new ("toggle-reorder-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    gtk_binding_entry_add_signal (binding_set, GDK_KEY_r, GDK_CONTROL_MASK, "toggle-reorder-button", 0);
+    g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK(toggle_button_cb), reorder_toggle_btn);
+    g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
+    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
+
+    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
     g_signal_new ("toggle-delete-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
-    gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
-    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_delete_button_cb), del_toggle_btn);
+    gtk_binding_entry_add_signal (binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
+    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_button_cb), del_toggle_btn);
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
@@ -324,6 +342,8 @@ get_wh_data (gint     *width,
         app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
+        app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+        g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
 }
@@ -383,6 +403,9 @@ create_main_window (gint             width,
     GtkWidget *header_bar =  GTK_WIDGET(gtk_builder_get_object (app_data->builder, "headerbar_id"));
     gtk_header_bar_set_subtitle (GTK_HEADER_BAR(header_bar), PROJECT_VER);
 
+    GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id"));
+    g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
+
     set_action_group (app_data->builder, app_data);
 }
 
@@ -401,6 +424,8 @@ set_action_group (GtkBuilder *builder,
             { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
+            { .name = "create_newdb", .activate = new_db_cb },
+            { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_selected_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
@@ -409,7 +434,6 @@ set_action_group (GtkBuilder *builder,
 
     static GActionEntry add_menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
-            { .name = "screenshot", .activate = screenshot_cb },
             { .name = "import_qr_file", .activate = add_qr_from_file },
             { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
             { .name = "manual", .activate = add_data_dialog }
@@ -425,10 +449,8 @@ set_action_group (GtkBuilder *builder,
     g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
 
-#if GTK_CHECK_VERSION(3, 20, 0)
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
-#endif
 
     return TRUE;
 }
@@ -461,47 +483,35 @@ get_db_path (AppData *app_data)
         goto end;
     }
     new_db: ; // empty statement workaround
-#if GTK_CHECK_VERSION(3, 20, 0)
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
                                                                 GTK_WINDOW (app_data->main_window),
                                                                 app_data->open_db_file_action,
                                                                 "OK",
                                                                 "Cancel");
-#else
-    GtkWidget *dialog = gtk_file_chooser_dialog_new ("Select database location",
-                                                        GTK_WINDOW (app_data->main_window),
-                                                        app_data->open_db_file_action,
-                                                        "Cancel", GTK_RESPONSE_CANCEL,
-                                                        "OK", GTK_RESPONSE_ACCEPT,
-                                                        NULL);
-#endif
+
     GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
     gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
     gtk_file_chooser_set_select_multiple (chooser, FALSE);
     if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
         gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
     }
-#if GTK_CHECK_VERSION(3, 20, 0)
+
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
-#else
-    gint res = gtk_dialog_run (GTK_DIALOG (dialog));
-#endif
+
     if (res == GTK_RESPONSE_ACCEPT) {
         db_path = gtk_file_chooser_get_filename (chooser);
         g_key_file_set_string (kf, "config", "db_path", db_path);
         g_key_file_save_to_file (kf, cfg_file_path, &err);
         if (err != NULL) {
             g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
         }
     }
-#if GTK_CHECK_VERSION(3, 20, 0)
+
     g_object_unref (dialog);
-#else
-    gtk_widget_destroy (dialog);
-#endif
+
     end:
     g_free (cfg_file_path);
+    g_key_file_free (kf);
 
     return db_path;
 }
@@ -509,10 +519,28 @@ get_db_path (AppData *app_data)
 
 
 static void
-toggle_delete_button_cb (GtkWidget *main_window __attribute__((unused)),
-                         gpointer   user_data)
+toggle_button_cb (GtkWidget *main_window __attribute__((unused)),
+                  gpointer   user_data)
 {
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(user_data), !gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(user_data)));
+}
+
+
+static void
+reorder_rows_cb (GtkToggleButton *btn,
+                 gpointer         user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    gboolean is_btn_active = gtk_toggle_button_get_active (btn);
+    gtk_tree_view_set_reorderable (GTK_TREE_VIEW(app_data->tree_view), is_btn_active);
+    app_data->is_reorder_active = is_btn_active;
+    gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), !is_btn_active);
+    gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id")), !is_btn_active);
+
+    if (is_btn_active == FALSE) {
+        // reordering has been disabled, so now we have to reorder and update the database itself
+        reorder_db (app_data);
+    }
 }
 
 

@@ -83,6 +83,19 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.5.0" date="2022-03-31">
+      <description>
+        <p>OTPClient 2.5.0 brings load of new features</p>
+        <ul>
+          <li>NEW: rows can now be sorted. Enable the sorting mode by using the "up down" arrows button on the top, then drag and drop rows where you want (#184).</li>
+          <li>NEW: added a dark theme (enable it settings) (#207)</li>
+          <li>NEW: allow to switch database. This is useful if you have multiple OTPClient databases (e.g. work, personal, etc) (#186)</li>
+          <li>NEW: add a button to lock the app (#236)</li>
+          <li>FIX: when app is locked, the content is now hidden (#235)</li>
+          <li>FIX: it's now possible to change the database, if the wrong one was selected during the first run (#196)</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.4.9.1" date="2022-02-28">
       <description>
         <p>OTPClient 2.4.9.1 fix a regression</p>

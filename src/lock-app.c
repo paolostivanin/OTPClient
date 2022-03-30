@@ -1,5 +1,4 @@
 #include <glib.h>
-#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "data.h"
@@ -10,7 +9,7 @@
 #include "lock-app.h"
 
 
-static void
+void
 lock_app (GtkWidget *w __attribute__((unused)),
           gpointer user_data)
 {
@@ -19,6 +18,7 @@ lock_app (GtkWidget *w __attribute__((unused)),
     app_data->app_locked = TRUE;
 
     g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
+    gtk_widget_hide (GTK_WIDGET(app_data->tree_view));
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 
@@ -47,6 +47,7 @@ lock_app (GtkWidget *w __attribute__((unused)),
                 app_data->last_user_activity = g_date_time_new_now_local ();
                 app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
                 gtk_widget_destroy (dialog);
+                gtk_widget_show (GTK_WIDGET(app_data->tree_view));
                 g_object_unref (builder);
             }
         } else {

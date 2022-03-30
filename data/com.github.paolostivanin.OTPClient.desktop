@@ -6,6 +6,6 @@ Keywords=otp;totp;hotp;
 Terminal=false
 Name=OTPClient
 Comment=GTK+ TOTP and HOTP client
-Categories=GTK;GNOME;Utility;
+Categories=System;Security;GTK;GNOME;
 StartupWMClass=otpclient
 X-Purism-FormFactor=Workstation;Mobile;

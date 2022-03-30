@@ -86,6 +86,14 @@
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="visible">1</property>
+                <property name="accelerator">&lt;Ctrl&gt;r</property>
+                <property name="title" translatable="yes">Toggle reorder rows</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
                 <property name="accelerator">&lt;Ctrl&gt;f</property>
                 <property name="title" translatable="yes">Search</property>
               </object>

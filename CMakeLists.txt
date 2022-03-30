@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(OTPClient VERSION "2.4.9.1" LANGUAGES "C")
+project(OTPClient VERSION "2.5.0" LANGUAGES "C")
 
 configure_file("src/common/version.h.in" "version.h")
 include_directories(${PROJECT_BINARY_DIR})
@@ -43,14 +43,10 @@ pkg_check_modules(COTP REQUIRED cotp>=1.2.1)
 pkg_check_modules(PNG REQUIRED libpng>=1.2.0)
 pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.6.0)
-pkg_check_modules(ZBAR REQUIRED zbar>=0.10)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.18.0)
+pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
+pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.20.0)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.48.0)
 pkg_check_modules(GIO REQUIRED gio-2.0>=2.48.0)
-
-if(${ZBAR_VERSION} VERSION_EQUAL 0.10)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DZBAR_OLD_LIB")
-endif ()
 
 set(GUI_HEADER_FILES
         src/common/common.h
@@ -71,7 +67,7 @@ set(GUI_HEADER_FILES
         src/qrcode-parser.h
         src/treeview.h
         src/common/exports.h
-        src/lock-app.h src/common/get-providers-data.h)
+        src/lock-app.h src/common/get-providers-data.h src/change-db-cb.h src/new-db-cb.h src/db-actions.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -94,7 +90,6 @@ set(GUI_SOURCE_FILES
         src/parse-uri.c
         src/password-cb.c
         src/qrcode-parser.c
-        src/screenshot-add-cb.c
         src/add-from-qr.c
         src/settings.c
         src/shortcuts.c
@@ -103,7 +98,7 @@ set(GUI_SOURCE_FILES
         src/exports.c
         src/lock-app.c
         src/common/freeotp.c
-        src/common/aegis.c)
+        src/common/aegis.c src/change-db-cb.c src/new-db-cb.c src/db-actions.c src/change-file-cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
