@@ -11,7 +11,7 @@ G_BEGIN_DECLS
 #define FREEOTPPLUS_IMPORT_ACTION_NAME      "import_freeotpplus"
 #define AEGIS_IMPORT_ACTION_NAME            "import_aegis"
 
-typedef struct _otp_t {
+typedef struct otp_object_t {
     gchar *type;
 
     gchar *algo;

@@ -41,8 +41,11 @@ static void       get_window_size_cb        (GtkWidget          *window,
                                              GtkAllocation      *allocation,
                                              gpointer            user_data);
 
-static void       toggle_delete_button_cb   (GtkWidget          *main_window,
+static void       toggle_button_cb          (GtkWidget          *main_window,
                                              gpointer            user_data);
+
+static void       reorder_rows_cb           (GtkToggleButton *btn,
+                                             gpointer         user_data);
 
 static void       del_data_cb               (GtkToggleButton    *btn,
                                              gpointer            user_data);
@@ -89,6 +92,7 @@ activate (GtkApplication    *app,
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
     app_data->use_dark_theme = FALSE; // light theme by default
+    app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     get_wh_data (&width, &height, app_data);
@@ -221,12 +225,19 @@ activate (GtkApplication    *app,
     g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
     g_object_unref (icon);
 
-    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
+    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
 
+    GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
+    g_signal_new ("toggle-reorder-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    gtk_binding_entry_add_signal (binding_set, GDK_KEY_r, GDK_CONTROL_MASK, "toggle-reorder-button", 0);
+    g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK(toggle_button_cb), reorder_toggle_btn);
+    g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
+    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
+
+    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
     g_signal_new ("toggle-delete-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    GtkBindingSet *toggle_btn_binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
-    gtk_binding_entry_add_signal (toggle_btn_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
-    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_delete_button_cb), del_toggle_btn);
+    gtk_binding_entry_add_signal (binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
+    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_button_cb), del_toggle_btn);
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
@@ -508,10 +519,28 @@ get_db_path (AppData *app_data)
 
 
 static void
-toggle_delete_button_cb (GtkWidget *main_window __attribute__((unused)),
-                         gpointer   user_data)
+toggle_button_cb (GtkWidget *main_window __attribute__((unused)),
+                  gpointer   user_data)
 {
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(user_data), !gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(user_data)));
+}
+
+
+static void
+reorder_rows_cb (GtkToggleButton *btn,
+                 gpointer         user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+    gboolean is_btn_active = gtk_toggle_button_get_active (btn);
+    gtk_tree_view_set_reorderable (GTK_TREE_VIEW(app_data->tree_view), is_btn_active);
+    app_data->is_reorder_active = is_btn_active;
+    gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), !is_btn_active);
+    gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id")), !is_btn_active);
+
+    if (is_btn_active == FALSE) {
+        // reordering has been disabled, so now we have to reorder and update the database itself
+        reorder_db (app_data);
+    }
 }
 
 
