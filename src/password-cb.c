@@ -6,7 +6,7 @@
 #include "otpclient.h"
 #include "common/common.h"
 
-typedef struct _entrywidgets {
+typedef struct entrywidgets_t {
     GtkWidget *entry_old;
     GtkWidget *entry1;
     GtkWidget *entry2;

@@ -1,5 +1,4 @@
 #include <gtk/gtk.h>
-#include <gcrypt.h>
 #include <jansson.h>
 
 
@@ -31,10 +30,10 @@ build_json_obj (const gchar *type,
                 const gchar *acc_label,
                 const gchar *acc_iss,
                 const gchar *acc_key,
-                gint         digits,
+                guint        digits,
                 const gchar *algo,
-                gint         period,
-                gint64       ctr)
+                guint        period,
+                guint64      ctr)
 {
     json_t *obj = json_object ();
     json_object_set (obj, "type", json_string (type));

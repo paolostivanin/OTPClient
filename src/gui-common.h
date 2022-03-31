@@ -17,10 +17,10 @@ json_t      *build_json_obj             (const gchar *type,
                                          const gchar *acc_label,
                                          const gchar *acc_iss,
                                          const gchar *acc_key,
-                                         gint         digits,
+                                         guint        digits,
                                          const gchar *algo,
-                                         gint         period,
-                                         gint64       ctr);
+                                         guint        period,
+                                         guint64      ctr);
 
 void send_ok_cb                         (GtkWidget *entry,
                                          gpointer   user_data);

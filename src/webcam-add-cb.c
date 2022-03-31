@@ -1,7 +1,6 @@
 #include <gtk/gtk.h>
 #include <zbar.h>
 #include <gcrypt.h>
-#include "gui-common.h"
 #include "imports.h"
 #include "parse-uri.h"
 #include "message-dialogs.h"
@@ -10,7 +9,7 @@
 #include "common/common.h"
 
 
-typedef struct _config_data {
+typedef struct config_data_t {
     GtkWidget *diag;
     gchar *otp_uri;
     gboolean qrcode_found;

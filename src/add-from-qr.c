@@ -7,7 +7,7 @@
 #include "add-common.h"
 #include "get-builder.h"
 
-typedef struct _gtimeout_data {
+typedef struct gtimeout_data_t {
     GtkWidget *diag;
     gboolean uris_available;
     gboolean image_available;
@@ -146,7 +146,7 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
     GdkPixbuf *pbuf;
     GError *err = NULL;
     if (uris != NULL && uris[0] != NULL) {
-        gint len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
+        glong len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
         gchar *file_path = g_malloc0 (len_fpath);
         memcpy (file_path, uris[0] + 7, len_fpath);
         pbuf = gdk_pixbuf_new_from_file (file_path, &err);
