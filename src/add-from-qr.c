@@ -131,7 +131,7 @@ parse_file_and_update_db (const gchar *filename,
         show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);
     } else {
-        show_message_dialog (app_data->main_window, "QRCode successfully imported from the screenshot", GTK_MESSAGE_INFO);
+        show_message_dialog (app_data->main_window, "QRCode successfully imported.", GTK_MESSAGE_INFO);
     }
     gcry_free (otpauth_uri);
 }
@@ -143,12 +143,27 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
                    gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
+    GdkPixbuf *pbuf;
+    GError *err = NULL;
     if (uris != NULL && uris[0] != NULL) {
         gint len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
         gchar *file_path = g_malloc0 (len_fpath);
         memcpy (file_path, uris[0] + 7, len_fpath);
-        parse_file_and_update_db (file_path, app_data);
+        pbuf = gdk_pixbuf_new_from_file (file_path, &err);
         g_free (file_path);
+        if (err != NULL) {
+            gchar *msg = g_strconcat ("Couldn't get QR code URI from clipboard: ", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+        } else {
+            // here we convert the input file to a PNG file, so we are able to parse it later on.
+            gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb_uri.png", NULL);
+            gdk_pixbuf_save (pbuf, filename, "png", &err, NULL);
+            parse_file_and_update_db (filename, app_data);
+            g_unlink (filename);
+            g_free (filename);
+            g_object_unref (pbuf);
+        }
     } else {
         show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
     }
