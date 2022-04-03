@@ -7,13 +7,13 @@ change_file (AppData *app_data)
     gboolean res = FALSE;
     GtkWidget *label = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_changefile_label_id"));
     gchar *partial_msg_start = g_markup_printf_escaped ("%s <span font_family=\"monospace\">%s</span>", "The currently selected file is:\n", app_data->db_data->db_path);
-    const gchar *partial_msg_end = "\nDo you want to change it?\n"
+    const gchar *partial_msg_end = "\n\nDo you want to change it?\n\n"
                                "If you select <b>Yes</b>, you will be asked to pick another\n"
                                "database and then you will be prompted for the\n"
-                               "decryption password.\n"
+                               "decryption password.\n\n"
                                "\nIf you select <b>No</b>, then the app will close.";
     gchar *msg = g_strconcat (partial_msg_start, partial_msg_end, NULL);
-    gtk_label_set_text (GTK_LABEL(label), msg);
+    gtk_label_set_markup (GTK_LABEL(label), msg);
     g_free (msg);
     g_free (partial_msg_start);
 
