@@ -5,7 +5,6 @@
 #include <time.h>
 #include "../file-size.h"
 #include "../imports.h"
-#include "../gui-common.h"
 #include "../gquarks.h"
 #include "common.h"
 

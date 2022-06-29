@@ -9,6 +9,7 @@ G_BEGIN_DECLS
 #define ANDOTP_EXPORT_PLAIN_ACTION_NAME     "export_andotp_plain"
 #define FREEOTPPLUS_EXPORT_ACTION_NAME      "export_freeotpplus"
 #define AEGIS_EXPORT_ACTION_NAME            "export_aegis"
+#define AEGIS_EXPORT_PLAIN_ACTION_NAME      "export_aegis_plain"
 
 
 void    export_data_cb     (GSimpleAction   *simple,
@@ -23,6 +24,7 @@ gchar  *export_freeotpplus (const gchar      *export_path,
                             json_t           *json_db_data);
 
 gchar  *export_aegis       (const gchar      *export_path,
-                            json_t           *json_db_data);
+                            json_t           *json_db_data,
+                            const gchar      *password);
 
 G_END_DECLS

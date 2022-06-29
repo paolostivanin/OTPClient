@@ -24,9 +24,9 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - support SHA1, SHA256 and SHA512 algorithms
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
-- import and export encrypted and/or plain [andOTP](https://github.com/flocke/andOTP) backup
+- import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
+- import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
-- import and export plain [Aegis](https://github.com/beemdevelopment/Aegis) backup (plain json only)
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt

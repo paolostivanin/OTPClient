@@ -10,6 +10,7 @@ G_BEGIN_DECLS
 #define AUTHPLUS_IMPORT_ACTION_NAME         "import_authplus"
 #define FREEOTPPLUS_IMPORT_ACTION_NAME      "import_freeotpplus"
 #define AEGIS_IMPORT_ACTION_NAME            "import_aegis"
+#define AEGIS_IMPORT_ENC_ACTION_NAME        "import_aegis_enc"
 
 typedef struct otp_object_t {
     gchar *type;

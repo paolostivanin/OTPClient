@@ -1758,6 +1758,20 @@
             <property name="position">4</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="import_aegis_enc_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_aegis_enc</property>
+            <property name="text" translatable="yes">Aegis (encrypted json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">5</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">import_menu</property>
@@ -1817,12 +1831,26 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.export_aegis</property>
-            <property name="text" translatable="yes">Aegis (plain json)</property>
+            <property name="text" translatable="yes">Aegis (encrypted json)</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">3</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_aegis_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_aegis_plain</property>
+            <property name="text" translatable="yes">Aegis (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
           </packing>
         </child>
       </object>

@@ -141,7 +141,7 @@ main (gint    argc,
         }
         if (g_ascii_strcasecmp (argv[3], "aegis") == 0) {
             exported_file_path = g_build_filename (base_dir, "aegis_export_plain.json", NULL);
-            ret_msg = export_aegis (exported_file_path, db_data->json_data);
+            ret_msg = export_aegis (exported_file_path, db_data->json_data, NULL);
         }
         if (ret_msg != NULL) {
             g_printerr ("An error occurred while exporting the data: %s\n", ret_msg);

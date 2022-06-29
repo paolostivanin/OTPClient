@@ -47,6 +47,7 @@ pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.20.0)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.48.0)
 pkg_check_modules(GIO REQUIRED gio-2.0>=2.48.0)
+pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 
 set(GUI_HEADER_FILES
         src/common/common.h
@@ -145,7 +146,8 @@ if(BUILD_GUI)
                 ${LIBZIP_INCLUDE_DIRS}
                 ${PNG_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
-                ${ZBAR_INCLUDE_DIRS})
+                ${ZBAR_INCLUDE_DIRS}
+                ${UUID_INCLUDE_DIRS})
 
         add_executable(${PROJECT_NAME} ${GUI_SOURCE_FILES} ${GUI_HEADER_FILES})
         target_link_libraries(${PROJECT_NAME}
@@ -155,7 +157,8 @@ if(BUILD_GUI)
                 ${LIBZIP_LIBRARIES}
                 ${PNG_LIBRARIES}
                 ${JANSSON_LIBRARIES}
-                ${ZBAR_LIBRARIES})
+                ${ZBAR_LIBRARIES}
+                ${UUID_LIBRARIES})
 
         set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
         install(TARGETS ${PROJECT_NAME} DESTINATION bin)
@@ -165,12 +168,14 @@ if(BUILD_CLI)
         include_directories(${GTK3_INCLUDE_DIRS}
                 ${GCRYPT_INCLUDE_DIRS}
                 ${COTP_INCLUDE_DIRS}
-                ${JANSSON_INCLUDE_DIRS})
+                ${JANSSON_INCLUDE_DIRS}
+                ${UUID_INCLUDE_DIRS})
         if(BUILD_GUI)
                 include_directories(
                         ${LIBZIP_INCLUDE_DIRS}
                         ${PNG_INCLUDE_DIRS}
-                        ${ZBAR_INCLUDE_DIRS})
+                        ${ZBAR_INCLUDE_DIRS}
+                        ${UUID_INCLUDE_DIRS})
         endif()
 
         add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
@@ -179,13 +184,15 @@ if(BUILD_CLI)
                 ${GIO_LIBRARIES}
                 ${GCRYPT_LIBRARIES}
                 ${COTP_LIBRARIES}
-                ${JANSSON_LIBRARIES})
+                ${JANSSON_LIBRARIES}
+                ${UUID_LIBRARIES})
         if(BUILD_GUI)
                 target_link_libraries(${PROJECT_NAME}-cli
                         ${GTK3_LIBRARIES}
                         ${LIBZIP_LIBRARIES}
                         ${PNG_LIBRARIES}
-                        ${ZBAR_LIBRARIES})
+                        ${ZBAR_LIBRARIES}
+                        ${UUID_LIBRARIES})
         endif()
 
         set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
