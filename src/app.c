@@ -437,6 +437,7 @@ set_action_group (GtkBuilder *builder,
     static GActionEntry add_menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "import_qr_file", .activate = add_qr_from_file },
+            { .name = "import_qr_google_migration_file", .activate = add_qr_from_file },
             { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
             { .name = "manual", .activate = add_data_dialog }
     };
