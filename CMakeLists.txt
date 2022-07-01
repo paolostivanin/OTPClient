@@ -77,7 +77,8 @@ set(GUI_HEADER_FILES
         src/change-db-cb.h
         src/new-db-cb.h
         src/db-actions.h
-        src/google-migration.pb-c.h src/secret-schema.h)
+        src/google-migration.pb-c.h
+        src/secret-schema.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -113,7 +114,8 @@ set(GUI_SOURCE_FILES
         src/new-db-cb.c
         src/db-actions.c
         src/change-file-cb.c
-        src/google-migration.pb-c.c src/secret-schema.c)
+        src/google-migration.pb-c.c
+        src/secret-schema.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
@@ -124,7 +126,8 @@ set(CLI_HEADER_FILES
         src/file-size.h
         src/common/exports.h
         src/parse-uri.h
-        src/common/get-providers-data.h src/secret-schema.h)
+        src/common/get-providers-data.h
+        src/secret-schema.h)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
@@ -137,7 +140,8 @@ set(CLI_SOURCE_FILES
         src/parse-uri.c
         src/common/andotp.c
         src/common/aegis.c
-        src/common/freeotp.c src/secret-schema.c)
+        src/common/freeotp.c
+        src/secret-schema.c)
 
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES

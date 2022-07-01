@@ -35,8 +35,6 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     cfg_data->diag = GTK_WIDGET(gtk_builder_get_object (builder, "diag_webcam_id"));
 
-    gtk_window_set_transient_for (GTK_WINDOW(cfg_data->diag), GTK_WINDOW(app_data->main_window));
-
     cfg_data->qrcode_found = FALSE;
     cfg_data->gtimeout_exit_value = TRUE;
     cfg_data->counter = 0;
@@ -50,7 +48,7 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         return;
     }
     zbar_processor_set_data_handler (proc, scan_qrcode, cfg_data);
-    zbar_processor_set_visible (proc, 0);
+    zbar_processor_set_visible (proc, 1);
     zbar_processor_set_active (proc, 1);
 
     guint source_id = g_timeout_add (1000, check_result, cfg_data);
@@ -60,6 +58,7 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
     gint response = gtk_dialog_run (GTK_DIALOG (cfg_data->diag));
     if (response == GTK_RESPONSE_CANCEL) {
         if (cfg_data->qrcode_found) {
+            zbar_processor_destroy (proc);
             gchar *err_msg = add_data_to_db (cfg_data->otp_uri, app_data);
             if (err_msg != NULL) {
                 show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
@@ -69,7 +68,6 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
             }
             gcry_free (cfg_data->otp_uri);
         }
-        zbar_processor_destroy (proc);
         if (cfg_data->gtimeout_exit_value) {
             // only remove if 'check_result' returned TRUE
             g_source_remove (source_id);
