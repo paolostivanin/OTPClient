@@ -23,8 +23,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://libzip.org/download/libzip-1.8.0.tar.xz
-    sha256: f0763bda24ba947e80430be787c4b068d8b6aa6027a26a19923f0acfa3dac97e
+    url: https://libzip.org/download/libzip-1.9.2.tar.xz
+    sha256: c93e9852b7b2dc931197831438fee5295976ee0ba24f8524a8907be5c2ba5937
 - name: jansson
   cleanup:
   - "/include"
@@ -60,8 +60,8 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.12.tar.gz
-    sha256: ee9d4cc198d48365633274f41bd1b0eae12f9bef49182ea20050aa68f60e09b6
+    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.14.tar.gz
+    sha256: bc95a64507b4ac359eec1f858a6bdcf84c9562424d40fbea8ab00021e9b3197c
 - name: libcotp
   buildsystem: cmake-ninja
   config-opts:
@@ -71,14 +71,15 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libcotp/archive/v1.2.4.tar.gz
-    sha256: 6a077c6a8e785a542262f207fbb760f3d7d03649787c10cb01ea38c280dda070
+    url: https://github.com/paolostivanin/libcotp/archive/v1.2.6.tar.gz
+    sha256: f0e75c8bd27a16e808e0af7768dc100872f26dd7c64534ce971c407374386d4a
 - name: OTPClient
   buildsystem: cmake-ninja
   config-opts:
   - "-DCMAKE_BUILD_TYPE=Release"
   - "-DUSE_FLATPAK_APP_FOLDER=ON"
   sources:
-  - type: archive
-    url: https://github.com/paolostivanin/otpclient/archive/v2.5.1.tar.gz
-    sha256: e35d4c004abc523428b9d40f01e18153d87e38073c2bd56ac855ecdcec14d47c
+  - type: git
+    url: https://github.com/paolostivanin/OTPClient.git
+    branch: master
+
