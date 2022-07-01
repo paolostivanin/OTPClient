@@ -426,6 +426,7 @@ set_action_group (GtkBuilder *builder,
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = GOOGLE_MIGRATION_ACTION_NAME, .activate = add_qr_from_file },
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
@@ -437,7 +438,6 @@ set_action_group (GtkBuilder *builder,
     static GActionEntry add_menu_entries[] = {
             { .name = "webcam", .activate = webcam_cb },
             { .name = "import_qr_file", .activate = add_qr_from_file },
-            { .name = "import_qr_google_migration_file", .activate = add_qr_from_file },
             { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
             { .name = "manual", .activate = add_data_dialog }
     };

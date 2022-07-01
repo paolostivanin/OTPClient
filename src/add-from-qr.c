@@ -42,7 +42,7 @@ add_qr_from_file (GSimpleAction *simple,
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     gboolean google_migration;
-    (g_strcmp0 (action_name, "import_qr_google_migration_file") == 0) ? google_migration = TRUE : FALSE;
+    (g_strcmp0 (action_name, GOOGLE_MIGRATION_ACTION_NAME) == 0) ? google_migration = TRUE : FALSE;
 
     AppData *app_data = (AppData *)user_data;
 
