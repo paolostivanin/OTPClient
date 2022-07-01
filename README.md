@@ -19,6 +19,9 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 | protobuf-c                                         | 1.30        |
 | protobuf                                           | 3.6         |
 
+:warning: Please note that the memlock value should be `>= 4 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
+See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
+
 ## Features
 - support both TOTP and HOTP
 - support setting custom digits (between 4 and 10 inclusive)
