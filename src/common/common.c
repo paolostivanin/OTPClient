@@ -19,7 +19,9 @@ get_max_file_size_from_memlock (void)
             return 4194304;
         } else {
             // memlock is less than 4 MB
-            g_print ("[WARNING] your OS's memlock limit may be too low for you (%d bytes). Please have a look at %s\n", (gint32)r.rlim_cur, link);
+            g_print ("[WARNING] your OS's memlock limit may be too low for you (current value: %d bytes).\n"
+                     "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
+                     "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
             return (gint32)r.rlim_cur;
         }
     }
