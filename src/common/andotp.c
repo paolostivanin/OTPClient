@@ -11,6 +11,8 @@
 #define ANDOTP_IV_SIZE   12
 #define ANDOTP_SALT_SIZE 12
 #define ANDOTP_TAG_SIZE  16
+#define PBKDF2_MIN_BACKUP_ITERATIONS 140000
+#define PBKDF2_MAX_BACKUP_ITERATIONS 160000
 
 static GSList *get_otps_from_encrypted_backup (const gchar          *path,
                                                const gchar          *password,
@@ -24,7 +26,7 @@ static GSList *get_otps_from_plain_backup     (const gchar          *path,
 
 static guchar *get_derived_key                (const gchar          *password,
                                                const guchar         *salt,
-                                               gint                  iterations);
+                                               guint32               iterations);
 
 static GSList *parse_json_data                (const gchar          *data,
                                                GError              **err);
@@ -44,7 +46,7 @@ get_andotp_data (const gchar     *path,
         return NULL;
     }
 
-    return encrypted == TRUE ? get_otps_from_encrypted_backup(path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup(path, err);
+    return (encrypted == TRUE) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
 }
 
 
@@ -56,20 +58,21 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 GFileInputStream     *in_stream,
                                 GError              **err)
 {
-    int32_t le_iterations;
+    gint32 le_iterations;
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), &le_iterations, 4, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
-    if (le_iterations < 1000 || le_iterations > 5000) {
-        // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
+
+    guint32 be_iterations = __builtin_bswap32 (le_iterations);
+    if (be_iterations < PBKDF2_MIN_BACKUP_ITERATIONS || be_iterations > PBKDF2_MAX_BACKUP_ITERATIONS) {
+        // https://github.com/andOTP/andOTP/blob/6c54b8811f950375c774b2eefebcf1f9fa13d433/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L124-L125
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Number of iterations is invalid. It's likely this is not an andOTP encrypted database.\n");
         return NULL;
     }
-    int32_t be_iterations = __builtin_bswap32(le_iterations);
 
     guchar salt[ANDOTP_SALT_SIZE];
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, ANDOTP_SALT_SIZE, NULL, err) == -1) {
@@ -227,11 +230,9 @@ export_andotp (const gchar *export_path,
     }
     gsize json_data_size = g_utf8_strlen (json_data, -1);
 
-    time_t t;
-    srand((unsigned) time(&t));
     // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
-    int32_t le_iterations = (rand () % (5000 - 1000 + 1)) + 1000;
-    int32_t be_iterations = __builtin_bswap32 (le_iterations);
+    guint32 le_iterations = (g_random_int () % (PBKDF2_MAX_BACKUP_ITERATIONS - PBKDF2_MIN_BACKUP_ITERATIONS + 1)) + PBKDF2_MIN_BACKUP_ITERATIONS;
+    gint32 be_iterations = (gint32)__builtin_bswap32 (le_iterations);
 
     guchar *iv = g_malloc0 (ANDOTP_IV_SIZE);
     gcry_create_nonce (iv, ANDOTP_IV_SIZE);
@@ -293,7 +294,7 @@ export_andotp (const gchar *export_path,
 static guchar *
 get_derived_key (const gchar  *password,
                  const guchar *salt,
-                 gint          iterations)
+                 guint32       iterations)
 {
     guchar *derived_key = gcry_malloc_secure (32);
     if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
