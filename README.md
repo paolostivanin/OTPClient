@@ -6,16 +6,21 @@
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
-|Name| Min Version |
-|----|-------------|
-|GTK+| 3.20        |
-|Glib| 2.48.0      |
-|jansson| 2.6.0       |
-|libgcrypt| 1.6.0       |
-|libzip| 1.0.0       |
-|libpng| 1.2.0       |
-|[libcotp](https://github.com/paolostivanin/libcotp)| 1.2.1       |-|
-|zbar| 0.20        |
+| Name                                               | Min Version |
+|----------------------------------------------------|-------------|
+| GTK+                                               | 3.20        |
+| Glib                                               | 2.48.0      |
+| jansson                                            | 2.6.0       |
+| libgcrypt                                          | 1.6.0       |
+| libzip                                             | 1.0.0       |
+| libpng                                             | 1.2.0       |
+| [libcotp](https://github.com/paolostivanin/libcotp) | 1.2.1       |-|
+| zbar                                               | 0.20        |
+| protobuf-c                                         | 1.30        |
+| protobuf                                           | 3.6         |
+
+:warning: Please note that the memlock value should be `>= 4 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
+See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
 
 ## Features
 - support both TOTP and HOTP
@@ -24,9 +29,9 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 - support SHA1, SHA256 and SHA512 algorithms
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 - import encrypted [Authenticator Plus](https://www.authenticatorplus.com/) backup
-- import and export encrypted and/or plain [andOTP](https://github.com/flocke/andOTP) backup
+- import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
+- import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
-- import and export plain [Aegis](https://github.com/beemdevelopment/Aegis) backup (plain json only)
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
@@ -34,6 +39,9 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 ## Testing
 * Before each release, I run PVS Studio in order to catch even more errors and/or corner cases
 * With every commit to master, OTPClient is compiled in CircleCI against different distros
+
+## Protobuf
+The protobuf files needed to decode Google's otpauth-migration qr codes have been generated with `protoc --c_out=src/ proto/google-migration.proto` 
 
 ## Wiki
 For things like roadmap, screenshots, how to use OTPClient, etc, please have a look at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.

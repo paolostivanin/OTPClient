@@ -91,6 +91,25 @@ delete_rows_cb (GtkTreeView        *tree_view,
     GtkTreeIter  iter;
     gtk_tree_model_get_iter (model, &iter, path);
 
+    gboolean delete_entry = FALSE;
+    GtkWidget *del_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_diag_id"));
+    gtk_window_set_transient_for (GTK_WINDOW(del_diag), GTK_WINDOW(app_data->main_window));
+    gint res = gtk_dialog_run (GTK_DIALOG(del_diag));
+    switch (res) {
+        case GTK_RESPONSE_YES:
+            delete_entry = TRUE;
+            break;
+        case GTK_RESPONSE_NO:
+        default:
+            delete_entry = FALSE;
+            break;
+    }
+    gtk_widget_hide (del_diag);
+
+    if (delete_entry == FALSE) {
+        return;
+    }
+
     gint db_item_position_to_delete;
     gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
 

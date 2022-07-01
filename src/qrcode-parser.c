@@ -2,10 +2,9 @@
 #include <zbar.h>
 #include <png.h>
 #include <glib/gstdio.h>
-#include "gui-common.h"
 #include "common/common.h"
 
-typedef struct _image_data_t {
+typedef struct image_data_t {
     gulong width;
     gulong height;
     guchar *raw_data;

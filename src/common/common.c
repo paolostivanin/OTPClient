@@ -19,7 +19,9 @@ get_max_file_size_from_memlock (void)
             return 4194304;
         } else {
             // memlock is less than 4 MB
-            g_print ("[WARNING] your OS's memlock limit may be too low for you (%d bytes). Please have a look at %s\n", (gint32)r.rlim_cur, link);
+            g_print ("[WARNING] your OS's memlock limit may be too low for you (current value: %d bytes).\n"
+                     "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
+                     "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
             return (gint32)r.rlim_cur;
         }
     }
@@ -126,4 +128,40 @@ g_trim_whitespace (const gchar *str)
     gcry_realloc (sec_buf, g_utf8_strlen(sec_buf, -1) + 1);
 
     return sec_buf;
+}
+
+
+guchar *
+hexstr_to_bytes (const gchar *hexstr)
+{
+    size_t len = strlen (hexstr);
+    size_t final_len = len / 2;
+    guchar *chrs = (guchar *)g_malloc((final_len+1) * sizeof(*chrs));
+    for (size_t i = 0, j = 0; j < final_len; i += 2, j++)
+        chrs[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
+    chrs[final_len] = '\0';
+    return chrs;
+}
+
+
+gchar *
+bytes_to_hexstr (const guchar *data, size_t datalen)
+{
+    gchar hex_str[]= "0123456789abcdef";
+
+    gchar *result = g_malloc0(datalen * 2 + 1);
+    if (result == NULL) {
+        g_printerr ("Error while allocating memory for bytes_to_hexstr.\n");
+        return result;
+    }
+
+    for (guint i = 0; i < datalen; i++)
+    {
+        result[i * 2 + 0] = hex_str[(data[i] >> 4) & 0x0F];
+        result[i * 2 + 1] = hex_str[(data[i]     ) & 0x0F];
+    }
+
+    result[datalen * 2] = 0;
+
+    return result;
 }

@@ -34,7 +34,7 @@
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">1</property>
+            <property name="position">2</property>
           </packing>
         </child>
       </object>
@@ -450,6 +450,75 @@
       <action-widget response="-5">decpwddiag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
+  <object class="GtkDialog" id="del_diag_id">
+    <property name="name">del_diag_id</property>
+    <property name="can-focus">False</property>
+    <property name="type-hint">dialog</property>
+    <child internal-child="vbox">
+      <object class="GtkBox">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">2</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <object class="GtkButton" id="del_diag_no_btn_id">
+                <property name="label" translatable="yes">No</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="del_diag_yes_btn_id">
+                <property name="label" translatable="yes">Yes</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkLabel" id="del_diag_label_id">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="margin-top">5</property>
+            <property name="margin-bottom">5</property>
+            <property name="label" translatable="yes">Are you sure you want to &lt;b&gt;permanently delete&lt;/b&gt; the selected item?</property>
+            <property name="use-markup">True</property>
+            <property name="justify">center</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-9">del_diag_no_btn_id</action-widget>
+      <action-widget response="-8">del_diag_yes_btn_id</action-widget>
+    </action-widgets>
+  </object>
   <object class="GtkDialog" id="diag_changefile_id">
     <property name="can-focus">False</property>
     <property name="type-hint">dialog</property>
@@ -590,12 +659,9 @@
     <child internal-child="vbox">
       <object class="GtkBox">
         <property name="can-focus">False</property>
-        <property name="margin-left">5</property>
-        <property name="margin-right">5</property>
         <property name="margin-top">5</property>
         <property name="margin-bottom">5</property>
         <property name="orientation">vertical</property>
-        <property name="spacing">5</property>
         <child internal-child="action_area">
           <object class="GtkButtonBox">
             <property name="can-focus">False</property>
@@ -625,10 +691,10 @@
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="label" translatable="yes">Please place the qrcode &lt;b&gt;in front of the webcam&lt;/b&gt;.
-              This dialog will automatically close as soon as a valid qrcode has been found or after 30 seconds if nothing has been detected.</property>
+This dialog will automatically close as soon as a valid qrcode
+has been found or after 30 seconds if nothing has been detected.</property>
             <property name="use-markup">True</property>
             <property name="justify">center</property>
-            <property name="wrap">True</property>
           </object>
           <packing>
             <property name="expand">True</property>
@@ -1500,7 +1566,7 @@
           </packing>
         </child>
         <child>
-          <!-- n-columns=3 n-rows=6 -->
+          <!-- n-columns=3 n-rows=7 -->
           <object class="GtkGrid">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
@@ -1650,6 +1716,30 @@
               </packing>
             </child>
             <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Disable secret service</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">6</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="disable_secret_service_switch_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">6</property>
+              </packing>
+            </child>
+            <child>
+              <placeholder/>
+            </child>
+            <child>
               <placeholder/>
             </child>
             <child>
@@ -1758,6 +1848,34 @@
             <property name="position">4</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="import_aegis_enc_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_aegis_enc</property>
+            <property name="text" translatable="yes">Aegis (encrypted json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">5</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_google_migration_qr_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_qr_google_migration_file</property>
+            <property name="text" translatable="yes">Google Migration QR</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">6</property>
+          </packing>
+        </child>
       </object>
       <packing>
         <property name="submenu">import_menu</property>
@@ -1817,12 +1935,26 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.export_aegis</property>
-            <property name="text" translatable="yes">Aegis (plain json)</property>
+            <property name="text" translatable="yes">Aegis (encrypted json)</property>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">3</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_aegis_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_aegis_plain</property>
+            <property name="text" translatable="yes">Aegis (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
           </packing>
         </child>
       </object>

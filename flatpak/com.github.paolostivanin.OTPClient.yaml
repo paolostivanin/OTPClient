@@ -1,27 +1,14 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '41'
+runtime-version: '42'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
-# X11 + XShm access
-- --share=ipc
-- --socket=x11
-# Wayland access
-- --socket=wayland
-# Notification access
-- --talk-name=org.freedesktop.Notifications
-# Screen Lock Listener
-- --talk-name=org.freedesktop.ScreenSaver
-- --talk-name=org.freedesktop.login1.Manager
-- --talk-name=org.freedesktop.login1.Session
-- --talk-name=org.gnome.ScreenSaver
-- --talk-name=org.gnome.SessionManager
-- --talk-name=org.gnome.SessionManager.Presence
-- --talk-name=com.canonical.Unity.Session
-# Other
-- --device=all
-- --talk-name=org.gnome.Shell.Screenshot
+- "--share=ipc"
+- "--socket=x11"
+- "--socket=wayland"
+- "--device=all"
+- "--talk-name=org.freedesktop.secrets"
 modules:
 - name: libzip
   buildsystem: cmake-ninja
@@ -36,8 +23,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://libzip.org/download/libzip-1.8.0.tar.xz
-    sha256: f0763bda24ba947e80430be787c4b068d8b6aa6027a26a19923f0acfa3dac97e
+    url: https://libzip.org/download/libzip-1.9.2.tar.xz
+    sha256: c93e9852b7b2dc931197831438fee5295976ee0ba24f8524a8907be5c2ba5937
 - name: jansson
   cleanup:
   - "/include"
@@ -47,8 +34,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://www.digip.org/jansson/releases/jansson-2.13.1.tar.gz
-    sha256: f4f377da17b10201a60c1108613e78ee15df6b12016b116b6de42209f47a474f
+    url: https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz
+    sha256: 5798d010e41cf8d76b66236cfb2f2543c8d082181d16bc3085ab49538d4b9929
 - name: zbar
   config-opts:
   - "--without-qt"
@@ -62,8 +49,8 @@ modules:
   - "--enable-codes=qrcode"
   sources:
   - type: archive
-    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.tar.gz
-    sha256: ac52763a7dd6ddc53ca6cd75ccee14f7abf6ae46ecb31137d025af123edd33bf
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.90.tar.gz
+    sha256: ff857dd7e3dbe043dac3765b5182c91dfd0477800713a75d15287d797cee60fa
 - name: libbaseencode
   buildsystem: cmake-ninja
   config-opts:
@@ -73,8 +60,8 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.9.tar.gz
-    sha256: a183d7cf30d931b2a078d6f0ef64616b71ab26f9258e5f4e191778c7ace7175d
+    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.14.tar.gz
+    sha256: bc95a64507b4ac359eec1f858a6bdcf84c9562424d40fbea8ab00021e9b3197c
 - name: libcotp
   buildsystem: cmake-ninja
   config-opts:
@@ -84,8 +71,8 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libcotp/archive/v1.2.2.tar.gz
-    sha256: 25b45ffa4aece5cc689503ebea7356a2f760c194f0c41805934495d2fe7165b1
+    url: https://github.com/paolostivanin/libcotp/archive/v1.2.6.tar.gz
+    sha256: f0e75c8bd27a16e808e0af7768dc100872f26dd7c64534ce971c407374386d4a
 - name: OTPClient
   buildsystem: cmake-ninja
   config-opts:
@@ -95,3 +82,4 @@ modules:
   - type: git
     url: https://github.com/paolostivanin/OTPClient.git
     branch: master
+

@@ -2,19 +2,22 @@
 #include <string.h>
 #include <gcrypt.h>
 #include <termios.h>
+#include <libsecret/secret.h>
 #include "help.h"
 #include "get-data.h"
 #include "../common/common.h"
 #include "../common/exports.h"
-#include "../common/get-providers-data.h"
+#include "../secret-schema.h"
 
 #define MAX_ABS_PATH_LEN 256
 
 #ifndef USE_FLATPAK_APP_FOLDER
-static gchar    *get_db_path    (void);
+static gchar    *get_db_path              (void);
 #endif
 
-static gchar    *get_pwd        (const gchar *pwd_msg);
+static gchar    *get_pwd                  (const gchar *pwd_msg);
+
+static gboolean  is_secretservice_disable (void);
 
 
 gint
@@ -26,6 +29,7 @@ main (gint    argc,
     }
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->key_stored = FALSE;
 
     db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
     gchar *msg = init_libs (db_data->max_file_size_from_memlock);
@@ -52,10 +56,23 @@ main (gint    argc,
     }
 #endif
 
-    db_data->key = get_pwd ("Type the DB decryption password: ");
-    if (db_data->key == NULL) {
-        g_free (db_data);
-        return -1;
+    gboolean disable_secret_service = is_secretservice_disable ();
+    if (disable_secret_service == FALSE) {
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
+        if (pwd == NULL) {
+            goto get_pwd;
+        } else {
+            db_data->key_stored = TRUE;
+            db_data->key= secure_strdup (pwd);
+            secret_password_free (pwd);
+        }
+    } else {
+        get_pwd:
+        db_data->key = get_pwd ("Type the DB decryption password: ");
+        if (db_data->key == NULL) {
+            g_free (db_data);
+            return -1;
+        }
     }
 
     db_data->objects_hash = NULL;
@@ -67,6 +84,10 @@ main (gint    argc,
         gcry_free (db_data->key);
         g_free (db_data);
         return -1;
+    }
+
+    if (disable_secret_service == FALSE && db_data->key_stored == FALSE) {
+        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
     gchar *account = NULL, *issuer = NULL;
@@ -141,7 +162,7 @@ main (gint    argc,
         }
         if (g_ascii_strcasecmp (argv[3], "aegis") == 0) {
             exported_file_path = g_build_filename (base_dir, "aegis_export_plain.json", NULL);
-            ret_msg = export_aegis (exported_file_path, db_data->json_data);
+            ret_msg = export_aegis (exported_file_path, db_data->json_data, NULL);
         }
         if (ret_msg != NULL) {
             g_printerr ("An error occurred while exporting the data: %s\n", ret_msg);
@@ -249,4 +270,23 @@ get_pwd (const gchar *pwd_msg)
     gchar *realloc_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);
 
     return realloc_pwd;
+}
+
+
+static gboolean
+is_secretservice_disable ()
+{
+    gboolean disable_secret_service = FALSE;
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+            g_key_file_free (kf);
+            return FALSE;
+        }
+        disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);
+    }
+    return disable_secret_service;
 }

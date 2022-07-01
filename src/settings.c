@@ -35,6 +35,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
     app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
     app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+    app_data->disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);
 
     GtkBuilder *builder = get_builder_from_partial_path(UI_PARTIAL_PATH);
     GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "settings_diag_id"));
@@ -44,6 +45,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     GtkWidget *al_switch = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_switch_id"));
     GtkWidget *inactivity_cb = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_inactive_cb_id"));
     GtkWidget *dt_switch = GTK_WIDGET(gtk_builder_get_object (builder, "dark_theme_switch_id"));
+    GtkWidget *dss_switch = GTK_WIDGET(gtk_builder_get_object (builder, "disable_secret_service_switch_id"));
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
@@ -51,6 +53,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     gtk_switch_set_active (GTK_SWITCH(dn_switch), app_data->disable_notifications);
     gtk_switch_set_active (GTK_SWITCH(al_switch), app_data->auto_lock);
     gtk_switch_set_active (GTK_SWITCH(dt_switch), app_data->use_dark_theme);
+    gtk_switch_set_active (GTK_SWITCH(dss_switch), app_data->disable_secret_service);
     gchar *active_id_string = g_strdup_printf ("%d", app_data->search_column);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(sc_cb), active_id_string);
     g_free (active_id_string);
@@ -68,12 +71,14 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
             app_data->auto_lock = gtk_switch_get_active (GTK_SWITCH(al_switch));
             app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(inactivity_cb)), NULL, 10);
             app_data->use_dark_theme = gtk_switch_get_active (GTK_SWITCH(dt_switch));
+            app_data->disable_secret_service = gtk_switch_get_active (GTK_SWITCH(dss_switch));
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
             g_key_file_set_integer (kf, "config", "search_column", app_data->search_column);
             g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
+            g_key_file_set_boolean (kf, "config", "disable_secret_service", app_data->disable_secret_service);
             g_key_file_save_to_file (kf, cfg_file_path, NULL);
             gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
             break;

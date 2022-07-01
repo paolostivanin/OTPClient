@@ -7,7 +7,7 @@
 #include "gui-common.h"
 #include "gquarks.h"
 
-typedef struct _edit_data_t {
+typedef struct edit_data_t {
     GtkListStore *list_store;
     GtkTreeIter iter;
     DatabaseData *db_data;

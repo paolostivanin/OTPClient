@@ -8,7 +8,7 @@
 #include "gquarks.h"
 #include "common/common.h"
 
-typedef struct _header_data {
+typedef struct header_data_t {
     guint8 iv[IV_SIZE];
     guint8 salt[KDF_SALT_SIZE];
 } HeaderData;
@@ -357,7 +357,7 @@ get_derived_key (const gchar    *pwd,
         return SECURE_MEMORY_ALLOC_ERR;
     }
 
-    int ret = gcry_kdf_derive (pwd, pwd_len, GCRY_KDF_PBKDF2, GCRY_MD_SHA512, header_data->salt, KDF_SALT_SIZE, KDF_ITERATIONS, key_len, derived_key);
+    gpg_error_t ret = gcry_kdf_derive (pwd, pwd_len, GCRY_KDF_PBKDF2, GCRY_MD_SHA512, header_data->salt, KDF_SALT_SIZE, KDF_ITERATIONS, key_len, derived_key);
     if (ret != 0) {
         gcry_free (derived_key);
         g_printerr ("Error during key derivation\n");

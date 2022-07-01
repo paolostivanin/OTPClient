@@ -19,6 +19,9 @@ GSList *get_freeotpplus_data    (const gchar     *path,
                                  GError         **err);
 
 GSList *get_aegis_data          (const gchar     *path,
+                                 const gchar     *password,
+                                 gint32           max_file_size,
+                                 gboolean         encrypted,
                                  GError         **err);
 
 G_END_DECLS

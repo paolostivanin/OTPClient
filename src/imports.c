@@ -97,7 +97,7 @@ parse_data_and_update_db (AppData       *app_data,
     GSList *content = NULL;
 
     gchar *pwd = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0) {
         pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
         if (pwd == NULL) {
             return FALSE;
@@ -111,7 +111,7 @@ parse_data_and_update_db (AppData       *app_data,
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
         content = get_freeotpplus_data (filename, &err);
     } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0) {
-        content = get_aegis_data (filename, &err);
+        content = get_aegis_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0 ? TRUE : FALSE , &err);
     }
 
     if (content == NULL && err != NULL) {

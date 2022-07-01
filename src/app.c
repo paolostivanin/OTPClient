@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <libsecret/secret.h>
 #include "otpclient.h"
 #include "gquarks.h"
 #include "imports.h"
@@ -14,6 +15,7 @@
 #include "new-db-cb.h"
 #include "common/common.h"
 #include "version.h"
+#include "secret-schema.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -92,12 +94,14 @@ activate (GtkApplication    *app,
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
     app_data->use_dark_theme = FALSE; // light theme by default
+    app_data->disable_secret_service = FALSE; // secret service enabled by default
     app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     get_wh_data (&width, &height, app_data);
 
     app_data->db_data = g_new0 (DatabaseData, 1);
+    app_data->db_data->key_stored = FALSE; // at startup, we don't know whether the key is stored or not
 
     app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 
@@ -174,16 +178,28 @@ activate (GtkApplication    *app,
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
-    retry:
-    app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
-    if (app_data->db_data->key == NULL) {
-        if (change_file (app_data) == FALSE) {
-            g_free (app_data->db_data);
-            g_free (app_data);
-            g_application_quit (G_APPLICATION(app));
-            return;
-        } else {
+    if (app_data->disable_secret_service == FALSE) {
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
+        if (pwd == NULL) {
+            g_printerr ("Couldn't find the password in the secret service.\n");
             goto retry;
+        } else {
+            app_data->db_data->key_stored = TRUE;
+            app_data->db_data->key= secure_strdup (pwd);
+            secret_password_free (pwd);
+        }
+    } else {
+        retry:
+        app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
+        if (app_data->db_data->key == NULL) {
+            if (change_file (app_data) == FALSE) {
+                g_free (app_data->db_data);
+                g_free (app_data);
+                g_application_quit (G_APPLICATION(app));
+                return;
+            } else {
+                goto retry;
+            }
         }
     }
 
@@ -201,6 +217,10 @@ activate (GtkApplication    *app,
         }
         g_clear_error (&err);
         goto retry;
+    }
+
+    if (app_data->disable_secret_service == FALSE && app_data->db_data->key_stored == FALSE) {
+        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
     if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE)) {
@@ -343,6 +363,7 @@ get_wh_data (gint     *width,
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+        app_data->disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
@@ -420,10 +441,13 @@ set_action_group (GtkBuilder *builder,
             { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = FREEOTPPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AEGIS_IMPORT_ACTION_NAME, .activate = select_file_cb },
+            { .name = AEGIS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
+            { .name = AEGIS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = GOOGLE_MIGRATION_ACTION_NAME, .activate = add_qr_from_file },
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
@@ -598,6 +622,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
             g_application_quit (G_APPLICATION(app));
         }
         show_message_dialog (app_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
+        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     } else {
         gcry_free (tmp_key);
     }
@@ -621,6 +646,9 @@ destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     AppData *app_data = (AppData *)user_data;
+    if (app_data->disable_secret_service == TRUE) {
+        secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL, NULL);
+    }
     save_sort_order (app_data->tree_view);
     g_source_remove (app_data->source_id);
     g_source_remove (app_data->source_id_last_activity);
