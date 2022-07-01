@@ -135,8 +135,6 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get(json, "db")), &out_len);
     if (out_len > max_file_size) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
-        g_free (key_nonce);
-        g_free (key_tag);
         gcry_cipher_close (hd);
         gcry_free (master_key);
         return NULL;
@@ -146,8 +144,6 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gpg_err = gcry_cipher_checktag(hd, tag, TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
-        g_free (key_nonce);
-        g_free (key_tag);
         gcry_cipher_close (hd);
         gcry_free (master_key);
         g_free (decrypted_db);
