@@ -51,6 +51,7 @@ pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.48.0)
 pkg_check_modules(GIO REQUIRED gio-2.0>=2.48.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
+pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
 
 set(GUI_HEADER_FILES
         src/common/common.h
@@ -76,7 +77,7 @@ set(GUI_HEADER_FILES
         src/change-db-cb.h
         src/new-db-cb.h
         src/db-actions.h
-        src/google-migration.pb-c.h)
+        src/google-migration.pb-c.h src/secret-schema.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -112,7 +113,7 @@ set(GUI_SOURCE_FILES
         src/new-db-cb.c
         src/db-actions.c
         src/change-file-cb.c
-        src/google-migration.pb-c.c)
+        src/google-migration.pb-c.c src/secret-schema.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
@@ -123,7 +124,7 @@ set(CLI_HEADER_FILES
         src/file-size.h
         src/common/exports.h
         src/parse-uri.h
-        src/common/get-providers-data.h)
+        src/common/get-providers-data.h src/secret-schema.h)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
@@ -136,7 +137,7 @@ set(CLI_SOURCE_FILES
         src/parse-uri.c
         src/common/andotp.c
         src/common/aegis.c
-        src/common/freeotp.c)
+        src/common/freeotp.c src/secret-schema.c)
 
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES
@@ -162,7 +163,8 @@ if(BUILD_GUI)
                 ${JANSSON_INCLUDE_DIRS}
                 ${ZBAR_INCLUDE_DIRS}
                 ${UUID_INCLUDE_DIRS}
-                ${PROTOC_INCLUDE_DIRS})
+                ${PROTOC_INCLUDE_DIRS}
+                ${LIBSECRET_INCLUDE_DIRS})
 
         add_executable(${PROJECT_NAME} ${GUI_SOURCE_FILES} ${GUI_HEADER_FILES})
         target_link_libraries(${PROJECT_NAME}
@@ -175,7 +177,8 @@ if(BUILD_GUI)
                 ${JANSSON_LIBRARIES}
                 ${ZBAR_LIBRARIES}
                 ${UUID_LIBRARIES}
-                ${PROTOC_LIBRARIES})
+                ${PROTOC_LIBRARIES}
+                ${LIBSECRET_LIBRARIES})
 
         set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
         install(TARGETS ${PROJECT_NAME} DESTINATION bin)
@@ -188,14 +191,16 @@ if(BUILD_CLI)
                 ${BASEENCODE_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
                 ${UUID_INCLUDE_DIRS}
-                ${PROTOC_INCLUDE_DIRS})
+                ${PROTOC_INCLUDE_DIRS}
+                ${LIBSECRET_INCLUDE_DIRS})
         if(BUILD_GUI)
                 include_directories(
                         ${LIBZIP_INCLUDE_DIRS}
                         ${PNG_INCLUDE_DIRS}
                         ${ZBAR_INCLUDE_DIRS}
                         ${UUID_INCLUDE_DIRS}
-                        ${PROTOC_INCLUDE_DIRS})
+                        ${PROTOC_INCLUDE_DIRS}
+                        ${LIBSECRET_INCLUDE_DIRS})
         endif()
 
         add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
@@ -206,6 +211,7 @@ if(BUILD_CLI)
                 ${COTP_LIBRARIES}
                 ${JANSSON_LIBRARIES}
                 ${UUID_LIBRARIES}
+                ${LIBSECRET_LIBRARIES}
                 ${PROTOC_LIBRARIES})
         if(BUILD_GUI)
                 target_link_libraries(${PROJECT_NAME}-cli
@@ -214,6 +220,7 @@ if(BUILD_CLI)
                         ${PNG_LIBRARIES}
                         ${ZBAR_LIBRARIES}
                         ${PROTOC_LIBRARIES}
+                        ${LIBSECRET_LIBRARIES}
                         ${UUID_LIBRARIES})
         endif()
 

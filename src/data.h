@@ -22,6 +22,8 @@ typedef struct db_data_t {
 
     gchar *last_hotp;
     GDateTime *last_hotp_update;
+
+    gboolean key_stored;
 } DatabaseData;
 
 
@@ -56,6 +58,8 @@ typedef struct app_data_t {
     gboolean use_dark_theme;
 
     gboolean is_reorder_active;
+
+    gboolean disable_secret_service;
 
     GDateTime *last_user_activity;
 
