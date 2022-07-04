@@ -26,6 +26,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
 
 ## Features
+- integration with the OS' secret service provider via libsecret
 - support both TOTP and HOTP
 - support setting custom digits (between 4 and 10 inclusive)
 - support setting a custom period (between 10 and 120 seconds inclusive)
@@ -35,6 +36,7 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
 - import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
+- import of Google's migration QR codes
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
