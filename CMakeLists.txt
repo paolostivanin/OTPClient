@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(OTPClient VERSION "2.6.0" LANGUAGES "C")
+project(OTPClient VERSION "2.6.1" LANGUAGES "C")
 
 configure_file("src/common/version.h.in" "version.h")
 include_directories(${PROJECT_BINARY_DIR})
@@ -127,6 +127,7 @@ set(CLI_HEADER_FILES
         src/common/exports.h
         src/parse-uri.h
         src/common/get-providers-data.h
+        src/google-migration.pb-c.h
         src/secret-schema.h)
 
 set(CLI_SOURCE_FILES
@@ -141,19 +142,29 @@ set(CLI_SOURCE_FILES
         src/common/andotp.c
         src/common/aegis.c
         src/common/freeotp.c
-        src/secret-schema.c)
+        src/secret-schema.c
+        src/google-migration.pb-c.c)
 
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES
                 src/treeview.c
                 src/liststore-misc.c
                 src/gui-common.c
+                src/add-common.c
+                src/imports.c
+                src/authplus.c
+                src/password-cb.c
+                src/get-builder.c
                 src/message-dialogs.c)
 
         list(APPEND CLI_HEADER_FILES
                 src/treeview.h
                 src/liststore-misc.h
                 src/gui-common.h
+                src/add-common.h
+                src/imports.h
+                src/password-cb.h
+                src/get-builder.h
                 src/message-dialogs.h)
 endif()
 
@@ -191,6 +202,7 @@ endif()
 if(BUILD_CLI)
         include_directories(${GTK3_INCLUDE_DIRS}
                 ${GCRYPT_INCLUDE_DIRS}
+                ${BASEENCODE_INCLUDE_DIRS}
                 ${COTP_INCLUDE_DIRS}
                 ${BASEENCODE_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
@@ -212,6 +224,7 @@ if(BUILD_CLI)
                 ${GLIB2_LIBRARIES}
                 ${GIO_LIBRARIES}
                 ${GCRYPT_LIBRARIES}
+                ${BASEENCODE_LIBRARIES}
                 ${COTP_LIBRARIES}
                 ${JANSSON_LIBRARIES}
                 ${UUID_LIBRARIES}

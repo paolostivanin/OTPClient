@@ -83,6 +83,15 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.6.1" date="2022-07-05">
+      <description>
+        <p>OTPClient 2.6.1 some fixes and a new feature</p>
+        <ul>
+          <li>add ability to import Google migration QR also via webcam</li>
+          <li>fix double free in case of error</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.6.0" date="2022-07-01">
       <description>
         <p>OTPClient 2.6.0 brings lots of new features</p>

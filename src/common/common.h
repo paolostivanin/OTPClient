@@ -31,4 +31,6 @@ guchar     *hexstr_to_bytes                 (const gchar    *hexstr);
 gchar      *bytes_to_hexstr                 (const guchar   *data,
                                              size_t          datalen);
 
+GSList     *decode_migration_data           (const gchar    *encoded_uri);
+
 G_END_DECLS

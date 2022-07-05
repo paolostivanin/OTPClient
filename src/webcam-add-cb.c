@@ -7,6 +7,7 @@
 #include "add-common.h"
 #include "get-builder.h"
 #include "common/common.h"
+#include "gui-common.h"
 
 
 typedef struct config_data_t {
@@ -28,6 +29,10 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
            GVariant      *parameter __attribute__((unused)),
            gpointer       user_data)
 {
+    const gchar *action_name = g_action_get_name (G_ACTION(simple));
+    gboolean google_migration;
+    (g_strcmp0 (action_name, GOOGLE_MIGRATION_WEBCAM_ACTION_NAME) == 0) ? google_migration = TRUE : FALSE;
+
     AppData *app_data = (AppData *)user_data;
 
     ConfigData *cfg_data = g_new0 (ConfigData, 1);
@@ -59,7 +64,7 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
     if (response == GTK_RESPONSE_CANCEL) {
         if (cfg_data->qrcode_found) {
             zbar_processor_destroy (proc);
-            gchar *err_msg = add_data_to_db (cfg_data->otp_uri, app_data);
+            gchar *err_msg = parse_uris_migration (app_data, cfg_data->otp_uri, google_migration);
             if (err_msg != NULL) {
                 show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
                 g_free (err_msg);

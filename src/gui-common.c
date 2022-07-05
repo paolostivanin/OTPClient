@@ -1,5 +1,8 @@
 #include <gtk/gtk.h>
 #include <jansson.h>
+#include "message-dialogs.h"
+#include "add-common.h"
+#include "common/common.h"
 
 
 void
@@ -60,4 +63,38 @@ send_ok_cb (GtkWidget *entry,
             gpointer   user_data __attribute__((unused)))
 {
     gtk_dialog_response (GTK_DIALOG(gtk_widget_get_toplevel (entry)), GTK_RESPONSE_OK);
+}
+
+
+gchar *
+parse_uris_migration (AppData  *app_data,
+                      const     gchar *user_uri,
+                      gboolean  google_migration)
+{
+    gchar *return_err_msg = NULL;
+    GSList *otpauth_decoded_uris = NULL;
+    if (google_migration == TRUE) {
+        gint failed = 0;
+        otpauth_decoded_uris = decode_migration_data (user_uri);
+        for (gint i = 0; i < g_slist_length (otpauth_decoded_uris); i++) {
+            gchar *uri = g_slist_nth_data (otpauth_decoded_uris, i);
+            gchar *err_msg = add_data_to_db (uri, app_data);
+            if (err_msg != NULL) {
+                failed++;
+                g_free (err_msg);
+            }
+        }
+        if (failed > 0) {
+            GString *e_msg = g_string_new (NULL);
+            g_string_printf (e_msg, "Failed to add all OTPs. Only %u out of %u were successfully added.", g_slist_length (otpauth_decoded_uris) - failed,
+                             g_slist_length (otpauth_decoded_uris));
+            return_err_msg = g_strdup (e_msg->str);
+            g_string_free (e_msg, TRUE);
+        }
+        g_slist_free_full (otpauth_decoded_uris, g_free);
+    } else {
+        return_err_msg = add_data_to_db (user_uri, app_data);
+    }
+
+    return return_err_msg;
 }

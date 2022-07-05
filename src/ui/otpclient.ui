@@ -1863,12 +1863,13 @@ has been found or after 30 seconds if nothing has been detected.</property>
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="import_google_migration_qr_btn_id">
+          <object class="GtkModelButton" id="import_google_qr_model_btn_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_qr_google_migration_file</property>
             <property name="text" translatable="yes">Google Migration QR</property>
+            <property name="menu-name">import_google_qr_menu</property>
+            <accelerator key="g" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2090,6 +2091,45 @@ has been found or after 30 seconds if nothing has been detected.</property>
       <packing>
         <property name="submenu">main</property>
         <property name="position">3</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="import_google_qr_file_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_google_qr_file</property>
+            <property name="text" translatable="yes">From file</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_google_qr_webcam_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_google_qr_webcam</property>
+            <property name="text" translatable="yes">From webcam</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">import_google_qr_menu</property>
+        <property name="position">4</property>
       </packing>
     </child>
   </object>
