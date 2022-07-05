@@ -1,8 +1,10 @@
 #include <glib.h>
 #include <sys/resource.h>
 #include <cotp.h>
+#include <baseencode.h>
 #include "gcrypt.h"
 #include "jansson.h"
+#include "../google-migration.pb-c.h"
 
 gint32
 get_max_file_size_from_memlock (void)
@@ -164,4 +166,78 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
     result[datalen * 2] = 0;
 
     return result;
+}
+
+
+GSList *
+decode_migration_data (const gchar *encoded_uri)
+{
+    const gchar *encoded_uri_copy = encoded_uri;
+    if (g_ascii_strncasecmp (encoded_uri_copy, "otpauth-migration://offline?data=", 33) != 0) {
+        return NULL;
+    }
+    encoded_uri_copy += 33;
+    gsize out_len;
+    guchar *data = g_base64_decode (g_uri_unescape_string ((encoded_uri_copy), NULL), &out_len);
+
+    GSList *uris = NULL;
+    gchar *uri = NULL;
+    MigrationPayload *msg = migration_payload__unpack (NULL, out_len, data);
+    for (gint i = 0; i < msg->n_otp_parameters; i++) {
+        uri = g_strconcat ("otpauth://", NULL);
+        if (msg->otp_parameters[i]->type == 1) {
+            uri = g_strconcat (uri, "hotp/", NULL);
+        } else if (msg->otp_parameters[i]->type == 2) {
+            uri = g_strconcat (uri, "totp/", NULL);
+        } else {
+            g_printerr ("OTP type not recognized, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        uri = g_strconcat (uri, msg->otp_parameters[i]->name, "?", NULL);
+
+        if (msg->otp_parameters[i]->algorithm == 1) {
+            uri = g_strconcat (uri, "algorithm=SHA1&", NULL);
+        } else if (msg->otp_parameters[i]->algorithm == 2) {
+            uri = g_strconcat (uri, "algorithm=SHA256&", NULL);
+        } else if (msg->otp_parameters[i]->algorithm == 3) {
+            uri = g_strconcat (uri, "algorithm=SHA512&", NULL);
+        } else {
+            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        if (msg->otp_parameters[i]->digits == 1) {
+            uri = g_strconcat (uri, "digits=6&", NULL);
+        } else if (msg->otp_parameters[i]->digits == 2) {
+            uri = g_strconcat (uri, "digits=8&", NULL);
+        } else {
+            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        if (msg->otp_parameters[i]->issuer != NULL) {
+            uri = g_strconcat (uri, "issuer=", msg->otp_parameters[i]->issuer, "&", NULL);
+        }
+
+        if (msg->otp_parameters[i]->type == 1) {
+            uri = g_strconcat (uri, "counter=", msg->otp_parameters[i]->counter, "&", NULL);
+        }
+
+        baseencode_error_t b_err;
+        gchar *b32_encoded_secret = base32_encode (msg->otp_parameters[i]->secret.data, msg->otp_parameters[i]->secret.len, &b_err);
+        if (b32_encoded_secret == NULL) {
+            g_printerr ("Error while encoding the secret (error code %d)\n", b_err);
+            goto end;
+        }
+
+        uri = g_strconcat (uri, "secret=", b32_encoded_secret, NULL);
+
+        uris = g_slist_append (uris, g_strdup (uri));
+
+        end:
+        g_free (uri);
+    }
+
+    return uris;
 }
