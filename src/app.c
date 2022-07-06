@@ -36,6 +36,15 @@ static void       create_main_window        (gint                width,
                                              gint                height,
                                              AppData            *app_data);
 
+static gboolean   show_upgrade_msg          (void);
+
+static void       set_info_bar              (AppData            *app_data,
+                                             const gchar        *msg);
+
+static void       on_bar_response           (GtkInfoBar         *ib,
+                                             gint                response_id,
+                                             gpointer            user_data);
+
 static gboolean   set_action_group          (GtkBuilder         *builder,
                                              AppData            *app_data);
 
@@ -272,6 +281,13 @@ activate (GtkApplication    *app,
     app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
 
     gtk_widget_show_all (app_data->main_window);
+
+    app_data->info_bar = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_id"));
+    if (show_upgrade_msg ()) {
+        set_info_bar (app_data, "Release <b>2.6.0</b>: please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>");
+    } else {
+        gtk_widget_hide (app_data->info_bar);
+    }
 }
 
 
@@ -428,6 +444,68 @@ create_main_window (gint             width,
     g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
 
     set_action_group (app_data->builder, app_data);
+}
+
+
+static gboolean
+show_upgrade_msg ()
+{
+    gboolean show_msg = TRUE;
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf != NULL) {
+        gchar *up_msg = g_key_file_get_string (kf, "config", "upgrade_msg", NULL);
+        if (up_msg == NULL) {
+            show_msg = TRUE;
+        } else {
+            show_msg = (g_strcmp0 (up_msg, "v2_6") == 0) ? FALSE : TRUE;
+        }
+    }
+
+    g_key_file_free (kf);
+
+    return show_msg;
+}
+
+
+static void
+set_info_bar (AppData     *app_data,
+              const gchar *msg)
+{
+    GtkWidget *label = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_label_id"));
+
+    g_signal_connect (app_data->info_bar, "response", G_CALLBACK(on_bar_response), NULL);
+
+    gtk_label_set_markup (GTK_LABEL(label), msg);
+    gtk_info_bar_set_message_type (GTK_INFO_BAR(app_data->info_bar), GTK_MESSAGE_INFO);
+    gtk_widget_show (app_data->info_bar);
+}
+
+
+static void
+on_bar_response (GtkInfoBar *ib,
+                 gint        response_id __attribute__((unused)),
+                 gpointer    user_data   __attribute__((unused)))
+{
+    GError *err = NULL;
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf != NULL) {
+        g_key_file_set_string (kf, "config", "upgrade_msg", "v2_6");
+        gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+        g_key_file_save_to_file (kf, cfg_file_path, &err);
+        if (err != NULL) {
+            g_printerr ("%s\n", err->message);
+        }
+        g_free (cfg_file_path);
+    }
+
+    g_key_file_free (kf);
+
+    gtk_widget_hide (GTK_WIDGET(ib));
 }
 
 
