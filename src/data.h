@@ -31,6 +31,7 @@ typedef struct app_data_t {
     GtkBuilder *builder;
 
     GtkWidget *main_window;
+    GtkWidget *info_bar;
     GtkTreeView *tree_view;
 
     GtkClipboard *clipboard;
