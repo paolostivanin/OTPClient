@@ -83,6 +83,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="2.6.3" date="2022-07-20">
+      <description>
+        <p>OTPClient 2.6.3 fixes an issue when setting the migration flag</p>
+        <ul>
+          <li>fix ternary operator logic that would incorrectly set the migration flag</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.6.2" date="2022-07-06">
       <description>
         <p>OTPClient 2.6.2 add an upgrade message</p>
