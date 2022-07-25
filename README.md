@@ -10,7 +10,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 |----------------------------------------------------|-------------|
 | GTK+                                               | 3.20        |
 | Glib                                               | 2.48.0      |
-| jansson                                            | 2.100       |
+| jansson                                            | 2.10       |
 | libgcrypt                                          | 1.6.0       |
 | libzip                                             | 1.0.0       |
 | libpng                                             | 1.2.0       |
