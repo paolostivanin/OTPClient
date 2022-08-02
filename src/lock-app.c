@@ -106,7 +106,6 @@ setup_dbus_listener (AppData *app_data)
     GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS (app_data->main_window));
     gtk_binding_entry_add_signal (binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
 
-    //const gchar *services[] = { "org.cinnamon.ScreenSaver", "org.freedesktop.ScreenSaver", "org.gnome.ScreenSaver", "com.canonical.Unity" };
     const gchar *paths[] = { "/org/cinnamon/ScreenSaver", "/org/freedesktop/ScreenSaver", "/org/gnome/ScreenSaver", "/com/canonical/Unity/Session" };
     const gchar *interfaces[] = { "org.cinnamon.ScreenSaver", "org.freedesktop.ScreenSaver", "org.gnome.ScreenSaver", "com.canonical.Unity.Session" };
     const gchar *signal_names[] = { "ActiveChanged", "ActiveChanged", "ActiveChanged", "Locked" };

@@ -1610,6 +1610,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkSwitch" id="notif_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
@@ -1636,6 +1638,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkSwitch" id="nextotp_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
@@ -1657,6 +1661,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkSwitch" id="autolock_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
@@ -1709,6 +1715,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkSwitch" id="dark_theme_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
@@ -1730,6 +1738,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkSwitch" id="disable_secret_service_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
@@ -2182,7 +2192,6 @@ has been found or after 30 seconds if nothing has been detected.</property>
                   <object class="GtkLabel" id="info_bar_label_id">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="label" translatable="yes">label</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>

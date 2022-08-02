@@ -94,12 +94,12 @@ get_token (json_t       *obj,
     cotp_error_t cotp_err;
     const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
     const gchar *secret = json_string_value (json_object_get (obj, "secret"));
-    gint digits = json_integer_value (json_object_get (obj, "digits"));
+    gint digits = (gint)json_integer_value (json_object_get (obj, "digits"));
     gint algo = get_algo_int_from_str (json_string_value (json_object_get (obj, "algo")));
     gint period;
     gint64 counter;
     if (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
-        period = json_integer_value (json_object_get (obj, "period"));
+        period = (gint)json_integer_value (json_object_get (obj, "period"));
         gint remaining_seconds = (period > 59 ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
         gint token_validity = remaining_seconds % period;
         glong current_ts = time(NULL);

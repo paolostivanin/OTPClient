@@ -7,7 +7,7 @@ The following list describes whether a version is eligible or not for security u
 | Version | Supported          | EOL         |
 | ------- | ------------------ |-------------|
 | 2.6.x   | :heavy_check_mark: | -           |
-| 2.5.x   | :heavy_check_mark: | 30-Sep-2022 |
+| 2.5.x   | :heavy_check_mark: | 31-Aug-2022 |
 | 2.4.x   | :x: | 15-May-2022 |
 | 2.3.x   | :x: | 28-Feb-2021 |
 | 2.2.x   | :x: | 27-May-2020 |

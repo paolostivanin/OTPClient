@@ -13,11 +13,18 @@ typedef struct edit_data_t {
     DatabaseData *db_data;
 } EditData;
 
-static void show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer);
+static void   show_edit_dialog                    (EditData   *edit_data,
+                                                   AppData    *app_data,
+                                                   gchar      *current_label,
+                                                   gchar      *current_issuer);
 
-static gchar *get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_entry, GtkWidget *new_iss_entry);
+static gchar *get_parse_and_set_data_from_entries (EditData    *edit_data,
+                                                   GtkWidget   *new_lab_entry,
+                                                   GtkWidget   *new_iss_entry);
 
-static void set_data_in_lstore_and_json (EditData *edit_data, const gchar *label, const gchar *issuer);
+static void   set_data_in_lstore_and_json         (EditData    *edit_data,
+                                                   const gchar *label,
+                                                   const gchar *issuer);
 
 
 void
@@ -51,7 +58,10 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 static void
-show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, gchar *current_issuer)
+show_edit_dialog (EditData *edit_data,
+                  AppData  *app_data,
+                  gchar    *current_label,
+                  gchar    *current_issuer)
 {
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     GtkWidget *diag = GTK_WIDGET (gtk_builder_get_object (builder, "edit_diag_id"));
@@ -102,7 +112,9 @@ show_edit_dialog (EditData *edit_data, AppData *app_data, gchar *current_label, 
 
 
 static gchar *
-get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_entry, GtkWidget *new_iss_entry)
+get_parse_and_set_data_from_entries (EditData  *edit_data,
+                                     GtkWidget *new_lab_entry,
+                                     GtkWidget *new_iss_entry)
 {
     const gchar *new_label = gtk_entry_get_text (GTK_ENTRY (new_lab_entry));
     const gchar *new_issuer = gtk_entry_get_text (GTK_ENTRY (new_iss_entry));
@@ -122,7 +134,9 @@ get_parse_and_set_data_from_entries (EditData *edit_data, GtkWidget *new_lab_ent
 
 
 static void
-set_data_in_lstore_and_json (EditData *edit_data, const gchar *label, const gchar *issuer)
+set_data_in_lstore_and_json (EditData    *edit_data,
+                             const gchar *label,
+                             const gchar *issuer)
 {
     gtk_list_store_set (edit_data->list_store, &edit_data->iter,
                         COLUMN_ACC_LABEL, label,
