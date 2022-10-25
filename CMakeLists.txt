@@ -85,7 +85,6 @@ set(GUI_SOURCE_FILES
         src/add-common.c
         src/common/andotp.c
         src/app.c
-        src/authplus.c
         src/gui-common.c
         src/db-misc.c
         src/edit-data.c
@@ -152,7 +151,6 @@ if(BUILD_GUI AND BUILD_CLI)
                 src/gui-common.c
                 src/add-common.c
                 src/imports.c
-                src/authplus.c
                 src/password-cb.c
                 src/get-builder.c
                 src/message-dialogs.c)

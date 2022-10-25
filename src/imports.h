@@ -7,7 +7,6 @@ G_BEGIN_DECLS
 
 #define ANDOTP_IMPORT_ACTION_NAME           "import_andotp"
 #define ANDOTP_IMPORT_PLAIN_ACTION_NAME     "import_andotp_plain"
-#define AUTHPLUS_IMPORT_ACTION_NAME         "import_authplus"
 #define FREEOTPPLUS_IMPORT_ACTION_NAME      "import_freeotpplus"
 #define AEGIS_IMPORT_ACTION_NAME            "import_aegis"
 #define AEGIS_IMPORT_ENC_ACTION_NAME        "import_aegis_enc"

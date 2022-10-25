@@ -4,11 +4,6 @@
 
 G_BEGIN_DECLS
 
-GSList *get_authplus_data       (const gchar     *zip_path,
-                                 const gchar     *password,
-                                 gint32           max_file_size,
-                                 GError         **err);
-
 GSList *get_andotp_data         (const gchar     *path,
                                  const gchar     *password,
                                  gint32           max_file_size,

@@ -516,7 +516,6 @@ set_action_group (GtkBuilder *builder,
     static GActionEntry settings_menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
-            { .name = AUTHPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = FREEOTPPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AEGIS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AEGIS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
