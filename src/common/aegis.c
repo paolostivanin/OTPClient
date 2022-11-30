@@ -38,7 +38,7 @@ get_aegis_data (const gchar     *path,
         return NULL;
     }
 
-    return encrypted == TRUE ? get_otps_from_encrypted_backup(path, password, max_file_size, err) : get_otps_from_plain_backup(path, err);
+    return (encrypted == TRUE) ? get_otps_from_encrypted_backup(path, password, max_file_size, err) : get_otps_from_plain_backup(path, err);
 }
 
 
@@ -139,7 +139,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (master_key);
         return NULL;
     }
-    gchar *decrypted_db = g_malloc0 (out_len);
+    gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
     gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
     gpg_err = gcry_cipher_checktag(hd, tag, TAG_SIZE);
     if (gpg_err != 0) {
@@ -157,8 +157,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gcry_free (master_key);
 
     GSList *otps = parse_json_data (decrypted_db, err);
-
-    g_free (decrypted_db);
+    gcry_free (decrypted_db);
 
     return otps;
 }
@@ -350,7 +349,7 @@ parse_json_data (const gchar *data,
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
     }
-    json_t *array = json_object_get(json_object_get(root, "db"), "entries");
+    json_t *array = json_object_get(root, "entries");
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         json_decref (root);
