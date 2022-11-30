@@ -110,14 +110,18 @@ parse_data_and_update_db (AppData       *app_data,
         content = get_authplus_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
         content = get_freeotpplus_data (filename, &err);
-    } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0) {
+    } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0) {
         content = get_aegis_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0 ? TRUE : FALSE , &err);
     }
 
-    if (content == NULL && err != NULL) {
-        gchar *msg = g_strconcat ("An error occurred while importing, so nothing has been added to the database. The error is:\n", err->message, NULL);
+    if (content == NULL) {
+        const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
+        gchar *msg_with_err = NULL;
+        if (err != NULL) {
+            msg_with_err = g_strconcat (msg, " The error is:\n", err->message, NULL);
+        }
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
+        g_free (msg_with_err);
         return FALSE;
     }
 
