@@ -1,0 +1,3 @@
+Note for myself:
+$ xgettext -k_ -kN_ -o otpclient-cli.pot -L C -cTranslators ../src/cli/main.c  ../src/cli/help.c ../src/cli/get-data.c
+$ xgettext -k_ -kN_ -o otpclient.pot -L Glade ../src/ui/otpclient.ui

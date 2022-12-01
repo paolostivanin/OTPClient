@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(OTPClient VERSION "2.6.4" LANGUAGES "C")
+project(OTPClient VERSION "3.0.0" LANGUAGES "C")
+include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
+
+set (GETTEXT_PACKAGE ${CMAKE_PROJECT_NAME})
+
 include_directories(${PROJECT_BINARY_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -28,6 +32,7 @@ endif()
 if(BUILD_CLI)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBUILD_CLI")
 endif()
+add_definitions(-DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\")
 
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
