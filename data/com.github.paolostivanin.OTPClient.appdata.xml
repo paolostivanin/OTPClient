@@ -87,9 +87,10 @@ It's also possible to import/export backups from/to andOTP and import backups fr
       <description>
         <p>OTPClient 3.0.0 brings some exciting news:</p>
         <ul>
-          <li></li>
-          <li></li>
-          <li></li>
+          <li>New feature (#263): OTPClient is now translatable (open a GitHub issue if you want to help translating it in your language).</li>
+          <li>New feature (#259): it's now possible to edit also the secret.</li>
+          <li>Improved: an About dialog has been added in the settings menu.</li>
+          <li>Removed (#257): Authenticator Plus support has been removed.</li>
           <li></li>
         </ul>
       </description>
