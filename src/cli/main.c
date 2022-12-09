@@ -117,7 +117,7 @@ main (gint    argc,
         }
         if (account == NULL) {
             // Translators: please do not translate 'account'
-            g_printerr (_("[ERROR]: The account option (-a) must be specified and can not be empty.\n"));
+            g_printerr ("%s\n", _("[ERROR]: The account option (-a) must be specified and can not be empty."));
             goto end;
         }
         show_token (db_data, account, issuer, match_exactly, show_next_token);
@@ -144,7 +144,7 @@ main (gint    argc,
                     base_dir = argv[5];
                 }
             } else {
-                g_printerr (_("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory.\n"));
+                g_printerr ("%s\n", _("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory."));
                 base_dir = g_get_home_dir ();
             }
         }
@@ -221,10 +221,10 @@ get_db_path (void)
         goto end;
     }
     type_db_path: ; // empty statement workaround
-    g_print (_("Type the absolute path to the database: "));
+    g_print ("%s", _("Type the absolute path to the database: "));
     db_path = g_malloc0 (MAX_ABS_PATH_LEN);
     if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
-        g_printerr (_("Couldn't get db path from stdin\n"));
+        g_printerr ("%s\n", _("Couldn't get db path from stdin"));
         g_free (cfg_file_path);
         return NULL;
     } else {
@@ -253,19 +253,19 @@ get_pwd (const gchar *pwd_msg)
 
     struct termios old, new;
     if (tcgetattr (STDIN_FILENO, &old) != 0) {
-        g_printerr (_("Couldn't get termios info\n"));
+        g_printerr ("%s\n", _("Couldn't get termios info"));
         gcry_free (pwd);
         return NULL;
     }
     new = old;
     new.c_lflag &= ~ECHO;
     if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) != 0) {
-        g_printerr (_("Couldn't turn echoing off\n"));
+        g_printerr ("%s\n", _("Couldn't turn echoing off"));
         gcry_free (pwd);
         return NULL;
     }
     if (fgets (pwd, 256, stdin) == NULL) {
-        g_printerr (_("Couldn't read password from stdin\n"));
+        g_printerr ("%s\n", _("Couldn't read password from stdin"));
         gcry_free (pwd);
         return NULL;
     }
