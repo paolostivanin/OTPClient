@@ -870,9 +870,13 @@ has been found or after 30 seconds if nothing has been detected.</property>
           <object class="GtkLabel">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="label" translatable="yes">Please note that "account" is &lt;b&gt;mandatory&lt;/b&gt; and "issuer", while optional, is &lt;b&gt;highly recommended&lt;/b&gt;</property>
+            <property name="margin-bottom">5</property>
+            <property name="label" translatable="yes">Please note that:
+- "account" is &lt;b&gt;mandatory&lt;/b&gt;
+- "issuer", while optional, is &lt;b&gt;highly recommended&lt;/b&gt;
+- when changing the "secret", be aware that &lt;b&gt;only the secret&lt;/b&gt; itself can be changed,
+but not the number of digits and/or the period/counter.</property>
             <property name="use-markup">True</property>
-            <property name="justify">center</property>
             <property name="wrap">True</property>
           </object>
           <packing>
@@ -886,7 +890,7 @@ has been found or after 30 seconds if nothing has been detected.</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="orientation">vertical</property>
-            <property name="spacing">10</property>
+            <property name="spacing">8</property>
             <child>
               <object class="GtkFrame">
                 <property name="visible">True</property>
@@ -897,8 +901,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
                   <object class="GtkAlignment">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="top-padding">8</property>
-                    <property name="bottom-padding">10</property>
+                    <property name="top-padding">7</property>
+                    <property name="bottom-padding">12</property>
                     <property name="left-padding">10</property>
                     <property name="right-padding">10</property>
                     <child>
@@ -961,8 +965,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
                   <object class="GtkAlignment">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="top-padding">8</property>
-                    <property name="bottom-padding">10</property>
+                    <property name="top-padding">7</property>
+                    <property name="bottom-padding">12</property>
                     <property name="left-padding">10</property>
                     <property name="right-padding">10</property>
                     <child>
@@ -1025,8 +1029,8 @@ has been found or after 30 seconds if nothing has been detected.</property>
                   <object class="GtkAlignment">
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
-                    <property name="top-padding">8</property>
-                    <property name="bottom-padding">10</property>
+                    <property name="top-padding">7</property>
+                    <property name="bottom-padding">12</property>
                     <property name="left-padding">10</property>
                     <property name="right-padding">10</property>
                     <child>
