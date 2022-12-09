@@ -55,11 +55,20 @@ show_token (DatabaseData *db_data,
         }
     }
     if (!found) {
-        g_printerr (_("Couldn't find the data. Either the given data is wrong or is not in the database.\n"));
+        g_printerr ("%s\n", _("Couldn't find the data. Either the given data is wrong or is not in the database."));
+
         // Translators: please do not translate 'account'
-        g_printerr (_("Given account: %s\n"), account != NULL ? account : "<none>");
+        GString *msg = g_string_new (_("Given account: %s"));
+        g_string_replace (msg, "%s", account != NULL ? account : "<none>", 0);
+        g_printerr ("%s\n", msg->str);
+        g_string_free (msg, TRUE);
+
         // Translators: please do not translate 'issuer'
-        g_printerr (_("Given issuer: %s\n"), issuer != NULL ? issuer : "<none>");
+        msg = g_string_new (_("Given issuer: %s"));
+        g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>" 0);
+        g_printerr ("%s\n", msg->str);
+        g_string_free (msg, TRUE);
+
         return;
     }
 }
