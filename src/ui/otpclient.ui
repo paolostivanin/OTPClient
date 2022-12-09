@@ -2477,7 +2477,7 @@ has been found or after 30 seconds if nothing has been detected.</property>
               <object class="GtkImage">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="icon-name">system-lock-screen-symbolic.symbolic</property>
+                <property name="icon-name">system-lock-screen-symbolic</property>
               </object>
             </child>
           </object>
