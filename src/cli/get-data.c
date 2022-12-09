@@ -59,13 +59,21 @@ show_token (DatabaseData *db_data,
 
         // Translators: please do not translate 'account'
         GString *msg = g_string_new (_("Given account: %s"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
         g_string_replace (msg, "%s", account != NULL ? account : "<none>", 0);
+#else
+        g_string_replace_backported (msg, "%s", account != NULL ? account : "<none>", 0);
+#endif
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
 
         // Translators: please do not translate 'issuer'
         msg = g_string_new (_("Given issuer: %s"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
         g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
+#else
+        g_string_replace_backported (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
+#endif
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
 

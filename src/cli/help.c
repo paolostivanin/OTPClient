@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include "version.h"
+#include "../common/common.h"
 
 static void print_main_help   (const gchar *prg_name);
 
@@ -36,7 +37,11 @@ static void
 print_main_help (const gchar *prg_name)
 {
     GString *msg = g_string_new (_("Usage:\n  %s <main option> [option 1] [option 2] ..."));
+#if GLIB_CHECK_VERSION(2, 68, 0)
     g_string_replace (msg, "%s", prg_name, 0);
+#else
+    g_string_replace_backported (msg, "%s", prg_name, 0);
+#endif
     g_print ("%s\n\n", msg->str);
     g_string_free (msg, TRUE);
 
@@ -72,7 +77,11 @@ print_show_help (const gchar *prg_name)
 {
     // Translators: please do not translate '%s show'
     GString *msg = g_string_new (_("Usage:\n  %s show <-a ..> [-i ..] [-m]"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
     g_string_replace (msg, "%s", prg_name, 0);
+#else
+    g_string_replace_backported (msg, "%s", prg_name, 0);
+#endif
     g_print ("%s\n\n", msg->str);
     g_string_free (msg, TRUE);
 
@@ -94,7 +103,11 @@ print_export_help (const gchar *prg_name)
 {
     // Translators: please do not translate '%s export'
     GString *msg = g_string_new (_("Usage:\n  %s export <-t> <andotp | freeotpplus | aegis> [-d ..]"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
     g_string_replace (msg, "%s", prg_name, 0);
+#else
+    g_string_replace_backported (msg, "%s", prg_name, 0);
+#endif
     g_print ("%s\n\n", msg->str);
     g_string_free (msg, TRUE);
 

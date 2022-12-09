@@ -33,4 +33,9 @@ gchar      *bytes_to_hexstr                 (const guchar   *data,
 
 GSList     *decode_migration_data           (const gchar    *encoded_uri);
 
+guint       g_string_replace_backported     (GString        *string,
+                                             const gchar    *find,
+                                             const gchar    *replace,
+                                             guint           limit);
+
 G_END_DECLS
