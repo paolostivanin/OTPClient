@@ -65,7 +65,7 @@ show_token (DatabaseData *db_data,
 
         // Translators: please do not translate 'issuer'
         msg = g_string_new (_("Given issuer: %s"));
-        g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>" 0);
+        g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
 
