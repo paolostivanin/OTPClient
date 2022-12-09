@@ -119,7 +119,7 @@ set(GUI_SOURCE_FILES
         src/db-actions.c
         src/change-file-cb.c
         src/google-migration.pb-c.c
-        src/secret-schema.c)
+        src/secret-schema.c src/about_diag_cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
