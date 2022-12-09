@@ -5,8 +5,9 @@
 The following list describes whether a version is eligible or not for security updates.
 
 | Version | Supported          | EOL         |
-| ------- | ------------------ |-------------|
-| 2.6.x   | :heavy_check_mark: | -           |
+|---------| ------------------ |-------------|
+| 3.0.x   | :heavy_check_mark: | -           |
+| 2.6.x   | :heavy_check_mark: | 15-Jan-2023 |
 | 2.5.x   | :x: | 31-Aug-2022 |
 | 2.4.x   | :x: | 15-May-2022 |
 | 2.3.x   | :x: | 28-Feb-2021 |

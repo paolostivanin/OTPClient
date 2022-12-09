@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <jansson.h>
 #include <cotp.h>
+#include <glib/gi18n.h>
 #include "../db-misc.h"
 #include "../common/common.h"
 
@@ -54,9 +55,28 @@ show_token (DatabaseData *db_data,
         }
     }
     if (!found) {
-        g_printerr ("Couldn't find the data. Either the given data is wrong or is not in the database.\n");
-        g_printerr ("Given account: %s\n", account != NULL ? account : "<none>");
-        g_printerr ("Given issuer: %s\n", issuer != NULL ? issuer : "<none>");
+        g_printerr ("%s\n", _("Couldn't find the data. Either the given data is wrong or is not in the database."));
+
+        // Translators: please do not translate 'account'
+        GString *msg = g_string_new (_("Given account: %s"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
+        g_string_replace (msg, "%s", account != NULL ? account : "<none>", 0);
+#else
+        g_string_replace_backported (msg, "%s", account != NULL ? account : "<none>", 0);
+#endif
+        g_printerr ("%s\n", msg->str);
+        g_string_free (msg, TRUE);
+
+        // Translators: please do not translate 'issuer'
+        msg = g_string_new (_("Given issuer: %s"));
+#if GLIB_CHECK_VERSION(2, 68, 0)
+        g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
+#else
+        g_string_replace_backported (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
+#endif
+        g_printerr ("%s\n", msg->str);
+        g_string_free (msg, TRUE);
+
         return;
     }
 }
@@ -112,11 +132,11 @@ get_token (json_t       *obj,
             current_totp = get_totp_at (secret, current_ts, digits, period, algo, &cotp_err);
             if (show_next_token) next_totp = get_totp_at (secret, current_ts + period, digits, period, algo, &cotp_err);
         }
-        g_print ("Current TOTP (valid for %d more second(s)): %s\n", token_validity, current_totp);
+        g_print (_("Current TOTP (valid for %d more second(s)): %s\n"), token_validity, current_totp);
         if (show_next_token) g_print ("Next TOTP: %s\n", next_totp);
     } else {
         counter = json_integer_value (json_object_get (obj, "counter"));
-        g_print ("Current HOTP: %s\n", get_hotp (secret, counter, digits, algo, &cotp_err));
+        g_print (_("Current HOTP: %s\n"), get_hotp (secret, counter, digits, algo, &cotp_err));
         // counter must be updated every time it is accessed
         json_object_set (obj, "counter", json_integer (counter + 1));
         GError *err = NULL;

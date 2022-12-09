@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(OTPClient VERSION "2.6.4" LANGUAGES "C")
+project(OTPClient VERSION "3.0.0" LANGUAGES "C")
+include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
+
+set (GETTEXT_PACKAGE ${CMAKE_PROJECT_NAME})
+
 include_directories(${PROJECT_BINARY_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -28,6 +32,7 @@ endif()
 if(BUILD_CLI)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBUILD_CLI")
 endif()
+add_definitions(-DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\")
 
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -47,8 +52,8 @@ pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.10.0)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.20.0)
-pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.48.0)
-pkg_check_modules(GIO REQUIRED gio-2.0>=2.48.0)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.64.0)
+pkg_check_modules(GIO REQUIRED gio-2.0>=2.64.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
@@ -85,7 +90,6 @@ set(GUI_SOURCE_FILES
         src/add-common.c
         src/common/andotp.c
         src/app.c
-        src/authplus.c
         src/gui-common.c
         src/db-misc.c
         src/edit-data.c
@@ -115,7 +119,7 @@ set(GUI_SOURCE_FILES
         src/db-actions.c
         src/change-file-cb.c
         src/google-migration.pb-c.c
-        src/secret-schema.c)
+        src/secret-schema.c src/about_diag_cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
@@ -152,7 +156,6 @@ if(BUILD_GUI AND BUILD_CLI)
                 src/gui-common.c
                 src/add-common.c
                 src/imports.c
-                src/authplus.c
                 src/password-cb.c
                 src/get-builder.c
                 src/message-dialogs.c)

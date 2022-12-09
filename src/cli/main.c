@@ -3,6 +3,7 @@
 #include <gcrypt.h>
 #include <termios.h>
 #include <libsecret/secret.h>
+#include <glib/gi18n.h>
 #include "help.h"
 #include "get-data.h"
 #include "../common/common.h"
@@ -32,10 +33,10 @@ main (gint    argc,
     db_data->key_stored = FALSE;
 
     db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
-    gchar *msg = init_libs (db_data->max_file_size_from_memlock);
-    if (msg != NULL) {
-        g_printerr ("%s\n", msg);
-        g_free (msg);
+    gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
+    if (init_msg != NULL) {
+        g_printerr ("%s\n", init_msg);
+        g_free (init_msg);
         g_free (db_data);
         return -1;
     }
@@ -68,7 +69,7 @@ main (gint    argc,
         }
     } else {
         get_pwd:
-        db_data->key = get_pwd ("Type the DB decryption password: ");
+        db_data->key = get_pwd (_("Type the DB decryption password: "));
         if (db_data->key == NULL) {
             g_free (db_data);
             return -1;
@@ -80,9 +81,12 @@ main (gint    argc,
     GError *err = NULL;
     load_db (db_data, &err);
     if (err != NULL) {
-        g_printerr ("Error while loading the database: %s\n", err->message);
+        const gchar *tmp_msg = _("Error while loading the database:");
+        gchar *msg = g_strconcat (tmp_msg, " %s\n", err->message, NULL);
+        g_printerr ("%s\n", msg);
         gcry_free (db_data->key);
         g_free (db_data);
+        g_free (msg);
         return -1;
     }
 
@@ -95,7 +99,8 @@ main (gint    argc,
 
     if (g_strcmp0 (argv[1], "show") == 0) {
         if (argc < 4 || argc > 8) {
-            g_printerr ("Wrong argument(s). Please type '%s --help-show' to see the available options.\n", argv[0]);
+            // Translators: please do not translate '%s --help-show'
+            g_printerr (_("Wrong argument(s). Please type '%s --help-show' to see the available options.\n"), argv[0]);
             g_free (db_data);
             return -1;
         }
@@ -111,7 +116,8 @@ main (gint    argc,
             }
         }
         if (account == NULL) {
-            g_printerr ("[ERROR]: The account option (-a) must be specified and can not be empty.\n");
+            // Translators: please do not translate 'account'
+            g_printerr ("%s\n", _("[ERROR]: The account option (-a) must be specified and can not be empty."));
             goto end;
         }
         show_token (db_data, account, issuer, match_exactly, show_next_token);
@@ -120,7 +126,8 @@ main (gint    argc,
     } else if (g_strcmp0 (argv[1], "export") == 0) {
         if (g_ascii_strcasecmp (argv[3], "andotp_plain") != 0 && g_ascii_strcasecmp (argv[3], "andotp_encrypted") != 0 &&
             g_ascii_strcasecmp (argv[3], "freeotpplus") != 0 && g_ascii_strcasecmp (argv[3], "aegis") != 0) {
-                g_printerr ("Wrong argument(s). Please type '%s --help-export' to see the available options.\n", argv[0]);
+                // Translators: please do not translate '%s --help-export'
+                g_printerr (_("Wrong argument(s). Please type '%s --help-export' to see the available options.\n"), argv[0]);
                 g_free (db_data);
                 return -1;
         }
@@ -131,13 +138,13 @@ main (gint    argc,
         } else {
             if (g_ascii_strcasecmp (argv[4], "-d") == 0 && argv[5] != NULL) {
                 if (!g_file_test (argv[5], G_FILE_TEST_IS_DIR)) {
-                    g_printerr ("%s is not a directory or the folder doesn't exist. The output will be saved into the HOME directory.\n", argv[5]);
+                    g_printerr (_("%s is not a directory or the folder doesn't exist. The output will be saved into the HOME directory.\n"), argv[5]);
                     base_dir = g_get_home_dir ();
                 } else {
                     base_dir = argv[5];
                 }
             } else {
-                g_printerr ("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory.\n");
+                g_printerr ("%s\n", _("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory."));
                 base_dir = g_get_home_dir ();
             }
         }
@@ -147,7 +154,7 @@ main (gint    argc,
         gchar *andotp_export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
         if (g_ascii_strcasecmp (argv[3], "andotp_plain") == 0 || g_ascii_strcasecmp (argv[3], "andotp_encrypted") == 0) {
             if (g_ascii_strcasecmp (argv[3], "andotp_encrypted")) {
-                andotp_export_pwd = get_pwd ("Type the export encryption password: ");
+                andotp_export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (andotp_export_pwd == NULL) {
                     goto end;
                 }
@@ -165,10 +172,10 @@ main (gint    argc,
             ret_msg = export_aegis (exported_file_path, db_data->json_data, NULL);
         }
         if (ret_msg != NULL) {
-            g_printerr ("An error occurred while exporting the data: %s\n", ret_msg);
+            g_printerr (_("An error occurred while exporting the data: %s\n"), ret_msg);
             g_free (ret_msg);
         } else {
-            g_print ("Data successfully exported to: %s\n", exported_file_path);
+            g_print (_("Data successfully exported to: %s\n"), exported_file_path);
         }
         g_free (exported_file_path);
     } else {
@@ -189,7 +196,7 @@ main (gint    argc,
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar *
-get_db_path ()
+get_db_path (void)
 {
     gchar *db_path = NULL;
     GError *err = NULL;
@@ -214,17 +221,17 @@ get_db_path ()
         goto end;
     }
     type_db_path: ; // empty statement workaround
-    g_print ("Type the absolute path to the database: ");
+    g_print ("%s", _("Type the absolute path to the database: "));
     db_path = g_malloc0 (MAX_ABS_PATH_LEN);
     if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
-        g_printerr ("Couldn't get db path from stdin\n");
+        g_printerr ("%s\n", _("Couldn't get db path from stdin"));
         g_free (cfg_file_path);
         return NULL;
     } else {
         // remove the newline char
         db_path[g_utf8_strlen (db_path, -1) - 1] = '\0';
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            g_printerr ("File '%s' does not exist\n", db_path);
+            g_printerr (_("File '%s' does not exist\n"), db_path);
             g_free (cfg_file_path);
             return NULL;
         }
@@ -246,19 +253,19 @@ get_pwd (const gchar *pwd_msg)
 
     struct termios old, new;
     if (tcgetattr (STDIN_FILENO, &old) != 0) {
-        g_printerr ("Couldn't get termios info\n");
+        g_printerr ("%s\n", _("Couldn't get termios info"));
         gcry_free (pwd);
         return NULL;
     }
     new = old;
     new.c_lflag &= ~ECHO;
     if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) != 0) {
-        g_printerr ("Couldn't turn echoing off\n");
+        g_printerr ("%s\n", _("Couldn't turn echoing off"));
         gcry_free (pwd);
         return NULL;
     }
     if (fgets (pwd, 256, stdin) == NULL) {
-        g_printerr ("Couldn't read password from stdin\n");
+        g_printerr ("%s\n", _("Couldn't read password from stdin"));
         gcry_free (pwd);
         return NULL;
     }
@@ -274,7 +281,7 @@ get_pwd (const gchar *pwd_msg)
 
 
 static gboolean
-is_secretservice_disable ()
+is_secretservice_disable (void)
 {
     gboolean disable_secret_service = FALSE;
     GError *err = NULL;
