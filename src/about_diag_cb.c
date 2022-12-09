@@ -10,8 +10,8 @@ about_diag_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
 
-    const gchar *authors[] = {"Paolo Stivanin <info@paolostivanin.com>"};
-    const gchar *artists[] = {"Paolo Stivanin <info@paolostivanin.com>"};
+    const gchar *authors[] = {"Paolo Stivanin <info@paolostivanin.com>", NULL};
+    const gchar *artists[] = {"Paolo Stivanin <info@paolostivanin.com>", NULL};
     const gchar *partial_path = "share/icons/hicolor/scalable/apps/com.github.paolostivanin.OTPClient.svg";
     gchar *icon_abs_path = g_strconcat (INSTALL_PREFIX, "/", partial_path, NULL);
 
