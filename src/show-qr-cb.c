@@ -131,7 +131,7 @@ write_png (const QRcode *qrcode)
         png_write_row (png_ptr, row);
     }
 
-    guint bit;
+    gint bit;
     guchar *q;
     guchar *p = qrcode->data;
     for (gint y = 0; y < qrcode->width; y++) {

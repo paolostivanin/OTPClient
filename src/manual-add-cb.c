@@ -14,9 +14,9 @@ static void steam_toggled_cb    (GtkWidget *        __attribute__((unused)),
 
 
 void
-manual_add_data_cb (GSimpleAction *simple    __attribute__((unused)),
-                    GVariant      *parameter __attribute__((unused)),
-                    gpointer       user_data)
+manual_add_cb (GSimpleAction *simple    __attribute__((unused)),
+               GVariant      *parameter __attribute__((unused)),
+               gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
     Widgets *widgets = g_new0 (Widgets, 1);

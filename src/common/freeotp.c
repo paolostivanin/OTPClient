@@ -29,7 +29,6 @@ gchar *
 export_freeotpplus (const gchar *export_path,
                     json_t      *json_db_data)
 {
-    gchar *constructed_label;
     json_t *db_obj;
     gsize index;
 

@@ -24,9 +24,9 @@ static void     scan_qrcode     (zbar_image_t   *image,
 
 
 void
-webcam_cb (GSimpleAction *simple,
-           GVariant      *parameter __attribute__((unused)),
-           gpointer       user_data)
+webcam_add_cb (GSimpleAction *simple,
+               GVariant      *parameter __attribute__((unused)),
+               gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_MIGRATION_WEBCAM_ACTION_NAME) == 0) ? TRUE : FALSE;
@@ -86,7 +86,7 @@ void
 webcam_add_cb_shortcut (GtkWidget *w __attribute__((unused)),
                         gpointer   user_data)
 {
-    webcam_cb (g_simple_action_new ("webcam", NULL), NULL, user_data);
+    webcam_add_cb (g_simple_action_new ("webcam", NULL), NULL, user_data);
 }
 
 

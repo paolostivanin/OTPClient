@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glib.h>
+#include "data.h"
 
 G_BEGIN_DECLS
 
