@@ -14,8 +14,13 @@
 #include "change-db-cb.h"
 #include "new-db-cb.h"
 #include "common/common.h"
-#include "version.h"
 #include "secret-schema.h"
+#include "change-pwd-cb.h"
+#include "settings-cb.h"
+#include "shortcuts-cb.h"
+#include "webcam-add-cb.h"
+#include "manual-add-cb.h"
+#include "edit-row-cb.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -52,6 +57,8 @@ static void       get_window_size_cb        (GtkWidget          *window,
                                              GtkAllocation      *allocation,
                                              gpointer            user_data);
 
+void              setup_kb_shortcuts        (AppData            *app_data);
+
 static void       toggle_button_cb          (GtkWidget          *main_window,
                                              gpointer            user_data);
 
@@ -59,10 +66,6 @@ static void       reorder_rows_cb           (GtkToggleButton *btn,
                                              gpointer         user_data);
 
 static void       del_data_cb               (GtkToggleButton    *btn,
-                                             gpointer            user_data);
-
-static void       change_password_cb        (GSimpleAction      *simple,
-                                             GVariant           *parameter,
                                              gpointer            user_data);
 
 static void       save_sort_order           (GtkTreeView        *tree_view);
@@ -246,6 +249,7 @@ activate (GtkApplication    *app,
     app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
 
     create_treeview (app_data);
+    setup_kb_shortcuts (app_data);
 
     app_data->notification = g_notification_new ("OTPClient");
     g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
@@ -254,18 +258,12 @@ activate (GtkApplication    *app,
     g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
     g_object_unref (icon);
 
-    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS (app_data->main_window));
-
     GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
-    g_signal_new ("toggle-reorder-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_r, GDK_CONTROL_MASK, "toggle-reorder-button", 0);
     g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK(toggle_button_cb), reorder_toggle_btn);
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
     GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
-    g_signal_new ("toggle-delete-button", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
     g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_button_cb), del_toggle_btn);
     g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
@@ -341,7 +339,7 @@ key_pressed_cb (GtkWidget   *window,
 
 
 static GKeyFile *
-get_kf_ptr ()
+get_kf_ptr (void)
 {
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
@@ -387,7 +385,7 @@ get_wh_data (gint     *width,
 
 
 static gboolean
-get_warn_data ()
+get_warn_data (void)
 {
     GKeyFile *kf = get_kf_ptr ();
     gboolean show_warning = TRUE;
@@ -445,7 +443,7 @@ create_main_window (gint             width,
 
 
 static gboolean
-show_upgrade_msg ()
+show_upgrade_msg (void)
 {
     gboolean show_msg = TRUE;
     GKeyFile *kf = get_kf_ptr ();
@@ -522,21 +520,21 @@ set_action_group (GtkBuilder *builder,
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = GOOGLE_MIGRATION_FILE_ACTION_NAME, .activate = add_qr_from_file },
-            { .name = GOOGLE_MIGRATION_WEBCAM_ACTION_NAME, .activate = webcam_cb },
+            { .name = GOOGLE_MIGRATION_WEBCAM_ACTION_NAME, .activate = webcam_add_cb },
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
-            { .name = "edit_row", .activate = edit_selected_row_cb },
+            { .name = "edit_row", .activate = edit_row_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
             { .name = "about", .activate = about_diag_cb }
     };
 
     static GActionEntry add_menu_entries[] = {
-            { .name = "webcam", .activate = webcam_cb },
+            { .name = "webcam", .activate = webcam_add_cb },
             { .name = "import_qr_file", .activate = add_qr_from_file },
             { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
-            { .name = "manual", .activate = add_data_dialog }
+            { .name = "manual", .activate = manual_add_cb }
     };
 
     GtkWidget *settings_popover = GTK_WIDGET (gtk_builder_get_object (builder, "settings_pop_id"));
@@ -551,6 +549,14 @@ set_action_group (GtkBuilder *builder,
 
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
+
+    g_signal_connect (app_data->main_window, "change-db", G_CALLBACK(change_db_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "change-pwd", G_CALLBACK(change_pwd_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "show-settings", G_CALLBACK(show_settings_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "show-kb-shortcuts", G_CALLBACK(show_kbs_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "scan-webcam", G_CALLBACK(webcam_add_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "manual-add", G_CALLBACK(manual_add_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "edit-row", G_CALLBACK(edit_row_cb_shortcut), app_data);
 
     return TRUE;
 }
@@ -675,32 +681,6 @@ del_data_cb (GtkToggleButton *btn,
         g_object_unref (app_data->css_provider);
         g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
         g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
-    }
-}
-
-
-static void
-change_password_cb (GSimpleAction *simple    __attribute__((unused)),
-                    GVariant      *parameter __attribute__((unused)),
-                    gpointer       user_data)
-{
-    AppData *app_data = (AppData *)user_data;
-    gchar *tmp_key = secure_strdup (app_data->db_data->key);
-    gchar *pwd = prompt_for_password (app_data, tmp_key, NULL, FALSE);
-    if (pwd != NULL) {
-        app_data->db_data->key = pwd;
-        GError *err = NULL;
-        update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
-        if (err != NULL) {
-            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            GtkApplication *app = gtk_window_get_application (GTK_WINDOW(app_data->main_window));
-            destroy_cb (app_data->main_window, app_data);
-            g_application_quit (G_APPLICATION(app));
-        }
-        show_message_dialog (app_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
-        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
-    } else {
-        gcry_free (tmp_key);
     }
 }
 

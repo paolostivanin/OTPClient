@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(OTPClient VERSION "3.0.0" LANGUAGES "C")
+project(OTPClient VERSION "3.1.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -48,7 +48,6 @@ find_package(Gcrypt 1.6.0 REQUIRED)
 pkg_check_modules(COTP REQUIRED cotp>=1.2.1)
 pkg_check_modules(BASEENCODE REQUIRED baseencode>=1.0.12)
 pkg_check_modules(PNG REQUIRED libpng>=1.2.0)
-pkg_check_modules(LIBZIP REQUIRED libzip>=1.0.0)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.10.0)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.20.0)
@@ -57,6 +56,7 @@ pkg_check_modules(GIO REQUIRED gio-2.0>=2.64.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
+pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.1.0)
 
 set(GUI_HEADER_FILES
         src/common/common.h
@@ -83,7 +83,7 @@ set(GUI_HEADER_FILES
         src/new-db-cb.h
         src/db-actions.h
         src/google-migration.pb-c.h
-        src/secret-schema.h)
+        src/secret-schema.h src/change-pwd-cb.h src/settings-cb.h src/shortcuts-cb.h src/webcam-add-cb.h src/edit-row-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -92,7 +92,7 @@ set(GUI_SOURCE_FILES
         src/app.c
         src/gui-common.c
         src/db-misc.c
-        src/edit-data.c
+        src/edit-row-cb.c
         src/file-size.c
         src/get-builder.c
         src/gquarks.c
@@ -106,8 +106,8 @@ set(GUI_SOURCE_FILES
         src/password-cb.c
         src/qrcode-parser.c
         src/add-from-qr.c
-        src/settings.c
-        src/shortcuts.c
+        src/settings-cb.c
+        src/shortcuts-cb.c
         src/treeview.c
         src/webcam-add-cb.c
         src/exports.c
@@ -119,7 +119,7 @@ set(GUI_SOURCE_FILES
         src/db-actions.c
         src/change-file-cb.c
         src/google-migration.pb-c.c
-        src/secret-schema.c src/about_diag_cb.c)
+        src/secret-schema.c src/about_diag_cb.c src/show-qr-cb.c src/setup-signals-shortcuts.c src/change-pwd-cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
@@ -182,7 +182,8 @@ if(BUILD_GUI)
                 ${ZBAR_INCLUDE_DIRS}
                 ${UUID_INCLUDE_DIRS}
                 ${PROTOC_INCLUDE_DIRS}
-                ${LIBSECRET_INCLUDE_DIRS})
+                ${LIBSECRET_INCLUDE_DIRS}
+                ${LIBQRENCODE_INCLUDE_DIRS})
 
         add_executable(${PROJECT_NAME} ${GUI_SOURCE_FILES} ${GUI_HEADER_FILES})
         target_link_libraries(${PROJECT_NAME}
@@ -196,7 +197,8 @@ if(BUILD_GUI)
                 ${ZBAR_LIBRARIES}
                 ${UUID_LIBRARIES}
                 ${PROTOC_LIBRARIES}
-                ${LIBSECRET_LIBRARIES})
+                ${LIBSECRET_LIBRARIES}
+                ${LIBQRENCODE_LIBRARIES})
 
         set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
         install(TARGETS ${PROJECT_NAME} DESTINATION bin)
@@ -207,7 +209,6 @@ if(BUILD_CLI)
                 ${GCRYPT_INCLUDE_DIRS}
                 ${BASEENCODE_INCLUDE_DIRS}
                 ${COTP_INCLUDE_DIRS}
-                ${BASEENCODE_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
                 ${UUID_INCLUDE_DIRS}
                 ${PROTOC_INCLUDE_DIRS}
@@ -217,9 +218,7 @@ if(BUILD_CLI)
                         ${LIBZIP_INCLUDE_DIRS}
                         ${PNG_INCLUDE_DIRS}
                         ${ZBAR_INCLUDE_DIRS}
-                        ${UUID_INCLUDE_DIRS}
-                        ${PROTOC_INCLUDE_DIRS}
-                        ${LIBSECRET_INCLUDE_DIRS})
+                        ${LIBQRENCODE_INCLUDE_DIRS})
         endif()
 
         add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
@@ -241,7 +240,8 @@ if(BUILD_CLI)
                         ${ZBAR_LIBRARIES}
                         ${PROTOC_LIBRARIES}
                         ${LIBSECRET_LIBRARIES}
-                        ${UUID_LIBRARIES})
+                        ${UUID_LIBRARIES}
+                        ${LIBQRENCODE_LIBRARIES})
         endif()
 
         set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")

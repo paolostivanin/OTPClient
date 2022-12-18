@@ -4,7 +4,6 @@
 #include "imports.h"
 #include "parse-uri.h"
 #include "message-dialogs.h"
-#include "add-common.h"
 #include "get-builder.h"
 #include "common/common.h"
 #include "gui-common.h"
@@ -25,7 +24,7 @@ static void     scan_qrcode     (zbar_image_t   *image,
 
 
 void
-webcam_cb (GSimpleAction *simple    __attribute__((unused)),
+webcam_cb (GSimpleAction *simple,
            GVariant      *parameter __attribute__((unused)),
            gpointer       user_data)
 {
@@ -80,6 +79,14 @@ webcam_cb (GSimpleAction *simple    __attribute__((unused)),
         g_free (cfg_data);
     }
     g_object_unref (builder);
+}
+
+
+void
+webcam_add_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                        gpointer   user_data)
+{
+    webcam_cb (g_simple_action_new ("webcam", NULL), NULL, user_data);
 }
 
 

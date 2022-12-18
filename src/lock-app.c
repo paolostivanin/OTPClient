@@ -100,11 +100,7 @@ check_inactivity (gpointer user_data)
 void
 setup_dbus_listener (AppData *app_data)
 {
-    g_signal_new ("lock-app", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     g_signal_connect (app_data->main_window, "lock-app", G_CALLBACK(lock_app), app_data);
-
-    GtkBindingSet *binding_set = gtk_binding_set_by_class (GTK_WIDGET_GET_CLASS (app_data->main_window));
-    gtk_binding_entry_add_signal (binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
 
     const gchar *paths[] = { "/org/cinnamon/ScreenSaver", "/org/freedesktop/ScreenSaver", "/org/gnome/ScreenSaver", "/com/canonical/Unity/Session" };
     const gchar *interfaces[] = { "org.cinnamon.ScreenSaver", "org.freedesktop.ScreenSaver", "org.gnome.ScreenSaver", "com.canonical.Unity.Session" };

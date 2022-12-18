@@ -39,9 +39,9 @@ static void   set_data_in_lstore_and_json         (EditData    *edit_data);
 
 
 void
-edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
-                      GVariant      *parameter __attribute__((unused)),
-                      gpointer       user_data)
+edit_row_cb (GSimpleAction *simple    __attribute__((unused)),
+             GVariant      *parameter __attribute__((unused)),
+             gpointer       user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
     AppData *app_data = (AppData *)user_data;
@@ -71,6 +71,14 @@ edit_selected_row_cb (GSimpleAction *simple    __attribute__((unused)),
         gcry_free (edit_data->new_secret);
     }
     g_free (edit_data);
+}
+
+
+void
+edit_row_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                      gpointer   user_data)
+{
+    edit_row_cb (NULL, NULL, user_data);
 }
 
 

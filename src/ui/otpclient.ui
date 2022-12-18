@@ -55,7 +55,6 @@
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.webcam</property>
             <property name="text" translatable="yes">Scan using webcam</property>
-            <accelerator key="w" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -70,7 +69,6 @@
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Using a QR Code</property>
             <property name="menu-name">import_qr_menu</property>
-            <accelerator key="p" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -85,7 +83,6 @@
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.manual</property>
             <property name="text" translatable="yes">Manually</property>
-            <accelerator key="l" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2005,7 +2002,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Google Migration QR</property>
             <property name="menu-name">import_google_qr_menu</property>
-            <accelerator key="g" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2112,7 +2108,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Import</property>
             <property name="menu-name">import_menu</property>
-            <accelerator key="i" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2127,7 +2122,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Export</property>
             <property name="menu-name">export_menu</property>
-            <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2170,7 +2164,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.change_pwd</property>
             <property name="text" translatable="yes">Change password</property>
-            <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2185,7 +2178,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.edit_row</property>
             <property name="text" translatable="yes">Edit row</property>
-            <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2200,7 +2192,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.settings</property>
             <property name="text" translatable="yes">Settings</property>
-            <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2215,7 +2206,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.shortcuts</property>
             <property name="text" translatable="yes">Keyboard shortcuts</property>
-            <accelerator key="k" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2410,7 +2400,6 @@ but not the number of digits and/or the period/counter.</property>
                     <property name="icon-name">list-add-symbolic</property>
                   </object>
                 </child>
-                <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -2466,7 +2455,6 @@ but not the number of digits and/or the period/counter.</property>
                 <property name="icon-name">open-menu-symbolic</property>
               </object>
             </child>
-            <accelerator key="m" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="pack-type">end</property>

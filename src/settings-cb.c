@@ -93,3 +93,11 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 
     g_object_unref (builder);
 }
+
+
+void
+show_settings_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                           gpointer   user_data)
+{
+    settings_dialog_cb (NULL, NULL, user_data);
+}
