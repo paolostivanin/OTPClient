@@ -1,6 +1,7 @@
 #include <glib.h>
 #include "imports.h"
 #include "common/common.h"
+#include "gui-common.h"
 
 
 static void parse_uri           (const gchar   *uri,
@@ -26,6 +27,83 @@ set_otps_from_uris (const gchar   *otpauth_uris,
         }
     }
     g_strfreev (uris);
+}
+
+
+gchar *
+get_otpauth_uri (AppData *app_data,
+                 json_t  *obj)
+{
+    gchar *constructed_label = NULL;
+    json_t *db_obj = NULL;
+
+    if (app_data == NULL) {
+        db_obj = obj;
+    } else {
+        GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+        GtkListStore *list_store = GTK_LIST_STORE(model);
+        GtkTreeIter iter;
+
+        if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &iter) == FALSE) {
+            return NULL;
+        }
+
+        guint row_number = get_row_number_from_iter (list_store, iter);
+        db_obj = json_array_get (app_data->db_data->json_data, row_number);
+    }
+
+    GString *uri = g_string_new (NULL);
+    g_string_append (uri, "otpauth://");
+    const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
+    if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
+        g_string_append (uri, "totp/");
+        constructed_label = g_strconcat ("Steam:", json_string_value (json_object_get (db_obj, "label")), NULL);
+    } else {
+        g_string_append (uri, g_utf8_strdown (json_string_value (json_object_get (db_obj, "type")),  -1));
+        g_string_append (uri, "/");
+        if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
+            constructed_label = g_strconcat (json_string_value (json_object_get (db_obj, "issuer")),
+                                             ":",
+                                             json_string_value (json_object_get (db_obj, "label")),
+                                             NULL);
+        } else {
+            constructed_label = g_strdup (json_string_value (json_object_get (db_obj, "label")));
+        }
+    }
+
+    gchar *escaped_label = g_uri_escape_string (constructed_label, NULL, FALSE);
+    g_string_append (uri, escaped_label);
+    g_string_append (uri, "?secret=");
+    g_string_append (uri,json_string_value (json_object_get (db_obj, "secret")));
+    if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
+        g_string_append (uri, "&issuer=Steam");
+    }
+    if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
+        g_string_append (uri, "&issuer=");
+        g_string_append (uri, json_string_value (json_object_get (db_obj, "issuer")));
+    }
+
+    g_string_append (uri, "&digits=");
+    g_string_append (uri,g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits"))));
+    g_string_append (uri, "&algorithm=");
+    g_string_append (uri, json_string_value ( json_object_get (db_obj, "algo")));
+
+    if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        g_string_append (uri, "&period=");
+        g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "period"))));
+    } else {
+        g_string_append (uri, "&counter=");
+        g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "counter"))));
+    }
+
+    g_string_append (uri, "\n");
+    gchar *ret_uri = g_strdup (uri->str);
+
+    g_free (constructed_label);
+    g_free (escaped_label);
+    g_string_free (uri, TRUE);
+
+    return ret_uri;
 }
 
 

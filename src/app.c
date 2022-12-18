@@ -21,6 +21,7 @@
 #include "webcam-add-cb.h"
 #include "manual-add-cb.h"
 #include "edit-row-cb.h"
+#include "show-qr-cb.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -525,6 +526,7 @@ set_action_group (GtkBuilder *builder,
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
             { .name = "edit_row", .activate = edit_row_cb },
+            { .name = "show_qr", .activate = show_qr_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
             { .name = "about", .activate = about_diag_cb }
@@ -557,6 +559,7 @@ set_action_group (GtkBuilder *builder,
     g_signal_connect (app_data->main_window, "scan-webcam", G_CALLBACK(webcam_add_cb_shortcut), app_data);
     g_signal_connect (app_data->main_window, "manual-add", G_CALLBACK(manual_add_cb_shortcut), app_data);
     g_signal_connect (app_data->main_window, "edit-row", G_CALLBACK(edit_row_cb_shortcut), app_data);
+    g_signal_connect (app_data->main_window, "show-qr", G_CALLBACK(show_qr_cb_shortcut), app_data);
 
     return TRUE;
 }

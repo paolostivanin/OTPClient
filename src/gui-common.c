@@ -19,9 +19,9 @@ guint
 get_row_number_from_iter (GtkListStore *list_store,
                           GtkTreeIter iter)
 {
-    GtkTreePath *path = gtk_tree_model_get_path (GTK_TREE_MODEL (list_store), &iter);
+    GtkTreePath *path = gtk_tree_model_get_path (GTK_TREE_MODEL(list_store), &iter);
     gint *row_number = gtk_tree_path_get_indices (path); // starts from 0
-    guint row = (guint) row_number[0];
+    guint row = (guint)row_number[0];
     gtk_tree_path_free (path);
 
     return row;

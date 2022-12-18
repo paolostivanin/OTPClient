@@ -83,7 +83,7 @@ set(GUI_HEADER_FILES
         src/new-db-cb.h
         src/db-actions.h
         src/google-migration.pb-c.h
-        src/secret-schema.h src/change-pwd-cb.h src/settings-cb.h src/shortcuts-cb.h src/webcam-add-cb.h src/edit-row-cb.h)
+        src/secret-schema.h src/change-pwd-cb.h src/settings-cb.h src/shortcuts-cb.h src/webcam-add-cb.h src/edit-row-cb.h src/show-qr-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
