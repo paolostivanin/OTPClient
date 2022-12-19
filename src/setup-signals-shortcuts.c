@@ -17,7 +17,7 @@ static void connect_signals (AppData *app_data);
 void
 setup_kb_shortcuts (AppData *app_data)
 {
-    // Used letters: r,d,l,h,w,m,b,p,e,s,k
+    // Used letters: r,d,l,h,w,m,b,o,e,s,k
     // hide-all-otps is in src/treeview.c
     setup_signals ();
     connect_signals (app_data);
@@ -28,7 +28,7 @@ setup_kb_shortcuts (AppData *app_data)
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_b, GDK_CONTROL_MASK, "change-db", 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_p, GDK_CONTROL_MASK, "change-pwd", 0);
+    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_o, GDK_CONTROL_MASK, "change-pwd", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_s, GDK_CONTROL_MASK, "show-settings", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_k, GDK_CONTROL_MASK, "show-kb-shortcuts", 0);
 

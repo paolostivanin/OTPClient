@@ -174,7 +174,6 @@
                 <property name="tooltip-text" translatable="yes">Max 255 chars</property>
                 <property name="editable">False</property>
                 <property name="max-length">255</property>
-                <property name="visibility">False</property>
                 <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
               </object>
               <packing>
