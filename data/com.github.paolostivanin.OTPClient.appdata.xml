@@ -83,14 +83,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
-    <release version="3.1.0" date="2022-yy-xx">
+    <release version="3.1.0" date="2022-12-19">
       <description>
         <p>OTPClient 3.1.0 the following feature and fixes:</p>
         <ul>
           <li>New feature (#258): entries can be displayed as a QR-Code</li>
           <li>Updated the artwork credits in the about dialog</li>
           <li>All keyboard shortcuts have been revised, be sure to check them (Ctrl-k)</li>
-          <li>Removed an unused variable</li>
+          <li>Code cleanup</li>
         </ul>
       </description>
     </release>
