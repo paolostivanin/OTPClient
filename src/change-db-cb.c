@@ -52,3 +52,9 @@ change_db_cb (GSimpleAction *simple    __attribute__((unused)),
 }
 
 
+void
+change_db_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                       gpointer   user_data)
+{
+    change_db_cb (NULL, NULL, user_data);
+}

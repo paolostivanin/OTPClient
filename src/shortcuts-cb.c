@@ -16,3 +16,11 @@ shortcuts_window_cb (GSimpleAction *simple    __attribute__((unused)),
     gtk_widget_show (overlay);
     g_object_unref (builder);
 }
+
+
+void
+show_kbs_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                      gpointer   user_data)
+{
+    shortcuts_window_cb (NULL, NULL, user_data);
+}

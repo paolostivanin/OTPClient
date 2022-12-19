@@ -55,7 +55,6 @@
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.webcam</property>
             <property name="text" translatable="yes">Scan using webcam</property>
-            <accelerator key="w" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -70,7 +69,6 @@
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Using a QR Code</property>
             <property name="menu-name">import_qr_menu</property>
-            <accelerator key="p" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -85,7 +83,6 @@
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.manual</property>
             <property name="text" translatable="yes">Manually</property>
-            <accelerator key="l" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -177,7 +174,6 @@
                 <property name="tooltip-text" translatable="yes">Max 255 chars</property>
                 <property name="editable">False</property>
                 <property name="max-length">255</property>
-                <property name="visibility">False</property>
                 <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
               </object>
               <packing>
@@ -1642,6 +1638,57 @@ but not the number of digits and/or the period/counter.</property>
       <action-widget response="-5">newdb_pwd_diag_ok_btn_id</action-widget>
     </action-widgets>
   </object>
+  <object class="GtkDialog" id="qr_code_diag_id">
+    <property name="can-focus">False</property>
+    <property name="window-position">center</property>
+    <property name="type-hint">dialog</property>
+    <property name="gravity">center</property>
+    <child internal-child="vbox">
+      <object class="GtkBox" id="qr_code_diag_box_id">
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">5</property>
+        <child internal-child="action_area">
+          <object class="GtkButtonBox">
+            <property name="can-focus">False</property>
+            <property name="layout-style">end</property>
+            <child>
+              <object class="GtkButton" id="qr_code_diag_ok_btn_id">
+                <property name="label" translatable="yes">OK</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">False</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkImage" id="qr_code_gtkimage_id">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+    <action-widgets>
+      <action-widget response="-5">qr_code_diag_ok_btn_id</action-widget>
+    </action-widgets>
+  </object>
   <object class="GtkDialog" id="settings_diag_id">
     <property name="can-focus">False</property>
     <property name="border-width">5</property>
@@ -2005,7 +2052,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Google Migration QR</property>
             <property name="menu-name">import_google_qr_menu</property>
-            <accelerator key="g" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2112,7 +2158,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Import</property>
             <property name="menu-name">import_menu</property>
-            <accelerator key="i" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2127,7 +2172,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="text" translatable="yes">Export</property>
             <property name="menu-name">export_menu</property>
-            <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2170,7 +2214,6 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.change_pwd</property>
             <property name="text" translatable="yes">Change password</property>
-            <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2185,12 +2228,25 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.edit_row</property>
             <property name="text" translatable="yes">Edit row</property>
-            <accelerator key="r" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">5</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="show_qr_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.show_qr</property>
+            <property name="text" translatable="yes">Show QR-Code</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">6</property>
           </packing>
         </child>
         <child>
@@ -2200,12 +2256,11 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.settings</property>
             <property name="text" translatable="yes">Settings</property>
-            <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">6</property>
+            <property name="position">7</property>
           </packing>
         </child>
         <child>
@@ -2215,12 +2270,11 @@ but not the number of digits and/or the period/counter.</property>
             <property name="receives-default">True</property>
             <property name="action-name">settings_menu.shortcuts</property>
             <property name="text" translatable="yes">Keyboard shortcuts</property>
-            <accelerator key="k" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">7</property>
+            <property name="position">8</property>
           </packing>
         </child>
         <child>
@@ -2234,7 +2288,7 @@ but not the number of digits and/or the period/counter.</property>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">8</property>
+            <property name="position">9</property>
           </packing>
         </child>
       </object>
@@ -2410,7 +2464,6 @@ but not the number of digits and/or the period/counter.</property>
                     <property name="icon-name">list-add-symbolic</property>
                   </object>
                 </child>
-                <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -2466,7 +2519,6 @@ but not the number of digits and/or the period/counter.</property>
                 <property name="icon-name">open-menu-symbolic</property>
               </object>
             </child>
-            <accelerator key="m" signal="activate" modifiers="GDK_CONTROL_MASK"/>
           </object>
           <packing>
             <property name="pack-type">end</property>

@@ -21,15 +21,7 @@
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;a</property>
-                <property name="title" translatable="yes">Open add menu</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;w</property>
+                <property name="accelerator">&lt;Alt&gt;w</property>
                 <property name="title" translatable="yes">Scan QR code using webcam</property>
               </object>
             </child>
@@ -37,23 +29,7 @@
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;t</property>
-                <property name="title" translatable="yes">Scan QR code by taking a screenshot</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;p</property>
-                <property name="title" translatable="yes">Select QR code from a local photo</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;l</property>
+                <property name="accelerator">&lt;Alt&gt;m</property>
                 <property name="title" translatable="yes">Manually insert data</property>
               </object>
             </child>
@@ -66,14 +42,6 @@
             <property name="visible">1</property>
             <property name="title" translatable="yes">General</property>
             <property name="view">general</property>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;h</property>
-                <property name="title" translatable="yes">Hide all otps</property>
-              </object>
-            </child>
 
             <child>
               <object class="GtkShortcutsShortcut">
@@ -114,55 +82,6 @@
                 <property name="title" translatable="yes">Quit</property>
               </object>
             </child>
-          </object>
-        </child>
-
-        <!-- hamburger menu shortcuts -->
-        <child>
-          <object class="GtkShortcutsGroup">
-            <property name="visible">1</property>
-            <property name="title" translatable="yes">Menu</property>
-            <property name="view">settings</property>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;m</property>
-                <property name="title" translatable="yes">Open menu</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;i</property>
-                <property name="title" translatable="yes">Import</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;e</property>
-                <property name="title" translatable="yes">Export</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;c</property>
-                <property name="title" translatable="yes">Change password</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;r</property>
-                <property name="title" translatable="yes">Edit selected row</property>
-              </object>
-            </child>
 
             <child>
               <object class="GtkShortcutsShortcut">
@@ -177,6 +96,55 @@
                 <property name="visible">1</property>
                 <property name="accelerator">&lt;Ctrl&gt;k</property>
                 <property name="title" translatable="yes">Show keyboard shortcuts</property>
+              </object>
+            </child>
+          </object>
+        </child>
+
+        <!-- hamburger menu shortcuts -->
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="visible">1</property>
+            <property name="title" translatable="yes">Menu</property>
+            <property name="view">settings</property>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
+                <property name="accelerator">&lt;Alt&gt;h</property>
+                <property name="title" translatable="yes">Hide all otps</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
+                <property name="accelerator">&lt;Alt&gt;e</property>
+                <property name="title" translatable="yes">Edit selected row</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
+                <property name="accelerator">&lt;Alt&gt;q</property>
+                <property name="title" translatable="yes">Show QR-Code</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
+                <property name="accelerator">&lt;Ctrl&gt;b</property>
+                <property name="title" translatable="yes">Change database</property>
+              </object>
+            </child>
+
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="visible">1</property>
+                <property name="accelerator">&lt;Ctrl&gt;o</property>
+                <property name="title" translatable="yes">Change password</property>
               </object>
             </child>
           </object>

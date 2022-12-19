@@ -14,9 +14,9 @@ static void steam_toggled_cb    (GtkWidget *        __attribute__((unused)),
 
 
 void
-add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
-                 GVariant      *parameter __attribute__((unused)),
-                 gpointer       user_data)
+manual_add_cb (GSimpleAction *simple    __attribute__((unused)),
+               GVariant      *parameter __attribute__((unused)),
+               gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
     Widgets *widgets = g_new0 (Widgets, 1);
@@ -59,6 +59,14 @@ add_data_dialog (GSimpleAction *simple    __attribute__((unused)),
     gtk_widget_destroy (widgets->dialog);
     g_free (widgets);
     g_object_unref (builder);
+}
+
+
+void
+manual_add_cb_shortcut (GtkWidget *w __attribute__((unused)),
+                        gpointer   user_data)
+{
+    manual_add_cb (NULL, NULL, user_data);
 }
 
 
