@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <png.h>
 #include <qrencode.h>
+#include <glib/gstdio.h>
 #include "data.h"
 #include "parse-uri.h"
 #include "get-builder.h"
@@ -44,6 +45,7 @@ show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
         gtk_widget_destroy (diag);
         g_object_unref (pbuf);
         g_object_unref (builder);
+        g_unlink (PNG_OUT);
     }
 }
 

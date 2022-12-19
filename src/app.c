@@ -552,15 +552,6 @@ set_action_group (GtkBuilder *builder,
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
 
-    g_signal_connect (app_data->main_window, "change-db", G_CALLBACK(change_db_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "change-pwd", G_CALLBACK(change_pwd_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "show-settings", G_CALLBACK(show_settings_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "show-kb-shortcuts", G_CALLBACK(show_kbs_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "scan-webcam", G_CALLBACK(webcam_add_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "manual-add", G_CALLBACK(manual_add_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "edit-row", G_CALLBACK(edit_row_cb_shortcut), app_data);
-    g_signal_connect (app_data->main_window, "show-qr", G_CALLBACK(show_qr_cb_shortcut), app_data);
-
     return TRUE;
 }
 
