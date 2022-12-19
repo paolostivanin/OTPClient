@@ -56,7 +56,7 @@ pkg_check_modules(GIO REQUIRED gio-2.0>=2.64.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
-pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.1.0)
+pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.0.2)
 
 set(GUI_HEADER_FILES
         src/common/common.h

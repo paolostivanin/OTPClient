@@ -6,7 +6,7 @@ jobs:
       - image: ubuntu:20.04
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -15,7 +15,7 @@ jobs:
       - image: ubuntu:rolling
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -24,7 +24,7 @@ jobs:
       - image: debian:latest
     steps:
       - checkout
-      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-3-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -33,7 +33,7 @@ jobs:
       - image: fedora:latest
     steps:
       - checkout
-      - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk3-devel libzip-devel jansson-devel libpng-devel zbar-devel protobuf-c-devel libsecret-devel libuuid-devel protobuf-devel
+      - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk3-devel libzip-devel jansson-devel libpng-devel zbar-devel protobuf-c-devel libsecret-devel libuuid-devel protobuf-devel qrencode-devel
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -42,7 +42,7 @@ jobs:
       - image: archlinux:latest
     steps:
       - checkout
-      - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk3 libgcrypt zbar gcc clang cmake make libzip jansson libpng protobuf-c libsecret util-linux-libs
+      - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk3 libgcrypt zbar gcc clang cmake make libzip jansson libpng protobuf-c libsecret util-linux-libs qrencode
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
