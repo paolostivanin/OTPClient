@@ -2,6 +2,7 @@
 #include <sys/resource.h>
 #include <cotp.h>
 #include <baseencode.h>
+#include <glib/gi18n.h>
 #include "gcrypt.h"
 #include "jansson.h"
 #include "../google-migration.pb-c.h"
@@ -92,7 +93,9 @@ json_object_get_hash (json_t *obj)
             json_int_t v = json_integer_value (value);
             g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
         } else {
-            g_strlcat (tmp_string, json_string_value (value), 256);
+            if (g_strlcat (tmp_string, json_string_value (value), 256) > 256) {
+                g_printerr ("%s\n", _("Truncation occurred."));
+            }
         }
     }
 
@@ -127,9 +130,9 @@ g_trim_whitespace (const gchar *str)
         }
     }
     sec_buf[pos] = '\0';
-    gcry_realloc (sec_buf, g_utf8_strlen(sec_buf, -1) + 1);
+    gchar *secubf_newpos = (gchar *)gcry_realloc (sec_buf, g_utf8_strlen(sec_buf, -1) + 1);
 
-    return sec_buf;
+    return secubf_newpos;
 }
 
 
@@ -169,80 +172,6 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
 }
 
 
-GSList *
-decode_migration_data (const gchar *encoded_uri)
-{
-    const gchar *encoded_uri_copy = encoded_uri;
-    if (g_ascii_strncasecmp (encoded_uri_copy, "otpauth-migration://offline?data=", 33) != 0) {
-        return NULL;
-    }
-    encoded_uri_copy += 33;
-    gsize out_len;
-    guchar *data = g_base64_decode (g_uri_unescape_string ((encoded_uri_copy), NULL), &out_len);
-
-    GSList *uris = NULL;
-    gchar *uri = NULL;
-    MigrationPayload *msg = migration_payload__unpack (NULL, out_len, data);
-    for (gint i = 0; i < msg->n_otp_parameters; i++) {
-        uri = g_strconcat ("otpauth://", NULL);
-        if (msg->otp_parameters[i]->type == 1) {
-            uri = g_strconcat (uri, "hotp/", NULL);
-        } else if (msg->otp_parameters[i]->type == 2) {
-            uri = g_strconcat (uri, "totp/", NULL);
-        } else {
-            g_printerr ("OTP type not recognized, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        uri = g_strconcat (uri, msg->otp_parameters[i]->name, "?", NULL);
-
-        if (msg->otp_parameters[i]->algorithm == 1) {
-            uri = g_strconcat (uri, "algorithm=SHA1&", NULL);
-        } else if (msg->otp_parameters[i]->algorithm == 2) {
-            uri = g_strconcat (uri, "algorithm=SHA256&", NULL);
-        } else if (msg->otp_parameters[i]->algorithm == 3) {
-            uri = g_strconcat (uri, "algorithm=SHA512&", NULL);
-        } else {
-            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        if (msg->otp_parameters[i]->digits == 1) {
-            uri = g_strconcat (uri, "digits=6&", NULL);
-        } else if (msg->otp_parameters[i]->digits == 2) {
-            uri = g_strconcat (uri, "digits=8&", NULL);
-        } else {
-            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        if (msg->otp_parameters[i]->issuer != NULL) {
-            uri = g_strconcat (uri, "issuer=", msg->otp_parameters[i]->issuer, "&", NULL);
-        }
-
-        if (msg->otp_parameters[i]->type == 1) {
-            uri = g_strconcat (uri, "counter=", msg->otp_parameters[i]->counter, "&", NULL);
-        }
-
-        baseencode_error_t b_err;
-        gchar *b32_encoded_secret = base32_encode (msg->otp_parameters[i]->secret.data, msg->otp_parameters[i]->secret.len, &b_err);
-        if (b32_encoded_secret == NULL) {
-            g_printerr ("Error while encoding the secret (error code %d)\n", b_err);
-            goto end;
-        }
-
-        uri = g_strconcat (uri, "secret=", b32_encoded_secret, NULL);
-
-        uris = g_slist_append (uris, g_strdup (uri));
-
-        end:
-        g_free (uri);
-    }
-
-    return uris;
-}
-
-
 // Backported from Glib 2.68 in order to support Debian "bullseye" and Ubuntu 20.04
 guint
 g_string_replace_backported (GString     *string,
@@ -265,8 +194,8 @@ g_string_replace_backported (GString     *string,
     while ((next = strstr (cur, find)) != NULL)
     {
         pos = next - string->str;
-        g_string_erase (string, pos, f_len);
-        g_string_insert (string, pos, replace);
+        g_string_erase (string, (gssize)pos, (gssize)f_len);
+        g_string_insert (string, (gssize)pos, replace);
         cur = string->str + pos + r_len;
         n++;
         /* Only match the empty string once at any given position, to
@@ -283,4 +212,209 @@ g_string_replace_backported (GString     *string,
     }
 
     return n;
+}
+
+
+// Backported from Glib. The only difference is that it's using gcrypt to allocate a secure buffer.
+static int
+unescape_character (const char *scanner)
+{
+    int first_digit;
+    int second_digit;
+
+    first_digit = g_ascii_xdigit_value (*scanner++);
+    if (first_digit < 0)
+        return -1;
+
+    second_digit = g_ascii_xdigit_value (*scanner++);
+    if (second_digit < 0)
+        return -1;
+
+    return (first_digit << 4) | second_digit;
+}
+
+
+// Backported from Glib. The only difference is that it's using gcrypt to allocate a secure buffer.
+gchar *
+g_uri_unescape_string_secure (const gchar *escaped_string,
+                              const gchar *illegal_characters)
+{
+    if (escaped_string == NULL)
+        return NULL;
+
+    const gchar *escaped_string_end = escaped_string + strlen (escaped_string);
+
+    gchar *result = gcry_calloc_secure (escaped_string_end - escaped_string + 1, 1);
+    gchar *out = result;
+
+    const gchar *in;
+    gint character;
+    for (in = escaped_string; in < escaped_string_end; in++) {
+        character = *in;
+
+        if (*in == '%') {
+            in++;
+            if (escaped_string_end - in < 2) {
+                // Invalid escaped char (to short)
+                gcry_free (result);
+                return NULL;
+            }
+
+            character = unescape_character (in);
+
+            // Check for an illegal character. We consider '\0' illegal here.
+            if (character <= 0 ||
+                (illegal_characters != NULL &&
+                 strchr (illegal_characters, (char)character) != NULL)) {
+                gcry_free (result);
+                return NULL;
+            }
+
+            in++; // The other char will be eaten in the loop header
+        }
+        *out++ = (char)character;
+    }
+
+    *out = '\0';
+
+    return result;
+}
+
+
+guchar *
+g_base64_decode_secure (const gchar *text,
+                        gsize       *out_len)
+{
+    guchar *ret;
+    gsize input_length;
+    gint state = 0;
+    guint save = 0;
+
+    g_return_val_if_fail (text != NULL, NULL);
+    g_return_val_if_fail (out_len != NULL, NULL);
+
+    input_length = strlen (text);
+
+    /* We can use a smaller limit here, since we know the saved state is 0,
+       +1 used to avoid calling g_malloc0(0), and hence returning NULL */
+    ret = gcry_calloc_secure ((input_length / 4) * 3 + 1, 1);
+
+    *out_len = g_base64_decode_step (text, input_length, ret, &state, &save);
+
+    return ret;
+}
+
+
+GSList *
+decode_migration_data (const gchar *encoded_uri)
+{
+    const gchar *encoded_uri_copy = encoded_uri;
+    if (g_ascii_strncasecmp (encoded_uri_copy, "otpauth-migration://offline?data=", 33) != 0) {
+        return NULL;
+    }
+    encoded_uri_copy += 33;
+    gsize out_len;
+    gchar *unesc_str = g_uri_unescape_string_secure (encoded_uri_copy, NULL);
+    guchar *data = g_base64_decode_secure (unesc_str, &out_len);
+    gcry_free (unesc_str);
+
+    GSList *uris = NULL;
+    GString *uri = NULL;
+    MigrationPayload *msg = migration_payload__unpack (NULL, out_len, data);
+    gcry_free (data);
+    for (gint i = 0; i < msg->n_otp_parameters; i++) {
+        uri = g_string_new ("otpauth://");
+        if (msg->otp_parameters[i]->type == 1) {
+            g_string_append (uri, "hotp/");
+        } else if (msg->otp_parameters[i]->type == 2) {
+            g_string_append (uri, "totp/");
+        } else {
+            g_printerr ("OTP type not recognized, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        g_string_append (uri, msg->otp_parameters[i]->name);
+        g_string_append (uri, "?");
+
+        if (msg->otp_parameters[i]->algorithm == 1) {
+            g_string_append (uri, "algorithm=SHA1&");
+        } else if (msg->otp_parameters[i]->algorithm == 2) {
+            g_string_append (uri, "algorithm=SHA256&");
+        } else if (msg->otp_parameters[i]->algorithm == 3) {
+            g_string_append (uri, "algorithm=SHA512&");
+        } else {
+            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        if (msg->otp_parameters[i]->digits == 1) {
+            g_string_append (uri, "digits=6&");
+        } else if (msg->otp_parameters[i]->digits == 2) {
+            g_string_append (uri, "digits=8&");
+        } else {
+            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
+            goto end;
+        }
+
+        if (msg->otp_parameters[i]->issuer != NULL) {
+            g_string_append (uri, "issuer=");
+            g_string_append (uri, msg->otp_parameters[i]->issuer);
+            g_string_append (uri, "&");
+        }
+
+        if (msg->otp_parameters[i]->type == 1) {
+            g_string_append (uri, "counter=");
+            g_string_append_printf(uri, "%ld", msg->otp_parameters[i]->counter);
+            g_string_append (uri, "&");
+        }
+
+        baseencode_error_t b_err;
+        gchar *b32_encoded_secret = base32_encode (msg->otp_parameters[i]->secret.data, msg->otp_parameters[i]->secret.len, &b_err);
+        if (b32_encoded_secret == NULL) {
+            g_printerr ("Error while encoding the secret (error code %d)\n", b_err);
+            goto end;
+        }
+
+        g_string_append (uri, "secret=");
+        g_string_append (uri, b32_encoded_secret);
+
+        uris = g_slist_append (uris, g_strdup (uri->str));
+
+        end:
+        g_string_free (uri, TRUE);
+    }
+
+    migration_payload__free_unpacked (msg, NULL);
+
+    return uris;
+}
+
+
+gcry_cipher_hd_t
+open_cipher_and_set_data (guchar *derived_key,
+                          guchar *iv,
+                          gsize   iv_len)
+{
+    gcry_cipher_hd_t hd;
+    gpg_error_t gpg_err = gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, GCRY_CIPHER_SECURE);
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while opening the cipher handle."));
+        return NULL;
+    }
+
+    gpg_err = gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while setting the cipher key."));
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+
+    gpg_err = gcry_cipher_setiv (hd, iv, iv_len);
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while setting the cipher iv."));
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+
+    return hd;
 }

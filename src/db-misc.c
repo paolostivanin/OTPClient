@@ -2,6 +2,7 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <glib/gstdio.h>
+#include <glib/gi18n.h>
 #include "db-misc.h"
 #include "otpclient.h"
 #include "file-size.h"
@@ -166,7 +167,9 @@ update_db (DatabaseData  *db_data,
         } else {
             g_printerr ("Couldn't update the database (encrypt_db failed)\n");
             if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-                g_unlink (db_data->db_path);
+                if (g_unlink (db_data->db_path) == -1) {
+                    g_printerr ("%s\n", _("Error while unlinking the file."));
+                }
             }
         }
     } else {
@@ -193,7 +196,6 @@ encrypt_db (const gchar  *db_path,
             GError      **err)
 {
     GError *local_err = NULL;
-    gcry_cipher_hd_t hd;
     HeaderData *header_data = g_new0 (HeaderData, 1);
 
     gcry_create_nonce (header_data->iv, IV_SIZE);
@@ -224,35 +226,64 @@ encrypt_db (const gchar  *db_path,
     gsize input_data_len = strlen (in_memory_json) + 1;
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-    gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-    gcry_cipher_setiv (hd, header_data->iv, IV_SIZE);
-    gcry_cipher_authenticate (hd, header_data, sizeof (HeaderData));
-    gcry_cipher_encrypt (hd, enc_buffer, input_data_len, in_memory_json, input_data_len);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
+    if (hd == NULL) {
+        gcry_free (derived_key);
+        g_free (header_data);
+        g_free (enc_buffer);
+        return NULL;
+    }
+
+    gpg_error_t gpg_err = gcry_cipher_authenticate (hd, header_data, sizeof (HeaderData));
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while processing the authenticated data."));
+        gcry_free (derived_key);
+        g_free (header_data);
+        g_free (enc_buffer);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
+    gpg_err = gcry_cipher_encrypt (hd, enc_buffer, input_data_len, in_memory_json, input_data_len);
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while encrypting the data."));
+        gcry_free (derived_key);
+        g_free (enc_buffer);
+        g_free (header_data);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
 
     guchar tag[TAG_SIZE];
-    gcry_cipher_gettag (hd, tag, TAG_SIZE); //append tag to outfile
+    gpg_err = gcry_cipher_gettag (hd, tag, TAG_SIZE); //append tag to outfile
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while getting the tag."));
+        gcry_free (derived_key);
+        g_free (enc_buffer);
+        g_free (header_data);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
 
     if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buffer, input_data_len, NULL, &local_err) == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing encrypted buffer to file");
         cleanup (out_file, out_stream, header_data, local_err);
-        gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
+        gcry_cipher_close (hd);
         return GENERIC_ERROR;
     }
     if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, TAG_SIZE, NULL, &local_err) == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing tag data to file");
         cleanup (out_file, out_stream, header_data, local_err);
-        gcry_cipher_close (hd);
         g_free (enc_buffer);
         gcry_free (derived_key);
+        gcry_cipher_close (hd);
         return GENERIC_ERROR;
     }
 
-    gcry_cipher_close (hd);
-    gcry_free (derived_key);
     g_free (enc_buffer);
+    gcry_free (derived_key);
+    gcry_cipher_close (hd);
     cleanup (out_file, out_stream, header_data, NULL);
 
     return NULL;
@@ -264,7 +295,6 @@ decrypt_db (const gchar *db_path,
             const gchar *password)
 {
     GError *err = NULL;
-    gcry_cipher_hd_t hd;
     HeaderData *header_data = g_new0 (HeaderData, 1);
 
     goffset input_file_size = get_file_size (db_path);
@@ -319,19 +349,49 @@ decrypt_db (const gchar *db_path,
         return (gpointer)derived_key;
     }
 
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-    gcry_cipher_setkey (hd, derived_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-    gcry_cipher_setiv (hd, header_data->iv, IV_SIZE);
-    gcry_cipher_authenticate (hd, header_data, sizeof (HeaderData));
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
+    if (hd == NULL) {
+        gcry_free (derived_key);
+        g_free (enc_buf);
+        g_free (header_data);
+        return GENERIC_ERROR;
+    }
 
-    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
-    gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size);
-    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
-        gcry_cipher_close (hd);
+    gpg_error_t gpg_err = gcry_cipher_authenticate (hd, header_data, sizeof (HeaderData));
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while processing the authenticated data."));
         gcry_free (derived_key);
         g_free (header_data);
         g_free (enc_buf);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
+
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
+    if (dec_buf == NULL) {
+        g_printerr ("%s\n", _("Error while allocating secure memory."));
+        gcry_free (derived_key);
+        g_free (header_data);
+        g_free (enc_buf);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
+    gpg_err = gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size);
+    if (gpg_err) {
+        g_printerr ("%s\n", _("Error while decrypting the data."));
+        gcry_free (derived_key);
         gcry_free (dec_buf);
+        g_free (header_data);
+        g_free (enc_buf);
+        gcry_cipher_close (hd);
+        return GENERIC_ERROR;
+    }
+    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        g_free (header_data);
+        g_free (enc_buf);
         return TAG_MISMATCH;
     }
 
@@ -353,14 +413,14 @@ get_derived_key (const gchar    *pwd,
 
     guchar *derived_key = gcry_malloc_secure (key_len);
     if (derived_key == NULL) {
-        g_printerr ("Couldn't allocate secure memory\n");
+        g_printerr ("%s\n", _("Couldn't allocate the needed secure memory."));
         return SECURE_MEMORY_ALLOC_ERR;
     }
 
     gpg_error_t ret = gcry_kdf_derive (pwd, pwd_len, GCRY_KDF_PBKDF2, GCRY_MD_SHA512, header_data->salt, KDF_SALT_SIZE, KDF_ITERATIONS, key_len, derived_key);
     if (ret != 0) {
         gcry_free (derived_key);
-        g_printerr ("Error during key derivation\n");
+        g_printerr ("%s\n", _("Error during key derivation."));
         return KEY_DERIV_ERR;
     }
     return derived_key;
@@ -396,7 +456,7 @@ restore_db (const gchar *path)
         g_printerr ("Couldn't restore the backup file: %s\n", err->message);
         g_clear_error (&err);
     } else {
-        g_print ("Backup copy successfully restored.\n");
+        g_print ("%s\n", _("Backup copy successfully restored."));
     }
     g_object_unref (src);
     g_object_unref (dst);

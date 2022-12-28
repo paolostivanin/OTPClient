@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <glib/gi18n.h>
 #include "data.h"
 #include "message-dialogs.h"
 #include "db-actions.h"
@@ -36,8 +37,6 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
 void
 update_cfg_file (AppData *app_data)
 {
-    GError *cfg_err = NULL;
-    gchar *msg = NULL;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -45,15 +44,20 @@ update_cfg_file (AppData *app_data)
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
-    g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL);
-    g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
-    g_key_file_save_to_file (kf, cfg_file_path, &cfg_err);
-    if (cfg_err != NULL) {
-        msg = g_strconcat ("Couldn't save the change to the config file: ", &cfg_err->message, NULL);
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
-        g_clear_error (&cfg_err);
+    if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
+        g_printerr ("%s\n", _("Error while loading the config file."));
     }
+    g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
+    GError *cfg_err = NULL;
+    if (!g_key_file_save_to_file (kf, cfg_file_path, &cfg_err)) {
+        if (cfg_err != NULL) {
+            gchar *msg = g_strconcat ("Couldn't save the change to the config file: ", &cfg_err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+            g_clear_error (&cfg_err);
+        }
+    }
+
     g_free (cfg_file_path);
     g_key_file_free (kf);
 }

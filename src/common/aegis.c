@@ -90,12 +90,25 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
     guchar *keybuf = gcry_malloc (KEY_SIZE);
-    gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf);
+    if (gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf) != 0) {
+        g_printerr ("Error while deriving the key.\n");
+        g_free (salt);
+        g_free (enc_key);
+        g_free (key_nonce);
+        g_free (key_tag);
+        gcry_free (keybuf);
+        return NULL;
+    }
 
-    gcry_cipher_hd_t hd;
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-    gcry_cipher_setkey (hd, keybuf, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-    gcry_cipher_setiv (hd, key_nonce, NONCE_SIZE);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, NONCE_SIZE);
+    if (hd == NULL) {
+        g_free (salt);
+        g_free (enc_key);
+        g_free (key_nonce);
+        g_free (key_tag);
+        gcry_free (keybuf);
+        return NULL;
+    }
 
     guchar *master_key = gcry_calloc_secure (KEY_SIZE, 1);
     if (gcry_cipher_decrypt (hd, master_key, KEY_SIZE, enc_key, KEY_SIZE) != 0) {
@@ -104,8 +117,9 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (enc_key);
         g_free (key_nonce);
         g_free (key_tag);
-        gcry_cipher_close (hd);
         gcry_free (master_key);
+        gcry_free (keybuf);
+        gcry_cipher_close (hd);
         return NULL;
     }
     gpg_error_t gpg_err = gcry_cipher_checktag(hd, key_tag, TAG_SIZE);
@@ -115,8 +129,9 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (enc_key);
         g_free (key_nonce);
         g_free (key_tag);
-        gcry_cipher_close (hd);
         gcry_free (master_key);
+        gcry_free (keybuf);
+        gcry_cipher_close (hd);
         return NULL;
     }
 
@@ -124,37 +139,55 @@ get_otps_from_encrypted_backup (const gchar          *path,
     g_free (enc_key);
     g_free (key_nonce);
     g_free (key_tag);
+    gcry_free (keybuf);
     gcry_cipher_close (hd);
 
     guchar *nonce = hexstr_to_bytes (json_string_value (json_object_get (dbp, "nonce")));
     guchar *tag = hexstr_to_bytes (json_string_value (json_object_get (dbp, "tag")));
-    gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-    gcry_cipher_setkey (hd, master_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-    gcry_cipher_setiv (hd, nonce, 12);
-    gsize out_len;
-    guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get(json, "db")), &out_len);
-    if (out_len > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
-        gcry_cipher_close (hd);
+
+    hd = open_cipher_and_set_data (master_key, nonce, 12);
+    if (hd == NULL) {
+        g_free (tag);
+        g_free (nonce);
         gcry_free (master_key);
-        return NULL;
-    }
-    gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
-    gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
-    gpg_err = gcry_cipher_checktag(hd, tag, TAG_SIZE);
-    if (gpg_err != 0) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
-        gcry_cipher_close (hd);
-        gcry_free (master_key);
-        g_free (decrypted_db);
         return NULL;
     }
 
-    g_free (b64decoded_db);
+    gsize out_len;
+    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get(json, "db")), &out_len);
+    if (out_len > max_file_size) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
+        g_free (tag);
+        g_free (nonce);
+        gcry_free (master_key);
+        gcry_free (b64decoded_db);
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+
+    gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
+    gpg_err = gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
+    if (gpg_err) {
+        goto clean_and_exit;
+    }
+    gpg_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    if (gpg_err != 0) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
+        clean_and_exit:
+        g_free (nonce);
+        g_free (tag);
+        gcry_free (master_key);
+        gcry_free (decrypted_db);
+        gcry_free (b64decoded_db);
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+
     g_free (nonce);
     g_free (tag);
     gcry_cipher_close (hd);
     gcry_free (master_key);
+    gcry_free (b64decoded_db);
 
     GSList *otps = parse_json_data (decrypted_db, err);
     gcry_free (decrypted_db);
@@ -173,7 +206,7 @@ export_aegis (const gchar   *export_path,
     json_object_set (root, "version", json_integer(1));
 
     gcry_cipher_hd_t hd;
-    guchar *derived_master_key, *enc_master_key, *key_nonce, *key_tag, *db_nonce, *db_tag, *salt;
+    guchar *derived_master_key = NULL, *enc_master_key = NULL, *key_nonce = NULL, *key_tag = NULL, *db_nonce = NULL, *db_tag = NULL, *salt = NULL;
     json_t *aegis_header_obj = json_object ();
     if (password == NULL) {
         json_object_set (aegis_header_obj, "slots", json_null ());
@@ -198,18 +231,32 @@ export_aegis (const gchar   *export_path,
         gcry_create_nonce (key_nonce, NONCE_SIZE);
 
         derived_master_key = gcry_calloc_secure(KEY_SIZE, 1);
-        gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
-        gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-        gcry_cipher_setkey (hd, derived_master_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-        gcry_cipher_setiv (hd, key_nonce, NONCE_SIZE);
+        gpg_error_t gpg_err = gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
+        if (gpg_err) {
+            g_printerr ("Error while deriving the key\n");
+            gcry_free (derived_master_key);
+            return NULL;
+        }
+
+        hd = open_cipher_and_set_data (derived_master_key, key_nonce, NONCE_SIZE);
+        if (hd == NULL) {
+            gcry_free (derived_master_key);
+            g_free (key_nonce);
+            g_free (salt);
+            return NULL;
+        }
+
         enc_master_key = gcry_malloc (KEY_SIZE);
         if (gcry_cipher_encrypt (hd, enc_master_key, KEY_SIZE, derived_master_key, KEY_SIZE)) {
             g_printerr ("Error while encrypting the master key.\n");
             gcry_free (derived_master_key);
             gcry_free (enc_master_key);
+            g_free (key_nonce);
+            g_free (salt);
             gcry_cipher_close (hd);
             return NULL;
         }
+
         key_tag = g_malloc0 (TAG_SIZE);
         gcry_cipher_gettag (hd, key_tag, TAG_SIZE);
         json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, KEY_SIZE)));
@@ -282,9 +329,10 @@ export_aegis (const gchar   *export_path,
     }
 
     if (password != NULL) {
-        gcry_cipher_open (&hd, GCRY_CIPHER_AES256, GCRY_CIPHER_MODE_GCM, 0);
-        gcry_cipher_setkey (hd, derived_master_key, gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256));
-        gcry_cipher_setiv (hd, db_nonce, NONCE_SIZE);
+        hd = open_cipher_and_set_data (derived_master_key, db_nonce, NONCE_SIZE);
+        if (hd == NULL) {
+            goto clean_and_return;
+        }
         size_t db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
         guchar *enc_db = g_malloc0 (db_size);
         gchar *dumped_db = g_malloc0 (db_size);
@@ -292,7 +340,9 @@ export_aegis (const gchar   *export_path,
         if (gcry_cipher_encrypt (hd, enc_db, db_size, dumped_db, db_size)) {
             g_printerr ("Error while encrypting the db.\n");
             g_free (enc_db);
-            gcry_free (dumped_db);
+            g_free (dumped_db);
+            gcry_cipher_close (hd);
+            clean_and_return:
             g_free (key_nonce);
             g_free (key_tag);
             g_free (db_nonce);
@@ -305,7 +355,7 @@ export_aegis (const gchar   *export_path,
         gcry_cipher_gettag (hd, db_tag, TAG_SIZE);
         json_t *db_params = json_object_get (aegis_header_obj, "params");
         json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, TAG_SIZE)));
-        gcry_free (dumped_db);
+        g_free (dumped_db);
         gchar *b64enc_db = g_base64_encode (enc_db, db_size);
         json_object_set (root, "db", json_string (b64enc_db));
 
@@ -318,6 +368,7 @@ export_aegis (const gchar   *export_path,
         g_free (salt);
         gcry_free (derived_master_key);
         gcry_free (enc_master_key);
+        gcry_cipher_close (hd);
     }
 
     FILE *fp = fopen (export_path, "w");

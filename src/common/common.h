@@ -2,6 +2,7 @@
 
 #include <glib.h>
 #include <jansson.h>
+#include <gcrypt.h>
 
 G_BEGIN_DECLS
 
@@ -37,5 +38,15 @@ guint       g_string_replace_backported     (GString        *string,
                                              const gchar    *find,
                                              const gchar    *replace,
                                              guint           limit);
+
+gchar      *g_uri_unescape_string_secure    (const gchar    *escaped_string,
+                                             const gchar    *illegal_characters);
+
+guchar     *g_base64_decode_secure          (const gchar    *text,
+                                             gsize          *out_len);
+
+gcry_cipher_hd_t open_cipher_and_set_data   (guchar         *derived_key,
+                                             guchar         *iv,
+                                             gsize           iv_len);
 
 G_END_DECLS

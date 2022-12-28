@@ -2,6 +2,7 @@
 #include <zbar.h>
 #include <png.h>
 #include <glib/gstdio.h>
+#include <gcrypt.h>
 #include "common/common.h"
 
 typedef struct image_data_t {
@@ -46,7 +47,9 @@ parse_qrcode (const gchar    *png_path,
 
     const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
     for (; symbol; symbol = zbar_symbol_next (symbol)) {
-        *otpauth_uri = secure_strdup (g_uri_unescape_string (zbar_symbol_get_data (symbol), NULL));
+        gchar *unesc_str = g_uri_unescape_string_secure (zbar_symbol_get_data (symbol), NULL);
+        *otpauth_uri = secure_strdup (unesc_str);
+        gcry_free (unesc_str);
     }
 
     zbar_image_destroy (image);

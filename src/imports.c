@@ -120,6 +120,12 @@ parse_data_and_update_db (AppData       *app_data,
         }
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg_with_err);
+        if (err != NULL){
+            g_clear_error (&err);
+        }
+        if (pwd != NULL) {
+            gcry_free (pwd);
+        }
         return FALSE;
     }
 
@@ -127,6 +133,9 @@ parse_data_and_update_db (AppData       *app_data,
     if (err_msg != NULL) {
         show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);
+        if (pwd != NULL) {
+            gcry_free (pwd);
+        }
         return FALSE;
     }
 

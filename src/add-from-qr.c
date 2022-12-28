@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <glib/gstdio.h>
+#include <glib/gi18n.h>
 #include "imports.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
@@ -169,7 +170,9 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
             gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb_uri.png", NULL);
             gdk_pixbuf_save (pbuf, filename, "png", &err, NULL);
             parse_file_and_update_db (filename, app_data, FALSE);
-            g_unlink (filename);
+            if (g_unlink (filename) == -1) {
+                g_printerr ("%s\n", _("Couldn't unlink the temp pixbuf."));
+            }
             g_free (filename);
             g_object_unref (pbuf);
         }
@@ -196,7 +199,9 @@ image_received_func (GtkClipboard  *clipboard __attribute__((unused)),
         } else {
             parse_file_and_update_db (filename, app_data, FALSE);
         }
-        g_unlink (filename);
+        if (g_unlink (filename) == -1) {
+            g_printerr ("%s\n", _("Error while unlinking the temp png."));
+        }
         g_free (filename);
     } else {
         show_message_dialog (app_data->main_window, "Couldn't get QR code image from clipboard", GTK_MESSAGE_ERROR);

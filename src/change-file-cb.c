@@ -1,5 +1,7 @@
 #include <gtk/gtk.h>
+#include <glib/gi18n.h>
 #include "db-misc.h"
+#include "message-dialogs.h"
 
 gboolean
 change_file (AppData *app_data)
@@ -40,7 +42,13 @@ change_file (AppData *app_data)
                 cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
                 g_key_file_set_string (kf, "config", "db_path", db_path);
-                g_key_file_save_to_file (kf, cfg_file_path, NULL);
+                GError *err = NULL;
+                if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+                    gchar *err_msg = g_strconcat (_("Couldn't save the config file: "), err->message, NULL);
+                    show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+                    g_free (err_msg);
+                    g_clear_error (&err);
+                }
                 g_free (app_data->db_data->db_path);
                 app_data->db_data->db_path = g_strdup (db_path);
                 g_free (db_path);

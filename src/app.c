@@ -356,6 +356,7 @@ get_kf_ptr (void)
             return kf;
         }
         g_printerr ("%s\n", err->message);
+        g_clear_error (&err);
     }
     g_free (cfg_file_path);
     g_key_file_free (kf);
@@ -419,6 +420,7 @@ set_warn_data (gboolean show_warning)
 #endif
         if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
             g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
         }
         g_free (cfg_file_path);
         g_key_file_free (kf);
@@ -492,9 +494,9 @@ on_bar_response (GtkInfoBar *ib,
 #else
         cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #endif
-        g_key_file_save_to_file (kf, cfg_file_path, &err);
-        if (err != NULL) {
+        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
             g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
         }
         g_free (cfg_file_path);
     }
@@ -568,9 +570,10 @@ get_db_path (AppData *app_data)
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             g_key_file_free (kf);
+            g_clear_error (&err);
             return NULL;
         }
-        db_path = g_key_file_get_string (kf, "config", "db_path", &err);
+        db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
         if (db_path == NULL) {
             goto new_db;
         }
@@ -601,9 +604,9 @@ get_db_path (AppData *app_data)
     if (res == GTK_RESPONSE_ACCEPT) {
         db_path = gtk_file_chooser_get_filename (chooser);
         g_key_file_set_string (kf, "config", "db_path", db_path);
-        g_key_file_save_to_file (kf, cfg_file_path, &err);
-        if (err != NULL) {
+        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
             g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
         }
     }
 
@@ -764,11 +767,13 @@ store_data (const gchar *param1_name,
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
         } else {
             g_key_file_set_integer (kf, "config", param1_name, param1_value);
             g_key_file_set_integer (kf, "config", param2_name, param2_value);
             if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
                 g_printerr ("%s\n", err->message);
+                g_clear_error (&err);
             }
         }
     }

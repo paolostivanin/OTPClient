@@ -74,7 +74,7 @@ get_otpauth_uri (AppData *app_data,
     gchar *escaped_label = g_uri_escape_string (constructed_label, NULL, FALSE);
     g_string_append (uri, escaped_label);
     g_string_append (uri, "?secret=");
-    g_string_append (uri,json_string_value (json_object_get (db_obj, "secret")));
+    g_string_append (uri, json_string_value (json_object_get (db_obj, "secret")));
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "&issuer=Steam");
     }
@@ -83,27 +83,32 @@ get_otpauth_uri (AppData *app_data,
         g_string_append (uri, json_string_value (json_object_get (db_obj, "issuer")));
     }
 
+    gchar *str_to_append = NULL;
     g_string_append (uri, "&digits=");
-    g_string_append (uri,g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits"))));
+    str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "digits")));
+    g_string_append (uri,str_to_append);
+    g_free (str_to_append);
     g_string_append (uri, "&algorithm=");
     g_string_append (uri, json_string_value ( json_object_get (db_obj, "algo")));
 
     if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
         g_string_append (uri, "&period=");
-        g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "period"))));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "period")));
+        g_string_append (uri, str_to_append);
+        g_free (str_to_append);
     } else {
         g_string_append (uri, "&counter=");
-        g_string_append (uri, g_strdup_printf ("%lld",json_integer_value ( json_object_get (db_obj, "counter"))));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (db_obj, "counter")));
+        g_string_append (uri, str_to_append);
+        g_free (str_to_append);
     }
 
     g_string_append (uri, "\n");
-    gchar *ret_uri = g_strdup (uri->str);
 
     g_free (constructed_label);
     g_free (escaped_label);
-    g_string_free (uri, TRUE);
 
-    return ret_uri;
+    return g_string_free (uri, FALSE);
 }
 
 

@@ -27,6 +27,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW(app_data->main_window));
             destroy_cb (app_data->main_window, app_data);
             g_application_quit (G_APPLICATION(app));
+            return;
         }
         show_message_dialog (app_data->main_window, "Password successfully changed", GTK_MESSAGE_INFO);
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
