@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <glib/gi18n.h>
 #include "otpclient.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
@@ -24,6 +25,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
         g_free (msg);
         g_free (cfg_file_path);
         g_key_file_free (kf);
+        g_clear_error (&err);
         return;
     }
 
@@ -79,7 +81,9 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
             g_key_file_set_boolean (kf, "config", "disable_secret_service", app_data->disable_secret_service);
-            g_key_file_save_to_file (kf, cfg_file_path, NULL);
+            if (!g_key_file_save_to_file (kf, cfg_file_path, NULL)) {
+                g_printerr ("%s\n", _("Error while saving the config file."));
+            }
             gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
             break;
         case GTK_RESPONSE_CANCEL:

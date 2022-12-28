@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <jansson.h>
+#include <gcrypt.h>
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "common/exports.h"
@@ -54,6 +55,9 @@ export_data_cb (GSimpleAction *simple,
     }
     g_free (ret_msg);
     g_free (exported_file_path);
+    if (encrypted == TRUE) {
+        gcry_free (password);
+    }
 }
 
 

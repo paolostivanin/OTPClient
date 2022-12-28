@@ -2,6 +2,7 @@
 #include <png.h>
 #include <qrencode.h>
 #include <glib/gstdio.h>
+#include <glib/gi18n.h>
 #include "data.h"
 #include "parse-uri.h"
 #include "get-builder.h"
@@ -45,7 +46,9 @@ show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
         gtk_widget_destroy (diag);
         g_object_unref (pbuf);
         g_object_unref (builder);
-        g_unlink (PNG_OUT);
+        if (g_unlink (PNG_OUT) == -1) {
+            g_printerr ("%s\n", _("Couldn't unlink the PNG file."));
+        }
     }
 }
 
@@ -62,40 +65,37 @@ static int
 write_png (const QRcode *qrcode)
 {
     guint realwidth = (qrcode->width + MARGIN * 2) * SIZE;
-    guchar *row = (guchar *)malloc ((size_t)((realwidth + 7) / 8));
+    guchar *row = (guchar *)g_malloc0 ((size_t)((realwidth + 7) / 8));
     if (row == NULL) {
         g_printerr ("Failed to allocate memory.\n");
-        return -1;
-    }
-
-    FILE *fp = fopen (PNG_OUT, "wb");
-    if (fp == NULL) {
-        g_printerr ("Failed to create file: %s\n", PNG_OUT);
-        perror(NULL);
         return -1;
     }
 
     png_structp png_ptr = png_create_write_struct (PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (png_ptr == NULL) {
         g_printerr ("Failed to initialize PNG writer.\n");
+        g_free (row);
         return -1;
     }
 
     png_infop info_ptr = png_create_info_struct (png_ptr);
     if (info_ptr == NULL) {
         g_printerr ("Failed to initialize PNG write.\n");
+        g_free (row);
         return -1;
     }
 
     if (setjmp (png_jmpbuf(png_ptr))) {
         png_destroy_write_struct (&png_ptr, &info_ptr);
         g_printerr ("Failed to write PNG image.\n");
+        g_free (row);
         return -1;
     }
 
-    png_colorp palette = (png_colorp)malloc(sizeof (png_color) * 2);
+    png_colorp palette = (png_colorp)g_malloc0 (sizeof (png_color) * 2);
     if (palette == NULL) {
         g_printerr ("Failed to allocate memory.\n");
+        g_free (row);
         return -1;
     }
 
@@ -114,6 +114,12 @@ write_png (const QRcode *qrcode)
     png_set_PLTE(png_ptr, info_ptr, palette, 2);
     png_set_tRNS(png_ptr, info_ptr, alpha_values, 2, NULL);
 
+    FILE *fp = fopen (PNG_OUT, "wb");
+    if (fp == NULL) {
+        g_printerr ("Failed to create file: %s\n", PNG_OUT);
+        g_free (row);
+        return -1;
+    }
     png_init_io (png_ptr, fp);
     png_set_IHDR (png_ptr, info_ptr,
                  (guint)realwidth, (guint)realwidth,

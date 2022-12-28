@@ -111,7 +111,9 @@ scan_qrcode (zbar_image_t   *image,
     ConfigData *cfg_data = (ConfigData *)user_data;
     const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
     for (; symbol; symbol = zbar_symbol_next (symbol)) {
-        cfg_data->otp_uri = secure_strdup (g_uri_unescape_string (zbar_symbol_get_data (symbol), NULL));
+        gchar *unesc_str = g_uri_unescape_string_secure (zbar_symbol_get_data (symbol), NULL);
+        cfg_data->otp_uri = secure_strdup (unesc_str);
         cfg_data->qrcode_found = TRUE;
+        gcry_free (unesc_str);
     }
 }

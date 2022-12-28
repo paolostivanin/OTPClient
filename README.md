@@ -2,6 +2,10 @@
 <a href="https://circleci.com/gh/paolostivanin/OTPClient">
   <img alt="CircleCI" src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
 </a>
+<a href="https://scan.coverity.com/projects/paolostivanin-otpclient">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/12749/badge.svg"/>
+</a>
 
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
@@ -42,7 +46,7 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
 
 ## Testing
-* Before each release, I run PVS Studio in order to catch even more errors and/or corner cases
+* Before each release, I run PVS Studio and Coverity in order to catch even more bugs.
 * With every commit to master, OTPClient is compiled in CircleCI against different distros
 
 ## Protobuf

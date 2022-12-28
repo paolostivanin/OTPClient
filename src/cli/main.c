@@ -206,9 +206,10 @@ get_db_path (void)
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             g_printerr ("%s\n", err->message);
             g_key_file_free (kf);
+            g_clear_error (&err);
             return NULL;
         }
-        db_path = g_key_file_get_string (kf, "config", "db_path", &err);
+        db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
         if (db_path == NULL) {
             goto type_db_path;
         }
@@ -226,6 +227,7 @@ get_db_path (void)
     if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
         g_printerr ("%s\n", _("Couldn't get db path from stdin"));
         g_free (cfg_file_path);
+        g_free (db_path);
         return NULL;
     } else {
         // remove the newline char
@@ -233,6 +235,7 @@ get_db_path (void)
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
             g_printerr (_("File '%s' does not exist\n"), db_path);
             g_free (cfg_file_path);
+            g_free (db_path);
             return NULL;
         }
     }
@@ -291,6 +294,7 @@ is_secretservice_disable (void)
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             g_printerr ("%s\n", err->message);
             g_key_file_free (kf);
+            g_clear_error (&err);
             return FALSE;
         }
         disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);

@@ -11,9 +11,15 @@ get_freeotpplus_data (const gchar     *path,
                       GError         **err)
 {
     GSList *otps = NULL;
-    gchar *sec_buf = gcry_calloc_secure (get_file_size (path), 1);
+    goffset fs = get_file_size (path);
+    if (fs < 10) {
+        g_printerr ("Couldn't get the file size (file doesn't exit or wrong file selected\n");
+        return NULL;
+    }
+    gchar *sec_buf = gcry_calloc_secure (fs, 1);
     if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
         g_printerr("Couldn't read into memory the freeotp txt file\n");
+        gcry_free (sec_buf);
         return NULL;
     }
 

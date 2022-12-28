@@ -47,6 +47,7 @@ check_params (GSList *otps)
         if (otp->period < 10 || otp->period > 120) {
             gchar *msg = g_strconcat("[INFO]: invalid period for '", otp->account_name, "'. Defaulting back to 30 seconds.", NULL);
             g_printerr ("%s\n", msg);
+            g_free (msg);
             otp->period = 30;
         }
     }

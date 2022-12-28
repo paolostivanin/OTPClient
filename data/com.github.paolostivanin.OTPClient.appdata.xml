@@ -83,6 +83,16 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="3.1.1" date="2022-12-29">
+      <description>
+        <p>OTPClient 3.1.1 brings lots of small under-the-hood changes:</p>
+        <ul>
+          <li>Fixed some memory leaks</li>
+          <li>Improved error handling</li>
+          <li>Use secure functions instead of standard ones</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.0" date="2022-12-19">
       <description>
         <p>OTPClient 3.1.0 the following feature and fixes:</p>
