@@ -61,10 +61,9 @@ If OTPClient hasn't been packaged for your distro ([check here](https://github.c
 ```
 git clone https://github.com/paolostivanin/OTPClient.git
 cd OTPClient
-mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make
-sudo make install
+meson --prefix /usr --buildtype=plain builddir
+meson compile -C builddir
+sudo meson install -C builddir
 ```
 
 ## License

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/com/github/paolostivanin/OTPClient/">
+    <file compressed="true" preprocess="xml-stripblanks" alias="preferences.ui">resources/ui/.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="preferences.ui">resources/ui/.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="preferences.ui">resources/ui/.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="preferences.ui">resources/ui/.ui</file>
+    <file compressed="true" preprocess="xml-stripblanks">icons/com.github.paolostivanin.OTPClient.svg</file>
+    <file compressed="true" preprocess="xml-stripblanks">icons/com.github.paolostivanin.OTPClient-symbolic.svg</file>
+  </gresource>
+</gresources>

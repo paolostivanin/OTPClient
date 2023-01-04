@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2019 Paolo Stivanin <info@paolostivanin.com> -->
 <component type="desktop-application">
-  <id type="desktop">com.github.paolostivanin.OTPClient.desktop</id>
+  <id type="desktop">@app-id@</id>
   <metadata_license>CC-BY-4.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <name>OTPClient</name>
@@ -21,7 +21,7 @@ It's also possible to import/export backups from/to andOTP and import backups fr
     </p>
   </description>
 
-  <launchable type="desktop-id">com.github.paolostivanin.OTPClient.desktop</launchable>
+  <launchable type="desktop-id">@app-id@</launchable>
 
   <screenshots>
     <screenshot type="default">

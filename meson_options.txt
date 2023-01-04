@@ -1,0 +1,4 @@
+option ('is_flatpak', type: 'boolean', value: 'false')
+option ('build_gui', type: 'boolean', value: 'true')
+option ('build_cli', type: 'boolean', value: 'true')
+
