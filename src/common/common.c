@@ -1,7 +1,9 @@
 #include <glib.h>
 #include <sys/resource.h>
 #include <cotp.h>
+#ifdef COTP_OLD_LIB
 #include <baseencode.h>
+#endif
 #include <glib/gi18n.h>
 #include "gcrypt.h"
 #include "jansson.h"
@@ -368,7 +370,11 @@ decode_migration_data (const gchar *encoded_uri)
             g_string_append (uri, "&");
         }
 
+#ifdef COTP_OLD_LIB
         baseencode_error_t b_err;
+#else
+        cotp_error_t b_err;
+#endif
         gchar *b32_encoded_secret = base32_encode (msg->otp_parameters[i]->secret.data, msg->otp_parameters[i]->secret.len, &b_err);
         if (b32_encoded_secret == NULL) {
             g_printerr ("Error while encoding the secret (error code %d)\n", b_err);
