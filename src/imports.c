@@ -118,7 +118,7 @@ parse_data_and_update_db (AppData       *app_data,
         if (err != NULL) {
             msg_with_err = g_strconcat (msg, " The error is:\n", err->message, NULL);
         }
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        show_message_dialog (app_data->main_window, err == NULL ? msg : msg_with_err, GTK_MESSAGE_ERROR);
         g_free (msg_with_err);
         if (err != NULL){
             g_clear_error (&err);

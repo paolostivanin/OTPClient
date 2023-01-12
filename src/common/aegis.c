@@ -90,7 +90,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
     guchar *keybuf = gcry_malloc (KEY_SIZE);
-    if (gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf) != 0) {
+    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
         g_free (salt);
         g_free (enc_key);
@@ -122,7 +122,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_cipher_close (hd);
         return NULL;
     }
-    gpg_error_t gpg_err = gcry_cipher_checktag(hd, key_tag, TAG_SIZE);
+    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (master key). Either the password is wrong or the file is corrupted.");
         g_free (salt);
@@ -231,7 +231,7 @@ export_aegis (const gchar   *export_path,
         gcry_create_nonce (key_nonce, NONCE_SIZE);
 
         derived_master_key = gcry_calloc_secure(KEY_SIZE, 1);
-        gpg_error_t gpg_err = gcry_kdf_derive (password, strlen (password) + 1, GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
+        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);
