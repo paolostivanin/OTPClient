@@ -103,7 +103,7 @@ prompt_for_password (AppData        *app_data,
     gchar *pwd = NULL;
     if (entry_widgets->pwd != NULL) {
         gcry_free (current_key);
-        gsize len = strlen (entry_widgets->pwd) + 1;
+        gsize len = g_utf8_strlen (entry_widgets->pwd, -1) + 1;
         pwd = gcry_calloc_secure (len, 1);
         strncpy (pwd, entry_widgets->pwd, len);
         gcry_free (entry_widgets->pwd);
@@ -152,7 +152,7 @@ password_cb (GtkWidget  *entry,
              gpointer   *pwd)
 {
     const gchar *text = gtk_entry_get_text (GTK_ENTRY(entry));
-    gsize len = strlen (text) + 1;
+    gsize len = g_utf8_strlen (text, -1) + 1;
     *pwd = gcry_calloc_secure (len, 1);
     strncpy (*pwd, text, len);
     GtkWidget *top_level = gtk_widget_get_toplevel (entry);

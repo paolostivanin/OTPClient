@@ -93,7 +93,7 @@ json_object_get_hash (json_t *obj)
     json_object_foreach (obj, key, value) {
         if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
-            g_snprintf (tmp_string + strlen (tmp_string), 256, "%ld", (gint64) v);
+            g_snprintf (tmp_string + g_utf8_strlen (tmp_string, -1), 256, "%ld", (gint64) v);
         } else {
             if (g_strlcat (tmp_string, json_string_value (value), 256) > 256) {
                 g_printerr ("%s\n", _("Truncation occurred."));
@@ -101,7 +101,7 @@ json_object_get_hash (json_t *obj)
         }
     }
 
-    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, g_utf8_strlen (tmp_string, -1) + 1);
 
     gcry_free (tmp_string);
 
@@ -111,8 +111,8 @@ json_object_get_hash (json_t *obj)
 gchar *
 secure_strdup (const gchar *src)
 {
-    gchar *sec_buf = gcry_calloc_secure (strlen (src) + 1, 1);
-    memcpy (sec_buf, src, strlen (src) + 1);
+    gchar *sec_buf = gcry_calloc_secure (g_utf8_strlen (src, -1) + 1, 1);
+    memcpy (sec_buf, src, g_utf8_strlen (src, -1) + 1);
 
     return sec_buf;
 }
@@ -124,7 +124,7 @@ g_trim_whitespace (const gchar *str)
     if (g_utf8_strlen (str, -1) == 0) {
         return NULL;
     }
-    gchar *sec_buf = gcry_calloc_secure (strlen (str) + 1, 1);
+    gchar *sec_buf = gcry_calloc_secure (g_utf8_strlen (str, -1) + 1, 1);
     int pos = 0;
     for (int i = 0; str[i]; i++) {
         if (str[i] != ' ') {
@@ -141,9 +141,9 @@ g_trim_whitespace (const gchar *str)
 guchar *
 hexstr_to_bytes (const gchar *hexstr)
 {
-    size_t len = strlen (hexstr);
+    size_t len = g_utf8_strlen (hexstr, -1);
     size_t final_len = len / 2;
-    guchar *chrs = (guchar *)g_malloc((final_len+1) * sizeof(*chrs));
+    guchar *chrs = (guchar *)g_malloc ((final_len+1) * sizeof(*chrs));
     for (size_t i = 0, j = 0; j < final_len; i += 2, j++)
         chrs[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
     chrs[final_len] = '\0';
@@ -189,8 +189,8 @@ g_string_replace_backported (GString     *string,
     g_return_val_if_fail (find != NULL, 0);
     g_return_val_if_fail (replace != NULL, 0);
 
-    f_len = strlen (find);
-    r_len = strlen (replace);
+    f_len = g_utf8_strlen (find, -1);
+    r_len = g_utf8_strlen (replace, -1);
     cur = string->str;
 
     while ((next = strstr (cur, find)) != NULL)
@@ -244,7 +244,7 @@ g_uri_unescape_string_secure (const gchar *escaped_string,
     if (escaped_string == NULL)
         return NULL;
 
-    const gchar *escaped_string_end = escaped_string + strlen (escaped_string);
+    const gchar *escaped_string_end = escaped_string + g_utf8_strlen (escaped_string, -1);
 
     gchar *result = gcry_calloc_secure (escaped_string_end - escaped_string + 1, 1);
     gchar *out = result;
@@ -295,7 +295,7 @@ g_base64_decode_secure (const gchar *text,
     g_return_val_if_fail (text != NULL, NULL);
     g_return_val_if_fail (out_len != NULL, NULL);
 
-    input_length = strlen (text);
+    input_length = g_utf8_strlen (text, -1);
 
     /* We can use a smaller limit here, since we know the saved state is 0,
        +1 used to avoid calling g_malloc0(0), and hence returning NULL */
