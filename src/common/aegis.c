@@ -122,7 +122,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_cipher_close (hd);
         return NULL;
     }
-    gpg_error_t gpg_err = gcry_cipher_checktag(hd, key_tag, TAG_SIZE);
+    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (master key). Either the password is wrong or the file is corrupted.");
         g_free (salt);
