@@ -699,9 +699,6 @@ destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     AppData *app_data = (AppData *)user_data;
-    if (app_data->disable_secret_service == TRUE) {
-        secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL, NULL);
-    }
     save_sort_order (app_data->tree_view);
     g_source_remove (app_data->source_id);
     g_source_remove (app_data->source_id_last_activity);
