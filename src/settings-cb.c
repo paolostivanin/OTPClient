@@ -1,8 +1,10 @@
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
+#include <libsecret/secret.h>
 #include "otpclient.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
+#include "secret-schema.h"
 
 void
 settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
@@ -65,6 +67,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 
     gtk_widget_show_all (dialog);
 
+    gboolean old_ss_value = app_data->disable_secret_service;
     switch (gtk_dialog_run (GTK_DIALOG(dialog))) {
         case GTK_RESPONSE_OK:
             app_data->show_next_otp = gtk_switch_get_active (GTK_SWITCH(sno_switch));
@@ -81,6 +84,10 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
             g_key_file_set_boolean (kf, "config", "disable_secret_service", app_data->disable_secret_service);
+            if (old_ss_value == FALSE && app_data->disable_secret_service == TRUE) {
+                // secret service was just disabled, so we have to clear the password from the keyring
+                secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
+            }
             if (!g_key_file_save_to_file (kf, cfg_file_path, NULL)) {
                 g_printerr ("%s\n", _("Error while saving the config file."));
             }
