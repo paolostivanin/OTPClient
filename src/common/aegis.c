@@ -46,15 +46,14 @@ static GSList *
 get_otps_from_plain_backup (const gchar  *path,
                             GError      **err)
 {
-    gchar *plain_json_data;
-    gsize read_len;
-    if (!g_file_get_contents (path, &plain_json_data, &read_len, err)) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while getting file's content.");
+    json_error_t j_err;
+    json_t *json = json_load_file (path, 0, &j_err);
+    if (!json) {
+        g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
     }
 
-    GSList *otps = parse_json_data (plain_json_data, err);
-    g_free (plain_json_data);
+    GSList *otps = parse_json_data (json_string_value (json_object_get (json, "db")), err);
 
     return otps;
 }
@@ -67,17 +66,17 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 GError              **err)
 {
     json_error_t j_err;
-    json_t *json = json_load_file(path, 0, &j_err);
+    json_t *json = json_load_file (path, 0, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
     }
 
-    json_t *arr = json_object_get(json_object_get(json, "header"), "slots");
+    json_t *arr = json_object_get (json_object_get(json, "header"), "slots");
     gint index = 0;
     for (; index < json_array_size(arr); index++) {
-        json_t *j_type = json_object_get(json_array_get(arr, index), "type");
-        json_int_t int_type = json_integer_value(j_type);
+        json_t *j_type = json_object_get (json_array_get(arr, index), "type");
+        json_int_t int_type = json_integer_value (j_type);
         if (int_type == 1) break;
     }
     json_t *wanted_obj = json_array_get (arr, index);
@@ -400,6 +399,7 @@ parse_json_data (const gchar *data,
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
     }
+
     json_t *array = json_object_get(root, "entries");
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
