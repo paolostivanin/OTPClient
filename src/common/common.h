@@ -49,4 +49,6 @@ gcry_cipher_hd_t open_cipher_and_set_data   (guchar         *derived_key,
                                              guchar         *iv,
                                              gsize           iv_len);
 
+GKeyFile   *get_kf_ptr                      (void);
+
 G_END_DECLS

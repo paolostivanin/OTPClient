@@ -46,15 +46,14 @@ static GSList *
 get_otps_from_plain_backup (const gchar  *path,
                             GError      **err)
 {
-    gchar *plain_json_data;
-    gsize read_len;
-    if (!g_file_get_contents (path, &plain_json_data, &read_len, err)) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while getting file's content.");
+    json_error_t j_err;
+    json_t *json = json_load_file (path, 0, &j_err);
+    if (!json) {
+        g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
     }
 
-    GSList *otps = parse_json_data (plain_json_data, err);
-    g_free (plain_json_data);
+    GSList *otps = parse_json_data (json_string_value (json_object_get (json, "db")), err);
 
     return otps;
 }
@@ -67,17 +66,17 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 GError              **err)
 {
     json_error_t j_err;
-    json_t *json = json_load_file(path, 0, &j_err);
+    json_t *json = json_load_file (path, 0, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
     }
 
-    json_t *arr = json_object_get(json_object_get(json, "header"), "slots");
+    json_t *arr = json_object_get (json_object_get(json, "header"), "slots");
     gint index = 0;
     for (; index < json_array_size(arr); index++) {
-        json_t *j_type = json_object_get(json_array_get(arr, index), "type");
-        json_int_t int_type = json_integer_value(j_type);
+        json_t *j_type = json_object_get (json_array_get(arr, index), "type");
+        json_int_t int_type = json_integer_value (j_type);
         if (int_type == 1) break;
     }
     json_t *wanted_obj = json_array_get (arr, index);
@@ -154,7 +153,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     gsize out_len;
-    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get(json, "db")), &out_len);
+    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get (json, "db")), &out_len);
     if (out_len > max_file_size) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
         g_free (tag);
@@ -203,7 +202,7 @@ export_aegis (const gchar   *export_path,
 {
     GError *err = NULL;
     json_t *root = json_object ();
-    json_object_set (root, "version", json_integer(1));
+    json_object_set (root, "version", json_integer (1));
 
     gcry_cipher_hd_t hd;
     guchar *derived_master_key = NULL, *enc_master_key = NULL, *key_nonce = NULL, *key_tag = NULL, *db_nonce = NULL, *db_tag = NULL, *salt = NULL;
@@ -218,7 +217,7 @@ export_aegis (const gchar   *export_path,
         json_object_set (slot_1, "type", json_integer (1));
 
         uuid_t binuuid;
-        uuid_generate_random(binuuid);
+        uuid_generate_random (binuuid);
         gchar *uuid = g_malloc0 (37);
         uuid_unparse_lower (binuuid, uuid);
         json_object_set (slot_1, "uuid", json_string (g_strdup (uuid)));
@@ -286,7 +285,7 @@ export_aegis (const gchar   *export_path,
 
     json_t *aegis_db_obj = json_object ();
     json_t *array = json_array ();
-    json_object_set (aegis_db_obj, "version", json_integer(1));
+    json_object_set (aegis_db_obj, "version", json_integer (2));
     json_object_set (aegis_db_obj, "entries", array);
     json_object_set (root, "db", aegis_db_obj);
 
@@ -395,12 +394,13 @@ parse_json_data (const gchar *data,
                  GError     **err)
 {
     json_error_t jerr;
-    json_t *root = json_loads (data, 0, &jerr);
+    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
     if (root == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
     }
-    json_t *array = json_object_get(root, "entries");
+
+    json_t *array = json_object_get (root, "entries");
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         json_decref (root);

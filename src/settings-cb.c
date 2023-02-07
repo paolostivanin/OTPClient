@@ -5,6 +5,24 @@
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "secret-schema.h"
+#include "common/common.h"
+
+static void     handle_al_ss                  (AppData *app_data,
+                                               GtkWidget *al_switch,
+                                               GtkWidget *inactivity_cb,
+                                               GtkWidget *dss_switch);
+
+static gboolean handle_secretservice_switch   (GtkSwitch   *sw,
+                                               gboolean     state,
+                                               gpointer     user_data);
+
+static void     handle_secretservice_combobox (GtkComboBox *cb,
+                                               gpointer     user_data);
+
+static gboolean handle_autolock               (GtkSwitch   *sw,
+                                               gboolean     state,
+                                               gpointer     user_data);
+
 
 void
 settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
@@ -47,9 +65,12 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     GtkWidget *dn_switch = GTK_WIDGET(gtk_builder_get_object (builder, "notif_switch_id"));
     GtkWidget *sc_cb = GTK_WIDGET(gtk_builder_get_object (builder, "search_by_cb_id"));
     GtkWidget *al_switch = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_switch_id"));
+    g_signal_connect (al_switch, "state-set", G_CALLBACK(handle_secretservice_switch), app_data);
     GtkWidget *inactivity_cb = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_inactive_cb_id"));
+    g_signal_connect (inactivity_cb, "changed", G_CALLBACK(handle_secretservice_combobox), app_data);
     GtkWidget *dt_switch = GTK_WIDGET(gtk_builder_get_object (builder, "dark_theme_switch_id"));
     GtkWidget *dss_switch = GTK_WIDGET(gtk_builder_get_object (builder, "disable_secret_service_switch_id"));
+    g_signal_connect (dss_switch, "state-set", G_CALLBACK(handle_autolock), app_data);
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
@@ -64,6 +85,8 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     active_id_string = g_strdup_printf ("%d", app_data->inactivity_timeout);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(inactivity_cb), active_id_string);
     g_free (active_id_string);
+
+    handle_al_ss (app_data, al_switch, inactivity_cb, dss_switch);
 
     gtk_widget_show_all (dialog);
 
@@ -111,4 +134,104 @@ show_settings_cb_shortcut (GtkWidget *w __attribute__((unused)),
                            gpointer   user_data)
 {
     settings_dialog_cb (NULL, NULL, user_data);
+}
+
+
+static void
+handle_al_ss (AppData   *app_data,
+              GtkWidget *al_switch,
+              GtkWidget *inactivity_cb,
+              GtkWidget *dss_switch)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    if (app_data->disable_secret_service == FALSE) {
+        // secret service is enabled, so we need to disable auto-lock
+        app_data->auto_lock = FALSE;
+        app_data->inactivity_timeout = 0;
+        gtk_widget_set_sensitive (al_switch, FALSE);
+        gtk_widget_set_sensitive (inactivity_cb, FALSE);
+    } else {
+        if (app_data->auto_lock == TRUE) {
+            // if secret service is disabled AND auto-lock is enabled, we need to disable secret service
+            app_data->disable_secret_service = TRUE;
+            gtk_widget_set_sensitive (dss_switch, FALSE);
+        }
+    }
+    if (kf != NULL) {
+        // Until the migration is done for all users, we need to manually update the settings.
+        // This code block can be removed once all distros have upgrade to, at least, version 3.1.4.
+        g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
+        g_key_file_set_boolean (kf, "config", "disable_secret_service", app_data->disable_secret_service);
+        g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
+        gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+        if (!g_key_file_save_to_file (kf, cfg_file_path, NULL)) {
+            g_printerr ("%s\n", _("Error while saving the config file."));
+        }
+        g_key_file_free (kf);
+    }
+}
+
+
+static gboolean
+handle_secretservice_switch (GtkSwitch *sw,
+                             gboolean   state,
+                             gpointer   user_data)
+{
+   /* SecretService is disabled, and we disable both autolock AND autolock timeout:
+    *  - disable_secret_service_switch_id must be set to sensitive
+    *  - remove entry signal ctrl-l
+    */
+    AppData *app_data = (AppData *)user_data;
+    app_data->auto_lock = state;
+    if (state == FALSE && app_data->inactivity_timeout == 0) {
+        gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "disable_secret_service_switch_id")), FALSE);
+        gtk_binding_entry_remove (gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(app_data->main_window)), GDK_KEY_l, GDK_CONTROL_MASK);
+    }
+    gtk_switch_set_state (GTK_SWITCH(sw), state);
+
+    return TRUE;
+}
+
+
+static void
+handle_secretservice_combobox (GtkComboBox *cb,
+                               gpointer     user_data)
+{
+   /* SecretService is disabled, and we disable both autolock AND autolock timeout:
+    *  - disable_secret_service_switch_id must be set to sensitive
+    *  - remove entry signal ctrl-l
+    */
+    AppData *app_data = (AppData *)user_data;
+    app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(cb)), NULL, 10);
+    if (app_data->inactivity_timeout == 0 && app_data->auto_lock == FALSE) {
+        gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "disable_secret_service_switch_id")), FALSE);
+        gtk_binding_entry_remove (gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(app_data->main_window)), GDK_KEY_l, GDK_CONTROL_MASK);
+    }
+}
+
+
+static gboolean
+handle_autolock (GtkSwitch *sw __attribute__((unused)),
+                 gboolean   state,
+                 gpointer   user_data)
+{
+   /* SecretService is enabled, and we disable it (FALSE -> TRUE):
+    *  - lock_btn_id, autolock_switch_id and autolock_inactive_cb_id must be set to sensitive
+    *  - add entry signal ctrl-l
+    */
+    AppData *app_data = (AppData *)user_data;
+    if (state == TRUE) {
+        gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id")), TRUE);
+        gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "autolock_switch_id")), TRUE);
+        gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "autolock_inactive_cb_id")), TRUE);
+        gtk_binding_entry_add_signal (gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(app_data->main_window)), GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
+    }
+    gtk_switch_set_state (GTK_SWITCH(sw), state);
+
+    return TRUE;
 }

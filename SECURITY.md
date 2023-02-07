@@ -5,18 +5,18 @@
 The following list describes whether a version is eligible or not for security updates.
 
 | Version | Supported          | EOL         |
-|---------| ------------------ |-------------|
+|---------|--------------------|-------------|
 | 3.1.x   | :heavy_check_mark: | -           |
-| 3.0.x   | :x: | 31-Dec-2022 |
-| 2.6.x   | :heavy_check_mark: | 15-Jan-2023 |
-| 2.5.x   | :x: | 31-Aug-2022 |
-| 2.4.x   | :x: | 15-May-2022 |
-| 2.3.x   | :x: | 28-Feb-2021 |
-| 2.2.x   | :x: | 27-May-2020 |
-| 2.1.x   | :x: | 20-Apr-2020 |
-| 2.0.x   | :x: | 08-Mar-2020 |
-| 1.5.x   | :x: | 31-Mar-2020 |
-| < 1.5.0 | :x: | 27-Jun-2019 |
+| 3.0.x   | :x:                | 31-Dec-2022 |
+| 2.6.x   | :x:                | 15-Jan-2023 |
+| 2.5.x   | :x:                | 31-Aug-2022 |
+| 2.4.x   | :x:                | 15-May-2022 |
+| 2.3.x   | :x:                | 28-Feb-2021 |
+| 2.2.x   | :x:                | 27-May-2020 |
+| 2.1.x   | :x:                | 20-Apr-2020 |
+| 2.0.x   | :x:                | 08-Mar-2020 |
+| 1.5.x   | :x:                | 31-Mar-2020 |
+| < 1.5.0 | :x:                | 27-Jun-2019 |
 
 ## Reporting a Vulnerability
 

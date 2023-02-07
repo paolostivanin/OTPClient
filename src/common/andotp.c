@@ -332,7 +332,7 @@ parse_json_data (const gchar *data,
                  GError     **err)
 {
     json_error_t jerr;
-    json_t *array = json_loads (data, 0, &jerr);
+    json_t *array = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;

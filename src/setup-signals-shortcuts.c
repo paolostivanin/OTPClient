@@ -26,7 +26,10 @@ setup_kb_shortcuts (AppData *app_data)
 
     gtk_binding_entry_add_signal(mw_binding_set, GDK_KEY_r, GDK_CONTROL_MASK, "toggle-reorder-button", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_d, GDK_CONTROL_MASK, "toggle-delete-button", 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
+    if (app_data->auto_lock == TRUE || app_data->inactivity_timeout > 0) {
+        // auto-lock is enabled, so secret service is disabled, therefore we allow the shortcut
+        gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
+    }
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_b, GDK_CONTROL_MASK, "change-db", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_o, GDK_CONTROL_MASK, "change-pwd", 0);
     gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_s, GDK_CONTROL_MASK, "show-settings", 0);

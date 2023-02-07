@@ -83,6 +83,16 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="3.1.4" date="2023-02-06">
+      <description>
+        <p>OTPClient 3.1.4 brings some fixes</p>
+        <ul>
+          <li>Auto lock and secret service are now mutually exclusive</li>
+          <li>Fix importing plain text AEGIS json</li>
+          <li>Bump jansson min version to 2.14</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.3" date="2023-01-12">
       <description>
         <p>OTPClient 3.1.3 brings some fixes</p>

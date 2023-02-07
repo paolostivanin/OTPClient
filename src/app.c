@@ -2,6 +2,7 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <libsecret/secret.h>
+#include <glib/gi18n.h>
 #include "otpclient.h"
 #include "gquarks.h"
 #include "imports.h"
@@ -28,9 +29,7 @@
 static gchar     *get_db_path               (AppData            *app_data);
 #endif
 
-static GKeyFile  *get_kf_ptr                (void);
-
-static void       get_wh_data               (gint               *width,
+static void       set_config_data           (gint               *width,
                                              gint               *height,
                                              AppData            *app_data);
 
@@ -111,16 +110,16 @@ activate (GtkApplication    *app,
     app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
-    get_wh_data (&width, &height, app_data);
+    app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+
+    set_config_data (&width, &height, app_data);
 
     app_data->db_data = g_new0 (DatabaseData, 1);
     app_data->db_data->key_stored = FALSE; // at startup, we don't know whether the key is stored or not
 
-    app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-
     create_main_window (width, height, app_data);
     if (app_data->main_window == NULL) {
-        g_printerr ("Couldn't locate the ui file, exiting...\n");
+        g_printerr ("%s\n", _("Couldn't locate the ui file, exiting..."));
         g_free (app_data->db_data);
         g_application_quit (G_APPLICATION(app));
         return;
@@ -194,7 +193,7 @@ activate (GtkApplication    *app,
     if (app_data->disable_secret_service == FALSE) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
-            g_printerr ("Couldn't find the password in the secret service.\n");
+            g_printerr ("%s\n", _("Couldn't find the password in the secret service."));
             goto retry;
         } else {
             app_data->db_data->key_stored = TRUE;
@@ -237,10 +236,10 @@ activate (GtkApplication    *app,
     }
 
     if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE)) {
-        const gchar *msg = "This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
+        const gchar *msg = _("This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
         "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
         "- to <b>import</b> existing tokens, please click the menu button <b>on the top right</b>.\n"
-        "\nIf you need more info, please visit the <a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>";
+        "\nIf you need more info, please visit the <a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>");
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_INFO);
         GError *tmp_err = NULL;
         update_and_reload_db (app_data, app_data->db_data, FALSE, &tmp_err);
@@ -256,7 +255,7 @@ activate (GtkApplication    *app,
     g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
     GIcon *icon = g_themed_icon_new ("com.github.paolostivanin.OTPClient");
     g_notification_set_icon (app_data->notification, icon);
-    g_notification_set_body (app_data->notification, "OTP value has been copied to the clipboard");
+    g_notification_set_body (app_data->notification, _("OTP value has been copied to the clipboard"));
     g_object_unref (icon);
 
     GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
@@ -283,7 +282,7 @@ activate (GtkApplication    *app,
 
     app_data->info_bar = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_id"));
     if (show_upgrade_msg ()) {
-        set_info_bar (app_data, "Release <b>2.6.0</b>: please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>");
+        set_info_bar (app_data, _("Release <b>2.6.0</b>: please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>"));
     } else {
         gtk_widget_hide (app_data->info_bar);
     }
@@ -294,11 +293,11 @@ static gboolean
 show_memlock_warn_dialog (gint32      max_file_size,
                           GtkBuilder *builder)
 {
-    gchar *msg = g_strdup_printf ("Your OS's memlock limit (%d) may be too low for you. "
+    gchar *msg = g_strdup_printf (_("Your OS's memlock limit (%d) may be too low for you. "
                                   "This could crash the program when importing data from 3rd party apps "
                                   "or when a certain amount of tokens is reached. "
                                   "Please have a look at the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki</a> page before "
-                                  "using this software with the current settings.", max_file_size);
+                                  "using this software with the current settings."), max_file_size);
     GtkWidget *warn_diag = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_id"));
     GtkLabel *warn_label = GTK_LABEL(gtk_builder_get_object (builder, "warning_diag_label_id"));
     GtkWidget *warn_chk_btn = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_check_btn_id"));
@@ -339,35 +338,10 @@ key_pressed_cb (GtkWidget   *window,
 }
 
 
-static GKeyFile *
-get_kf_ptr (void)
-{
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_free (cfg_file_path);
-            return kf;
-        }
-        g_printerr ("%s\n", err->message);
-        g_clear_error (&err);
-    }
-    g_free (cfg_file_path);
-    g_key_file_free (kf);
-    return NULL;
-}
-
-
 static void
-get_wh_data (gint     *width,
-             gint     *height,
-             AppData  *app_data)
+set_config_data (gint     *width,
+                 gint     *height,
+                 AppData  *app_data)
 {
     GKeyFile *kf = get_kf_ptr ();
     if (kf != NULL) {
@@ -440,6 +414,10 @@ create_main_window (gint             width,
 
     GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id"));
     g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
+    if (app_data->disable_secret_service == FALSE) {
+        // secret service is enabled, so we can't lock the app
+        gtk_widget_set_sensitive (lock_btn, FALSE);
+    }
 
     set_action_group (app_data->builder, app_data);
 }
@@ -586,7 +564,7 @@ get_db_path (AppData *app_data)
         goto end;
     }
     new_db: ; // empty statement workaround
-    GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Select database location",
+    GtkFileChooserNative *dialog = gtk_file_chooser_native_new (_("Select database location"),
                                                                 GTK_WINDOW (app_data->main_window),
                                                                 app_data->open_db_file_action,
                                                                 "OK",
@@ -660,8 +638,8 @@ del_data_cb (GtkToggleButton *btn,
         app_data->css_provider = gtk_css_provider_new ();
         gtk_css_provider_load_from_data (app_data->css_provider, "#delbtn { background: #ff0033; }", -1, NULL);
         gtk_style_context_add_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
-        const gchar *msg = "You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
-            "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>";
+        const gchar *msg = _("You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
+            "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>");
 
         if (get_confirmation_from_dialog (app_data->main_window, msg)) {
             g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data);
