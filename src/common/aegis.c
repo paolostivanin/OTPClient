@@ -202,7 +202,7 @@ export_aegis (const gchar   *export_path,
 {
     GError *err = NULL;
     json_t *root = json_object ();
-    json_object_set (root, "version", json_integer(1));
+    json_object_set (root, "version", json_integer (1));
 
     gcry_cipher_hd_t hd;
     guchar *derived_master_key = NULL, *enc_master_key = NULL, *key_nonce = NULL, *key_tag = NULL, *db_nonce = NULL, *db_tag = NULL, *salt = NULL;
@@ -285,7 +285,7 @@ export_aegis (const gchar   *export_path,
 
     json_t *aegis_db_obj = json_object ();
     json_t *array = json_array ();
-    json_object_set (aegis_db_obj, "version", json_integer(1));
+    json_object_set (aegis_db_obj, "version", json_integer (2));
     json_object_set (aegis_db_obj, "entries", array);
     json_object_set (root, "db", aegis_db_obj);
 
