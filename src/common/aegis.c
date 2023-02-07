@@ -153,7 +153,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     gsize out_len;
-    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get(json, "db")), &out_len);
+    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get (json, "db")), &out_len);
     if (out_len > max_file_size) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
         g_free (tag);
@@ -217,7 +217,7 @@ export_aegis (const gchar   *export_path,
         json_object_set (slot_1, "type", json_integer (1));
 
         uuid_t binuuid;
-        uuid_generate_random(binuuid);
+        uuid_generate_random (binuuid);
         gchar *uuid = g_malloc0 (37);
         uuid_unparse_lower (binuuid, uuid);
         json_object_set (slot_1, "uuid", json_string (g_strdup (uuid)));
@@ -394,13 +394,13 @@ parse_json_data (const gchar *data,
                  GError     **err)
 {
     json_error_t jerr;
-    json_t *root = json_loads (data, 0, &jerr);
+    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
     if (root == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
     }
 
-    json_t *array = json_object_get(root, "entries");
+    json_t *array = json_object_get (root, "entries");
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         json_decref (root);
