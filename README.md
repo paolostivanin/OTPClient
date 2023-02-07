@@ -14,15 +14,14 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 |----------------------------------------------------|-------------|
 | GTK+                                               | 3.20        |
 | Glib                                               | 2.48.0      |
-| jansson                                            | 2.10       |
-| libgcrypt                                          | 1.6.0       |
-| libzip                                             | 1.0.0       |
-| libpng                                             | 1.2.0       |
-| [libbaseencode](https://github.com/paolostivanin/libbaseencode) | 1.0.12     |
-| [libcotp](https://github.com/paolostivanin/libcotp) | 1.2.1      |
+| jansson                                            | 2.12        |
+| libgcrypt                                          | 1.8.0       |
+| libpng                                             | 1.6.35      |
+| [libbaseencode](https://github.com/paolostivanin/libbaseencode) | 1.0.15     |
+| [libcotp](https://github.com/paolostivanin/libcotp) | 1.2.8      |
 | zbar                                               | 0.20        |
-| protobuf-c                                         | 1.30        |
-| protobuf                                           | 3.6         |
+| protobuf-c                                         | 1.3.0       |
+| protobuf                                           | 3.6.o       |
 | uuid                                               | 2.34        |
 | libsecret                                          | 0.20        |
 | qrencode                                           | 4.0.2       |
