@@ -21,7 +21,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 | [libcotp](https://github.com/paolostivanin/libcotp) | 1.2.8      |
 | zbar                                               | 0.20        |
 | protobuf-c                                         | 1.3.0       |
-| protobuf                                           | 3.6.o       |
+| protobuf                                           | 3.6.0       |
 | uuid                                               | 2.34        |
 | libsecret                                          | 0.20        |
 | qrencode                                           | 4.0.2       |
