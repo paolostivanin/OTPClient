@@ -87,9 +87,10 @@ It's also possible to import/export backups from/to andOTP and import backups fr
       <description>
         <p>OTPClient 3.1.4 brings some fixes</p>
         <ul>
-          <li>Auto lock and secret service are now mutually exclusive</li>
-          <li>Fix importing plain text AEGIS json</li>
-          <li>Bump jansson min version to 2.14</li>
+          <li>make auto-lock and secret service mutually exclusive (#279)</li>
+          <li>fix importing plain AEGIS (#281)</li>
+          <li>fix importing encrypted AEGIS on some distros (#281)</li>
+          <li>rename disable_secret_service setting to use_secret_service</li>
         </ul>
       </description>
     </release>
