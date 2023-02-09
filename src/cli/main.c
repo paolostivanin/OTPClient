@@ -13,12 +13,12 @@
 #define MAX_ABS_PATH_LEN 256
 
 #ifndef USE_FLATPAK_APP_FOLDER
-static gchar    *get_db_path              (void);
+static gchar    *get_db_path           (void);
 #endif
 
-static gchar    *get_pwd                  (const gchar *pwd_msg);
+static gchar    *get_pwd               (const gchar *pwd_msg);
 
-static gboolean  is_secretservice_disable (void);
+static gboolean  get_use_secretservice (void);
 
 
 gint
@@ -57,8 +57,8 @@ main (gint    argc,
     }
 #endif
 
-    gboolean disable_secret_service = is_secretservice_disable ();
-    if (disable_secret_service == FALSE) {
+    gboolean use_secret_service = get_use_secretservice ();
+    if (use_secret_service == TRUE) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
             goto get_pwd;
@@ -90,7 +90,7 @@ main (gint    argc,
         return -1;
     }
 
-    if (disable_secret_service == FALSE && db_data->key_stored == FALSE) {
+    if (use_secret_service == TRUE && db_data->key_stored == FALSE) {
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
@@ -284,9 +284,9 @@ get_pwd (const gchar *pwd_msg)
 
 
 static gboolean
-is_secretservice_disable (void)
+get_use_secretservice (void)
 {
-    gboolean disable_secret_service = FALSE;
+    gboolean use_secret_service = TRUE; // by default, we enable it
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
@@ -297,7 +297,7 @@ is_secretservice_disable (void)
             g_clear_error (&err);
             return FALSE;
         }
-        disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);
+        use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
     }
-    return disable_secret_service;
+    return use_secret_service;
 }

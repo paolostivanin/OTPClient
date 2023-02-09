@@ -1900,7 +1900,7 @@ but not the number of digits and/or the period/counter.</property>
               <object class="GtkLabel">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="label" translatable="yes">Disable secret service</property>
+                <property name="label" translatable="yes">Enable secret service</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
@@ -1908,7 +1908,7 @@ but not the number of digits and/or the period/counter.</property>
               </packing>
             </child>
             <child>
-              <object class="GtkSwitch" id="disable_secret_service_switch_id">
+              <object class="GtkSwitch" id="secret_service_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="halign">center</property>

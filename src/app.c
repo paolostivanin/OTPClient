@@ -33,6 +33,10 @@ static void       set_config_data           (gint               *width,
                                              gint               *height,
                                              AppData            *app_data);
 
+static void      migrate_secretservice_kf   (AppData            *app_data,
+                                             GKeyFile           *kf,
+                                             gboolean            value);
+
 static gboolean   get_warn_data             (void);
 
 static void       set_warn_data             (gboolean            show_warning);
@@ -106,7 +110,7 @@ activate (GtkApplication    *app,
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
     app_data->use_dark_theme = FALSE; // light theme by default
-    app_data->disable_secret_service = FALSE; // secret service enabled by default
+    app_data->use_secret_service = TRUE; // secret service enabled by default
     app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
@@ -190,7 +194,7 @@ activate (GtkApplication    *app,
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
     app_data->db_data->last_hotp_update = g_date_time_add_seconds (g_date_time_new_now_local (), -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
 
-    if (app_data->disable_secret_service == FALSE) {
+    if (app_data->use_secret_service == TRUE) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
             g_printerr ("%s\n", _("Couldn't find the password in the secret service."));
@@ -231,7 +235,7 @@ activate (GtkApplication    *app,
         goto retry;
     }
 
-    if (app_data->disable_secret_service == FALSE && app_data->db_data->key_stored == FALSE) {
+    if (app_data->use_secret_service == TRUE && app_data->db_data->key_stored == FALSE) {
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
@@ -344,6 +348,8 @@ set_config_data (gint     *width,
                  AppData  *app_data)
 {
     GKeyFile *kf = get_kf_ptr ();
+    GError *err = NULL;
+    gboolean tmp;
     if (kf != NULL) {
         *width = g_key_file_get_integer (kf, "config", "window_width", NULL);
         *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
@@ -353,12 +359,46 @@ set_config_data (gint     *width,
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
-        app_data->disable_secret_service = g_key_file_get_boolean (kf, "config", "disable_secret_service", NULL);
+        // handle migration from disable_secret_service to use_secret_service
+        tmp = g_key_file_get_boolean (kf, "config", "disable_secret_service", &err);
+        if (tmp == TRUE || (tmp == FALSE && err == NULL)) {
+            // old key was found, so we need to migrate to the new format
+            migrate_secretservice_kf (app_data, kf, !tmp);
+        }
+        if (tmp == FALSE && err != NULL) {
+            // key was not found, so we already migrated to the new format
+            app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
+            g_clear_error (&err);
+        }
+        // end migration
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
 }
 
+
+static void
+migrate_secretservice_kf (AppData  *app_data,
+                          GKeyFile *kf,
+                          gboolean  value)
+{
+    GError *err = NULL;
+    app_data->use_secret_service = value;
+    g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
+    g_key_file_remove_key (kf, "config", "disable_secret_service", NULL);
+    gchar *cfg_file_path;
+#ifndef USE_FLATPAK_APP_FOLDER
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+        gchar *err_msg = g_strconcat (_("Couldn't save the config file: "), err->message, NULL);
+        show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+        g_free (err_msg);
+        g_clear_error (&err);
+    }
+}
 
 static gboolean
 get_warn_data (void)
@@ -414,7 +454,7 @@ create_main_window (gint             width,
 
     GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id"));
     g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
-    if (app_data->disable_secret_service == FALSE) {
+    if (app_data->use_secret_service == TRUE) {
         // secret service is enabled, so we can't lock the app
         gtk_widget_set_sensitive (lock_btn, FALSE);
     }

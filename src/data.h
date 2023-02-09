@@ -60,7 +60,7 @@ typedef struct app_data_t {
 
     gboolean is_reorder_active;
 
-    gboolean disable_secret_service;
+    gboolean use_secret_service;
 
     GDateTime *last_user_activity;
 
