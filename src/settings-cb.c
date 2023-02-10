@@ -66,7 +66,11 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
     app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
     app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
-    app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
+    app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
+    if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+        app_data->use_secret_service = TRUE;
+        g_clear_error (&err);
+    }
 
     GtkBuilder *builder = get_builder_from_partial_path(UI_PARTIAL_PATH);
     GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "settings_diag_id"));
