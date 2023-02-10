@@ -286,7 +286,7 @@ activate (GtkApplication    *app,
 
     app_data->info_bar = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_id"));
     if (show_upgrade_msg ()) {
-        set_info_bar (app_data, _("Release <b>2.6.0</b>: please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>"));
+        set_info_bar (app_data, _("Not asking for password? Please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>"));
     } else {
         gtk_widget_hide (app_data->info_bar);
     }
