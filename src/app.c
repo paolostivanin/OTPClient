@@ -367,8 +367,7 @@ set_config_data (gint     *width,
         }
         if (tmp == FALSE && err != NULL) {
             // key was not found, so we already migrated to the new format
-            app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
-            g_clear_error (&err);
+            app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
         }
         // end migration
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
