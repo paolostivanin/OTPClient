@@ -25,28 +25,20 @@ It's also possible to import/export backups from/to andOTP and import backups fr
 
   <screenshots>
     <screenshot type="default">
-      <caption>Main window</caption>
-      <image type="source">https://preview.ibb.co/jE5eff/main.png</image>
-    </screenshot>
-    <screenshot>
       <caption>Empty main window</caption>
-      <image type="source">https://image.ibb.co/garPD0/emptymain.png</image>
+      <image type="source">https://raw.githubusercontent.com/paolostivanin/OTPClient/master/data/screenshots/emptymain.png</image>
     </screenshot>
     <screenshot>
       <caption>Add menu</caption>
-      <image type="source">https://preview.ibb.co/c840mL/addmenu.png</image>
+      <image type="source">https://raw.githubusercontent.com/paolostivanin/OTPClient/master/data/screenshots/addmenu.png</image>
     </screenshot>
     <screenshot>
       <caption>General menu</caption>
-      <image type="source">https://image.ibb.co/dZit6L/hambmenu.png</image>
+      <image type="source">https://raw.githubusercontent.com/paolostivanin/OTPClient/master/data/screenshots/hambmenu.png</image>
     </screenshot>
     <screenshot>
       <caption>Settings menu</caption>
-      <image type="source">https://image.ibb.co/jXpSY0/settingsmenu.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Manually add a token</caption>
-      <image type="source">https://preview.ibb.co/dxmkLf/manualadd.png</image>
+      <image type="source">https://raw.githubusercontent.com/paolostivanin/OTPClient/master/data/screenshots/settings.png</image>
     </screenshot>
   </screenshots>
 
