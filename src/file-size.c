@@ -5,10 +5,9 @@ goffset
 get_file_size (const gchar *file_path)
 {
     GError *error = NULL;
-    GFileQueryInfoFlags flags = G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS;
 
     GFile *file = g_file_new_for_path (file_path);
-    GFileInfo *info = g_file_query_info (G_FILE(file), "standard::*", flags, NULL, &error);
+    GFileInfo *info = g_file_query_info (G_FILE(file), "standard::*", G_FILE_QUERY_INFO_NONE, NULL, &error);
     if (info == NULL) {
         g_printerr ("%s\n", error->message);
         g_clear_error (&error);
