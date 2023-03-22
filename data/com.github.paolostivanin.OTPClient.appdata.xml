@@ -75,6 +75,14 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="3.1.6" date="2023-03-22">
+      <description>
+        <p>OTPClient 3.1.6 fixes a security issue.</p>
+        <ul>
+          <li>quit the password dialog when either the cancel or close button is pressed</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.5" date="2023-03-15">
       <description>
         <p>OTPClient 3.1.5 fixes an issue when dealing with symlink</p>

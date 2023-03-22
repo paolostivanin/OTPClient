@@ -34,6 +34,9 @@ export_data_cb (GSimpleAction *simple,
     if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0) {
         if (encrypted == TRUE) {
             password = prompt_for_password (app_data, NULL, NULL, TRUE);
+            if (password == NULL) {
+                return;
+            }
         }
         exported_file_path = g_build_filename (base_dir, encrypted == TRUE ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
         ret_msg = export_andotp (exported_file_path, password, app_data->db_data->json_data);
@@ -45,6 +48,9 @@ export_data_cb (GSimpleAction *simple,
     } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
         if (encrypted == TRUE) {
             password = prompt_for_password (app_data, NULL, NULL, TRUE);
+            if (password == NULL) {
+                return;
+            }
         }
         exported_file_path = g_build_filename (base_dir, encrypted == TRUE ? "aegis_encrypted.json" : "aegis_export_plain.json", NULL);
         ret_msg = export_aegis (exported_file_path, app_data->db_data->json_data, password);
