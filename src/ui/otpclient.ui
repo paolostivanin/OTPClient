@@ -190,10 +190,9 @@
                 <property name="tooltip-text" translatable="yes">Max 255 chars</property>
                 <property name="editable">False</property>
                 <property name="max-length">255</property>
-                <property name="visibility">False</property>
                 <property name="secondary-icon-name">document-open-symbolic</property>
-                <property name="secondary-icon-tooltip-markup" translatable="yes">Show password</property>
-                <property name="placeholder-text" translatable="yes">New DB path...</property>
+                <property name="secondary-icon-tooltip-markup" translatable="yes">Open database file</property>
+                <property name="placeholder-text" translatable="yes">Absolute path of the existing database...</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -1492,10 +1491,9 @@ but not the number of digits and/or the period/counter.</property>
                 <property name="tooltip-text" translatable="yes">Max 255 chars</property>
                 <property name="editable">False</property>
                 <property name="max-length">255</property>
-                <property name="visibility">False</property>
                 <property name="secondary-icon-name">document-open-symbolic</property>
-                <property name="secondary-icon-tooltip-text" translatable="yes">Show password</property>
-                <property name="placeholder-text" translatable="yes">Full path to the new database...</property>
+                <property name="secondary-icon-tooltip-text" translatable="yes">Open database file</property>
+                <property name="placeholder-text" translatable="yes">Absolute path of the new database...</property>
               </object>
               <packing>
                 <property name="expand">False</property>
