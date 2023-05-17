@@ -129,6 +129,13 @@ check_duplicate (gconstpointer data,
 }
 
 
+void write_db_to_disk (DatabaseData  *db_data,
+                       GError  **err)
+{
+    update_db (db_data, err);
+}
+
+
 static void
 reload_db (DatabaseData  *db_data,
            GError       **err)
