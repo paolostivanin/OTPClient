@@ -24,12 +24,18 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
                                                                 "OK",
                                                                 "Cancel");
 
+    GFile *gfile_dbpath = g_file_new_for_path (app_data->db_data->db_path);
+    gchar *db_dir = g_file_get_path (g_file_get_parent (gfile_dbpath));
+    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), db_dir);
+
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
 
     if (res == GTK_RESPONSE_ACCEPT) {
         gtk_entry_set_text (entry, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(dialog)));
     }
 
+    g_free (db_dir);
+    g_object_unref (gfile_dbpath);
     g_object_unref (dialog);
 }
 
