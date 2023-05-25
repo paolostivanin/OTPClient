@@ -92,7 +92,7 @@ set(GUI_HEADER_FILES
         src/shortcuts-cb.h
         src/webcam-add-cb.h
         src/edit-row-cb.h
-        src/show-qr-cb.h)
+        src/show-qr-cb.h src/dbinfo-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -132,7 +132,7 @@ set(GUI_SOURCE_FILES
         src/about_diag_cb.c
         src/show-qr-cb.c
         src/setup-signals-shortcuts.c
-        src/change-pwd-cb.c)
+        src/change-pwd-cb.c src/dbinfo-cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h
