@@ -16,7 +16,7 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 | Glib                                               | 2.48.0      |
 | jansson                                            | 2.12        |
 | libgcrypt                                          | 1.8.0       |
-| libpng                                             | 1.6.35      |
+| libpng                                             | 1.6.30      |
 | [libcotp](https://github.com/paolostivanin/libcotp) | 2.0.0      |
 | zbar                                               | 0.20        |
 | protobuf-c                                         | 1.3.0       |

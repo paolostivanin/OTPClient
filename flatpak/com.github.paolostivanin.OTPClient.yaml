@@ -1,6 +1,6 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '42'
+runtime-version: '44'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
@@ -10,21 +10,6 @@ finish-args:
 - "--device=all"
 - "--talk-name=org.freedesktop.secrets"
 modules:
-- name: libzip
-  buildsystem: cmake-ninja
-  config-opts:
-  - "-DCMAKE_BUILD_TYPE=Release"
-  - "-DCMAKE_INSTALL_LIBDIR=lib"
-  cleanup:
-  - "/include"
-  - "/bin"
-  - "/share"
-  - "/lib/pkgconfig"
-  - "/lib/*.la"
-  sources:
-  - type: archive
-    url: https://libzip.org/download/libzip-1.9.2.tar.xz
-    sha256: c93e9852b7b2dc931197831438fee5295976ee0ba24f8524a8907be5c2ba5937
 - name: jansson
   cleanup:
   - "/include"
@@ -36,6 +21,38 @@ modules:
   - type: archive
     url: https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz
     sha256: 5798d010e41cf8d76b66236cfb2f2543c8d082181d16bc3085ab49538d4b9929
+- shared-modules/libsecret/libsecret.json
+- name: protobuf
+  cleanup:
+  - "/include"
+  - "/bin"
+  - "/share"
+  - "/lib/pkgconfig"
+  - "/lib/*.la"
+  sources:
+  - type: archive
+    url: https://github.com/protocolbuffers/protobuf/archive/refs/tags/v21.12.tar.gz
+    sha256: 22fdaf641b31655d4b2297f9981fa5203b2866f8332d3c6333f6b0107bb320de
+- name: protobuf-c
+  cleanup:
+  - "/include"
+  - "/bin"
+  - "/share"
+  - "/lib/pkgconfig"
+  - "/lib/*.la"
+  sources:
+  - type: archive
+    url: https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v1.4.1.tar.gz
+    sha256: 99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102
+- name: qrencode
+  buildsystem: cmake-ninja
+  config-opts:
+  - "-DCMAKE_BUILD_TYPE=Release"
+  - "-DBUILD_SHARED_LIBS=TRUE"
+  sources:
+  - type: archive
+    url: https://github.com/fukuchi/libqrencode/archive/refs/tags/v4.1.1.tar.gz
+    sha256: 5385bc1b8c2f20f3b91d258bf8ccc8cf62023935df2d2676b5b67049f31a049c
 - name: zbar
   config-opts:
   - "--without-qt"
@@ -51,17 +68,6 @@ modules:
   - type: archive
     url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.90.tar.gz
     sha256: ff857dd7e3dbe043dac3765b5182c91dfd0477800713a75d15287d797cee60fa
-- name: libbaseencode
-  buildsystem: cmake-ninja
-  config-opts:
-  - "-DCMAKE_BUILD_TYPE=Release"
-  - "-DCMAKE_INSTALL_LIBDIR=lib"
-  cleanup:
-  - "/include"
-  sources:
-  - type: archive
-    url: https://github.com/paolostivanin/libbaseencode/archive/v1.0.14.tar.gz
-    sha256: bc95a64507b4ac359eec1f858a6bdcf84c9562424d40fbea8ab00021e9b3197c
 - name: libcotp
   buildsystem: cmake-ninja
   config-opts:
@@ -71,8 +77,8 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libcotp/archive/v1.2.6.tar.gz
-    sha256: f0e75c8bd27a16e808e0af7768dc100872f26dd7c64534ce971c407374386d4a
+    url: https://github.com/paolostivanin/libcotp/archive/v2.0.1.tar.gz
+    sha256: b111d528bbde7c1a0a392f49293b25ae33e6e78fbcbe378e0cf8bc6d59743d11
 - name: OTPClient
   buildsystem: cmake-ninja
   config-opts:
@@ -82,4 +88,3 @@ modules:
   - type: git
     url: https://github.com/paolostivanin/OTPClient.git
     branch: master
-
