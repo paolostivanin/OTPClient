@@ -93,6 +93,7 @@
           <li>Fix UI when creating/changing a database</li>
           <li>Multiple fixes when creating a new database</li>
           <li>Use current db folder when creating/changing database</li>
+          <li>Fix memory leak in case of error when opening the settings dialog</li>
         </ul>
       </description>
     </release>
