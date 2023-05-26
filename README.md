@@ -12,8 +12,8 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 ## Requirements
 | Name                                               | Min Version |
 |----------------------------------------------------|-------------|
-| GTK+                                               | 3.20        |
-| Glib                                               | 2.48.0      |
+| GTK+                                               | 3.24        |
+| Glib                                               | 2.64.0      |
 | jansson                                            | 2.12        |
 | libgcrypt                                          | 1.8.0       |
 | libpng                                             | 1.6.30      |
