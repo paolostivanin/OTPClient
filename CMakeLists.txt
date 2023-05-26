@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.1.6" LANGUAGES "C")
+project(OTPClient VERSION "3.1.7" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -50,10 +50,10 @@ if(${COTP_VERSION} LESS 2.0.0)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCOTP_OLD_LIB")
   pkg_check_modules(BASEENCODE REQUIRED baseencode>=1.0.15)
 endif()
-pkg_check_modules(PNG REQUIRED libpng>=1.6.35)
+pkg_check_modules(PNG REQUIRED libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.12)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.20.0)
+pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.24.0)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.64.0)
 pkg_check_modules(GIO REQUIRED gio-2.0>=2.64.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
@@ -92,7 +92,7 @@ set(GUI_HEADER_FILES
         src/shortcuts-cb.h
         src/webcam-add-cb.h
         src/edit-row-cb.h
-        src/show-qr-cb.h)
+        src/show-qr-cb.h src/dbinfo-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -132,7 +132,7 @@ set(GUI_SOURCE_FILES
         src/about_diag_cb.c
         src/show-qr-cb.c
         src/setup-signals-shortcuts.c
-        src/change-pwd-cb.c)
+        src/change-pwd-cb.c src/dbinfo-cb.c)
 
 set(CLI_HEADER_FILES
         src/cli/help.h

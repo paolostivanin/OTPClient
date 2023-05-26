@@ -6,6 +6,7 @@
 #include "data.h"
 #include "parse-uri.h"
 #include "get-builder.h"
+#include "message-dialogs.h"
 
 #define INCHES_PER_METER (100.0/2.54)
 #define SIZE 3
@@ -24,6 +25,10 @@ show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
     AppData *app_data = (AppData *)user_data;
 
     gchar *otpauth_uri = get_otpauth_uri (app_data, NULL);
+    if (otpauth_uri == NULL) {
+        show_message_dialog (app_data->main_window, "Error: a row must be selected in order to get the QR Code.", GTK_MESSAGE_ERROR);
+        return;
+    }
     QRcode *qr = QRcode_encodeString8bit ((const gchar *)otpauth_uri, 0, QR_ECLEVEL_H);
     write_png (qr);
     g_free (otpauth_uri);

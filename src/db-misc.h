@@ -26,6 +26,9 @@ void update_and_reload_db   (AppData        *app_data,
 void load_new_db            (AppData        *app_data,
                              GError        **err);
 
+void write_db_to_disk       (DatabaseData   *db_data,
+                             GError        **err);
+
 gint check_duplicate        (gconstpointer data,
                              gconstpointer user_data);
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright 2019 Paolo Stivanin <info@paolostivanin.com> -->
+<!-- Copyright 2023 Paolo Stivanin <info@paolostivanin.com> -->
 <component type="desktop-application">
   <id type="desktop">com.github.paolostivanin.OTPClient.desktop</id>
   <metadata_license>CC-BY-4.0</metadata_license>
@@ -14,11 +14,20 @@
   </keywords>
 
   <description>
-    <p>
-      Easy to use GTK application for securely managing TOTP and HOTP tokens.
-The content is encrypted on the disk using AES256-GCM and the master password is derived using PBKDF2 with 100k iterations and SHA512 as hash algorithm.
-It's also possible to import/export backups from/to andOTP and import backups from Authenticator+.
-    </p>
+    <p>Highly secure and easy to use OTP client written in C/GTK3 that supports both TOTP and HOTP and has the following features:</p>
+<ul>
+<li>integration with the OS' secret service provider via libsecret</li>
+<li>support both TOTP and HOTP</li>
+<li>support setting custom digits (between 4 and 10 inclusive)</li>
+<li>support setting a custom period (between 10 and 120 seconds inclusive)</li>
+<li>support SHA1, SHA256 and SHA512 algorithms</li>
+<li>support for Steam codes</li>
+<li>import and export encrypted/plain andOTP backup</li>
+<li>import and export encrypted/plain Aegis backup</li>
+<li>import and export plain FreeOTPPlus backup (key URI format only)</li>
+<li>import of Google's migration QR codes</li>
+<li>local database is encrypted using AES256-GCM (PBKDF2 with SHA512 and 100k iterations) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
+</ul>
   </description>
 
   <launchable type="desktop-id">com.github.paolostivanin.OTPClient.desktop</launchable>
@@ -75,6 +84,19 @@ It's also possible to import/export backups from/to andOTP and import backups fr
   </content_rating>
 
   <releases>
+    <release version="3.1.7" date="2023-05-26">
+      <description>
+        <p>OTPClient 3.1.7 brings many fixes</p>
+        <ul>
+          <li>Add new Database info dialog</li>
+          <li>Fix crash when no row is selected (#295)</li>
+          <li>Fix UI when creating/changing a database</li>
+          <li>Multiple fixes when creating a new database</li>
+          <li>Use current db folder when creating/changing database</li>
+          <li>Fix memory leak in case of error when opening the settings dialog</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.6" date="2023-03-22">
       <description>
         <p>OTPClient 3.1.6 fixes a security issue.</p>

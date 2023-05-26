@@ -23,6 +23,7 @@
 #include "manual-add-cb.h"
 #include "edit-row-cb.h"
 #include "show-qr-cb.h"
+#include "dbinfo-cb.h"
 
 
 #ifndef USE_FLATPAK_APP_FOLDER
@@ -548,6 +549,7 @@ set_action_group (GtkBuilder *builder,
             { .name = "show_qr", .activate = show_qr_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
+            { .name = "dbinfo", .activate = dbinfo_cb },
             { .name = "about", .activate = about_diag_cb }
     };
 

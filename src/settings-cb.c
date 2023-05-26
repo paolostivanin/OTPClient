@@ -55,6 +55,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
         g_free (cfg_file_path);
         g_key_file_free (kf);
         g_clear_error (&err);
+        g_free (settings_data);
         return;
     }
 
