@@ -84,6 +84,14 @@
   </content_rating>
 
   <releases>
+    <release version="3.1.8" date="2023-06-14">
+      <description>
+        <p>OTPClient 3.1.8 brings a single fix</p>
+        <ul>
+          <li>Fix importing Aegis plain json</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.7" date="2023-05-26">
       <description>
         <p>OTPClient 3.1.7 brings many fixes</p>

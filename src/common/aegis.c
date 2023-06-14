@@ -53,7 +53,9 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
-    GSList *otps = parse_json_data (json_string_value (json_object_get (json, "db")), err);
+    gchar *dumped_json = json_dumps(json_object_get (json, "db"), 0);
+    GSList *otps = parse_json_data (dumped_json, err);
+    gcry_free (dumped_json);
 
     return otps;
 }
