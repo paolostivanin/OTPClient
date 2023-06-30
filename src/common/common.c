@@ -101,7 +101,7 @@ json_object_get_hash (json_t *obj)
         }
     }
 
-    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, g_utf8_strlen (tmp_string, -1) + 1);
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
 
     gcry_free (tmp_string);
 
@@ -124,7 +124,7 @@ g_trim_whitespace (const gchar *str)
     if (g_utf8_strlen (str, -1) == 0) {
         return NULL;
     }
-    gchar *sec_buf = gcry_calloc_secure (g_utf8_strlen (str, -1) + 1, 1);
+    gchar *sec_buf = gcry_calloc_secure (strlen (str) + 1, 1);
     int pos = 0;
     for (int i = 0; str[i]; i++) {
         if (str[i] != ' ') {
@@ -132,7 +132,7 @@ g_trim_whitespace (const gchar *str)
         }
     }
     sec_buf[pos] = '\0';
-    gchar *secubf_newpos = (gchar *)gcry_realloc (sec_buf, g_utf8_strlen(sec_buf, -1) + 1);
+    gchar *secubf_newpos = (gchar *)gcry_realloc (sec_buf, strlen (sec_buf) + 1);
 
     return secubf_newpos;
 }

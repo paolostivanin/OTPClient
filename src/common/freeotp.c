@@ -45,7 +45,7 @@ export_freeotpplus (const gchar *export_path,
 
     json_array_foreach (json_db_data, index, db_obj) {
         gchar *uri = get_otpauth_uri (NULL, db_obj);
-        fwrite (uri, g_utf8_strlen (uri, -1), 1, fp);
+        fwrite (uri, strlen (uri), 1, fp);
         g_free (uri);
     }
 
