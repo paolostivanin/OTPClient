@@ -230,7 +230,7 @@ encrypt_db (const gchar  *db_path,
         return (gpointer)derived_key;
     }
 
-    gsize input_data_len = g_utf8_strlen (in_memory_json, -1) + 1;
+    gsize input_data_len = strlen (in_memory_json) + 1;
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);

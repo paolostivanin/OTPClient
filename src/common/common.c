@@ -111,8 +111,8 @@ json_object_get_hash (json_t *obj)
 gchar *
 secure_strdup (const gchar *src)
 {
-    gchar *sec_buf = gcry_calloc_secure (g_utf8_strlen (src, -1) + 1, 1);
-    memcpy (sec_buf, src, g_utf8_strlen (src, -1) + 1);
+    gchar *sec_buf = gcry_calloc_secure (strlen (src) + 1, 1);
+    memcpy (sec_buf, src, strlen (src) + 1);
 
     return sec_buf;
 }
