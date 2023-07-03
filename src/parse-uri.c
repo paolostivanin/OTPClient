@@ -153,7 +153,7 @@ parse_parameters (const gchar   *modified_uri,
 {
     gchar **tokens = g_strsplit (modified_uri, "?", -1);
     gchar *escaped_issuer_and_label = g_uri_unescape_string (tokens[0], NULL);
-    gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer(modified_uri, g_utf8_strlen (tokens[0], -1) + 1);
+    gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer (modified_uri, g_utf8_strlen (tokens[0], -1) + 1);
     g_strfreev (tokens);
 
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);

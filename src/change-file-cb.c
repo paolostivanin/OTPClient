@@ -62,7 +62,7 @@ change_file (AppData *app_data)
         default:
             break;
     }
-    gtk_widget_destroy (diag_changefile);
+    gtk_widget_hide (diag_changefile);
 
     return res;
 }

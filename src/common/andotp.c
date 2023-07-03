@@ -239,7 +239,7 @@ export_andotp (const gchar *export_path,
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data");
         goto end;
     }
-    gsize json_data_size = g_utf8_strlen (json_data, -1);
+    gsize json_data_size = strlen (json_data);
 
     // https://github.com/andOTP/andOTP/blob/bb01bbd242ace1a2e2620263d950d9852772f051/app/src/main/java/org/shadowice/flocke/andotp/Utilities/Constants.java#L109-L110
     guint32 le_iterations = (g_random_int () % (PBKDF2_MAX_BACKUP_ITERATIONS - PBKDF2_MIN_BACKUP_ITERATIONS + 1)) + PBKDF2_MIN_BACKUP_ITERATIONS;
