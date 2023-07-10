@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema path="/com/github/paolostivanin/OTPClient/" id="com.github.paolostivanin.OTPClient" gettext-domain="OTPClient">
+    <key name="db-path" type="s">
+      <default>NULL</default>
+      <summary>Database path</summary>
+      <description>Absolute path to the last used database</description>
+    </key>
+    <key name="show-next-otp" type="b">
+      <default>false</default>
+      <summary>Show Next OTP</summary>
+      <description>If enabled, when the current OTP expires, the next one is shown too</description>
+    </key>
+    <key name="notification-enabled" type="b">
+      <default>true</default>
+      <summary>Notification Enabled</summary>
+      <description>If enabled, a notification will pop-up everytime an OTP is copied</description>
+    </key>
+    <key name="search-column" type="i">
+      <default>0</default>
+      <summary>Search Column</summary>
+      <description>Select whether searching will be done on the Account or Issuer column</description>
+    </key>
+    <key name="window-width" type="i">
+      <default>-1</default>
+      <summary>Default window width</summary>
+      <description>Default window width</description>
+    </key>
+    <key name="window-height" type="i">
+      <default>-1</default>
+      <summary>Default window height</summary>
+      <description>Default window height</description>
+    </key>
+    <key name="dark-theme" type="b">
+      <default>false</default>
+      <summary>Dark Theme</summary>
+      <description>Whether the application should use a dark theme.</description>
+    </key>
+    <key name="auto-lock" type="b">
+      <default>false</default>
+      <summary>Auto lock</summary>
+      <description>Whether to auto lock the application or not</description>
+    </key>
+    <key name="auto-lock-timeout" type="u">
+      <default>5</default>
+      <summary>Auto lock timeout</summary>
+      <description>Lock the application on idle after the specified amount of minutes</description>
+    </key>
+    <key name="secret-service" type="b">
+      <default>true</default>
+      <summary>Secret Service Integration</summary>
+      <description>Whether to use the secret service to handle the password</description>
+    </key>
+</schemalist>
+

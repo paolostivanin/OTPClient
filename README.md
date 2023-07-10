@@ -12,18 +12,19 @@ Highly secure and easy to use GTK+ software for two-factor authentication that s
 ## Requirements
 | Name                                               | Min Version |
 |----------------------------------------------------|-------------|
-| GTK+                                               | 3.24        |
-| Glib                                               | 2.64.0      |
-| jansson                                            | 2.12        |
-| libgcrypt                                          | 1.8.0       |
+| GTK+                                               | 4.12        |
+| libadwaita                                         | 1.4.0       |
+| Glib                                               | 2.76.0      |
+| jansson                                            | 2.14        |
+| libgcrypt                                          | 1.10.0      |
 | libpng                                             | 1.6.30      |
 | [libcotp](https://github.com/paolostivanin/libcotp) | 2.0.0      |
 | zbar                                               | 0.20        |
-| protobuf-c                                         | 1.3.0       |
-| protobuf                                           | 3.6.0       |
+| protobuf-c                                         | 1.4.0       |
+| protobuf                                           | 3.20.0      |
 | uuid                                               | 2.34        |
 | libsecret                                          | 0.20        |
-| qrencode                                           | 4.0.2       |
+| qrencode                                           | 4.1.0       |
 
 :warning: Please note that the memlock value should be `>= 4 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
 See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
