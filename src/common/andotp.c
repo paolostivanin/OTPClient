@@ -276,7 +276,7 @@ export_andotp (const gchar *export_path,
     gcry_cipher_close (hd);
 
     GFile *out_gfile = g_file_new_for_path (export_path);
-    GFileOutputStream *out_stream = g_file_append_to (out_gfile, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
+    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
     if (err != NULL) {
         goto cleanup_before_exiting;
     }
