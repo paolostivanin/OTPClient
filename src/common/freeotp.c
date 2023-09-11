@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <sys/stat.h>
 #include <time.h>
 #include "../file-size.h"
 #include "../parse-uri.h"
@@ -37,8 +38,9 @@ export_freeotpplus (const gchar *export_path,
 {
     json_t *db_obj;
     gsize index;
-
+    mode_t old_umask = umask(S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
     FILE *fp = fopen (export_path, "w");
+    umask(old_umask);
     if (fp == NULL) {
         return g_strdup ("couldn't create the file object");
     }

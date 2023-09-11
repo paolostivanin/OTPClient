@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <glib/gi18n.h>
 #include "../file-size.h"
@@ -220,7 +221,9 @@ export_andotp (const gchar *export_path,
 
     // if plaintext export is needed, then write the file and exit
     if (password == NULL) {
+        mode_t old_umask = umask(S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
         FILE *fp = fopen (export_path, "w");
+        umask(old_umask);
         if (fp == NULL) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
             goto end;
@@ -276,7 +279,7 @@ export_andotp (const gchar *export_path,
     gcry_cipher_close (hd);
 
     GFile *out_gfile = g_file_new_for_path (export_path);
-    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
+    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
     if (err != NULL) {
         goto cleanup_before_exiting;
     }
