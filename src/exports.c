@@ -6,7 +6,9 @@
 #include "common/exports.h"
 
 
-static void show_ret_msg_dialog (GtkWidget  *mainwin, gchar *fpath, gchar *ret_msg);
+static void show_ret_msg_dialog (GtkWidget   *mainwin,
+                                 const gchar *fpath,
+                                 const gchar *ret_msg);
 
 
 void
@@ -24,13 +26,49 @@ export_data_cb (GSimpleAction *simple,
     base_dir = g_get_user_data_dir ();
 #endif
 
-    gchar *password = NULL, *exported_file_path = NULL, *ret_msg = NULL;
     gboolean encrypted;
     if ((g_strcmp0 (action_name, "export_andotp") == 0) || (g_strcmp0 (action_name, "export_aegis") == 0)) {
         encrypted = TRUE;
     } else {
         encrypted = FALSE;
     }
+
+    GtkFileChooserNative *fl_diag = gtk_file_chooser_native_new ("Export file",
+                                                                 GTK_WINDOW(app_data->main_window),
+                                                                 GTK_FILE_CHOOSER_ACTION_SAVE,
+                                                                 "OK",
+                                                                 "Cancel");
+    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(fl_diag), base_dir);
+    gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER(fl_diag), TRUE);
+    gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER(fl_diag), FALSE);
+
+    const gchar *filename = NULL;
+    if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "andotp_exports.json.aes" : "andotp_exports.json";
+    } else if (g_strcmp0 (action_name, FREEOTPPLUS_EXPORT_ACTION_NAME) == 0) {
+        filename = "freeotpplus-exports.txt";
+    } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "aegis_encrypted.json" : "aegis_export_plain.json";
+    } else {
+        show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
+        return;
+    }
+
+    gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER(fl_diag), filename);
+
+    gchar *export_file_abs_path = NULL;
+    gint native_diag_res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(fl_diag));
+    if (native_diag_res == GTK_RESPONSE_ACCEPT) {
+        export_file_abs_path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(fl_diag));
+    }
+    g_object_unref (fl_diag);
+
+    if (export_file_abs_path == NULL) {
+        show_message_dialog (app_data->main_window, "Invalid export file name/path.", GTK_MESSAGE_ERROR);
+        return;
+    }
+
+    gchar *password = NULL, *ret_msg = NULL;
     if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0) {
         if (encrypted == TRUE) {
             password = prompt_for_password (app_data, NULL, NULL, TRUE);
@@ -38,13 +76,11 @@ export_data_cb (GSimpleAction *simple,
                 return;
             }
         }
-        exported_file_path = g_build_filename (base_dir, encrypted == TRUE ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
-        ret_msg = export_andotp (exported_file_path, password, app_data->db_data->json_data);
-        show_ret_msg_dialog (app_data->main_window, exported_file_path, ret_msg);
+        ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->json_data);
+        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_EXPORT_ACTION_NAME) == 0) {
-        exported_file_path = g_build_filename (base_dir, "freeotpplus-exports.txt", NULL);
-        ret_msg = export_freeotpplus (exported_file_path, app_data->db_data->json_data);
-        show_ret_msg_dialog (app_data->main_window, exported_file_path, ret_msg);
+        ret_msg = export_freeotpplus (export_file_abs_path, app_data->db_data->json_data);
+        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
         if (encrypted == TRUE) {
             password = prompt_for_password (app_data, NULL, NULL, TRUE);
@@ -52,15 +88,14 @@ export_data_cb (GSimpleAction *simple,
                 return;
             }
         }
-        exported_file_path = g_build_filename (base_dir, encrypted == TRUE ? "aegis_encrypted.json" : "aegis_export_plain.json", NULL);
-        ret_msg = export_aegis (exported_file_path, app_data->db_data->json_data, password);
-        show_ret_msg_dialog (app_data->main_window, exported_file_path, ret_msg);
+        ret_msg = export_aegis (export_file_abs_path, app_data->db_data->json_data, password);
+        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
     }
     g_free (ret_msg);
-    g_free (exported_file_path);
+    g_free (export_file_abs_path);
     if (encrypted == TRUE) {
         gcry_free (password);
     }
@@ -68,9 +103,9 @@ export_data_cb (GSimpleAction *simple,
 
 
 static void
-show_ret_msg_dialog (GtkWidget  *mainwin,
-                     gchar      *fpath,
-                     gchar      *ret_msg)
+show_ret_msg_dialog (GtkWidget   *mainwin,
+                     const gchar *fpath,
+                     const gchar *ret_msg)
 {
     GtkMessageType msg_type;
     gchar *message = NULL;
