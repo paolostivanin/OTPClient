@@ -697,8 +697,8 @@
             <property name="can-focus">False</property>
             <property name="layout-style">end</property>
             <child>
-              <object class="GtkButton" id="btn_changefile_no_id">
-                <property name="label" translatable="yes">No</property>
+              <object class="GtkButton" id="btn_changefile_quit_id">
+                <property name="label" translatable="yes">Quit</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">True</property>
@@ -710,8 +710,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="btn_changefile_yes_id">
-                <property name="label" translatable="yes">Yes</property>
+              <object class="GtkButton" id="btn_changefile_selex_id">
+                <property name="label" translatable="yes">Select another DB</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">True</property>
@@ -720,6 +720,19 @@
                 <property name="expand">True</property>
                 <property name="fill">True</property>
                 <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="btn_changefile_new_id">
+                <property name="label" translatable="yes">Create new DB</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -747,8 +760,9 @@
       </object>
     </child>
     <action-widgets>
-      <action-widget response="-6">btn_changefile_no_id</action-widget>
-      <action-widget response="-5">btn_changefile_yes_id</action-widget>
+      <action-widget response="-7">btn_changefile_quit_id</action-widget>
+      <action-widget response="-3">btn_changefile_selex_id</action-widget>
+      <action-widget response="-5">btn_changefile_new_id</action-widget>
     </action-widgets>
   </object>
   <object class="GtkDialog" id="diag_qr_clipboard_id">

@@ -66,11 +66,11 @@ create_treeview (AppData *app_data)
 void
 update_model (AppData *app_data)
 {
-    GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view));
-
-    gtk_list_store_clear (store);
-
-    add_data_to_model (app_data->db_data, store);
+    if (app_data->tree_view != NULL) {
+        GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view));
+        gtk_list_store_clear (store);
+        add_data_to_model (app_data->db_data, store);
+    }
 }
 
 
