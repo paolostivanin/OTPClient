@@ -626,6 +626,9 @@ get_db_path (AppData *app_data)
         }
     }
 
+    // clear any password that may have been previously set, thus avoiding using a wrong password with a new database
+    secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
+
     g_object_unref (dialog);
 
     end:

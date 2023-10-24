@@ -1,10 +1,12 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <libsecret/secret.h>
 #include "data.h"
 #include "db-misc.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "db-actions.h"
+#include "secret-schema.h"
 
 void
 new_db_cb (GSimpleAction *simple    __attribute__((unused)),
@@ -32,6 +34,7 @@ new_db_cb (GSimpleAction *simple    __attribute__((unused)),
                 update_cfg_file (app_data);
                 gcry_free (app_data->db_data->key);
                 app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
+                secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
                 GError *err = NULL;
                 write_db_to_disk (app_data->db_data, &err);
                 if (err != NULL) {
