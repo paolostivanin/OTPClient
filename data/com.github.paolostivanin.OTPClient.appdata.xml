@@ -84,6 +84,18 @@
   </content_rating>
 
   <releases>
+    <release version="3.2.0" date="2023-10-24">
+      <description>
+        <p>OTPClient 3.2.0 fixes a couple of issues.</p>
+        <ul>
+          <li>NEW: add file chooser dialog on export (#305)</li>
+          <li>FIX: overwrite exported file instead of appending it (#305)</li>
+          <li>FIX: exported file will be accessible only by the current user (#305)</li>
+          <li>FIX: multiple issues related to failed first launch (#303)</li>
+          <li>FIX: couple of issues with secret-service</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.9" date="2023-07-03">
       <description>
         <p>OTPClient 3.1.9 brings a couple of fixes:</p>

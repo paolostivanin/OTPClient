@@ -372,20 +372,36 @@ export_aegis (const gchar   *export_path,
         gcry_cipher_close (hd);
     }
 
-    FILE *fp = fopen (export_path, "w");
-    if (fp == NULL) {
-        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
-    } else {
-        if (json_dumpf (root, fp, JSON_COMPACT) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
+    GFile *out_gfile = g_file_new_for_path (export_path);
+    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+    if (err == NULL) {
+        gsize jbuf_size = json_dumpb (root, NULL, 0, 0);
+        if (jbuf_size == 0) {
+            goto cleanup_and_exit;
         }
-        fclose (fp);
+        gchar *jbuf = g_malloc0 (jbuf_size);
+        if (json_dumpb (root, jbuf, jbuf_size, JSON_COMPACT) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to buffer");
+            g_free (jbuf);
+            goto cleanup_and_exit;
+        }
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
+            g_free (jbuf);
+            goto cleanup_and_exit;
+        }
+        g_free (jbuf);
+    } else {
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
     }
 
+    cleanup_and_exit:
     json_array_clear (array);
     json_decref (aegis_db_obj);
     json_decref (aegis_header_obj);
     json_decref (root);
+    g_object_unref (out_stream);
+    g_object_unref (out_gfile);
 
     return (err != NULL ? g_strdup (err->message) : NULL);
 }

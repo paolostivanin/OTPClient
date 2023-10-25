@@ -220,16 +220,33 @@ export_andotp (const gchar *export_path,
 
     // if plaintext export is needed, then write the file and exit
     if (password == NULL) {
-        FILE *fp = fopen (export_path, "w");
-        if (fp == NULL) {
+        GFile *out_gfile = g_file_new_for_path (export_path);
+        GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+        if (err == NULL) {
+            gsize jbuf_size = json_dumpb (array, NULL, 0, 0);
+            if (jbuf_size == 0) {
+                g_object_unref (out_stream);
+                g_object_unref (out_gfile);
+                goto end;
+            }
+            gchar *jbuf = g_malloc0 (jbuf_size);
+            if (json_dumpb (array, jbuf, jbuf_size, JSON_COMPACT) == -1) {
+                g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to buffer");
+                g_free (jbuf);
+                g_object_unref (out_stream);
+                g_object_unref (out_gfile);
+                goto end;
+            }
+            if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
+                g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
+            }
+            g_free (jbuf);
+            g_object_unref (out_stream);
+            g_object_unref (out_gfile);
+        } else {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
-            goto end;
+            g_object_unref (out_gfile);
         }
-        if (json_dumpf (array, fp, JSON_COMPACT) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
-        }
-        fclose (fp);
-
         goto end;
     }
 
@@ -276,7 +293,7 @@ export_andotp (const gchar *export_path,
     gcry_cipher_close (hd);
 
     GFile *out_gfile = g_file_new_for_path (export_path);
-    GFileOutputStream *out_stream = g_file_append_to (out_gfile, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &err);
+    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
     if (err != NULL) {
         goto cleanup_before_exiting;
     }

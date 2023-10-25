@@ -25,7 +25,6 @@
 #include "show-qr-cb.h"
 #include "dbinfo-cb.h"
 
-
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path               (AppData            *app_data);
 #endif
@@ -214,8 +213,6 @@ activate (GtkApplication    *app,
                 g_free (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
-            } else {
-                goto retry;
             }
         }
     }
@@ -606,12 +603,12 @@ get_db_path (AppData *app_data)
     }
     new_db: ; // empty statement workaround
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new (_("Select database location"),
-                                                                GTK_WINDOW (app_data->main_window),
+                                                                GTK_WINDOW(app_data->main_window),
                                                                 app_data->open_db_file_action,
                                                                 "OK",
                                                                 "Cancel");
 
-    GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
+    GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
     gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
     gtk_file_chooser_set_select_multiple (chooser, FALSE);
     if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
@@ -628,6 +625,9 @@ get_db_path (AppData *app_data)
             g_clear_error (&err);
         }
     }
+
+    // clear any password that may have been previously set, thus avoiding using a wrong password with a new database
+    secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
 
     g_object_unref (dialog);
 
