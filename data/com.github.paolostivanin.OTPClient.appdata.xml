@@ -15,19 +15,19 @@
 
   <description>
     <p>Highly secure and easy to use OTP client written in C/GTK3 that supports both TOTP and HOTP and has the following features:</p>
-<ul>
-<li>integration with the OS' secret service provider via libsecret</li>
-<li>support both TOTP and HOTP</li>
-<li>support setting custom digits (between 4 and 10 inclusive)</li>
-<li>support setting a custom period (between 10 and 120 seconds inclusive)</li>
-<li>support SHA1, SHA256 and SHA512 algorithms</li>
-<li>support for Steam codes</li>
-<li>import and export encrypted/plain andOTP backup</li>
-<li>import and export encrypted/plain Aegis backup</li>
-<li>import and export plain FreeOTPPlus backup (key URI format only)</li>
-<li>import of Google's migration QR codes</li>
-<li>local database is encrypted using AES256-GCM (PBKDF2 with SHA512 and 100k iterations) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
-</ul>
+    <ul>
+      <li>integration with the OS' secret service provider via libsecret</li>
+      <li>support both TOTP and HOTP</li>
+      <li>support setting custom digits (between 4 and 10 inclusive)</li>
+      <li>support setting a custom period (between 10 and 120 seconds inclusive)</li>
+      <li>support SHA1, SHA256 and SHA512 algorithms</li>
+      <li>support for Steam codes</li>
+      <li>import and export encrypted/plain andOTP backup</li>
+      <li>import and export encrypted/plain Aegis backup</li>
+      <li>import and export plain FreeOTPPlus backup (key URI format only)</li>
+      <li>import of Google's migration QR codes</li>
+      <li>local database is encrypted using AES256-GCM (PBKDF2 with SHA512 and 100k iterations) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
+    </ul>
   </description>
 
   <launchable type="desktop-id">com.github.paolostivanin.OTPClient.desktop</launchable>
@@ -84,6 +84,26 @@
   </content_rating>
 
   <releases>
+    <release version="3.99.1" date="2024-01-xx">
+      <description>
+        <p>OTPClient 4.0.0-alpha1 has been released.</p>
+        <ul>
+          <li>..</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.2.0" date="2023-10-25">
+      <description>
+        <p>OTPClient 3.2.0 fixes a couple of issues.</p>
+        <ul>
+          <li>NEW: add file chooser dialog on export (#305)</li>
+          <li>FIX: overwrite exported file instead of appending it (#305)</li>
+          <li>FIX: exported file will be accessible only by the current user (#305)</li>
+          <li>FIX: multiple issues related to failed first launch (#303)</li>
+          <li>FIX: couple of issues with secret-service</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.1.9" date="2023-07-03">
       <description>
         <p>OTPClient 3.1.9 brings a couple of fixes:</p>
