@@ -12,6 +12,9 @@ G_BEGIN_DECLS
     #define g_memdupX g_memdup
 #endif
 
+#define LOW_MEMLOCK_VALUE    65536 //64KB
+#define MEMLOCK_VALUE     67108864 //64MB
+
 gint32      get_max_file_size_from_memlock  (void);
 
 gchar      *init_libs                       (gint32          max_file_size);

@@ -179,7 +179,7 @@ activate (GtkApplication    *app,
     }
 #endif
 
-    if (max_file_size < (96 * 1024) && get_warn_data () == TRUE) {
+    if (max_file_size < LOW_MEMLOCK_VALUE && get_warn_data () == TRUE) {
         if (show_memlock_warn_dialog (max_file_size, app_data->builder) == TRUE) {
             g_free (app_data->db_data);
             g_free (app_data);
