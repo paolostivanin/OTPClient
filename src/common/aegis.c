@@ -98,6 +98,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_nonce);
         g_free (key_tag);
         gcry_free (keybuf);
+        json_decref (json);
         return NULL;
     }
 
@@ -108,6 +109,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_nonce);
         g_free (key_tag);
         gcry_free (keybuf);
+        json_decref (json);
         return NULL;
     }
 
@@ -121,6 +123,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (master_key);
         gcry_free (keybuf);
         gcry_cipher_close (hd);
+        json_decref (json);
         return NULL;
     }
     gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, TAG_SIZE);
@@ -133,6 +136,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (master_key);
         gcry_free (keybuf);
         gcry_cipher_close (hd);
+        json_decref (json);
         return NULL;
     }
 
@@ -151,6 +155,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (tag);
         g_free (nonce);
         gcry_free (master_key);
+        json_decref (json);
         return NULL;
     }
 
@@ -163,14 +168,19 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (master_key);
         gcry_free (b64decoded_db);
         gcry_cipher_close (hd);
+        json_decref (json);
         return NULL;
     }
+    // we no longer need the json object, so we can free up some secure memory
+    json_decref (json);
 
     gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
     gpg_err = gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
     if (gpg_err) {
         goto clean_and_exit;
     }
+    // we no longer need b64decoded_db, so we can free up some secure memory
+    gcry_free (b64decoded_db);
     gpg_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
@@ -179,7 +189,6 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (tag);
         gcry_free (master_key);
         gcry_free (decrypted_db);
-        gcry_free (b64decoded_db);
         gcry_cipher_close (hd);
         return NULL;
     }
@@ -188,7 +197,6 @@ get_otps_from_encrypted_backup (const gchar          *path,
     g_free (tag);
     gcry_cipher_close (hd);
     gcry_free (master_key);
-    gcry_free (b64decoded_db);
 
     // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
     GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
