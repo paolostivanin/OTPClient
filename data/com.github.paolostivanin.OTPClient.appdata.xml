@@ -84,6 +84,15 @@
   </content_rating>
 
   <releases>
+    <release version="3.2.1" date="2023-10-31">
+      <description>
+        <p>OTPClient 3.2.1 fixes a couple of issues.</p>
+        <ul>
+          <li>FIX: increase secure memory pool to 64 MB, if possible</li>
+          <li>FIX: parsing of big aegis encrypted json</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.2.0" date="2023-10-25">
       <description>
         <p>OTPClient 3.2.0 fixes a couple of issues.</p>
