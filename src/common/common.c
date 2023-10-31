@@ -1,12 +1,10 @@
 #include <glib.h>
 #include <sys/resource.h>
 #include <cotp.h>
-#ifdef COTP_OLD_LIB
-#include <baseencode.h>
-#endif
 #include <glib/gi18n.h>
 #include "gcrypt.h"
 #include "jansson.h"
+#include "common.h"
 #include "../google-migration.pb-c.h"
 
 gint32
@@ -17,13 +15,13 @@ get_max_file_size_from_memlock (void)
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
         // couldn't get memlock limit, so falling back to a default, low value
         g_print ("[WARNING] your OS's memlock limit may be too low for you (64000 bytes). Please have a look at %s\n", link);
-        return 64000;
+        return LOW_MEMLOCK_VALUE;
     } else {
-        if (r.rlim_cur == -1 || r.rlim_cur > 4194304) {
-            // memlock is either unlimited or bigger than needed
-            return 4194304;
+        if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
+            // memlock is either unlimited or bigger than needed, so defaulting to 'MEMLOCK_VALUE'
+            return MEMLOCK_VALUE;
         } else {
-            // memlock is less than 4 MB
+            // memlock is less than 'MEMLOCK_VALUE'
             g_print ("[WARNING] your OS's memlock limit may be too low for you (current value: %d bytes).\n"
                      "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
                      "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
@@ -36,8 +34,8 @@ get_max_file_size_from_memlock (void)
 gchar *
 init_libs (gint32 max_file_size)
 {
-    if (!gcry_check_version ("1.6.0")) {
-        return g_strdup ("The required version of GCrypt is 1.6.0 or greater.");
+    if (!gcry_check_version ("1.8.0")) {
+        return g_strdup ("The required version of GCrypt is 1.8.0 or greater.");
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {

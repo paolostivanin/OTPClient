@@ -190,8 +190,14 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gcry_free (master_key);
     gcry_free (b64decoded_db);
 
-    GSList *otps = parse_json_data (decrypted_db, err);
+    // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
+    GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
+    gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
+    g_regex_unref (regex);
     gcry_free (decrypted_db);
+
+    GSList *otps = parse_json_data (cleaned_db, err);
+    gcry_free (cleaned_db);
 
     return otps;
 }
