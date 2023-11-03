@@ -160,13 +160,13 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     gsize out_len;
-    guchar *b64decoded_db = g_base64_decode_secure (json_string_value (json_object_get (json, "db")), &out_len);
+    guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
     if (out_len > max_file_size) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
         g_free (tag);
         g_free (nonce);
         gcry_free (master_key);
-        gcry_free (b64decoded_db);
+        g_free (b64decoded_db);
         gcry_cipher_close (hd);
         json_decref (json);
         return NULL;
@@ -179,12 +179,11 @@ get_otps_from_encrypted_backup (const gchar          *path,
     if (gpg_err) {
         goto clean_and_exit;
     }
-    // we no longer need b64decoded_db, so we can free up some secure memory
-    gcry_free (b64decoded_db);
     gpg_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
         clean_and_exit:
+        g_free (b64decoded_db);
         g_free (nonce);
         g_free (tag);
         gcry_free (master_key);
@@ -193,6 +192,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         return NULL;
     }
 
+    g_free (b64decoded_db);
     g_free (nonce);
     g_free (tag);
     gcry_cipher_close (hd);

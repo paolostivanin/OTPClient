@@ -742,6 +742,7 @@ destroy_cb (GtkWidget   *window,
     save_window_size (w, h);
     g_object_unref (app_data->builder);
     g_free (app_data);
+    gcry_control (GCRYCTL_TERM_SECMEM);
 }
 
 
