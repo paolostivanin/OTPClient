@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.2.1" LANGUAGES "C")
+project(OTPClient VERSION "3.2.2" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -45,11 +45,7 @@ endif()
 find_package(PkgConfig REQUIRED)
 find_package(Protobuf 3.6.0 REQUIRED)
 find_package(Gcrypt 1.8.0 REQUIRED)
-pkg_check_modules(COTP REQUIRED cotp>=1.2.8)
-if(${COTP_VERSION} LESS 2.0.0)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCOTP_OLD_LIB")
-  pkg_check_modules(BASEENCODE REQUIRED baseencode>=1.0.15)
-endif()
+pkg_check_modules(COTP REQUIRED cotp>=2.0.0)
 pkg_check_modules(PNG REQUIRED libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.12)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
@@ -188,7 +184,6 @@ if(BUILD_GUI)
         include_directories(${GTK3_INCLUDE_DIRS}
                 ${GCRYPT_INCLUDE_DIRS}
                 ${COTP_INCLUDE_DIRS}
-                ${BASEENCODE_INCLUDE_DIRS}
                 ${LIBZIP_INCLUDE_DIRS}
                 ${PNG_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
@@ -203,7 +198,6 @@ if(BUILD_GUI)
                 ${GTK3_LIBRARIES}
                 ${GCRYPT_LIBRARIES}
                 ${COTP_LIBRARIES}
-                ${BASEENCODE_LIBRARIES}
                 ${LIBZIP_LIBRARIES}
                 ${PNG_LIBRARIES}
                 ${JANSSON_LIBRARIES}
@@ -220,7 +214,6 @@ endif()
 if(BUILD_CLI)
         include_directories(${GTK3_INCLUDE_DIRS}
                 ${GCRYPT_INCLUDE_DIRS}
-                ${BASEENCODE_INCLUDE_DIRS}
                 ${COTP_INCLUDE_DIRS}
                 ${JANSSON_INCLUDE_DIRS}
                 ${UUID_INCLUDE_DIRS}
@@ -239,7 +232,6 @@ if(BUILD_CLI)
                 ${GLIB2_LIBRARIES}
                 ${GIO_LIBRARIES}
                 ${GCRYPT_LIBRARIES}
-                ${BASEENCODE_LIBRARIES}
                 ${COTP_LIBRARIES}
                 ${JANSSON_LIBRARIES}
                 ${UUID_LIBRARIES}
