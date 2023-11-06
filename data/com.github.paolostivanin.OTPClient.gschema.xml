@@ -51,5 +51,6 @@
       <summary>Secret Service Integration</summary>
       <description>Whether to use the secret service to handle the password</description>
     </key>
+  </schema>
 </schemalist>
 

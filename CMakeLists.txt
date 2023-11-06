@@ -12,7 +12,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_GUI "Build the GUI" ON)
-option(BUILD_CLI "Build the CLI" ON)
+option(BUILD_CLI "Build the CLI" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "-Wall -Wextra -O2 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef -Wmissing-format-attribute")
@@ -49,13 +49,49 @@ pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.4.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
 pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.1.0)
 
+set(COMMON_INCDIRS
+    ${GCRYPT_INCLUDE_DIRS}
+    ${COTP_INCLUDE_DIRS}
+    ${JANSSON_INCLUDE_DIRS}
+    ${UUID_INCLUDE_DIRS}
+    ${PROTOC_INCLUDE_DIRS}
+    ${LIBSECRET_INCLUDE_DIRS}
+    ${LIBQRENCODE_INCLUDE_DIRS}
+)
+
+set(COMMON_LIBS
+    ${GCRYPT_LIBRARIES}
+    ${COTP_LIBRARIES}
+    ${JANSSON_LIBRARIES}
+    ${UUID_LIBRARIES}
+    ${PROTOC_LIBRARIES}
+    ${LIBSECRET_LIBRARIES}
+    ${LIBQRENCODE_LIBRARIES}
+)
+
 if(BUILD_GUI)
     add_subdirectory(src/gui)
+    target_link_libraries(${PROJECT_NAME}
+            ${GTK4_LIBRARIES}
+            ${ADWAITA_LIBRARIES}
+            ${PNG_LIBRARIES}
+            ${ZBAR_LIBRARIES}
+            ${COMMON_LIBS}
+    )
+    set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 endif()
 
 if(BUILD_CLI)
     add_subdirectory(src/cli)
+    target_link_libraries(${PROJECT_NAME}
+            ${COMMON_LIBS}
+    )
+    set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
 endif()
+
+# add glib-compile-schema for both GUI and CLI
+
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)

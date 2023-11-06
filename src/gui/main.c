@@ -1,25 +1,22 @@
-#include <gtk/gtk.h>
+#include <gtk-4.0/gtk/gtk.h>
 #include <glib/gi18n.h>
-#include "otpclient.h"
+#include "otpclient-application.h"
 #include "version.h"
 
 gint
 main (gint    argc,
       gchar **argv)
 {
+    g_autoptr (OTPClientApplication)app = NULL;
+
     bindtextdomain (GETTEXT_PACKAGE, LOCALE_DIR);
     bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
     textdomain (GETTEXT_PACKAGE);
 
-    GApplicationFlags flags = G_APPLICATION_DEFAULT_FLAGS;
-    GtkApplication *app = gtk_application_new ("com.github.paolostivanin.OTPClient", flags);
-    g_set_application_name (PROJECT_NAME);
+    g_set_application_name (_(PROJECT_NAME));
 
-    g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
+    app = otpclient_application_new ();
+    g_application_set_default (G_APPLICATION(app));
 
-    gint status = g_application_run (G_APPLICATION (app), argc, argv);
-
-    g_object_unref (app);
-
-    return status;
+    return g_application_run (G_APPLICATION(app), argc, argv);
 }
