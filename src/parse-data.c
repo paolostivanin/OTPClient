@@ -2,6 +2,7 @@
 #include <string.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <cotp.h>
 #include "db-misc.h"
 #include "manual-add-cb.h"
 #include "gquarks.h"
