@@ -672,13 +672,21 @@ del_data_cb (GtkToggleButton *btn,
 {
     AppData *app_data = (AppData *)user_data;
 
-    GtkStyleContext *gsc = gtk_widget_get_style_context (GTK_WIDGET(btn));
+    GtkStyleContext *gsc_btn = gtk_widget_get_style_context (GTK_WIDGET(btn));
+    GtkStyleContext *gsc_tv = gtk_widget_get_style_context (GTK_WIDGET(app_data->tree_view));
+
     GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (app_data->tree_view);
 
     if (gtk_toggle_button_get_active (btn)) {
-        app_data->css_provider = gtk_css_provider_new ();
-        gtk_css_provider_load_from_data (app_data->css_provider, "#delbtn { background: #ff0033; }", -1, NULL);
-        gtk_style_context_add_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+        app_data->delbtn_css_provider = gtk_css_provider_new ();
+        app_data->tv_css_provider = gtk_css_provider_new ();
+
+        gtk_css_provider_load_from_data (app_data->delbtn_css_provider, "#delbtn { background: #970000; }", -1, NULL);
+        gtk_css_provider_load_from_data (app_data->tv_css_provider, "#tv { background: #970000; }", -1, NULL);
+
+        gtk_style_context_add_provider (gsc_btn, GTK_STYLE_PROVIDER(app_data->delbtn_css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+        gtk_style_context_add_provider (gsc_tv, GTK_STYLE_PROVIDER(app_data->tv_css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
+
         const gchar *msg = _("You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
             "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>");
 
@@ -693,8 +701,10 @@ del_data_cb (GtkToggleButton *btn,
             gtk_toggle_button_set_active (btn, FALSE);
         }
     } else {
-        gtk_style_context_remove_provider (gsc, GTK_STYLE_PROVIDER(app_data->css_provider));
-        g_object_unref (app_data->css_provider);
+        gtk_style_context_remove_provider (gsc_btn, GTK_STYLE_PROVIDER(app_data->delbtn_css_provider));
+        gtk_style_context_remove_provider (gsc_tv, GTK_STYLE_PROVIDER(app_data->tv_css_provider));
+        g_object_unref (app_data->delbtn_css_provider);
+        g_object_unref (app_data->tv_css_provider);
         g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
         g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
     }

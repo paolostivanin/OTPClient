@@ -2612,6 +2612,7 @@ but not the number of digits and/or the period/counter.</property>
             <property name="shadow-type">etched-in</property>
             <child>
               <object class="GtkTreeView" id="treeview_id">
+                <property name="name">tv</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="hexpand">True</property>
