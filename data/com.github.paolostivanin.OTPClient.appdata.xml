@@ -87,6 +87,15 @@
   </content_rating>
 
   <releases>
+    <release version="3.3.0" date="2024-01-08">
+      <description>
+        <p>OTPClient 3.3.0 brings the following changes:</p>
+        <ul>
+          <li>NEW: set background to red when delete mode is entered (#323)</li>
+          <li>FIX: handling of base32 string (#328)</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.2.1" date="2023-10-31">
       <description>
         <p>OTPClient 3.2.1 fixes a couple of issues.</p>

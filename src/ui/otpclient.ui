@@ -1437,7 +1437,7 @@ but not the number of digits and/or the period/counter.</property>
                 <property name="max-length">255</property>
                 <property name="visibility">False</property>
                 <property name="secondary-icon-name">dialog-password-symbolic</property>
-                <property name="primary-icon-tooltip-text" translatable="yes">Secret</property>
+                <property name="primary-icon-tooltip-text" translatable="yes">Must be an uppercase base32 string. It may contain spaces. </property>
                 <property name="placeholder-text" translatable="yes">Secret</property>
                 <property name="input-purpose">password</property>
               </object>
