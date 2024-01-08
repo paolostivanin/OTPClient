@@ -42,7 +42,8 @@ typedef struct app_data_t {
     gboolean auto_lock;
     gint inactivity_timeout;
 
-    GtkCssProvider *css_provider;
+    GtkCssProvider *delbtn_css_provider;
+    GtkCssProvider *tv_css_provider;
 
     GNotification *notification;
 
