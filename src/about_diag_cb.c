@@ -16,11 +16,11 @@ about_diag_cb (GSimpleAction *simple    __attribute__((unused)),
     gchar *icon_abs_path = g_strconcat (INSTALL_PREFIX, "/", partial_path, NULL);
 
     GtkWidget *ab_diag = gtk_about_dialog_new ();
-    gtk_window_set_transient_for (GTK_WINDOW(app_data->main_window), GTK_WINDOW(ab_diag));
+    gtk_window_set_transient_for (GTK_WINDOW(ab_diag), GTK_WINDOW(app_data->main_window));
 
     gtk_about_dialog_set_program_name (GTK_ABOUT_DIALOG(ab_diag), PROJECT_NAME);
     gtk_about_dialog_set_version (GTK_ABOUT_DIALOG(ab_diag), PROJECT_VER);
-    gtk_about_dialog_set_copyright (GTK_ABOUT_DIALOG(ab_diag), "2017-2022");
+    gtk_about_dialog_set_copyright (GTK_ABOUT_DIALOG(ab_diag), "2017-2024");
     gtk_about_dialog_set_comments (GTK_ABOUT_DIALOG(ab_diag), _("Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP)."));
     gtk_about_dialog_set_license_type (GTK_ABOUT_DIALOG(ab_diag), GTK_LICENSE_GPL_3_0);
     gtk_about_dialog_set_website (GTK_ABOUT_DIALOG(ab_diag), "https://github.com/paolostivanin/OTPClient");
