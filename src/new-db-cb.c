@@ -7,13 +7,11 @@
 #include "password-cb.h"
 #include "db-actions.h"
 #include "secret-schema.h"
+#include "change-file-cb.h"
 
-void
-new_db_cb (GSimpleAction *simple    __attribute__((unused)),
-           GVariant      *parameter __attribute__((unused)),
-           gpointer       user_data)
+int
+new_db (AppData *app_data)
 {
-    AppData *app_data = (AppData *)user_data;
     GtkWidget *newdb_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "newdb_diag_id"));
     GtkWidget *newdb_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "newdb_entry_id"));
 
@@ -24,10 +22,17 @@ new_db_cb (GSimpleAction *simple    __attribute__((unused)),
     gint result = gtk_dialog_run (GTK_DIALOG (newdb_diag));
     switch (result) {
         case GTK_RESPONSE_OK:
+            if (gtk_entry_get_text_length (GTK_ENTRY(newdb_entry)) == 0) {
+                show_message_dialog (app_data->main_window, "Input cannot be empty.", GTK_MESSAGE_ERROR);
+                gtk_widget_hide (newdb_diag);
+                return RETRY_CHANGE;
+            }
             new_db_path_with_suffix = g_string_new (gtk_entry_get_text (GTK_ENTRY(newdb_entry)));
             g_string_append (new_db_path_with_suffix, ".enc");
             if (g_file_test (new_db_path_with_suffix->str, G_FILE_TEST_IS_REGULAR) || g_file_test (new_db_path_with_suffix->str, G_FILE_TEST_IS_SYMLINK)) {
                 show_message_dialog (app_data->main_window, "Selected file already exists, please choose another filename.", GTK_MESSAGE_ERROR);
+                g_string_free (new_db_path_with_suffix, TRUE);
+                return RETRY_CHANGE;
             } else {
                 g_free (app_data->db_data->db_path);
                 app_data->db_data->db_path = g_strdup (new_db_path_with_suffix->str);
@@ -51,8 +56,23 @@ new_db_cb (GSimpleAction *simple    __attribute__((unused)),
             g_string_free (new_db_path_with_suffix, TRUE);
             break;
         case GTK_RESPONSE_CANCEL:
+            gtk_widget_destroy (newdb_diag);
+            return QUIT_APP;
         default:
             break;
     }
     gtk_widget_destroy (newdb_diag);
+
+    return TRUE;
+}
+
+
+void
+new_db_cb (GSimpleAction *simple    __attribute__((unused)),
+           GVariant      *parameter __attribute__((unused)),
+           gpointer       user_data)
+{
+    AppData *app_data = (AppData *)user_data;
+
+    new_db (app_data);
 }

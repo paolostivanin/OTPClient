@@ -11,8 +11,6 @@ G_BEGIN_DECLS
 void     activate              (GtkApplication *app,
                                 gpointer        user_data);
 
-gboolean change_file           (AppData *app_data);
-
 void     add_qr_from_file      (GSimpleAction  *simple,
                                 GVariant       *parameter,
                                 gpointer        user_data);

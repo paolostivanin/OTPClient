@@ -4,6 +4,8 @@
 
 G_BEGIN_DECLS
 
+int  change_db             (AppData *app_data);
+
 void change_db_cb          (GSimpleAction *simple,
                             GVariant      *parameter,
                             gpointer       user_data);

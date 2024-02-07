@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.3.0" LANGUAGES "C")
+project(OTPClient VERSION "3.4.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -88,7 +88,8 @@ set(GUI_HEADER_FILES
         src/shortcuts-cb.h
         src/webcam-add-cb.h
         src/edit-row-cb.h
-        src/show-qr-cb.h src/dbinfo-cb.h)
+        src/show-qr-cb.h src/dbinfo-cb.h
+        src/change-file-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
