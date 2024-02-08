@@ -34,24 +34,36 @@ new_db (AppData *app_data)
                 g_string_free (new_db_path_with_suffix, TRUE);
                 return RETRY_CHANGE;
             } else {
+                gchar *old_db_path = g_strdup (app_data->db_data->db_path);
                 g_free (app_data->db_data->db_path);
                 app_data->db_data->db_path = g_strdup (new_db_path_with_suffix->str);
                 update_cfg_file (app_data);
                 gcry_free (app_data->db_data->key);
                 app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
+                if (app_data->db_data->key == NULL) {
+                    gtk_widget_hide (newdb_diag);
+                    revert_db_path (app_data, old_db_path);
+                    return RETRY_CHANGE;
+                }
                 secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
                 GError *err = NULL;
                 write_db_to_disk (app_data->db_data, &err);
                 if (err != NULL) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                     g_clear_error (&err);
-                } else {
-                    load_new_db (app_data, &err);
-                    if (err != NULL) {
-                        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-                        g_clear_error (&err);
-                    }
+                    gtk_widget_hide (newdb_diag);
+                    revert_db_path (app_data, old_db_path);
+                    return RETRY_CHANGE;
                 }
+                load_new_db (app_data, &err);
+                if (err != NULL) {
+                    show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+                    g_clear_error (&err);
+                    gtk_widget_hide (newdb_diag);
+                    revert_db_path (app_data, old_db_path);
+                    return RETRY_CHANGE;
+                }
+                g_free (old_db_path);
             }
             g_string_free (new_db_path_with_suffix, TRUE);
             break;
@@ -63,7 +75,7 @@ new_db (AppData *app_data)
     }
     gtk_widget_destroy (newdb_diag);
 
-    return TRUE;
+    return CHANGE_OK;
 }
 
 
