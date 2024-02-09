@@ -39,7 +39,7 @@ main (gint    argc,
                     { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
 #endif
                     { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
-                    G_OPTION_ENTRY_NULL
+                    { NULL }
             };
 
 
