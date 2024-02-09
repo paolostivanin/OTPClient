@@ -67,3 +67,14 @@ update_cfg_file (AppData *app_data)
     g_free (cfg_file_path);
     g_key_file_free (kf);
 }
+
+
+void
+revert_db_path (AppData *app_data,
+                gchar   *old_db_path)
+{
+    g_free (app_data->db_data->db_path);
+    app_data->db_data->db_path = g_strdup (old_db_path);
+    update_cfg_file (app_data);
+    g_free (old_db_path);
+}

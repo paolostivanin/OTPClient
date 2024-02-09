@@ -1,303 +1,181 @@
 #include <glib.h>
-#include <string.h>
-#include <gcrypt.h>
-#include <termios.h>
-#include <libsecret/secret.h>
-#include <glib/gi18n.h>
-#include "help.h"
-#include "get-data.h"
+#include <gio/gio.h>
+#include "version.h"
+#include "main.h"
 #include "../common/common.h"
-#include "../common/exports.h"
-#include "../secret-schema.h"
 
-#define MAX_ABS_PATH_LEN 256
+static gint      handle_local_options  (GApplication            *application,
+                                        GVariantDict            *options,
+                                        gpointer                 user_data);
 
-#ifndef USE_FLATPAK_APP_FOLDER
-static gchar    *get_db_path           (void);
-#endif
+static int       command_line          (GApplication            *application,
+                                        GApplicationCommandLine *cmdline,
+                                        gpointer                 user_data);
 
-static gchar    *get_pwd               (const gchar *pwd_msg);
+static gboolean  parse_options         (GApplicationCommandLine *cmdline,
+                                        CmdlineOpts             *cmdline_opts);
 
-static gboolean  get_use_secretservice (void);
+static void      g_free_cmdline_opts   (CmdlineOpts             *co);
 
 
 gint
 main (gint    argc,
       gchar **argv)
 {
-    if (show_help (argv[0], argv[1])) {
-        return 0;
-    }
-
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->key_stored = FALSE;
-
-    db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
-    gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
-    if (init_msg != NULL) {
-        g_printerr ("%s\n", init_msg);
-        g_free (init_msg);
-        g_free (db_data);
-        return -1;
-    }
-
-#ifdef USE_FLATPAK_APP_FOLDER
-    db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
-    gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
-    }
-    g_free (cfg_file_path);
-#else
-    db_data->db_path = get_db_path ();
-    if (db_data->db_path == NULL) {
-        g_free (db_data);
-        return -1;
-    }
-#endif
-
-    gboolean use_secret_service = get_use_secretservice ();
-    if (use_secret_service == TRUE) {
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
-        if (pwd == NULL) {
-            goto get_pwd;
-        } else {
-            db_data->key_stored = TRUE;
-            db_data->key= secure_strdup (pwd);
-            secret_password_free (pwd);
-        }
-    } else {
-        get_pwd:
-        db_data->key = get_pwd (_("Type the DB decryption password: "));
-        if (db_data->key == NULL) {
-            g_free (db_data);
-            return -1;
-        }
-    }
-
-    db_data->objects_hash = NULL;
-
-    GError *err = NULL;
-    load_db (db_data, &err);
-    if (err != NULL) {
-        const gchar *tmp_msg = _("Error while loading the database:");
-        gchar *msg = g_strconcat (tmp_msg, " %s\n", err->message, NULL);
-        g_printerr ("%s\n", msg);
-        gcry_free (db_data->key);
-        g_free (db_data);
-        g_free (msg);
-        return -1;
-    }
-
-    if (use_secret_service == TRUE && db_data->key_stored == FALSE) {
-        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
-    }
-
-    gchar *account = NULL, *issuer = NULL;
-    gboolean show_next_token = FALSE, match_exactly = FALSE;
-
-    if (g_strcmp0 (argv[1], "show") == 0) {
-        if (argc < 4 || argc > 8) {
-            // Translators: please do not translate '%s --help-show'
-            g_printerr (_("Wrong argument(s). Please type '%s --help-show' to see the available options.\n"), argv[0]);
-            g_free (db_data);
-            return -1;
-        }
-        for (gint i = 2; i < argc; i++) {
-            if (g_strcmp0 (argv[i], "-a") == 0) {
-                account = argv[i + 1];
-            } else if (g_strcmp0 (argv[i], "-i") == 0) {
-                issuer = argv[i + 1];
-            } else if (g_strcmp0 (argv[i], "-m") == 0) {
-                match_exactly = TRUE;
-            } else if (g_strcmp0 (argv[i], "-n") == 0) {
-                show_next_token = TRUE;
-            }
-        }
-        if (account == NULL) {
-            // Translators: please do not translate 'account'
-            g_printerr ("%s\n", _("[ERROR]: The account option (-a) must be specified and can not be empty."));
-            goto end;
-        }
-        show_token (db_data, account, issuer, match_exactly, show_next_token);
-    } else if (g_strcmp0 (argv[1], "list") == 0) {
-        list_all_acc_iss (db_data);
-    } else if (g_strcmp0 (argv[1], "export") == 0) {
-        if (g_ascii_strcasecmp (argv[3], "andotp_plain") != 0 && g_ascii_strcasecmp (argv[3], "andotp_encrypted") != 0 &&
-            g_ascii_strcasecmp (argv[3], "freeotpplus") != 0 && g_ascii_strcasecmp (argv[3], "aegis") != 0) {
-                // Translators: please do not translate '%s --help-export'
-                g_printerr (_("Wrong argument(s). Please type '%s --help-export' to see the available options.\n"), argv[0]);
-                g_free (db_data);
-                return -1;
-        }
-        const gchar *base_dir = NULL;
+    GOptionEntry entries[] =
+            {
 #ifndef USE_FLATPAK_APP_FOLDER
-        if (argv[4] == NULL) {
-            base_dir = g_get_home_dir ();
-        } else {
-            if (g_ascii_strcasecmp (argv[4], "-d") == 0 && argv[5] != NULL) {
-                if (!g_file_test (argv[5], G_FILE_TEST_IS_DIR)) {
-                    g_printerr (_("%s is not a directory or the folder doesn't exist. The output will be saved into the HOME directory.\n"), argv[5]);
-                    base_dir = g_get_home_dir ();
-                } else {
-                    base_dir = argv[5];
-                }
-            } else {
-                g_printerr ("%s\n", _("Incorrect parameters used for setting the output folder. Therefore, the exported file will be saved into the HOME directory."));
-                base_dir = g_get_home_dir ();
-            }
-        }
-#else
-        base_dir = g_get_user_data_dir ();
+                    { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) path to the database. Default value is taken from otpclient.cfg", NULL },
 #endif
-        gchar *andotp_export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
-        if (g_ascii_strcasecmp (argv[3], "andotp_plain") == 0 || g_ascii_strcasecmp (argv[3], "andotp_encrypted") == 0) {
-            if (g_ascii_strcasecmp (argv[3], "andotp_encrypted")) {
-                andotp_export_pwd = get_pwd (_("Type the export encryption password: "));
-                if (andotp_export_pwd == NULL) {
-                    goto end;
-                }
-            }
-            exported_file_path = g_build_filename (base_dir, andotp_export_pwd != NULL ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
-            ret_msg = export_andotp (exported_file_path, andotp_export_pwd, db_data->json_data);
-            gcry_free (andotp_export_pwd);
-        }
-        if (g_ascii_strcasecmp (argv[3], "freeotpplus") == 0) {
-            exported_file_path = g_build_filename (base_dir, "freeotpplus-exports.txt", NULL);
-            ret_msg = export_freeotpplus (exported_file_path, db_data->json_data);
-        }
-        if (g_ascii_strcasecmp (argv[3], "aegis") == 0) {
-            exported_file_path = g_build_filename (base_dir, "aegis_export_plain.json", NULL);
-            ret_msg = export_aegis (exported_file_path, db_data->json_data, NULL);
-        }
-        if (ret_msg != NULL) {
-            g_printerr (_("An error occurred while exporting the data: %s\n"), ret_msg);
-            g_free (ret_msg);
-        } else {
-            g_print (_("Data successfully exported to: %s\n"), exported_file_path);
-        }
-        g_free (exported_file_path);
-    } else {
-        show_help (argv[0], "help");
-        return -1;
-    }
+                    { "show", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show a token for a given account.", NULL },
+                    { "account", 'a', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Account name (to be used with --show, mandatory)", NULL},
+                    { "issuer", 'i', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Issuer (to be used with --show, optional)", NULL},
+                    { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Match exactly the provided account/issuer (to be used with --show, optional)", NULL},
+                    { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
+                    { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
+                    { "export", 'e', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
+                    { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The export type for the database. Must be either one of: andotp_plain, andotp_encrypted, freeotpplus, aegis, aegis_encrypted (to be used with --export, mandatory)", NULL },
+#ifndef USE_FLATPAK_APP_FOLDER
+                    { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
+#endif
+                    { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
+                    { NULL }
+            };
 
-    end:
+
+    const gchar *ctx_text = "- Highly secure and easy to use OTP client that supports both TOTP and HOTP";
+
+    GApplication *app = g_application_new ("com.github.paolostivanin.OTPClient", G_APPLICATION_HANDLES_COMMAND_LINE);
+
+    g_application_add_main_option_entries (app, entries);
+    g_application_set_option_context_parameter_string (app, ctx_text);
+
+    g_signal_connect (app, "handle-local-options", G_CALLBACK (handle_local_options), NULL);
+    g_signal_connect (app, "command-line", G_CALLBACK(command_line), NULL);
+
+    int status = g_application_run (app, argc, argv);
+
+    g_object_unref (app);
+
+    return status;
+}
+
+
+void
+free_dbdata (DatabaseData *db_data)
+{
     gcry_free (db_data->key);
     g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);
     json_decref (db_data->json_data);
     g_free (db_data);
+}
+
+
+static gint
+handle_local_options (GApplication      *application __attribute__((unused)),
+                      GVariantDict      *options,
+                      gpointer           user_data   __attribute__((unused)))
+{
+    guint32 count;
+    if (g_variant_dict_lookup (options, "version", "b", &count)) {
+        gchar *msg = g_strconcat ("OTPClient version ", PROJECT_VER, NULL);
+        g_print ("%s\n", msg);
+        g_free (msg);
+        return 0;
+    }
+    return -1;
+}
+
+
+static int
+command_line (GApplication                *application __attribute__((unused)),
+              GApplicationCommandLine     *cmdline,
+              gpointer                     user_data   __attribute__((unused)))
+{
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->key_stored = FALSE;
+    db_data->objects_hash = NULL;
+
+    db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
+    gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
+    if (init_msg != NULL) {
+        g_application_command_line_printerr(cmdline, "Error while initializing GCrypt: %s\n", init_msg);
+        g_free (init_msg);
+        g_free (db_data);
+        return -1;
+    }
+
+    CmdlineOpts *cmdline_opts = g_new0 (CmdlineOpts, 1);
+    cmdline_opts->database = NULL;
+    cmdline_opts->show = FALSE;
+    cmdline_opts->account = NULL;
+    cmdline_opts->issuer = NULL;
+    cmdline_opts->match_exact = FALSE;
+    cmdline_opts->show_next = FALSE;
+    cmdline_opts->list = FALSE;
+    cmdline_opts->export = FALSE;
+    cmdline_opts->export_type = NULL;
+    cmdline_opts->export_dir = NULL;
+
+    if (!parse_options (cmdline, cmdline_opts)) {
+        g_free (db_data);
+        g_free_cmdline_opts (cmdline_opts);
+        return -1;
+    }
+
+    if (!exec_action (cmdline_opts, db_data)) {
+        g_free_cmdline_opts (cmdline_opts);
+        return -1;
+    }
+
+    free_dbdata (db_data);
+    g_free_cmdline_opts (cmdline_opts);
 
     return 0;
 }
 
 
-#ifndef USE_FLATPAK_APP_FOLDER
-static gchar *
-get_db_path (void)
-{
-    gchar *db_path = NULL;
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
-            g_clear_error (&err);
-            return NULL;
-        }
-        db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        if (db_path == NULL) {
-            goto type_db_path;
-        }
-        if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.\n", NULL);
-            g_printerr ("%s\n", msg);
-            g_free (msg);
-            goto type_db_path;
-        }
-        goto end;
-    }
-    type_db_path: ; // empty statement workaround
-    g_print ("%s", _("Type the absolute path to the database: "));
-    db_path = g_malloc0 (MAX_ABS_PATH_LEN);
-    if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
-        g_printerr ("%s\n", _("Couldn't get db path from stdin"));
-        g_free (cfg_file_path);
-        g_free (db_path);
-        return NULL;
-    } else {
-        // remove the newline char
-        db_path[g_utf8_strlen (db_path, -1) - 1] = '\0';
-        if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            g_printerr (_("File '%s' does not exist\n"), db_path);
-            g_free (cfg_file_path);
-            g_free (db_path);
-            return NULL;
-        }
-    }
-
-    end:
-    g_free (cfg_file_path);
-
-    return db_path;
-}
-#endif
-
-
-static gchar *
-get_pwd (const gchar *pwd_msg)
-{
-    gchar *pwd = gcry_calloc_secure (256, 1);
-    g_print ("%s", pwd_msg);
-
-    struct termios old, new;
-    if (tcgetattr (STDIN_FILENO, &old) != 0) {
-        g_printerr ("%s\n", _("Couldn't get termios info"));
-        gcry_free (pwd);
-        return NULL;
-    }
-    new = old;
-    new.c_lflag &= ~ECHO;
-    if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) != 0) {
-        g_printerr ("%s\n", _("Couldn't turn echoing off"));
-        gcry_free (pwd);
-        return NULL;
-    }
-    if (fgets (pwd, 256, stdin) == NULL) {
-        g_printerr ("%s\n", _("Couldn't read password from stdin"));
-        gcry_free (pwd);
-        return NULL;
-    }
-    g_print ("\n");
-    tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
-
-    pwd[g_utf8_strlen (pwd, -1) - 1] = '\0';
-
-    gchar *realloc_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);
-
-    return realloc_pwd;
-}
-
-
 static gboolean
-get_use_secretservice (void)
+parse_options (GApplicationCommandLine *cmdline,
+               CmdlineOpts             *cmdline_opts)
 {
-    gboolean use_secret_service = TRUE; // by default, we enable it
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
-            g_clear_error (&err);
+    GVariantDict *options = g_application_command_line_get_options_dict (cmdline);
+
+    g_variant_dict_lookup (options, "database", "s", &cmdline_opts->database);
+
+    if (g_variant_dict_lookup (options, "show", "b", &cmdline_opts->show)) {
+        if (!g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account)) {
+            g_application_command_line_print (cmdline, "Please provide at least the account option.\n");
             return FALSE;
         }
-        use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
+        g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer);
+        g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact);
+        g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next);
     }
-    return use_secret_service;
+
+    g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
+
+    if (g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export)) {
+        if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
+            g_application_command_line_print (cmdline, "Please provide at least export type.\n");
+            return FALSE;
+        }
+#ifndef USE_FLATPAK_APP_FOLDER
+        g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir);
+#endif
+    }
+    return TRUE;
+}
+
+
+static void
+g_free_cmdline_opts (CmdlineOpts *co)
+{
+    g_free (co->database);
+    g_free (co->account);
+    g_free (co->issuer);
+    g_free (co->export_type);
+    g_free (co->export_dir);
+    g_free (co);
 }

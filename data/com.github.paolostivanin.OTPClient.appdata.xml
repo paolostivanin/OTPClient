@@ -14,6 +14,8 @@
     <keyword>2fa</keyword>
     <keyword>2factor</keyword>
     <keyword>2fa-client</keyword>
+    <keyword>2step</keyword>
+    <keyword>twostep</keyword>
   </keywords>
 
   <description>
@@ -87,6 +89,18 @@
   </content_rating>
 
   <releases>
+    <release version="3.4.0" date="2024-02-09">
+      <description>
+        <p>OTPClient 3.4.0 brings the following changes:</p>
+        <ul>
+          <li>NEW: you can now specify a database when calling the CLI (#340)</li>
+          <li>FIX: handling errors when path and/or password is incorrect (#336)</li>
+          <li>FIX: prompt for file again, if needed (#335)</li>
+          <li>FIX: prevent about dialog from hiding</li>
+          <li>FIX: use system RNG as source of entropy</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.3.0" date="2024-01-08">
       <description>
         <p>OTPClient 3.3.0 brings the following changes:</p>

@@ -1,10 +1,10 @@
 #include <gtk/gtk.h>
 #include "new-db-cb.h"
 #include "change-db-cb.h"
-#include "db-misc.h"
+#include "change-file-cb.h"
 #include "message-dialogs.h"
 
-gboolean
+int
 change_file (AppData *app_data)
 {
     GtkWidget *label = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "diag_changefile_label_id"));
@@ -21,18 +21,18 @@ change_file (AppData *app_data)
     switch (result) {
         case GTK_RESPONSE_ACCEPT:
             // select an existing DB.
-            change_db_cb (NULL, NULL, app_data);
-            res = TRUE;
+            res = change_db (app_data);
             break;
         case GTK_RESPONSE_OK:
             // create a new db.
-            new_db_cb (NULL, NULL, app_data);
-            res = TRUE;
+            res =  new_db (app_data);
             break;
-        case GTK_RESPONSE_CANCEL:
+        case GTK_RESPONSE_CLOSE:
+            res = QUIT_APP;
         default:
             break;
     }
+
     gtk_widget_hide (diag_changefile);
 
     return res;

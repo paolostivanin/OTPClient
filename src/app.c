@@ -24,6 +24,7 @@
 #include "edit-row-cb.h"
 #include "show-qr-cb.h"
 #include "dbinfo-cb.h"
+#include "change-file-cb.h"
 
 #ifndef USE_FLATPAK_APP_FOLDER
 static gchar     *get_db_path               (AppData            *app_data);
@@ -208,11 +209,14 @@ activate (GtkApplication    *app,
         retry:
         app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
         if (app_data->db_data->key == NULL) {
-            if (change_file (app_data) == FALSE) {
+            retry_change_file:
+            if (change_file (app_data) == QUIT_APP) {
                 g_free (app_data->db_data);
                 g_free (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
+            } else {
+                goto retry_change_file;
             }
         }
     }

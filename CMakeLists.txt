@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.3.0" LANGUAGES "C")
+project(OTPClient VERSION "3.4.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -88,7 +88,8 @@ set(GUI_HEADER_FILES
         src/shortcuts-cb.h
         src/webcam-add-cb.h
         src/edit-row-cb.h
-        src/show-qr-cb.h src/dbinfo-cb.h)
+        src/show-qr-cb.h src/dbinfo-cb.h
+        src/change-file-cb.h)
 
 set(GUI_SOURCE_FILES
         src/common/common.c
@@ -128,10 +129,10 @@ set(GUI_SOURCE_FILES
         src/about_diag_cb.c
         src/show-qr-cb.c
         src/setup-signals-shortcuts.c
-        src/change-pwd-cb.c src/dbinfo-cb.c)
+        src/change-pwd-cb.c
+        src/dbinfo-cb.c)
 
 set(CLI_HEADER_FILES
-        src/cli/help.h
         src/cli/get-data.h
         src/common/common.h
         src/db-misc.h
@@ -141,15 +142,17 @@ set(CLI_HEADER_FILES
         src/parse-uri.h
         src/common/get-providers-data.h
         src/google-migration.pb-c.h
-        src/secret-schema.h)
+        src/secret-schema.h
+        src/cli/main.h
+)
 
 set(CLI_SOURCE_FILES
         src/cli/main.c
-        src/cli/help.c
         src/cli/get-data.c
         src/common/common.c
         src/db-misc.c
         src/gquarks.c
+        src/cli/exec-action.c
         src/file-size.c
         src/parse-uri.c
         src/common/andotp.c
