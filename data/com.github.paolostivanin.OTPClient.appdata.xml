@@ -89,6 +89,14 @@
   </content_rating>
 
   <releases>
+    <release version="3.4.1" date="2024-02-12">
+      <description>
+        <p>OTPClient 3.4.1 brings a single fix::</p>
+        <ul>
+          <li>FIX: fix FreeOTP+ export (thanks @hubnut)</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.4.0" date="2024-02-09">
       <description>
         <p>OTPClient 3.4.0 brings the following changes:</p>
