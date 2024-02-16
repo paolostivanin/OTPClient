@@ -14,7 +14,7 @@ get_max_file_size_from_memlock (void)
     struct rlimit r;
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
         // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your OS's memlock limit may be too low for you (64000 bytes). Please have a look at %s\n", link);
+        g_print ("[WARNING] your operating system's memlock limit may be too low for you. Please have a look at %s\n", link);
         return LOW_MEMLOCK_VALUE;
     } else {
         if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
@@ -22,7 +22,7 @@ get_max_file_size_from_memlock (void)
             return MEMLOCK_VALUE;
         } else {
             // memlock is less than 'MEMLOCK_VALUE'
-            g_print ("[WARNING] your OS's memlock limit may be too low for you (current value: %d bytes).\n"
+            g_print ("[WARNING] your operating system's memlock limit may be too low for you (current value: %d bytes).\n"
                      "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
                      "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
             return (gint32)r.rlim_cur;
