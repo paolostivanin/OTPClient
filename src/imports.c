@@ -53,7 +53,7 @@ update_db_from_otps (GSList *otps, AppData *app_data)
         obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
         guint hash = json_object_get_hash (obj);
         if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER(hash), check_duplicate) == NULL) {
-            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdupX (&hash, sizeof (guint)));
+            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdup2 (&hash, sizeof (guint)));
             app_data->db_data->data_to_add = g_slist_append (app_data->db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");
@@ -83,8 +83,7 @@ free_otps_gslist (GSList *otps,
         g_free (otp_data->issuer);
         gcry_free (otp_data->secret);
     }
-
-    g_slist_free_full (otps, g_free);
+    g_slist_free (otps);
 }
 
 
@@ -97,7 +96,8 @@ parse_data_and_update_db (AppData       *app_data,
     GSList *content = NULL;
 
     gchar *pwd = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, AUTHPRO_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_IMPORT_ENC_ACTION_NAME) == 0) {
         pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
         if (pwd == NULL) {
             return FALSE;
@@ -105,11 +105,15 @@ parse_data_and_update_db (AppData       *app_data,
     }
 
     if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) == 0) {
-        content = get_andotp_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 ? TRUE : FALSE , &err);
+        content = get_andotp_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
         content = get_freeotpplus_data (filename, &err);
     } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0) {
-        content = get_aegis_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0 ? TRUE : FALSE , &err);
+        content = get_aegis_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
+    } else if (g_strcmp0 (action_name, AUTHPRO_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_IMPORT_PLAIN_ACTION_NAME) == 0) {
+        content = get_authpro_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
+    } else if (g_strcmp0 (action_name, TWOFAS_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_IMPORT_PLAIN_ACTION_NAME) == 0) {
+        content = get_twofas_data (filename, pwd, &err);
     }
 
     if (content == NULL) {

@@ -26,11 +26,15 @@ export_data_cb (GSimpleAction *simple,
     base_dir = g_get_user_data_dir ();
 #endif
 
-    gboolean encrypted;
-    if ((g_strcmp0 (action_name, "export_andotp") == 0) || (g_strcmp0 (action_name, "export_aegis") == 0)) {
+    gboolean encrypted = FALSE;
+    gchar *password = NULL;
+    if (g_strcmp0 (action_name, "export_andotp") == 0 || g_strcmp0 (action_name, "export_aegis") == 0 ||
+        g_strcmp0 (action_name, "export_authpro_enc") == 0 || g_strcmp0 (action_name, "export_twofas_enc") == 0) {
+        password = prompt_for_password (app_data, NULL, NULL, TRUE);
+        if (password == NULL) {
+            return;
+        }
         encrypted = TRUE;
-    } else {
-        encrypted = FALSE;
     }
 
     GtkFileChooserNative *fl_diag = gtk_file_chooser_native_new ("Export file",
@@ -49,6 +53,10 @@ export_data_cb (GSimpleAction *simple,
         filename = "freeotpplus-exports.txt";
     } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
         filename = (encrypted == TRUE) ? "aegis_encrypted.json" : "aegis_export_plain.json";
+    } else if (g_strcmp0 (action_name, AUTHPRO_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "authpro_encrypted.bin" : "authpro_plain.json";
+    } else if (g_strcmp0 (action_name, TWOFAS_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "twofas_encrypted_v4.2fas" : "twofas_plain_v4.2fas";
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
@@ -68,32 +76,22 @@ export_data_cb (GSimpleAction *simple,
         return;
     }
 
-    gchar *password = NULL, *ret_msg = NULL;
+    gchar *ret_msg = NULL;
     if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0) {
-        if (encrypted == TRUE) {
-            password = prompt_for_password (app_data, NULL, NULL, TRUE);
-            if (password == NULL) {
-                return;
-            }
-        }
         ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->json_data);
-        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_EXPORT_ACTION_NAME) == 0) {
         ret_msg = export_freeotpplus (export_file_abs_path, app_data->db_data->json_data);
-        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
-        if (encrypted == TRUE) {
-            password = prompt_for_password (app_data, NULL, NULL, TRUE);
-            if (password == NULL) {
-                return;
-            }
-        }
-        ret_msg = export_aegis (export_file_abs_path, app_data->db_data->json_data, password);
-        show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
+        ret_msg = export_aegis (export_file_abs_path, password, app_data->db_data->json_data);
+    } else if (g_strcmp0 (action_name, AUTHPRO_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        ret_msg = export_authpro (export_file_abs_path, password, app_data->db_data->json_data);
+    } else if (g_strcmp0 (action_name, TWOFAS_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        ret_msg = export_twofas (export_file_abs_path, password, app_data->db_data->json_data);
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
     }
+    show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
     g_free (ret_msg);
     g_free (export_file_abs_path);
     if (encrypted == TRUE) {

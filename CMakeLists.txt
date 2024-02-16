@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.4.1" LANGUAGES "C")
+project(OTPClient VERSION "3.5.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -44,14 +44,14 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Protobuf 3.6.0 REQUIRED)
-find_package(Gcrypt 1.8.0 REQUIRED)
+find_package(Gcrypt 1.10.1 REQUIRED)
 pkg_check_modules(COTP REQUIRED cotp>=3.0.0)
 pkg_check_modules(PNG REQUIRED libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.12)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
 pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.24.0)
-pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.64.0)
-pkg_check_modules(GIO REQUIRED gio-2.0>=2.64.0)
+pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.68.0)
+pkg_check_modules(GIO REQUIRED gio-2.0>=2.68.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
@@ -130,7 +130,9 @@ set(GUI_SOURCE_FILES
         src/show-qr-cb.c
         src/setup-signals-shortcuts.c
         src/change-pwd-cb.c
-        src/dbinfo-cb.c)
+        src/dbinfo-cb.c
+        src/common/twofas.c
+        src/common/authpro.c)
 
 set(CLI_HEADER_FILES
         src/cli/get-data.h
@@ -159,7 +161,9 @@ set(CLI_SOURCE_FILES
         src/common/aegis.c
         src/common/freeotp.c
         src/secret-schema.c
-        src/google-migration.pb-c.c)
+        src/google-migration.pb-c.c
+        src/common/twofas.c
+        src/common/authpro.c)
 
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES

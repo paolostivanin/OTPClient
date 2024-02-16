@@ -10,6 +10,10 @@ G_BEGIN_DECLS
 #define FREEOTPPLUS_IMPORT_ACTION_NAME      "import_freeotpplus"
 #define AEGIS_IMPORT_ACTION_NAME            "import_aegis"
 #define AEGIS_IMPORT_ENC_ACTION_NAME        "import_aegis_enc"
+#define AUTHPRO_IMPORT_ENC_ACTION_NAME      "import_authpro_enc"
+#define AUTHPRO_IMPORT_PLAIN_ACTION_NAME    "import_authpro_plain"
+#define TWOFAS_IMPORT_ENC_ACTION_NAME       "import_twofas_enc"
+#define TWOFAS_IMPORT_PLAIN_ACTION_NAME     "import_twofas_plain"
 #define GOOGLE_MIGRATION_FILE_ACTION_NAME   "import_google_qr_file"
 #define GOOGLE_MIGRATION_WEBCAM_ACTION_NAME "import_google_qr_webcam"
 
