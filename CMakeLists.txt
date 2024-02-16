@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.4.1" LANGUAGES "C")
+project(OTPClient VERSION "3.5.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -130,7 +130,9 @@ set(GUI_SOURCE_FILES
         src/show-qr-cb.c
         src/setup-signals-shortcuts.c
         src/change-pwd-cb.c
-        src/dbinfo-cb.c)
+        src/dbinfo-cb.c
+        src/common/twofas.c
+        src/common/authpro.c)
 
 set(CLI_HEADER_FILES
         src/cli/get-data.h
@@ -159,7 +161,9 @@ set(CLI_SOURCE_FILES
         src/common/aegis.c
         src/common/freeotp.c
         src/secret-schema.c
-        src/google-migration.pb-c.c)
+        src/google-migration.pb-c.c
+        src/common/twofas.c
+        src/common/authpro.c)
 
 if(BUILD_GUI AND BUILD_CLI)
         list(APPEND CLI_SOURCE_FILES
