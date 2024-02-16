@@ -14,6 +14,7 @@ set(GUI_HEADER_FILES
         ../common/secret-schema.h
         otpclient-application.h
         otpclient-window.h
+        otpclient-types.h
 )
 
 set(GUI_SOURCE_FILES

@@ -5,11 +5,72 @@
     <property name="default-height">600</property>
     <property name="content">
       <object class="AdwToolbarView">
+        <property name="top-bar-style">ADW_TOOLBAR_RAISED</property>
         <child type="top">
           <object class="AdwHeaderBar">
             <child type="title">
               <object class="AdwWindowTitle" id="title">
                 <property name="title">OTPClient</property>
+              </object>
+            </child>
+            <child type="start">
+              <object class="GtkBox" id="titlebar_start_buttons_box">
+                <child>
+                  <object class="GtkMenuButton" id="add_button">
+                    <property name="icon-name">list-add-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="remove_button">
+                    <property name="icon-name">list-remove-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="reorder_button">
+                    <property name="icon-name">mail-send-receive</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="search_button">
+                    <property name="icon-name">system-search-symbolic</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="linked"/>
+                </style>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkBox" id="titlebar_end_buttons_box">
+                <child>
+                  <object class="GtkButton" id="lock_button">
+                    <property name="icon-name">system-lock-screen-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="settings_button">
+                    <property name="icon-name">open-menu-symbolic</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="linked"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkSearchBar" id="search_bar">
+                <property name="search-mode-enabled" bind-source="search_button" bind-property="active" bind-flags="bidirectional"/>
+                <child>
+                  <object class="GtkSearchEntry" id="search_entry">
+                    <property name="placeholder-text" translatable="yes">Find token</property>
+                    <signal name="search-changed" handler="search_text_changed"/>
+                  </object>
+                </child>
               </object>
             </child>
           </object>

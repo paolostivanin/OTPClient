@@ -6,12 +6,12 @@
 
 struct _OTPClientApplication
 {
-    AdwApplication  application;
-    GtkWindow      *window;
+    AdwApplication application;
+    OTPClientWindow *window;
+
     // config stuff
     gboolean show_next_otp;
     gboolean disable_notifications;
-    gint search_column;
     gboolean auto_lock;
     gint inactivity_timeout;
     gboolean app_locked;
@@ -32,7 +32,6 @@ static void otpclient_application_quit            (GSimpleAction *simple,
 
 static const GActionEntry otpclient_application_entries[] = {
         { .name = "about", .activate = otpclient_application_show_about },
-        { .name = "quit", .activate = otpclient_application_quit }
 };
 
 OTPClientApplication *
@@ -66,7 +65,7 @@ otpclient_application_show_about (GSimpleAction *simple,
     };
 
     static const gchar *designers[] = {
-            "Tobias Bernard (bertob) <https://tobiasbernard.com>",
+            "Tobias Bernard (bertob) https://tobiasbernard.com",
             NULL
     };
 
@@ -92,7 +91,7 @@ otpclient_application_quit (GSimpleAction *simple,
                             gpointer       user_data)
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
-    gtk_window_destroy (self->window);
+    gtk_window_destroy (GTK_WINDOW(self->window));
 }
 
 static void
@@ -112,16 +111,12 @@ otpclient_application_startup (GApplication *application)
                                      G_N_ELEMENTS(otpclient_application_entries),
                                      self);
 
-    set_accel_for_action (self, "app.quit", "<Control>q");
-    set_accel_for_action (self, "app.about", "<Control>a");
-    set_accel_for_action (self, "app.settings", "<Control>s");
-    set_accel_for_action (self, "app.kb_shortcuts", "<Control>k");
+    set_accel_for_action (self, "app.about", "<Control>b");
 
     // set default values
     self->app_locked = FALSE;               // app is not locked when started
     self->show_next_otp = FALSE;            // next otp not shown by default
     self->disable_notifications = FALSE;    // notifications enabled by default
-    self->search_column = 0;                // search by account
     self->auto_lock = FALSE;                // disabled by default
     self->inactivity_timeout = 0;           // never by default
     self->use_dark_theme = FALSE;           // light theme by default
@@ -131,7 +126,7 @@ otpclient_application_startup (GApplication *application)
     G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
 
     gtk_window_set_default_icon_name (APPLICATION_ID);
-    self->window = GTK_WINDOW(otpclient_window_new (self));
+    self->window = OTPCLIENT_WINDOW(otpclient_window_new (self));
 }
 
 static void

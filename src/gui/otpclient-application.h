@@ -1,5 +1,6 @@
 #pragma once
 
+#include "otpclient-types.h"
 #include <adwaita.h>
 
 G_BEGIN_DECLS
