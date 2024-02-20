@@ -9,8 +9,8 @@
 #include "../gquarks.h"
 #include "common.h"
 
-#define ANDOTP_IV_SIZE   12
-#define ANDOTP_SALT_SIZE 12
+// salt and iv are both 12 bytes
+#define ANDOTP_SI_SIZE   12
 #define ANDOTP_TAG_SIZE  16
 #define PBKDF2_MIN_BACKUP_ITERATIONS 140000
 #define PBKDF2_MAX_BACKUP_ITERATIONS 160000
@@ -25,11 +25,7 @@ static GSList *get_otps_from_encrypted_backup (const gchar          *path,
 static GSList *get_otps_from_plain_backup     (const gchar          *path,
                                                GError              **err);
 
-static guchar *get_derived_key                (const gchar          *password,
-                                               const guchar         *salt,
-                                               guint32               iterations);
-
-static GSList *parse_json_data                (const gchar          *data,
+static GSList *parse_andotp_json_data         (const gchar          *data,
                                                GError              **err);
 
 
@@ -75,95 +71,11 @@ get_otps_from_encrypted_backup (const gchar          *path,
         return NULL;
     }
 
-    guchar salt[ANDOTP_SALT_SIZE];
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, ANDOTP_SALT_SIZE, NULL, err) == -1) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
+    gchar *decrypted_json = get_data_from_encrypted_backup (path, password, max_file_size, ANDOTP, be_iterations, in_file, in_stream, err);
+    if (decrypted_json == NULL) {
         return NULL;
     }
-
-    guchar iv[ANDOTP_IV_SIZE];
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, ANDOTP_IV_SIZE, NULL, err) == -1) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        return NULL;
-    }
-
-    goffset input_file_size = get_file_size (path);
-    guchar tag[ANDOTP_TAG_SIZE];
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - ANDOTP_TAG_SIZE, G_SEEK_SET, NULL, err)) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        return NULL;
-    }
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, ANDOTP_TAG_SIZE, NULL, err) == -1) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        return NULL;
-    }
-
-    // 4 is the size of iterations (int32)
-    gsize enc_buf_size = (gsize) input_file_size - 4 - ANDOTP_SALT_SIZE - ANDOTP_IV_SIZE - ANDOTP_TAG_SIZE;
-    if (enc_buf_size < 1) {
-        g_printerr ("A non-encrypted file has been selected\n");
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        return NULL;
-    } else if (enc_buf_size > max_file_size) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
-        return NULL;
-    }
-
-    guchar *enc_buf = g_malloc0 (enc_buf_size);
-    if (!g_seekable_seek (G_SEEKABLE (in_stream), 4 + ANDOTP_SALT_SIZE + ANDOTP_IV_SIZE, G_SEEK_SET, NULL, err)) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        g_free (enc_buf);
-        return NULL;
-    }
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, err) == -1) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        g_free (enc_buf);
-        return NULL;
-    }
-    g_object_unref (in_stream);
-    g_object_unref (in_file);
-
-    guchar *derived_key = get_derived_key (password, salt, be_iterations);
-
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, ANDOTP_IV_SIZE);
-    if (hd == NULL) {
-        gcry_free (derived_key);
-        g_free (enc_buf);
-        return NULL;
-    }
-
-    gchar *decrypted_json = gcry_calloc_secure (enc_buf_size, 1);
-    gpg_error_t gpg_err = gcry_cipher_decrypt (hd, decrypted_json, enc_buf_size, enc_buf, enc_buf_size);
-    if (gpg_err) {
-        g_free (enc_buf);
-        gcry_free (derived_key);
-        gcry_free (decrypted_json);
-        gcry_cipher_close (hd);
-        return NULL;
-    }
-    if (gcry_err_code (gcry_cipher_checktag (hd, tag, ANDOTP_TAG_SIZE)) == GPG_ERR_CHECKSUM) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
-        gcry_cipher_close (hd);
-        g_free (enc_buf);
-        gcry_free (derived_key);
-        gcry_free (decrypted_json);
-        return NULL;
-    }
-
-    gcry_cipher_close (hd);
-    gcry_free (derived_key);
-    g_free (enc_buf);
-
-    GSList *otps = parse_json_data (decrypted_json, err);
+    GSList *otps = parse_andotp_json_data (decrypted_json, err);
     gcry_free (decrypted_json);
 
     return otps;
@@ -180,7 +92,7 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
-    GSList *otps = parse_json_data (plain_json_data, err);
+    GSList *otps = parse_andotp_json_data (plain_json_data, err);
     g_free (plain_json_data);
 
     return otps;
@@ -262,14 +174,14 @@ export_andotp (const gchar *export_path,
     guint32 le_iterations = (g_random_int () % (PBKDF2_MAX_BACKUP_ITERATIONS - PBKDF2_MIN_BACKUP_ITERATIONS + 1)) + PBKDF2_MIN_BACKUP_ITERATIONS;
     gint32 be_iterations = (gint32)__builtin_bswap32 (le_iterations);
 
-    guchar *iv = g_malloc0 (ANDOTP_IV_SIZE);
-    gcry_create_nonce (iv, ANDOTP_IV_SIZE);
+    guchar *iv = g_malloc0 (ANDOTP_SI_SIZE);
+    gcry_create_nonce (iv, ANDOTP_SI_SIZE);
 
-    guchar *salt = g_malloc0 (ANDOTP_SALT_SIZE);
-    gcry_create_nonce (salt, ANDOTP_SALT_SIZE);
+    guchar *salt = g_malloc0 (ANDOTP_SI_SIZE);
+    gcry_create_nonce (salt, ANDOTP_SI_SIZE);
 
-    guchar *derived_key = get_derived_key (password, salt, le_iterations);
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, ANDOTP_IV_SIZE);
+    guchar *derived_key = get_andotp_derived_key (password, salt, le_iterations, ANDOTP_SI_SIZE);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, ANDOTP_SI_SIZE);
     if (hd == NULL) {
         gcry_free (derived_key);
         g_free (iv);
@@ -300,10 +212,10 @@ export_andotp (const gchar *export_path,
     if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), &be_iterations, 4, NULL, &err) == -1) {
         goto cleanup_before_exiting;
     }
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), salt, ANDOTP_SALT_SIZE, NULL, &err) == -1) {
+    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), salt, ANDOTP_SI_SIZE, NULL, &err) == -1) {
         goto cleanup_before_exiting;
     }
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), iv, ANDOTP_IV_SIZE, NULL, &err) == -1) {
+    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), iv, ANDOTP_SI_SIZE, NULL, &err) == -1) {
         goto cleanup_before_exiting;
     }
     if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), enc_buf, json_data_size, NULL, &err) == -1) {
@@ -328,25 +240,9 @@ export_andotp (const gchar *export_path,
 }
 
 
-static guchar *
-get_derived_key (const gchar  *password,
-                 const guchar *salt,
-                 guint32       iterations)
-{
-    guchar *derived_key = gcry_malloc_secure (32);
-    if (gcry_kdf_derive (password, (gsize) g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
-                         salt, ANDOTP_SALT_SIZE, iterations, 32, derived_key) != 0) {
-        gcry_free (derived_key);
-        return NULL;
-    }
-
-    return derived_key;
-}
-
-
 static GSList *
-parse_json_data (const gchar *data,
-                 GError     **err)
+parse_andotp_json_data (const gchar *data,
+                        GError     **err)
 {
     json_error_t jerr;
     json_t *array = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
