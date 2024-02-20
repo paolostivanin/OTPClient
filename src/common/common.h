@@ -3,6 +3,7 @@
 #include <glib.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
 
@@ -14,6 +15,9 @@ G_BEGIN_DECLS
 
 #define LOW_MEMLOCK_VALUE    65536 //64KB
 #define MEMLOCK_VALUE     67108864 //64MB
+
+#define ANDOTP  100
+#define AUTHPRO 101
 
 gint32      get_max_file_size_from_memlock  (void);
 
@@ -53,5 +57,23 @@ gcry_cipher_hd_t open_cipher_and_set_data   (guchar         *derived_key,
                                              gsize           iv_len);
 
 GKeyFile   *get_kf_ptr                      (void);
+
+guchar     *get_andotp_derived_key          (const gchar    *password,
+                                             const guchar   *salt,
+                                             guint32         iterations,
+                                             guint32         salt_size);
+
+guchar     *get_authpro_derived_key         (const gchar    *password,
+                                             const guchar   *salt,
+                                             gint32          salt_size);
+
+gchar      *get_data_from_encrypted_backup  (const gchar    *path,
+                                             const gchar    *password,
+                                             gint32          max_file_size,
+                                             gint32          provider,
+                                             guint32         andotp_be_iterations,
+                                             GFile          *in_file,
+                                             GFileInputStream  *in_stream,
+                                             GError        **err);
 
 G_END_DECLS

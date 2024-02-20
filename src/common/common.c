@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <gio/gio.h>
 #include <sys/resource.h>
 #include <cotp.h>
 #include <glib/gi18n.h>
@@ -6,6 +7,8 @@
 #include "jansson.h"
 #include "common.h"
 #include "../google-migration.pb-c.h"
+#include "../file-size.h"
+#include "../gquarks.h"
 
 gint32
 get_max_file_size_from_memlock (void)
@@ -447,4 +450,191 @@ get_kf_ptr (void)
     g_free (cfg_file_path);
     g_key_file_free (kf);
     return NULL;
+}
+
+
+guchar *
+get_authpro_derived_key (const gchar *password,
+                         const guchar *salt,
+                         gint32 salt_size)
+{
+    guchar *derived_key = gcry_malloc_secure (32);
+    // taglen, iterations, memory_cost (65536=64MiB), parallelism
+    const unsigned long params[4] = {32, 3, 65536, 4};
+    gcry_kdf_hd_t hd;
+    if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
+                       params, 4,
+                       password,  (gsize)g_utf8_strlen (password, -1),
+                       salt, salt_size,
+                       NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
+        g_printerr ("Error while opening the KDF handler\n");
+        return NULL;
+    }
+    if (gcry_kdf_compute (hd, NULL) != GPG_ERR_NO_ERROR) {
+        g_printerr ("Error while computing the KDF\n");
+        gcry_free (derived_key);
+        gcry_kdf_close (hd);
+        return NULL;
+    }
+    if (gcry_kdf_final (hd, 32, derived_key) != GPG_ERR_NO_ERROR) {
+        g_printerr ("Error while finalizing the KDF handler\n");
+        gcry_free (derived_key);
+        gcry_kdf_close (hd);
+        return NULL;
+    }
+
+    gcry_kdf_close (hd);
+
+    return derived_key;
+}
+
+
+guchar *
+get_andotp_derived_key (const gchar  *password,
+                        const guchar *salt,
+                        guint32       iterations,
+                        guint32       salt_size)
+{
+    guchar *derived_key = gcry_malloc_secure (32);
+    if (gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
+                         salt, salt_size, iterations, 32, derived_key) != 0) {
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    return derived_key;
+}
+
+
+gchar *
+get_data_from_encrypted_backup (const gchar       *path,
+                                const gchar       *password,
+                                gint32             max_file_size,
+                                gint32             provider,
+                                guint32            andotp_be_iterations,
+                                GFile             *in_file,
+                                GFileInputStream  *in_stream,
+                                GError           **err)
+{
+    gint32 salt_size, iv_size, tag_size;
+    switch (provider) {
+        case ANDOTP:
+            salt_size = iv_size = 12;
+            tag_size = 16;
+            break;
+        case AUTHPRO:
+            salt_size = tag_size = 16;
+            iv_size = 12;
+            break;
+    }
+
+    guchar salt[salt_size];
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, salt_size, NULL, err) == -1) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+
+    guchar iv[iv_size];
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, iv_size, NULL, err) == -1) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+
+    goffset input_file_size = get_file_size (path);
+    if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - tag_size, G_SEEK_SET, NULL, err)) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+    guchar tag[tag_size];
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, tag_size, NULL, err) == -1) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+
+    gsize enc_buf_size;
+    gint32 offset;
+    switch (provider) {
+        case ANDOTP:
+            // 4 is the size of iterations (int32)
+            offset = 4;
+            enc_buf_size = (gsize)input_file_size - offset - salt_size - iv_size - tag_size;
+            break;
+        case AUTHPRO:
+            // 16 is the size of the header
+            offset = 16;
+            enc_buf_size = (gsize)(input_file_size - offset - salt_size - iv_size - tag_size);
+            break;
+    }
+    if (enc_buf_size < 1) {
+        g_printerr ("A non-encrypted file has been selected\n");
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    } else if (enc_buf_size > max_file_size) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
+        return NULL;
+    }
+
+    guchar *enc_buf = g_malloc0 (enc_buf_size);
+    if (!g_seekable_seek (G_SEEKABLE(in_stream), offset + salt_size + iv_size, G_SEEK_SET, NULL, err)) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_free (enc_buf);
+        return NULL;
+    }
+    if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, err) == -1) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_free (enc_buf);
+        return NULL;
+    }
+    g_object_unref (in_stream);
+    g_object_unref (in_file);
+
+    guchar *derived_key;
+    switch (provider) {
+        case ANDOTP:
+            derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations, salt_size);
+            break;
+        case AUTHPRO:
+            derived_key = get_authpro_derived_key (password, salt, salt_size);
+            break;
+    }
+
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, iv_size);
+    if (hd == NULL) {
+        gcry_free (derived_key);
+        g_free (enc_buf);
+        return NULL;
+    }
+
+    gchar *decrypted_data = gcry_calloc_secure (enc_buf_size, 1);
+    gpg_error_t gpg_err = gcry_cipher_decrypt (hd, decrypted_data, enc_buf_size, enc_buf, enc_buf_size);
+    if (gpg_err) {
+        g_free (enc_buf);
+        gcry_free (derived_key);
+        gcry_free (decrypted_data);
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+    if (gcry_err_code (gcry_cipher_checktag (hd, tag, tag_size)) == GPG_ERR_CHECKSUM) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
+        gcry_cipher_close (hd);
+        g_free (enc_buf);
+        gcry_free (derived_key);
+        gcry_free (decrypted_data);
+        return NULL;
+    }
+
+    gcry_cipher_close (hd);
+    gcry_free (derived_key);
+    g_free (enc_buf);
+
+    return decrypted_data;
 }

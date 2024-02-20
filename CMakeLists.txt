@@ -44,7 +44,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Protobuf 3.6.0 REQUIRED)
-find_package(Gcrypt 1.8.0 REQUIRED)
+find_package(Gcrypt 1.10.1 REQUIRED)
 pkg_check_modules(COTP REQUIRED cotp>=3.0.0)
 pkg_check_modules(PNG REQUIRED libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.12)
