@@ -7,12 +7,6 @@
 
 G_BEGIN_DECLS
 
-#if GLIB_CHECK_VERSION(2, 68, 0)
-    #define g_memdupX g_memdup2
-#else
-    #define g_memdupX g_memdup
-#endif
-
 #define LOW_MEMLOCK_VALUE    65536 //64KB
 #define MEMLOCK_VALUE     67108864 //64MB
 
@@ -40,11 +34,6 @@ gchar      *bytes_to_hexstr                 (const guchar   *data,
                                              size_t          datalen);
 
 GSList     *decode_migration_data           (const gchar    *encoded_uri);
-
-guint       g_string_replace_backported     (GString        *string,
-                                             const gchar    *find,
-                                             const gchar    *replace,
-                                             guint           limit);
 
 gchar      *g_uri_unescape_string_secure    (const gchar    *escaped_string,
                                              const gchar    *illegal_characters);

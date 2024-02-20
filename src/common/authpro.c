@@ -128,7 +128,7 @@ parse_authpro_json_data (const gchar *data,
         }
 
         if (!skip) {
-            otps = g_slist_append (otps, g_memdupX (otp, sizeof (otp_t)));
+            otps = g_slist_append (otps, g_memdup2 (otp, sizeof (otp_t)));
         }
 
         gcry_free (otp->secret);

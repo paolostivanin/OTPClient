@@ -176,50 +176,7 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
 }
 
 
-// Backported from Glib 2.68 in order to support Debian "bullseye" and Ubuntu 20.04
-guint
-g_string_replace_backported (GString     *string,
-                             const gchar *find,
-                             const gchar *replace,
-                             guint        limit)
-{
-    gsize f_len, r_len, pos;
-    gchar *cur, *next;
-    guint n = 0;
-
-    g_return_val_if_fail (string != NULL, 0);
-    g_return_val_if_fail (find != NULL, 0);
-    g_return_val_if_fail (replace != NULL, 0);
-
-    f_len = g_utf8_strlen (find, -1);
-    r_len = g_utf8_strlen (replace, -1);
-    cur = string->str;
-
-    while ((next = strstr (cur, find)) != NULL)
-    {
-        pos = next - string->str;
-        g_string_erase (string, (gssize)pos, (gssize)f_len);
-        g_string_insert (string, (gssize)pos, replace);
-        cur = string->str + pos + r_len;
-        n++;
-        /* Only match the empty string once at any given position, to
-         * avoid infinite loops */
-        if (f_len == 0)
-        {
-            if (cur[0] == '\0')
-                break;
-            else
-                cur++;
-        }
-        if (n == limit)
-            break;
-    }
-
-    return n;
-}
-
-
-// Backported from Glib. The only difference is that it's using gcrypt to allocate a secure buffer.
+// Backported from Glib (needed by below function)
 static int
 unescape_character (const char *scanner)
 {
