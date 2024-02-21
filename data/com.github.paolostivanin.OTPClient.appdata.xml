@@ -5,7 +5,7 @@
   <metadata_license>CC-BY-4.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <name>OTPClient</name>
-  <summary>GTK+ application for managing TOTP and HOTP tokens with built-in encryption.</summary>
+  <summary>Application for managing TOTP/HOTP tokens with built-in encryption</summary>
 
   <keywords>
     <keyword>otp</keyword>
@@ -561,8 +561,4 @@
       </description>
     </release>
   </releases>
-  <custom>
-    <value key="Purism::form_factor">workstation</value>
-    <value key="Purism::form_factor">mobile</value>
-  </custom>
 </component>

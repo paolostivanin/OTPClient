@@ -473,7 +473,7 @@ get_data_from_encrypted_backup (const gchar       *path,
                                 GFileInputStream  *in_stream,
                                 GError           **err)
 {
-    gint32 salt_size, iv_size, tag_size;
+    gint32 salt_size = 0, iv_size = 0, tag_size = 0;
     switch (provider) {
         case ANDOTP:
             salt_size = iv_size = ANDOTP_IV_SALT;
@@ -513,7 +513,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     }
 
     gsize enc_buf_size;
-    gint32 offset;
+    gint32 offset = 0;
     switch (provider) {
         case ANDOTP:
             // 4 is the size of iterations (int32)
@@ -553,7 +553,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     g_object_unref (in_stream);
     g_object_unref (in_file);
 
-    guchar *derived_key;
+    guchar *derived_key = NULL;
     switch (provider) {
         case ANDOTP:
             derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations);
