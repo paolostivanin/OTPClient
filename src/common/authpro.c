@@ -12,6 +12,9 @@ static GSList *get_otps_from_encrypted_backup (const gchar       *path,
                                                GFileInputStream  *in_stream,
                                                GError           **err);
 
+static GSList *get_otps_from_plain_backup     (const gchar       *path,
+                                               GError           **err);
+
 static GSList *parse_authpro_json_data        (const gchar       *data,
                                                GError           **err);
 
@@ -29,7 +32,7 @@ get_authpro_data (const gchar  *path,
         return NULL;
     }
 
-    return get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err);
+    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
 }
 
 
@@ -55,6 +58,25 @@ get_otps_from_encrypted_backup (const gchar       *path,
 
     GSList *otps = parse_authpro_json_data (decrypted_json, err);
     gcry_free (decrypted_json);
+
+    return otps;
+}
+
+
+static GSList *
+get_otps_from_plain_backup (const gchar  *path,
+                            GError      **err)
+{
+    json_error_t j_err;
+    json_t *json = json_load_file (path, 0, &j_err);
+    if (!json) {
+        g_printerr ("Error loading json: %s\n", j_err.text);
+        return NULL;
+    }
+
+    gchar *dumped_json = json_dumps (json, 0);
+    GSList *otps = parse_authpro_json_data (dumped_json, err);
+    gcry_free (dumped_json);
 
     return otps;
 }
