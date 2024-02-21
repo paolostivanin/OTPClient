@@ -33,7 +33,6 @@ GSList *
 get_andotp_data (const gchar     *path,
                  const gchar     *password,
                  gint32           max_file_size,
-                 gboolean         encrypted,
                  GError         **err)
 {
     GFile *in_file = g_file_new_for_path(path);
@@ -43,7 +42,7 @@ get_andotp_data (const gchar     *path,
         return NULL;
     }
 
-    return (encrypted == TRUE) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
+    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
 }
 
 

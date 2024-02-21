@@ -30,7 +30,6 @@ GSList *
 get_aegis_data (const gchar     *path,
                 const gchar     *password,
                 gint32           max_file_size,
-                gboolean         encrypted,
                 GError         **err)
 {
     if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
@@ -38,7 +37,7 @@ get_aegis_data (const gchar     *path,
         return NULL;
     }
 
-    return (encrypted == TRUE) ? get_otps_from_encrypted_backup(path, password, max_file_size, err) : get_otps_from_plain_backup(path, err);
+    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, err) : get_otps_from_plain_backup (path, err);
 }
 
 
