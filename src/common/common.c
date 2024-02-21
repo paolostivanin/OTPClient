@@ -453,8 +453,10 @@ get_andotp_derived_key (const gchar  *password,
                         guint32       salt_size)
 {
     guchar *derived_key = gcry_malloc_secure (32);
-    if (gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
-                         salt, salt_size, iterations, 32, derived_key) != 0) {
+    gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
+                                         salt, salt_size, iterations, 32, derived_key);
+    if (g_err != GPG_ERR_NO_ERROR) {
+        g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
         gcry_free (derived_key);
         return NULL;
     }
@@ -562,6 +564,11 @@ get_data_from_encrypted_backup (const gchar       *path,
         case AUTHPRO:
             derived_key = get_authpro_derived_key (password, salt, salt_size);
             break;
+    }
+
+    if (derived_key == NULL) {
+        g_free (enc_buf);
+        return NULL;
     }
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, iv_size);

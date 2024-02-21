@@ -52,7 +52,7 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
-    gchar *dumped_json = json_dumps(json_object_get (json, "db"), 0);
+    gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
     GSList *otps = parse_aegis_json_data (dumped_json, err);
     gcry_free (dumped_json);
 
