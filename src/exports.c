@@ -27,7 +27,8 @@ export_data_cb (GSimpleAction *simple,
 #endif
 
     gboolean encrypted;
-    if ((g_strcmp0 (action_name, "export_andotp") == 0) || (g_strcmp0 (action_name, "export_aegis") == 0)) {
+    if (g_strcmp0 (action_name, "export_andotp") == 0 || g_strcmp0 (action_name, "export_aegis") == 0 ||
+        g_strcmp0 (action_name, "export_authpro_enc") == 0 || g_strcmp0 (action_name, "export_twofas_enc") == 0) {
         encrypted = TRUE;
     } else {
         encrypted = FALSE;
@@ -49,6 +50,10 @@ export_data_cb (GSimpleAction *simple,
         filename = "freeotpplus-exports.txt";
     } else if (g_strcmp0 (action_name, AEGIS_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_EXPORT_PLAIN_ACTION_NAME) == 0) {
         filename = (encrypted == TRUE) ? "aegis_encrypted.json" : "aegis_export_plain.json";
+    } else if (g_strcmp0 (action_name, AUTHPRO_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "authpro_encrypted.bin" : "authpro_plain.json";
+    } else if (g_strcmp0 (action_name, TWOFAS_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_EXPORT_PLAIN_ACTION_NAME) == 0) {
+        filename = (encrypted == TRUE) ? "twofas_encrypted_v4.2fas" : "twofas_plain_v4.2fas";
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
@@ -69,7 +74,8 @@ export_data_cb (GSimpleAction *simple,
     }
 
     gchar *password = NULL, *ret_msg = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, ANDOTP_EXPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_EXPORT_PLAIN_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, AUTHPRO_EXPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_EXPORT_ENC_ACTION_NAME) == 0) {
         if (encrypted == TRUE) {
             password = prompt_for_password (app_data, NULL, NULL, TRUE);
             if (password == NULL) {
