@@ -24,7 +24,6 @@ GSList *get_authpro_data     (const gchar     *path,
 
 GSList *get_twofas_data      (const gchar     *path,
                               const gchar     *password,
-                              gint32           max_file_size,
                               GError         **err);
 
 G_END_DECLS

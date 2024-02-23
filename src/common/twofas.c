@@ -16,9 +16,6 @@ typedef struct twofas_data_t {
 
 static GSList   *get_otps_from_encrypted_backup (const gchar       *path,
                                                  const gchar       *password,
-                                                 gint32             max_file_size,
-                                                 GFile             *in_file,
-                                                 GFileInputStream  *in_stream,
                                                  GError           **err);
 
 static GSList   *get_otps_from_plain_backup     (const gchar       *path,
@@ -39,26 +36,15 @@ static GSList   *parse_twofas_json_data         (const gchar       *data,
 GSList *
 get_twofas_data (const gchar  *path,
                  const gchar  *password,
-                 gint32        max_file_size,
                  GError      **err)
 {
-    GFile *in_file = g_file_new_for_path(path);
-    GFileInputStream *in_stream = g_file_read(in_file, NULL, err);
-    if (*err != NULL) {
-        g_object_unref(in_file);
-        return NULL;
-    }
-
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
+    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
 }
 
 
 static GSList *
 get_otps_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,
-                                gint32             max_file_size,
-                                GFile             *in_file,
-                                GFileInputStream  *in_stream,
                                 GError           **err)
 {
     if (!is_schema_supported (path)) {
@@ -66,21 +52,22 @@ get_otps_from_encrypted_backup (const gchar       *path,
     }
 
     TwofasData *twofas_data = g_new0 (TwofasData, 1);
+    GSList *otps = NULL;
 
     json_t *root = get_json_root (path);
     gchar **b64_encoded_data = g_strsplit (json_string_value (json_object_get (root, "servicesEncrypted")), ":", 3);
     decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
     if (twofas_data->json_data != NULL) {
-        parse_twofas_json_data (twofas_data->json_data, err);
+        otps = parse_twofas_json_data (twofas_data->json_data, err);
+        gcry_free (twofas_data->json_data);
     }
     g_strfreev (b64_encoded_data);
-    gcry_free (twofas_data->json_data);
     g_free (twofas_data->salt);
     g_free (twofas_data->iv);
     g_free (twofas_data);
     json_decref (root);
 
-    return NULL;
+    return otps;
 }
 
 
@@ -155,21 +142,22 @@ decrypt_data (const gchar **b64_data,
                                          twofas_data->salt, salt_out_len, KDF_ITERS, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
         g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
-        // TODO: cleanup
+        gcry_free (derived_key);
+        g_free (enc_data);
         return;
     }
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, twofas_data->iv, iv_out_len);
     if (hd == NULL) {
-        // TODO: cleanup
+        gcry_free (derived_key);
+        g_free (enc_data);
         return;
     }
 
     twofas_data->json_data = gcry_calloc_secure (data_out_len, 1);
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, data_out_len, enc_data, data_out_len);
     if (gpg_err) {
-        // TODO: cleanup
-        return;
+        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
     }
 
     gcry_cipher_close (hd);

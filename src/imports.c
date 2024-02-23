@@ -114,7 +114,7 @@ parse_data_and_update_db (AppData       *app_data,
     } else if (g_strcmp0 (action_name, AUTHPRO_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_IMPORT_PLAIN_ACTION_NAME) == 0) {
         content = get_authpro_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     } else if (g_strcmp0 (action_name, TWOFAS_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_IMPORT_PLAIN_ACTION_NAME) == 0) {
-        content = get_twofas_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
+        content = get_twofas_data (filename, pwd, &err);
     }
 
     if (content == NULL) {
