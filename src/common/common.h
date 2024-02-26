@@ -19,6 +19,9 @@ G_BEGIN_DECLS
 #define ANDOTP_IV_SALT          12
 #define ANDOTP_TAG              16
 
+#define TWOFAS_SALT            256
+#define TWOFAS_IV               12
+
 gint32      get_max_file_size_from_memlock  (void);
 
 gchar      *init_libs                       (gint32          max_file_size);

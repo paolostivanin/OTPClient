@@ -108,7 +108,7 @@ get_otpauth_uri (AppData *app_data,
     g_free (constructed_label);
     g_free (escaped_label);
 
-    return g_string_free (uri, FALSE);
+    return g_string_free_and_steal (uri);
 }
 
 
