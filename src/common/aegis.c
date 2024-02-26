@@ -212,8 +212,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
 gchar *
 export_aegis (const gchar   *export_path,
-              json_t        *json_db_data,
-              const gchar   *password)
+              const gchar   *password,
+              json_t        *json_db_data)
 {
     GError *err = NULL;
     json_t *root = json_object ();

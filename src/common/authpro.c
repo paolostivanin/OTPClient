@@ -36,6 +36,149 @@ get_authpro_data (const gchar  *path,
 }
 
 
+gchar *
+export_authpro (const gchar *export_path,
+                const gchar *password,
+                json_t      *json_db_data)
+{
+    GError *err = NULL;
+    json_t *root = json_object ();
+    json_t *auth_array = json_array ();
+    json_object_set (root, "Authenticators", auth_array);
+    json_object_set (root, "Categories", json_array());
+    json_object_set (root, "AuthenticatorCategories", json_array());
+    json_object_set (root, "CustomIcons", json_array());
+
+    json_t *db_obj, *export_obj;
+    gsize index;
+    json_array_foreach (json_db_data, index, db_obj) {
+        export_obj = json_object ();
+        const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
+        if (issuer != NULL) {
+            if (g_ascii_strcasecmp (issuer, "steam") == 0) {
+                json_object_set (export_obj, "Issuer", json_string ("Steam"));
+            } else {
+                json_object_set(export_obj, "Issuer", json_object_get (db_obj, "issuer"));
+            }
+        }
+        const gchar *label = json_string_value (json_object_get (db_obj, "issuer"));
+        if (label != NULL) {
+            json_object_set (export_obj, "Username", json_object_get (db_obj, "label"));
+        }
+        json_object_set (export_obj, "Secret", json_object_get (db_obj, "secret"));
+        json_object_set (export_obj, "Digits", json_object_get (db_obj, "digits"));
+        json_object_set (export_obj, "Ranking", json_integer (0));
+        json_object_set (export_obj, "Icon", json_null());
+        json_object_set (export_obj, "Pin", json_null());
+        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA1") == 0) {
+            json_object_set (export_obj, "Algorithm", json_integer (0));
+        } else if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA256") == 0) {
+            json_object_set (export_obj, "Algorithm", json_integer (1));
+        } else if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA512") == 0) {
+            json_object_set (export_obj, "Algorithm", json_integer (2));
+        }
+        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+            json_object_set (export_obj, "Period", json_object_get (db_obj, "period"));
+            json_object_set (export_obj, "Counter", json_integer (0));
+            json_object_set (export_obj, "Type", json_integer (2));
+        } else {
+            json_object_set (export_obj, "Counter", json_object_get (db_obj, "counter"));
+            json_object_set (export_obj, "Period", json_integer (0));
+            json_object_set (export_obj, "Type", json_integer (1));
+        }
+        json_array_append (auth_array, export_obj);
+    }
+
+    gchar *json_data = json_dumps (root, JSON_COMPACT);
+    if (json_data == NULL) {
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't dump json data");
+        goto end;
+    }
+    gsize json_data_size = strlen (json_data);
+
+    GFile *out_gfile = g_file_new_for_path (export_path);
+    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+    if (password != NULL) {
+        // encrypt the content and write the encrypted file to disk
+        const gchar *header = "AUTHENTICATORPRO";
+        guchar *salt = g_malloc0 (AUTHPRO_SALT_TAG);
+        gcry_create_nonce (salt, AUTHPRO_SALT_TAG);
+        guchar *iv = g_malloc0 (AUTHPRO_IV);
+        gcry_create_nonce (iv, AUTHPRO_SALT_TAG);
+        guchar *derived_key = get_authpro_derived_key (password, salt);
+        if (derived_key == NULL) {
+            g_free (salt);
+            g_free (iv);
+            g_set_error (&err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key.");
+            goto end;
+        }
+        gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, AUTHPRO_IV);
+        if (hd == NULL) {
+            gcry_free (derived_key);
+            g_free (salt);
+            g_free (iv);
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the cipher.");
+            goto end;
+        }
+        gchar *enc_buf = gcry_calloc_secure (json_data_size, 1);
+        gpg_error_t gpg_err = gcry_cipher_encrypt (hd, enc_buf, json_data_size, json_data, json_data_size);
+        if (gpg_err != GPG_ERR_NO_ERROR) {
+            g_printerr ("Failed to encrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to encrypt data.");
+            gcry_free (derived_key);
+            gcry_free (enc_buf);
+            g_free (iv);
+            g_free (salt);
+            gcry_cipher_close (hd);
+            goto end;
+        }
+        guchar tag[AUTHPRO_SALT_TAG];
+        gcry_cipher_gettag (hd, tag, AUTHPRO_SALT_TAG);
+        gcry_cipher_close (hd);
+
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), header, 16, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write header to file.");
+            goto enc_end;
+        }
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), salt, AUTHPRO_SALT_TAG, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write salt to file.");
+            goto enc_end;
+        }
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), iv, AUTHPRO_IV, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write iv to file.");
+            goto enc_end;
+        }
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buf, json_data_size, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write payload to file.");
+            goto enc_end;
+        }
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, AUTHPRO_SALT_TAG, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write tag to file");
+            goto enc_end;
+        }
+        enc_end:
+        gcry_free (derived_key);
+        gcry_free (enc_buf);
+        g_free (iv);
+        g_free (salt);
+    } else {
+        // write the plain json to disk
+        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
+        }
+    }
+    g_object_unref (out_stream);
+    g_object_unref (out_gfile);
+
+    end:
+    gcry_free (json_data);
+    json_decref (auth_array);
+    json_decref (root);
+
+    return (err != NULL ? g_strdup (err->message) : NULL);
+}
+
+
 static GSList *
 get_otps_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,

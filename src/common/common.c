@@ -412,8 +412,7 @@ get_kf_ptr (void)
 
 guchar *
 get_authpro_derived_key (const gchar *password,
-                         const guchar *salt,
-                         gint32 salt_size)
+                         const guchar *salt)
 {
     guchar *derived_key = gcry_malloc_secure (32);
     // taglen, iterations, memory_cost (65536=64MiB), parallelism
@@ -422,7 +421,7 @@ get_authpro_derived_key (const gchar *password,
     if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                        params, 4,
                        password,  (gsize)g_utf8_strlen (password, -1),
-                       salt, salt_size,
+                       salt, AUTHPRO_SALT_TAG,
                        NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
         g_printerr ("Error while opening the KDF handler\n");
         return NULL;
@@ -449,12 +448,11 @@ get_authpro_derived_key (const gchar *password,
 guchar *
 get_andotp_derived_key (const gchar  *password,
                         const guchar *salt,
-                        guint32       iterations,
-                        guint32       salt_size)
+                        guint32       iterations)
 {
     guchar *derived_key = gcry_malloc_secure (32);
     gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
-                                         salt, salt_size, iterations, 32, derived_key);
+                                         salt, ANDOTP_IV_SALT, iterations, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
         g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
         gcry_free (derived_key);
@@ -478,12 +476,12 @@ get_data_from_encrypted_backup (const gchar       *path,
     gint32 salt_size, iv_size, tag_size;
     switch (provider) {
         case ANDOTP:
-            salt_size = iv_size = 12;
-            tag_size = 16;
+            salt_size = iv_size = ANDOTP_IV_SALT;
+            tag_size = ANDOTP_TAG;
             break;
         case AUTHPRO:
-            salt_size = tag_size = 16;
-            iv_size = 12;
+            salt_size = tag_size = AUTHPRO_SALT_TAG;
+            iv_size = AUTHPRO_IV;
             break;
     }
 
@@ -520,14 +518,13 @@ get_data_from_encrypted_backup (const gchar       *path,
         case ANDOTP:
             // 4 is the size of iterations (int32)
             offset = 4;
-            enc_buf_size = (gsize)input_file_size - offset - salt_size - iv_size - tag_size;
             break;
         case AUTHPRO:
             // 16 is the size of the header
             offset = 16;
-            enc_buf_size = (gsize)(input_file_size - offset - salt_size - iv_size - tag_size);
             break;
     }
+    enc_buf_size = (gsize)(input_file_size - offset - salt_size - iv_size - tag_size);
     if (enc_buf_size < 1) {
         g_printerr ("A non-encrypted file has been selected\n");
         g_object_unref (in_stream);
@@ -559,10 +556,10 @@ get_data_from_encrypted_backup (const gchar       *path,
     guchar *derived_key;
     switch (provider) {
         case ANDOTP:
-            derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations, salt_size);
+            derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations);
             break;
         case AUTHPRO:
-            derived_key = get_authpro_derived_key (password, salt, salt_size);
+            derived_key = get_authpro_derived_key (password, salt);
             break;
     }
 

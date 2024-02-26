@@ -179,7 +179,7 @@ export_andotp (const gchar *export_path,
     guchar *salt = g_malloc0 (ANDOTP_SI_SIZE);
     gcry_create_nonce (salt, ANDOTP_SI_SIZE);
 
-    guchar *derived_key = get_andotp_derived_key (password, salt, le_iterations, ANDOTP_SI_SIZE);
+    guchar *derived_key = get_andotp_derived_key (password, salt, le_iterations);
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, ANDOTP_SI_SIZE);
     if (hd == NULL) {
         gcry_free (derived_key);

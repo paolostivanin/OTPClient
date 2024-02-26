@@ -42,6 +42,23 @@ get_twofas_data (const gchar  *path,
 }
 
 
+gchar *
+export_twofas (const gchar *export_path,
+               const gchar *password,
+               json_t      *json_db_data)
+{
+    // TODO: create the otps json (services => array(name, secret,
+    //                                               otp =>object(link, label=account, issuer, digits, period, algorithm, tokenType, source=Link),
+    //                                               order => object(position=0++),
+    //                                               icon=null),
+    //                             groups => array(),
+    //                             schemaVersion: 4
+    // TODO: create the encrypted format json (services => array(), groups => array(), schemaVersion: 4, servicesEncrypted: base64(otps_json), reference: )
+    // TODO: encrypt the otps json
+    // TODO: add encrypted otps json to encrypted format json
+}
+
+
 static GSList *
 get_otps_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,

@@ -28,15 +28,15 @@ gchar  *export_freeotpplus (const gchar      *export_path,
                             json_t           *json_db_data);
 
 gchar  *export_aegis       (const gchar      *export_path,
-                            json_t           *json_db_data,
-                            const gchar      *password);
+                            const gchar      *password,
+                            json_t           *json_db_data);
 
 gchar  *export_authpro     (const gchar      *export_path,
-                            json_t           *json_db_data,
-                            const gchar      *password);
+                            const gchar      *password,
+                            json_t           *json_db_data);
 
 gchar  *export_twofas      (const gchar      *export_path,
-                            json_t           *json_db_data,
-                            const gchar      *password);
+                            const gchar      *password,
+                            json_t           *json_db_data);
 
 G_END_DECLS

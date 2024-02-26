@@ -10,8 +10,14 @@ G_BEGIN_DECLS
 #define LOW_MEMLOCK_VALUE    65536 //64KB
 #define MEMLOCK_VALUE     67108864 //64MB
 
-#define ANDOTP  100
-#define AUTHPRO 101
+#define ANDOTP                 100
+#define AUTHPRO                101
+
+#define AUTHPRO_IV              12
+#define AUTHPRO_SALT_TAG        16
+
+#define ANDOTP_IV_SALT          12
+#define ANDOTP_TAG              16
 
 gint32      get_max_file_size_from_memlock  (void);
 
@@ -49,12 +55,10 @@ GKeyFile   *get_kf_ptr                      (void);
 
 guchar     *get_andotp_derived_key          (const gchar    *password,
                                              const guchar   *salt,
-                                             guint32         iterations,
-                                             guint32         salt_size);
+                                             guint32         iterations);
 
 guchar     *get_authpro_derived_key         (const gchar    *password,
-                                             const guchar   *salt,
-                                             gint32          salt_size);
+                                             const guchar   *salt);
 
 gchar      *get_data_from_encrypted_backup  (const gchar    *path,
                                              const gchar    *password,
