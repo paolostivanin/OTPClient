@@ -5,10 +5,9 @@
 #include "message-dialogs.h"
 #include "common/exports.h"
 
-
-static void show_ret_msg_dialog (GtkWidget   *mainwin,
-                                 const gchar *fpath,
-                                 const gchar *ret_msg);
+static void     show_ret_msg_dialog       (GtkWidget   *mainwin,
+                                           const gchar *fpath,
+                                           const gchar *ret_msg);
 
 
 void
@@ -35,6 +34,12 @@ export_data_cb (GSimpleAction *simple,
             return;
         }
         encrypted = TRUE;
+    } else {
+        const gchar *msg = "Please note that exporting to a plain format is a huge security risk.\n"
+                            "If you wish to safely abort the operation, please click the 'Cancel' button below.";
+        if (get_confirmation_from_dialog (app_data->main_window, msg) == FALSE) {
+            return;
+        }
     }
 
     GtkFileChooserNative *fl_diag = gtk_file_chooser_native_new ("Export file",
