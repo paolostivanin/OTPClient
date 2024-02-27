@@ -38,8 +38,8 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
 - import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
-- import and export encrypted [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) backup
-- import and export encrypted [2FAS](https://github.com/twofas) backup
+- import and export encrypted/plain [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) backup
+- import and export encrypted/plain [2FAS](https://github.com/twofas) backup
 - import of Google's migration QR codes
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
