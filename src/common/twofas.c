@@ -35,6 +35,10 @@ static gchar    *get_encoded_data               (guchar            *enc_buf,
                                                  guchar            *salt,
                                                  guchar            *iv);
 
+static gchar    *get_reference_data             (guchar            *derived_key,
+                                                 guchar            *salt,
+                                                 guchar            *iv);
+
 static GSList   *parse_twofas_json_data         (const gchar       *data,
                                                  GError           **err);
 
@@ -53,9 +57,6 @@ export_twofas (const gchar *export_path,
                const gchar *password,
                json_t      *json_db_data)
 {
-    // TODO: create the otps json (services => array(secret,
-    //                                               order => object(position=0++),
-    //                                               icon=null),
     GError *err = NULL;
     json_t *root = json_object ();
     json_t *services_array = json_array ();
@@ -80,6 +81,7 @@ export_twofas (const gchar *export_path,
                 json_object_set (otp_obj, "issuer", json_string (issuer));
             }
         }
+        json_object_set (export_obj, "secret", json_object_get (db_obj, "secret"));
         const gchar *label = json_string_value (json_object_get (db_obj, "label"));
         if (label != NULL) {
             json_object_set (otp_obj, "label", json_string (label));
@@ -87,10 +89,10 @@ export_twofas (const gchar *export_path,
         }
 
         gchar *algo = g_ascii_strup (json_string_value (json_object_get (db_obj, "algo")), -1);
-        json_object_set (otp_obj, "algorithm", json_object_get (db_obj, "digits"));
+        json_object_set (otp_obj, "algorithm", json_string (algo));
         g_free (algo);
 
-        json_object_set (otp_obj, "digits", json_string (algo));
+        json_object_set (otp_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (otp_obj, "source", json_string ("Link"));
         gchar *otpauth_uri = secure_strdup (get_otpauth_uri (NULL, db_obj));
         json_object_set (otp_obj, "link", json_string (otpauth_uri));
@@ -105,8 +107,8 @@ export_twofas (const gchar *export_path,
         }
 
         json_object_set (order_obj, "position", json_integer ((json_int_t)index));
-        json_object_set (export_obj, "order", order_obj);
         json_object_set (export_obj, "otp", otp_obj);
+        json_object_set (export_obj, "order", order_obj);
         json_object_set (export_obj, "icon", json_null());
 
         json_array_append (services_array, export_obj);
@@ -158,16 +160,20 @@ export_twofas (const gchar *export_path,
             goto end;
         }
         // TWOFAS ignores the tag, so we don't have to append it (sigh!)
-        gcry_free (derived_key);
         gcry_cipher_close (hd);
 
         json_t *enc_root = json_object ();
         json_object_set (enc_root, "services", json_array ());
         json_object_set (enc_root, "groups", json_array());
         json_object_set (enc_root, "schemaVersion", json_integer (4));
-        json_object_set (enc_root, "reference", json_null ());
         gchar *encoded_data = get_encoded_data (enc_buf, json_data_size, salt, iv);
         json_object_set (enc_root, "servicesEncrypted", json_string (encoded_data));
+        gchar *encoded_ref_data = get_reference_data (derived_key, salt, iv);
+        if (encoded_ref_data == NULL) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't encrypt the reference data.");
+            goto enc_end;
+        }
+        json_object_set (enc_root, "reference", json_string (encoded_ref_data));
         gchar *json_enc_data = json_dumps (enc_root, JSON_COMPACT);
         if (json_enc_data == NULL) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't dump json data");
@@ -179,6 +185,7 @@ export_twofas (const gchar *export_path,
         gcry_free (json_enc_data);
 
         enc_end:
+        gcry_free (derived_key);
         g_free (iv);
         g_free (salt);
         g_free (encoded_data);
@@ -339,6 +346,35 @@ get_encoded_data (guchar *enc_buf,
     g_free (payload);
     g_free (encoded_salt);
     g_free (encoded_iv);
+
+    return encoded_data;
+}
+
+
+static gchar *
+get_reference_data (guchar *derived_key,
+                    guchar *salt,
+                    guchar *iv)
+{
+    // This is taken from https://github.com/twofas/2fas-android/blob/main/data/services/src/main/java/com/twofasapp/data/services/domain/BackupContent.kt
+    const gchar *reference = "tRViSsLKzd86Hprh4ceC2OP7xazn4rrt4xhfEUbOjxLX8Rc3mkISXE0lWbmnWfggogbBJhtYgpK6fMl1D6mtsy92R3HkdGfwuXbzLebqVFJsR7IZ2w58t938iymwG4824igYy1wi6n2WDpO1Q1P69zwJGs2F5a1qP4MyIiDSD7NCV2OvidXQCBnDlGfmz0f1BQySRkkt4ryiJeCjD2o4QsveJ9uDBUn8ELyOrESv5R5DMDkD4iAF8TXU7KyoJujd";
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, TWOFAS_IV);
+    if (hd == NULL) {
+        g_printerr ("Failed to open the cipher to encrypt the reference data.\n");
+        return NULL;
+    }
+    gsize buf_size = strlen (reference);
+    guchar *enc_ref_buf = gcry_calloc (buf_size, 1);
+    gpg_error_t gpg_err = gcry_cipher_encrypt (hd, enc_ref_buf, buf_size, reference, buf_size);
+    if (gpg_err != GPG_ERR_NO_ERROR) {
+        g_printerr ("Failed to encrypt the data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+        gcry_free (enc_ref_buf);
+        gcry_cipher_close (hd);
+        return NULL;
+    }
+    gchar *encoded_data = get_encoded_data (enc_ref_buf, buf_size, salt, iv);
+    gcry_free (enc_ref_buf);
+    gcry_cipher_close (hd);
 
     return encoded_data;
 }
