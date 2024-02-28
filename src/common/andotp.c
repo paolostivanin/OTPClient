@@ -314,9 +314,7 @@ parse_andotp_json_data (const gchar *data,
             json_decref (obj);
             return NULL;
         }
-
-        otps = g_slist_append (otps, g_memdup2 (otp, sizeof (otp_t)));
-        g_free (otp);
+        otps = g_slist_append (otps, otp);
     }
 
     json_decref (array);

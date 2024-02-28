@@ -83,8 +83,7 @@ free_otps_gslist (GSList *otps,
         g_free (otp_data->issuer);
         gcry_free (otp_data->secret);
     }
-
-    g_slist_free_full (otps, g_free);
+    g_slist_free (otps);
 }
 
 
