@@ -68,10 +68,9 @@ new_db (AppData *app_data)
             g_string_free (new_db_path_with_suffix, TRUE);
             break;
         case GTK_RESPONSE_CANCEL:
-            gtk_widget_destroy (newdb_diag);
-            return QUIT_APP;
         default:
-            break;
+            gtk_widget_hide (newdb_diag);
+            return QUIT_APP;
     }
     gtk_widget_destroy (newdb_diag);
 
