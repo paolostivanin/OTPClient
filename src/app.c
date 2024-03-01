@@ -609,6 +609,8 @@ get_db_path (AppData *app_data)
             gchar *msg = g_strconcat ("Database file/location:\n<b>", db_path, "</b>\ndoes not exist. A new database will be created.", NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
+            g_free (db_path);
+            db_path = NULL;
             goto new_db;
         }
         goto end;

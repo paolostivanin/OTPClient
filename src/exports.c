@@ -78,6 +78,9 @@ export_data_cb (GSimpleAction *simple,
 
     if (export_file_abs_path == NULL) {
         show_message_dialog (app_data->main_window, "Invalid export file name/path.", GTK_MESSAGE_ERROR);
+        if (encrypted == TRUE) {
+            gcry_free (password);
+        }
         return;
     }
 

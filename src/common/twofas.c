@@ -340,13 +340,15 @@ decrypt_data (const gchar **b64_data,
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
         g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        gcry_free (derived_key);
+        g_free (enc_data);
+        gcry_cipher_close (hd);
+        return;
     }
 
     gpg_err = gcry_cipher_checktag (hd, tag, TWOFAS_TAG);
     if (gpg_err) {
         g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
-        // TODO: cleanup
-        return;
     }
 
     gcry_cipher_close (hd);

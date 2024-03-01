@@ -424,6 +424,7 @@ get_authpro_derived_key (const gchar *password,
                        salt, AUTHPRO_SALT_TAG,
                        NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
         g_printerr ("Error while opening the KDF handler\n");
+        gcry_free (derived_key);
         return NULL;
     }
     if (gcry_kdf_compute (hd, NULL) != GPG_ERR_NO_ERROR) {

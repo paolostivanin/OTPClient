@@ -43,6 +43,7 @@ new_db (AppData *app_data)
                 if (app_data->db_data->key == NULL) {
                     gtk_widget_hide (newdb_diag);
                     revert_db_path (app_data, old_db_path);
+                    g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
                 }
                 secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
@@ -53,6 +54,7 @@ new_db (AppData *app_data)
                     g_clear_error (&err);
                     gtk_widget_hide (newdb_diag);
                     revert_db_path (app_data, old_db_path);
+                    g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
                 }
                 load_new_db (app_data, &err);
@@ -61,6 +63,7 @@ new_db (AppData *app_data)
                     g_clear_error (&err);
                     gtk_widget_hide (newdb_diag);
                     revert_db_path (app_data, old_db_path);
+                    g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
                 }
                 g_free (old_db_path);
