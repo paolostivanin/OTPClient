@@ -120,7 +120,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "aegis_exports.json.aes" : "aegis_exports.json", NULL);
-            ret_msg = export_aegis (exported_file_path, db_data->json_data, export_pwd);
+            ret_msg = export_aegis (exported_file_path, export_pwd, db_data->json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }

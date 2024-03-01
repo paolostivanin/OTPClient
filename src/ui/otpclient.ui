@@ -2170,12 +2170,12 @@ but not the number of digits and/or the period/counter.</property>
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="import_authplus_model_btn_id">
+          <object class="GtkModelButton" id="import_freeotpplus_model_btn_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_authplus</property>
-            <property name="text" translatable="yes">Authenticator Plus</property>
+            <property name="action-name">settings_menu.import_freeotpplus</property>
+            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2184,12 +2184,12 @@ but not the number of digits and/or the period/counter.</property>
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="import_freeotpplus_model_btn_id">
+          <object class="GtkModelButton" id="import_aegis_enc_model_btn_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_freeotpplus</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
+            <property name="action-name">settings_menu.import_aegis_enc</property>
+            <property name="text" translatable="yes">Aegis (encrypted json)</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2212,12 +2212,12 @@ but not the number of digits and/or the period/counter.</property>
           </packing>
         </child>
         <child>
-          <object class="GtkModelButton" id="import_aegis_enc_model_btn_id">
+          <object class="GtkModelButton" id="import_authpro_enc_model_btn_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_aegis_enc</property>
-            <property name="text" translatable="yes">Aegis (encrypted json)</property>
+            <property name="action-name">settings_menu.import_authpro_enc</property>
+            <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -2225,6 +2225,49 @@ but not the number of digits and/or the period/counter.</property>
             <property name="position">5</property>
           </packing>
         </child>
+        <child>
+          <object class="GtkModelButton" id="import_authpro_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_authpro_plain</property>
+            <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">6</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_twofas_enc_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_twofas_enc</property>
+            <property name="text" translatable="yes">2FAS (encrypted json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">7</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="import_twofas_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.import_twofas_plain</property>
+            <property name="text" translatable="yes">2FAS (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">8</property>
+          </packing>
+        </child>
+
         <child>
           <object class="GtkModelButton" id="import_google_qr_model_btn_id">
             <property name="visible">True</property>
@@ -2236,7 +2279,7 @@ but not the number of digits and/or the period/counter.</property>
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">6</property>
+            <property name="position">9</property>
           </packing>
         </child>
       </object>
@@ -2318,6 +2361,62 @@ but not the number of digits and/or the period/counter.</property>
             <property name="expand">False</property>
             <property name="fill">True</property>
             <property name="position">4</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_authpro_enc_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_authpro_enc</property>
+            <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">5</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_authpro_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_authpro_plain</property>
+            <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">6</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_twofas_enc_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_twofas_enc</property>
+            <property name="text" translatable="yes">2FAS (encrypted json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">7</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_twofas_plain_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.export_twofas_plain</property>
+            <property name="text" translatable="yes">2FAS (plain json)</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">8</property>
           </packing>
         </child>
       </object>

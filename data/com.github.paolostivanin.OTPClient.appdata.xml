@@ -5,7 +5,7 @@
   <metadata_license>CC-BY-4.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <name>OTPClient</name>
-  <summary>GTK+ application for managing TOTP and HOTP tokens with built-in encryption.</summary>
+  <summary>Application for managing TOTP/HOTP tokens with built-in encryption</summary>
 
   <keywords>
     <keyword>otp</keyword>
@@ -89,6 +89,20 @@
   </content_rating>
 
   <releases>
+    <release version="3.5.0" date="2024-03-01x">
+      <description>
+        <p>OTPClient 3.5.0 brings some new features and improvements:</p>
+        <ul>
+          <li>NEW: add support for importing and exporting plain/encrypted 2FAS backups (#322)</li>
+          <li>NEW: add support for importing and exporting plain/encrypted AuthenticatorPro backups (#322)</li>
+          <li>CHANGE: show warning when exporting a plain backup</li>
+          <li>CHANGE: remove support for older Glib and GCrypt</li>
+          <li>FIX: add 2fa keyword to the desktop file (#349)</li>
+          <li>FIX: remove custom keywords from metadata file (#348)</li>
+          <li>FIX: returning to a dialog won't crash the widget</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.4.1" date="2024-02-12">
       <description>
         <p>OTPClient 3.4.1 brings a single fix::</p>
@@ -561,8 +575,4 @@
       </description>
     </release>
   </releases>
-  <custom>
-    <value key="Purism::form_factor">workstation</value>
-    <value key="Purism::form_factor">mobile</value>
-  </custom>
 </component>

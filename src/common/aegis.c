@@ -22,7 +22,7 @@ static GSList *get_otps_from_encrypted_backup (const gchar          *path,
                                                gint32                max_file_size,
                                                GError              **err);
 
-static GSList *parse_json_data                (const gchar          *data,
+static GSList *parse_aegis_json_data          (const gchar          *data,
                                                GError              **err);
 
 
@@ -30,7 +30,6 @@ GSList *
 get_aegis_data (const gchar     *path,
                 const gchar     *password,
                 gint32           max_file_size,
-                gboolean         encrypted,
                 GError         **err)
 {
     if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
@@ -38,7 +37,7 @@ get_aegis_data (const gchar     *path,
         return NULL;
     }
 
-    return (encrypted == TRUE) ? get_otps_from_encrypted_backup(path, password, max_file_size, err) : get_otps_from_plain_backup(path, err);
+    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, err) : get_otps_from_plain_backup (path, err);
 }
 
 
@@ -53,8 +52,8 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
-    gchar *dumped_json = json_dumps(json_object_get (json, "db"), 0);
-    GSList *otps = parse_json_data (dumped_json, err);
+    gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
+    GSList *otps = parse_aegis_json_data (dumped_json, err);
     gcry_free (dumped_json);
 
     return otps;
@@ -204,7 +203,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     g_regex_unref (regex);
     gcry_free (decrypted_db);
 
-    GSList *otps = parse_json_data (cleaned_db, err);
+    GSList *otps = parse_aegis_json_data (cleaned_db, err);
     gcry_free (cleaned_db);
 
     return otps;
@@ -213,8 +212,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
 gchar *
 export_aegis (const gchar   *export_path,
-              json_t        *json_db_data,
-              const gchar   *password)
+              const gchar   *password,
+              json_t        *json_db_data)
 {
     GError *err = NULL;
     json_t *root = json_object ();
@@ -422,8 +421,8 @@ export_aegis (const gchar   *export_path,
 
 
 static GSList *
-parse_json_data (const gchar *data,
-                 GError     **err)
+parse_aegis_json_data (const gchar *data,
+                       GError     **err)
 {
     json_error_t jerr;
     json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
@@ -451,6 +450,7 @@ parse_json_data (const gchar *data,
         otp->secret = secure_strdup (json_string_value (json_object_get (info_obj, "secret")));
         otp->digits = (guint32) json_integer_value (json_object_get(info_obj, "digits"));
 
+        gboolean skip = FALSE;
         const gchar *type = json_string_value (json_object_get (obj, "type"));
         if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup (type);
@@ -468,11 +468,8 @@ parse_json_data (const gchar *data,
             g_free (otp->issuer);
             otp->issuer = g_strdup ("Steam");
         } else {
-            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "otp type is neither TOTP nor HOTP");
-            gcry_free (otp->secret);
-            g_free (otp);
-            json_decref (obj);
-            return NULL;
+            g_printerr ("Skipping token due to unsupported type: %s\n", type);
+            skip = TRUE;
         }
 
         const gchar *algo = json_string_value (json_object_get (info_obj, "algo"));
@@ -481,16 +478,20 @@ parse_json_data (const gchar *data,
             g_ascii_strcasecmp (algo, "SHA512") == 0) {
                 otp->algo = g_ascii_strup (algo, -1);
         } else {
-            g_printerr ("algo not supported (must be either one of: sha1, sha256 or sha512\n");
-            gcry_free (otp->secret);
-            g_free (otp);
-            json_decref (obj);
-            json_decref (info_obj);
-            return NULL;
+            g_printerr ("Skipping token due to unsupported algo: %s\n", algo);
+            skip = TRUE;
         }
 
-        otps = g_slist_append (otps, g_memdupX (otp, sizeof (otp_t)));
-        g_free (otp);
+        if (!skip) {
+            otps = g_slist_append (otps, otp);
+        } else {
+            gcry_free (otp->secret);
+            g_free (otp->issuer);
+            g_free (otp->account_name);
+            g_free (otp->algo);
+            g_free (otp->type);
+            g_free (otp);
+        }
     }
 
     json_decref (root);

@@ -142,7 +142,7 @@ parse_uri (const gchar   *uri,
     }
     parse_parameters (uri_copy, otp);
 
-    *otps = g_slist_append (*otps, g_memdupX (otp, sizeof (otp_t)));
+    *otps = g_slist_append (*otps, g_memdup2 (otp, sizeof (otp_t)));
     g_free (otp);
 }
 

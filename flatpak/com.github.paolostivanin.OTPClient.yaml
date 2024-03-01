@@ -1,11 +1,11 @@
 app-id: com.github.paolostivanin.OTPClient
 runtime: org.gnome.Platform
-runtime-version: '44'
+runtime-version: '45'
 sdk: org.gnome.Sdk
 command: otpclient
 finish-args:
 - "--share=ipc"
-- "--socket=x11"
+- "--socket=fallback-x11"
 - "--socket=wayland"
 - "--device=all"
 - "--talk-name=org.freedesktop.secrets"
@@ -42,8 +42,8 @@ modules:
   - "/lib/*.la"
   sources:
   - type: archive
-    url: https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v1.4.1.tar.gz
-    sha256: 99be336cdb15dfc5827efe34e5ac9aaa962e2485db547dd254d2a122a7d23102
+    url: https://github.com/protobuf-c/protobuf-c/archive/refs/tags/v1.5.0.tar.gz
+    sha256: 7b404c63361ed35b3667aec75cc37b54298d56dd2bcf369de3373212cc06fd98
 - name: qrencode
   buildsystem: cmake-ninja
   config-opts:
@@ -66,8 +66,8 @@ modules:
   - "--enable-codes=qrcode"
   sources:
   - type: archive
-    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.90.tar.gz
-    sha256: ff857dd7e3dbe043dac3765b5182c91dfd0477800713a75d15287d797cee60fa
+    url: https://www.linuxtv.org/downloads/zbar/zbar-0.23.93.tar.gz
+    sha256: 78ae427a529f0399561bc198de5c2c7ca3f11d05fa9e903e65e501168433d218
 - name: libcotp
   buildsystem: cmake-ninja
   config-opts:
@@ -77,8 +77,8 @@ modules:
   - "/include"
   sources:
   - type: archive
-    url: https://github.com/paolostivanin/libcotp/archive/v2.0.1.tar.gz
-    sha256: b111d528bbde7c1a0a392f49293b25ae33e6e78fbcbe378e0cf8bc6d59743d11
+    url: https://github.com/paolostivanin/libcotp/archive/v3.0.0.tar.gz
+    sha256: ff0b9ce208c4c6542a0f1e739cf31978fbf28848c573837c671a6cb7b56b2c12
 - name: OTPClient
   buildsystem: cmake-ninja
   config-opts:

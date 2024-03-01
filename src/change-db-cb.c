@@ -60,10 +60,9 @@ change_db (AppData *app_data)
             g_free (old_db_path);
             break;
         case GTK_RESPONSE_CANCEL:
-            gtk_widget_destroy (changedb_diag);
-            return QUIT_APP;
         default:
-            break;
+            gtk_widget_hide (changedb_diag);
+            return QUIT_APP;
     }
     gtk_widget_destroy (changedb_diag);
 

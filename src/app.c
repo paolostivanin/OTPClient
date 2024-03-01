@@ -536,11 +536,19 @@ set_action_group (GtkBuilder *builder,
             { .name = FREEOTPPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AEGIS_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = AEGIS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
+            { .name = AUTHPRO_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
+            { .name = AUTHPRO_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
+            { .name = TWOFAS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
+            { .name = TWOFAS_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = AUTHPRO_EXPORT_ENC_ACTION_NAME, .activate = export_data_cb },
+            { .name = AUTHPRO_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = TWOFAS_EXPORT_ENC_ACTION_NAME, .activate = export_data_cb },
+            { .name = TWOFAS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = GOOGLE_MIGRATION_FILE_ACTION_NAME, .activate = add_qr_from_file },
             { .name = GOOGLE_MIGRATION_WEBCAM_ACTION_NAME, .activate = webcam_add_cb },
             { .name = "create_newdb", .activate = new_db_cb },
@@ -601,6 +609,8 @@ get_db_path (AppData *app_data)
             gchar *msg = g_strconcat ("Database file/location:\n<b>", db_path, "</b>\ndoes not exist. A new database will be created.", NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
+            g_free (db_path);
+            db_path = NULL;
             goto new_db;
         }
         goto end;

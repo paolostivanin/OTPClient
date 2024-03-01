@@ -204,7 +204,7 @@ reorder_db (AppData *app_data)
             json_t *obj = json_array_get (app_data->db_data->json_data, current_db_pos);
             node_info->newpos = gtk_tree_path_get_indices (path)[0];
             node_info->hash = json_object_get_hash (obj);
-            nodes_order_slist = g_slist_append (nodes_order_slist, g_memdupX (node_info, sizeof (NodeInfo)));
+            nodes_order_slist = g_slist_append (nodes_order_slist, g_memdup2 (node_info, sizeof (NodeInfo)));
             slist_len++;
             g_free (node_info);
         }
