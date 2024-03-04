@@ -29,6 +29,8 @@ typedef struct db_data_t {
 
 typedef struct app_data_t {
     GtkBuilder *builder;
+    GtkBuilder *add_popover_builder;
+    GtkBuilder *settings_popover_builder;
 
     GtkWidget *main_window;
     GtkWidget *info_bar;
