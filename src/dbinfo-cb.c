@@ -3,8 +3,8 @@
 
 void
 dbinfo_cb (GSimpleAction *simple    __attribute__((unused)),
-              GVariant      *parameter __attribute__((unused)),
-              gpointer       user_data)
+           GVariant      *parameter __attribute__((unused)),
+           gpointer       user_data)
 {
     AppData *app_data = (AppData *)user_data;
 

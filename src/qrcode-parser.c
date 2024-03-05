@@ -19,7 +19,6 @@ gchar *
 parse_qrcode (const gchar    *png_path,
               gchar         **otpauth_uri)
 {
-
     zbar_image_scanner_t *scanner = zbar_image_scanner_create ();
     zbar_image_scanner_set_config (scanner, ZBAR_NONE, ZBAR_CFG_ENABLE, 1);
 

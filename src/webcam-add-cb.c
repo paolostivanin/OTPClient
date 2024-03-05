@@ -2,7 +2,6 @@
 #include <zbar.h>
 #include <gcrypt.h>
 #include "imports.h"
-#include "parse-uri.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "common/common.h"
