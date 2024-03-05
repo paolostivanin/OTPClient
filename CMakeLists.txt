@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.5.0" LANGUAGES "C")
+project(OTPClient VERSION "3.5.1" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -264,6 +264,8 @@ install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
 install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
+install(FILES src/ui/add_popover.ui DESTINATION share/otpclient)
+install(FILES src/ui/settings_popover.ui DESTINATION share/otpclient)
 install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
 
 install(FILES man/otpclient.1.gz DESTINATION share/man/man1)

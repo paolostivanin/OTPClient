@@ -46,18 +46,6 @@ static void       create_main_window        (gint                width,
                                              gint                height,
                                              AppData            *app_data);
 
-static gboolean   show_upgrade_msg          (void);
-
-static void       set_info_bar              (AppData            *app_data,
-                                             const gchar        *msg);
-
-static void       on_bar_response           (GtkInfoBar         *ib,
-                                             gint                response_id,
-                                             gpointer            user_data);
-
-static gboolean   set_action_group          (GtkBuilder         *builder,
-                                             AppData            *app_data);
-
 static void       get_window_size_cb        (GtkWidget          *window,
                                              GtkAllocation      *allocation,
                                              gpointer            user_data);
@@ -116,6 +104,8 @@ activate (GtkApplication    *app,
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    app_data->add_popover_builder = get_builder_from_partial_path (AP_PARTIAL_PATH);
+    app_data->settings_popover_builder = get_builder_from_partial_path (SP_PARTIAL_PATH);
 
     set_config_data (&width, &height, app_data);
 
@@ -285,13 +275,6 @@ activate (GtkApplication    *app,
     app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
 
     gtk_widget_show_all (app_data->main_window);
-
-    app_data->info_bar = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_id"));
-    if (show_upgrade_msg ()) {
-        set_info_bar (app_data, _("Not asking for password? Please check the 'Secret Service Integration' new feature <a href=\"https://github.com/paolostivanin/OTPClient/wiki/How-to-use-OTPClient#secret-service-integration\">HERE</a>"));
-    } else {
-        gtk_widget_hide (app_data->info_bar);
-    }
 }
 
 
@@ -444,9 +427,9 @@ set_warn_data (gboolean show_warning)
 
 
 static void
-create_main_window (gint             width,
-                    gint             height,
-                    AppData         *app_data)
+create_main_window (gint     width,
+                    gint     height,
+                    AppData *app_data)
 {
     app_data->main_window = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "appwindow_id"));
     gtk_window_set_icon_name (GTK_WINDOW(app_data->main_window), "otpclient");
@@ -460,76 +443,6 @@ create_main_window (gint             width,
         gtk_widget_set_sensitive (lock_btn, FALSE);
     }
 
-    set_action_group (app_data->builder, app_data);
-}
-
-
-static gboolean
-show_upgrade_msg (void)
-{
-    gboolean show_msg = TRUE;
-    GKeyFile *kf = get_kf_ptr ();
-    if (kf != NULL) {
-        gchar *up_msg = g_key_file_get_string (kf, "config", "upgrade_msg", NULL);
-        if (up_msg == NULL) {
-            show_msg = TRUE;
-        } else {
-            show_msg = (g_strcmp0 (up_msg, "v2_6") == 0) ? FALSE : TRUE;
-        }
-    }
-
-    g_key_file_free (kf);
-
-    return show_msg;
-}
-
-
-static void
-set_info_bar (AppData     *app_data,
-              const gchar *msg)
-{
-    GtkWidget *label = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "info_bar_label_id"));
-
-    g_signal_connect (app_data->info_bar, "response", G_CALLBACK(on_bar_response), NULL);
-
-    gtk_label_set_markup (GTK_LABEL(label), msg);
-    gtk_info_bar_set_message_type (GTK_INFO_BAR(app_data->info_bar), GTK_MESSAGE_INFO);
-    gtk_widget_show (app_data->info_bar);
-}
-
-
-static void
-on_bar_response (GtkInfoBar *ib,
-                 gint        response_id __attribute__((unused)),
-                 gpointer    user_data   __attribute__((unused)))
-{
-    GError *err = NULL;
-    GKeyFile *kf = get_kf_ptr ();
-    if (kf != NULL) {
-        g_key_file_set_string (kf, "config", "upgrade_msg", "v2_6");
-        gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
-        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
-        }
-        g_free (cfg_file_path);
-    }
-
-    g_key_file_free (kf);
-
-    gtk_widget_hide (GTK_WIDGET(ib));
-}
-
-
-static gboolean
-set_action_group (GtkBuilder *builder,
-                  AppData    *app_data)
-{
     static GActionEntry settings_menu_entries[] = {
             { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
             { .name = ANDOTP_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
@@ -569,20 +482,20 @@ set_action_group (GtkBuilder *builder,
             { .name = "manual", .activate = manual_add_cb }
     };
 
-    GtkWidget *settings_popover = GTK_WIDGET (gtk_builder_get_object (builder, "settings_pop_id"));
+    GtkWidget *settings_popover = GTK_WIDGET(gtk_builder_get_object (app_data->settings_popover_builder, "settings_pop_id"));
+    gtk_menu_button_set_popover (GTK_MENU_BUTTON(gtk_builder_get_object (app_data->builder, "settings_btn_id")), settings_popover);
     GActionGroup *settings_actions = (GActionGroup *)g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP(settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
 
-    GtkWidget *add_popover = GTK_WIDGET (gtk_builder_get_object (builder, "add_pop_id"));
+    GtkWidget *add_popover = GTK_WIDGET(gtk_builder_get_object (app_data->add_popover_builder, "add_pop_id"));
+    gtk_menu_button_set_popover (GTK_MENU_BUTTON(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), add_popover);
     GActionGroup *add_actions = (GActionGroup *)g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP(add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
 
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
-
-    return TRUE;
 }
 
 
@@ -765,6 +678,8 @@ destroy_cb (GtkWidget   *window,
 #pragma GCC diagnostic pop
     save_window_size (w, h);
     g_object_unref (app_data->builder);
+    g_object_unref (app_data->add_popover_builder);
+    g_object_unref (app_data->settings_popover_builder);
     g_free (app_data);
     gcry_control (GCRYCTL_TERM_SECMEM);
 }

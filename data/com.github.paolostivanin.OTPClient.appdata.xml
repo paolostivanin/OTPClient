@@ -89,7 +89,17 @@
   </content_rating>
 
   <releases>
-    <release version="3.5.0" date="2024-03-01x">
+    <release version="3.5.0" date="2024-03-05">
+      <description>
+        <p>OTPClient 3.5.1 brings a small improvement and some code clean-up:</p>
+        <ul>
+          <li>NEW: add back buttons to the various popover menus</li>
+          <li>FIX: split popovers into their own UI files</li>
+          <li>FIX: remove upgrade message when upgrading from a version older than 2.6.0</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.5.0" date="2024-03-01">
       <description>
         <p>OTPClient 3.5.0 brings some new features and improvements:</p>
         <ul>
