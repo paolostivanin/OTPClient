@@ -124,6 +124,32 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gcry_free (export_pwd);
             exported = TRUE;
         }
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_encrypted") == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_encrypted") == 0) {
+                export_pwd = get_pwd (_("Type the export encryption password: "));
+                if (export_pwd == NULL) {
+                    free_dbdata (db_data);
+                    return FALSE;
+                }
+            }
+            exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "twofas_encrypted_v4.2fas" : "twofas_plain_v4.2fas", NULL);
+            ret_msg = export_twofas (exported_file_path, export_pwd, db_data->json_data);
+            gcry_free (export_pwd);
+            exported = TRUE;
+        }
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_encrypted") == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_encrypted") == 0) {
+                export_pwd = get_pwd (_("Type the export encryption password: "));
+                if (export_pwd == NULL) {
+                    free_dbdata (db_data);
+                    return FALSE;
+                }
+            }
+            exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "authpro_encrypted.bin" : "authpro_plain.json", NULL);
+            ret_msg = export_authpro (exported_file_path, export_pwd, db_data->json_data);
+            gcry_free (export_pwd);
+            exported = TRUE;
+        }
         if (ret_msg != NULL) {
             g_printerr (_("An error occurred while exporting the data: %s\n"), ret_msg);
             g_free (ret_msg);
