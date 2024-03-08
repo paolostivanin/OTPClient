@@ -277,9 +277,9 @@ set_json_data (json_t     *array,
                ParsedData *pjd)
 {
     gsize array_len = json_array_size (array);
-    pjd->types = (gchar **) g_malloc0 ((array_len + 1)  * sizeof (gchar *));
-    pjd->labels = (gchar **) g_malloc0 ((array_len + 1) * sizeof (gchar *));
-    pjd->issuers = (gchar **) g_malloc0 ((array_len + 1) * sizeof (gchar *));
+    pjd->types = (gchar **)g_malloc0 ((array_len + 1)  * sizeof(gchar *));
+    pjd->labels = (gchar **)g_malloc0 ((array_len + 1) * sizeof(gchar *));
+    pjd->issuers = (gchar **)g_malloc0 ((array_len + 1) * sizeof(gchar *));
     pjd->periods = g_array_new (FALSE, FALSE, sizeof(gint));
     for (guint i = 0; i < array_len; i++) {
         json_t *obj = json_array_get (array, i);
@@ -323,51 +323,33 @@ add_data_to_model (DatabaseData *db_data,
 
 
 static void
-add_columns (GtkTreeView *tree_view)
+add_column_with_attributes (GtkTreeView *tree_view,
+                            const gchar *title,
+                            gint         column_id,
+                            gboolean     visible)
 {
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
-    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes ("Type", renderer, "text", COLUMN_TYPE, NULL);
+    GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes (title, renderer, "text", column_id, NULL);
+    gtk_tree_view_column_set_visible (column, visible);
     gtk_tree_view_append_column (tree_view, column);
+}
 
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Account", renderer, "text", COLUMN_ACC_LABEL, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_append_column (tree_view, column);
 
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Issuer", renderer, "text", COLUMN_ACC_ISSUER, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_append_column (tree_view, column);
+static void
+add_columns (GtkTreeView *tree_view)
+{
+    // Main columns
+    add_column_with_attributes (tree_view, "Type", COLUMN_TYPE, TRUE);
+    add_column_with_attributes (tree_view, "Account", COLUMN_ACC_LABEL, TRUE);
+    add_column_with_attributes (tree_view, "Issuer", COLUMN_ACC_ISSUER, TRUE);
+    add_column_with_attributes (tree_view, "OTP Value", COLUMN_OTP, TRUE);
+    add_column_with_attributes (tree_view, "Validity", COLUMN_VALIDITY, TRUE);
 
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("OTP Value", renderer, "text", COLUMN_OTP, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_append_column (tree_view, column);
-
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Validity", renderer, "text", COLUMN_VALIDITY, NULL);
-    gtk_tree_view_column_set_sizing (GTK_TREE_VIEW_COLUMN(column), GTK_TREE_VIEW_COLUMN_AUTOSIZE);
-    gtk_tree_view_append_column (tree_view, column);
-
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Period", renderer, "text", COLUMN_PERIOD, NULL);
-    gtk_tree_view_column_set_visible (column, FALSE);
-    gtk_tree_view_append_column (tree_view, column);
-
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Updated", renderer, "text", COLUMN_UPDATED, NULL);
-    gtk_tree_view_column_set_visible (column, FALSE);
-    gtk_tree_view_append_column (tree_view, column);
-
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Less Than a Minute", renderer, "text", COLUMN_LESS_THAN_A_MINUTE, NULL);
-    gtk_tree_view_column_set_visible (column, FALSE);
-    gtk_tree_view_append_column (tree_view, column);
-
-    renderer = gtk_cell_renderer_text_new ();
-    column = gtk_tree_view_column_new_with_attributes ("Position in Database", renderer, "text", COLUMN_POSITION_IN_DB, NULL);
-    gtk_tree_view_column_set_visible (column, FALSE);
-    gtk_tree_view_append_column (tree_view, column);
+    // Additional columns (hidden by default)
+    add_column_with_attributes (tree_view, "Period", COLUMN_PERIOD, FALSE);
+    add_column_with_attributes (tree_view, "Updated", COLUMN_UPDATED, FALSE);
+    add_column_with_attributes (tree_view, "Less Than a Minute", COLUMN_LESS_THAN_A_MINUTE, FALSE);
+    add_column_with_attributes (tree_view, "Position in Database", COLUMN_POSITION_IN_DB, FALSE);
 }
 
 

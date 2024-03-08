@@ -3,7 +3,6 @@
 #include "gui-common.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "otpclient.h"
 #include "common/common.h"
 
 typedef struct entrywidgets_t {

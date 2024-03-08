@@ -34,7 +34,7 @@ main (gint    argc,
                     { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
                     { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
                     { "export", 'e', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
-                    { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The export type for the database. Must be either one of: andotp_plain, andotp_encrypted, freeotpplus, aegis, aegis_encrypted (to be used with --export, mandatory)", NULL },
+                    { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The export type for the database. Must be either one of: andotp_plain, andotp_encrypted, freeotpplus, aegis_plain, aegis_encrypted, twofas_plain, twofas_encrypted, authpro_plain, authpro_encrypted (to be used with --export, mandatory)", NULL },
 #ifndef USE_FLATPAK_APP_FOLDER
                     { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
 #endif
