@@ -45,7 +45,7 @@ update_cfg_file (AppData *app_data)
 {
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);

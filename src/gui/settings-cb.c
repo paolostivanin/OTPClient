@@ -5,7 +5,7 @@
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "secret-schema.h"
-#include "common/common.h"
+#include "../common/common.h"
 
 typedef struct settings_data_t {
     GtkWidget *dss_switch;
@@ -41,7 +41,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
     settings_data->app_data = app_data;
 
     gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
@@ -180,7 +180,7 @@ handle_al_ss (AppData   *app_data,
         g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
         g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
         gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
         cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
         cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);

@@ -15,7 +15,7 @@ dbinfo_cb (GSimpleAction *simple    __attribute__((unused)),
 
     gtk_entry_set_text (GTK_ENTRY(db_location_entry), app_data->db_data->db_path);
     gchar *cfg_file_path = NULL;
-#ifdef USE_FLATPAK_APP_FOLDER
+#ifdef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);

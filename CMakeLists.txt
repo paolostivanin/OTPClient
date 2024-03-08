@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "3.5.2" LANGUAGES "C")
+project(OTPClient VERSION "3.5.3" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -10,8 +10,7 @@ include_directories(${PROJECT_BINARY_DIR})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-option(USE_FLATPAK_APP_FOLDER "Use flatpak app's config folder to store the database" OFF)
-option(BUILD_GUI "Build the GUI" ON)
+option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_CLI "Build the CLI" ON)
 
 set(CMAKE_C_STANDARD 11)
@@ -23,15 +22,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
 if(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pie -fPIE")
 endif()
-if(USE_FLATPAK_APP_FOLDER)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_FLATPAK_APP_FOLDER")
+if(IS_FLATPAK)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DIS_FLATPAK")
 endif()
-if(BUILD_GUI)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBUILD_GUI")
-endif()
-if(BUILD_CLI)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DBUILD_CLI")
-endif()
+
 add_definitions(-DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\")
 
 
@@ -57,219 +51,67 @@ pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
 pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.0.2)
 
-set(GUI_HEADER_FILES
-        src/common/common.h
-        src/add-common.h
-        src/gui-common.h
-        src/data.h
-        src/db-misc.h
-        src/file-size.h
-        src/get-builder.h
-        src/gquarks.h
-        src/imports.h
-        src/liststore-misc.h
-        src/manual-add-cb.h
-        src/message-dialogs.h
-        src/otpclient.h
-        src/parse-uri.h
-        src/password-cb.h
-        src/qrcode-parser.h
-        src/treeview.h
-        src/common/exports.h
-        src/lock-app.h
-        src/common/get-providers-data.h
-        src/change-db-cb.h
-        src/new-db-cb.h
-        src/db-actions.h
-        src/google-migration.pb-c.h
-        src/secret-schema.h
-        src/change-pwd-cb.h
-        src/settings-cb.h
-        src/shortcuts-cb.h
-        src/webcam-add-cb.h
-        src/edit-row-cb.h
-        src/show-qr-cb.h src/dbinfo-cb.h
-        src/change-file-cb.h)
-
-set(GUI_SOURCE_FILES
-        src/common/common.c
-        src/add-common.c
-        src/common/andotp.c
-        src/app.c
-        src/gui-common.c
-        src/db-misc.c
-        src/edit-row-cb.c
-        src/file-size.c
-        src/get-builder.c
-        src/gquarks.c
-        src/imports.c
-        src/liststore-misc.c
-        src/main.c
-        src/manual-add-cb.c
-        src/message-dialogs.c
-        src/parse-data.c
-        src/parse-uri.c
-        src/password-cb.c
-        src/qrcode-parser.c
-        src/add-from-qr.c
-        src/settings-cb.c
-        src/shortcuts-cb.c
-        src/treeview.c
-        src/webcam-add-cb.c
-        src/exports.c
-        src/lock-app.c
-        src/common/freeotp.c
-        src/common/aegis.c
-        src/change-db-cb.c
-        src/new-db-cb.c
-        src/db-actions.c
-        src/change-file-cb.c
-        src/google-migration.pb-c.c
-        src/secret-schema.c
-        src/about_diag_cb.c
-        src/show-qr-cb.c
-        src/setup-signals-shortcuts.c
-        src/change-pwd-cb.c
-        src/dbinfo-cb.c
-        src/common/twofas.c
-        src/common/authpro.c)
-
-set(CLI_HEADER_FILES
-        src/cli/get-data.h
-        src/common/common.h
-        src/db-misc.h
-        src/gquarks.h
-        src/file-size.h
-        src/common/exports.h
-        src/parse-uri.h
-        src/common/get-providers-data.h
-        src/google-migration.pb-c.h
-        src/secret-schema.h
-        src/cli/main.h
+set(COMMON_INCDIRS
+        ${GTK3_INCLUDE_DIRS}
+        ${GCRYPT_INCLUDE_DIRS}
+        ${COTP_INCLUDE_DIRS}
+        ${JANSSON_INCLUDE_DIRS}
+        ${UUID_INCLUDE_DIRS}
+        ${PROTOC_INCLUDE_DIRS}
+        ${LIBSECRET_INCLUDE_DIRS}
+        ${LIBQRENCODE_INCLUDE_DIRS}
 )
 
-set(CLI_SOURCE_FILES
-        src/cli/main.c
-        src/cli/get-data.c
-        src/common/common.c
-        src/db-misc.c
-        src/gquarks.c
-        src/cli/exec-action.c
-        src/file-size.c
-        src/parse-uri.c
-        src/common/andotp.c
-        src/common/aegis.c
-        src/common/freeotp.c
-        src/secret-schema.c
-        src/google-migration.pb-c.c
-        src/common/twofas.c
-        src/common/authpro.c)
+set(COMMON_LIBS
+        ${GTK3_LIBRARIES}
+        ${GCRYPT_LIBRARIES}
+        ${COTP_LIBRARIES}
+        ${JANSSON_LIBRARIES}
+        ${UUID_LIBRARIES}
+        ${PROTOC_LIBRARIES}
+        ${LIBSECRET_LIBRARIES}
+        ${LIBQRENCODE_LIBRARIES}
+)
 
-if(BUILD_GUI AND BUILD_CLI)
-        list(APPEND CLI_SOURCE_FILES
-                src/treeview.c
-                src/liststore-misc.c
-                src/gui-common.c
-                src/add-common.c
-                src/imports.c
-                src/password-cb.c
-                src/get-builder.c
-                src/message-dialogs.c)
+## GUI START
+add_subdirectory(src/gui)
+target_link_libraries(${PROJECT_NAME}
+        ${PNG_LIBRARIES}
+        ${ZBAR_LIBRARIES}
+        ${COMMON_LIBS}
+)
+set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
-        list(APPEND CLI_HEADER_FILES
-                src/treeview.h
-                src/liststore-misc.h
-                src/gui-common.h
-                src/add-common.h
-                src/imports.h
-                src/password-cb.h
-                src/get-builder.h
-                src/message-dialogs.h)
-endif()
-
-if(BUILD_GUI)
-        include_directories(${GTK3_INCLUDE_DIRS}
-                ${GCRYPT_INCLUDE_DIRS}
-                ${COTP_INCLUDE_DIRS}
-                ${LIBZIP_INCLUDE_DIRS}
-                ${PNG_INCLUDE_DIRS}
-                ${JANSSON_INCLUDE_DIRS}
-                ${ZBAR_INCLUDE_DIRS}
-                ${UUID_INCLUDE_DIRS}
-                ${PROTOC_INCLUDE_DIRS}
-                ${LIBSECRET_INCLUDE_DIRS}
-                ${LIBQRENCODE_INCLUDE_DIRS})
-
-        add_executable(${PROJECT_NAME} ${GUI_SOURCE_FILES} ${GUI_HEADER_FILES})
-        target_link_libraries(${PROJECT_NAME}
-                ${GTK3_LIBRARIES}
-                ${GCRYPT_LIBRARIES}
-                ${COTP_LIBRARIES}
-                ${LIBZIP_LIBRARIES}
-                ${PNG_LIBRARIES}
-                ${JANSSON_LIBRARIES}
-                ${ZBAR_LIBRARIES}
-                ${UUID_LIBRARIES}
-                ${PROTOC_LIBRARIES}
-                ${LIBSECRET_LIBRARIES}
-                ${LIBQRENCODE_LIBRARIES})
-
-        set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
-        install(TARGETS ${PROJECT_NAME} DESTINATION bin)
-endif()
-
-if(BUILD_CLI)
-        include_directories(${GTK3_INCLUDE_DIRS}
-                ${GCRYPT_INCLUDE_DIRS}
-                ${COTP_INCLUDE_DIRS}
-                ${JANSSON_INCLUDE_DIRS}
-                ${UUID_INCLUDE_DIRS}
-                ${PROTOC_INCLUDE_DIRS}
-                ${LIBSECRET_INCLUDE_DIRS})
-        if(BUILD_GUI)
-                include_directories(
-                        ${LIBZIP_INCLUDE_DIRS}
-                        ${PNG_INCLUDE_DIRS}
-                        ${ZBAR_INCLUDE_DIRS}
-                        ${LIBQRENCODE_INCLUDE_DIRS})
-        endif()
-
-        add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
-        target_link_libraries(${PROJECT_NAME}-cli
-                ${GLIB2_LIBRARIES}
-                ${GIO_LIBRARIES}
-                ${GCRYPT_LIBRARIES}
-                ${COTP_LIBRARIES}
-                ${JANSSON_LIBRARIES}
-                ${UUID_LIBRARIES}
-                ${LIBSECRET_LIBRARIES}
-                ${PROTOC_LIBRARIES})
-        if(BUILD_GUI)
-                target_link_libraries(${PROJECT_NAME}-cli
-                        ${GTK3_LIBRARIES}
-                        ${LIBZIP_LIBRARIES}
-                        ${PNG_LIBRARIES}
-                        ${ZBAR_LIBRARIES}
-                        ${PROTOC_LIBRARIES}
-                        ${LIBSECRET_LIBRARIES}
-                        ${UUID_LIBRARIES}
-                        ${LIBQRENCODE_LIBRARIES})
-        endif()
-
-        set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
-        install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
-endif()
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 
 install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
-install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
 
-install(FILES src/ui/otpclient.ui DESTINATION share/otpclient)
-install(FILES src/ui/add_popover.ui DESTINATION share/otpclient)
-install(FILES src/ui/settings_popover.ui DESTINATION share/otpclient)
-install(FILES src/ui/shortcuts.ui DESTINATION share/otpclient)
+install(FILES
+        src/gui/ui/otpclient.ui
+        src/gui/ui/add_popover.ui
+        src/gui/ui/settings_popover.ui
+        src/gui/ui/shortcuts.ui
+        DESTINATION share/otpclient)
 
 install(FILES man/otpclient.1.gz DESTINATION share/man/man1)
-install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
 
-install(FILES data/icons/com.github.paolostivanin.OTPClient.svg DESTINATION share/icons/hicolor/scalable/apps)
-install(FILES data/icons/com.github.paolostivanin.OTPClient-symbolic.svg DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES
+        data/icons/com.github.paolostivanin.OTPClient.svg
+        data/icons/com.github.paolostivanin.OTPClient-symbolic.svg
+        DESTINATION share/icons/hicolor/scalable/apps)
+## GUI END
+## CLI START
+if(BUILD_CLI)
+    add_subdirectory(src/cli)
+    target_link_libraries(${PROJECT_NAME}-cli
+            ${COMMON_LIBS}
+    )
+    set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
+
+    install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
+
+    install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
+endif()
+## CLI END
+
+install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)

@@ -1,0 +1,53 @@
+set(CLI_HEADER_FILES
+        main.h
+        get-data.h
+        ../gui/db-misc.h
+        ../gui/gquarks.h
+        ../gui/file-size.h
+        ../gui/parse-uri.h
+        ../gui/google-migration.pb-c.h
+        ../gui/secret-schema.h
+        ../gui/treeview.h
+        ../gui/liststore-misc.h
+        ../gui/gui-common.h
+        ../gui/add-common.h
+        ../gui/imports.h
+        ../gui/password-cb.h
+        ../gui/get-builder.h
+        ../gui/message-dialogs.h
+        ../common/exports.h
+        ../common/common.h
+        ../common/get-providers-data.h
+)
+
+set(CLI_SOURCE_FILES
+        main.c
+        get-data.c
+        exec-action.c
+        ../gui/db-misc.c
+        ../gui/gquarks.c
+        ../gui/file-size.c
+        ../gui/parse-uri.c
+        ../gui/secret-schema.c
+        ../gui/google-migration.pb-c.c
+        ../gui/treeview.c
+        ../gui/liststore-misc.c
+        ../gui/gui-common.c
+        ../gui/add-common.c
+        ../gui/imports.c
+        ../gui/password-cb.c
+        ../gui/get-builder.c
+        ../gui/message-dialogs.c
+        ../common/common.c
+        ../common/andotp.c
+        ../common/aegis.c
+        ../common/freeotp.c
+        ../common/twofas.c
+        ../common/authpro.c
+)
+
+include_directories(
+        ${COMMON_INCDIRS}
+)
+
+add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})

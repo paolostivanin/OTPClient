@@ -1,6 +1,6 @@
 #include <glib.h>
 #include "imports.h"
-#include "common/common.h"
+#include "../common/common.h"
 #include "gui-common.h"
 
 

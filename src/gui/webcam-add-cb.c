@@ -4,7 +4,7 @@
 #include "imports.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "common/common.h"
+#include "../common/common.h"
 #include "gui-common.h"
 
 

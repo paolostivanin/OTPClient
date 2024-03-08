@@ -7,7 +7,7 @@
 #include "message-dialogs.h"
 #include "gui-common.h"
 #include "gquarks.h"
-#include "common/common.h"
+#include "../common/common.h"
 
 typedef struct edit_data_t {
     GtkListStore *list_store;

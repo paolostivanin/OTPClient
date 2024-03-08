@@ -2,9 +2,9 @@
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
-#include "../file-size.h"
-#include "../parse-uri.h"
-#include "../gquarks.h"
+#include "../gui/file-size.h"
+#include "../gui/parse-uri.h"
+#include "../gui/gquarks.h"
 
 
 GSList *

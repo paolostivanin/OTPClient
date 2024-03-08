@@ -3,8 +3,8 @@
 #include <jansson.h>
 #include <time.h>
 #include <uuid/uuid.h>
-#include "../imports.h"
-#include "../gquarks.h"
+#include "../gui/imports.h"
+#include "../gui/gquarks.h"
 #include "common.h"
 
 

@@ -3,7 +3,7 @@
 #include <gcrypt.h>
 #include "password-cb.h"
 #include "message-dialogs.h"
-#include "common/exports.h"
+#include "../common/exports.h"
 
 static void     show_ret_msg_dialog       (GtkWidget   *mainwin,
                                            const gchar *fpath,
@@ -19,7 +19,7 @@ export_data_cb (GSimpleAction *simple,
     AppData *app_data = (AppData *)user_data;
 
     const gchar *base_dir = NULL;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     base_dir = g_get_home_dir ();
 #else
     base_dir = g_get_user_data_dir ();

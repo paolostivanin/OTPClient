@@ -3,7 +3,7 @@
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "message-dialogs.h"
-#include "common/common.h"
+#include "../common/common.h"
 
 
 typedef struct parsed_json_data_t {

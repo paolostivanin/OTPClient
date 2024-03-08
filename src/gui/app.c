@@ -6,7 +6,7 @@
 #include "otpclient.h"
 #include "gquarks.h"
 #include "imports.h"
-#include "common/exports.h"
+#include "../common/exports.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "get-builder.h"
@@ -14,7 +14,7 @@
 #include "lock-app.h"
 #include "change-db-cb.h"
 #include "new-db-cb.h"
-#include "common/common.h"
+#include "../common/common.h"
 #include "secret-schema.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
@@ -26,7 +26,7 @@
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
 
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
 #endif
 
@@ -131,7 +131,7 @@ activate (GtkApplication    *app,
         return;
     }
 
-#ifdef USE_FLATPAK_APP_FOLDER
+#ifdef IS_FLATPAK
     app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
     // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
     gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
@@ -371,7 +371,7 @@ migrate_secretservice_kf (AppData  *app_data,
     g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
     g_key_file_remove_key (kf, "config", "disable_secret_service", NULL);
     gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
@@ -411,7 +411,7 @@ set_warn_data (gboolean show_warning)
     if (kf != NULL) {
         g_key_file_set_boolean (kf, "config", "show_memlock_warning", show_warning);
         gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
         cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
         cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
@@ -499,7 +499,7 @@ create_main_window (gint     width,
 }
 
 
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
 static gchar *
 get_db_path (AppData *app_data)
 {
@@ -715,7 +715,7 @@ store_data (const gchar *param1_name,
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);

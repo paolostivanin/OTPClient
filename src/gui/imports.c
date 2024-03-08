@@ -5,10 +5,10 @@
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "gquarks.h"
-#include "common/common.h"
+#include "../common/common.h"
 #include "gui-common.h"
 #include "db-misc.h"
-#include "common/get-providers-data.h"
+#include "../common/get-providers-data.h"
 
 
 static gboolean  parse_data_and_update_db    (AppData       *app_data,

@@ -2,8 +2,8 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include "common.h"
-#include "../gquarks.h"
-#include "../imports.h"
+#include "../gui/gquarks.h"
+#include "../gui/imports.h"
 
 static GSList *get_otps_from_encrypted_backup (const gchar       *path,
                                                const gchar       *password,

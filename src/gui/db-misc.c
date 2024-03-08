@@ -1,4 +1,3 @@
-#include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
 #include <glib/gstdio.h>
@@ -7,7 +6,7 @@
 #include "otpclient.h"
 #include "file-size.h"
 #include "gquarks.h"
-#include "common/common.h"
+#include "../common/common.h"
 
 typedef struct header_data_t {
     guint8 iv[IV_SIZE];
@@ -107,13 +106,12 @@ update_and_reload_db (AppData       *app_data,
         g_printerr ("%s\n", (*err)->message);
         return;
     }
-#ifdef BUILD_GUI
+
     if (regenerate_model) {
         update_model (app_data);
         g_slist_free_full (app_data->db_data->data_to_add, json_free);
         app_data->db_data->data_to_add = NULL;
     }
-#endif
 }
 
 
@@ -125,11 +123,10 @@ load_new_db (AppData  *app_data,
     if (*err != NULL) {
         return;
     }
-#ifdef BUILD_GUI
+
     update_model (app_data);
     g_slist_free_full (app_data->db_data->data_to_add, json_free);
     app_data->db_data->data_to_add = NULL;
-#endif
 }
 
 

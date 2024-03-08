@@ -6,9 +6,9 @@
 #include "gcrypt.h"
 #include "jansson.h"
 #include "common.h"
-#include "../google-migration.pb-c.h"
-#include "../file-size.h"
-#include "../gquarks.h"
+#include "../gui/google-migration.pb-c.h"
+#include "../gui/file-size.h"
+#include "../gui/gquarks.h"
 
 gint32
 get_max_file_size_from_memlock (void)
@@ -391,7 +391,7 @@ get_kf_ptr (void)
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);

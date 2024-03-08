@@ -1,13 +1,13 @@
 #pragma once
 
 #include <glib.h>
-#include "../data.h"
+#include "../gui/data.h"
 
 G_BEGIN_DECLS
 
 #define MAX_ABS_PATH_LEN 256
 
-typedef struct _cmdline_opts {
+typedef struct cmdline_opts_t {
     gchar *database;
     gboolean show;
     gchar *account;

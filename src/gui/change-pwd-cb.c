@@ -5,7 +5,7 @@
 #include "message-dialogs.h"
 #include "db-misc.h"
 #include "password-cb.h"
-#include "common/common.h"
+#include "../common/common.h"
 #include "secret-schema.h"
 #include "otpclient.h"
 

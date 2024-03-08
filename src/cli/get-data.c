@@ -2,7 +2,7 @@
 #include <jansson.h>
 #include <cotp.h>
 #include <glib/gi18n.h>
-#include "../db-misc.h"
+#include "../gui/db-misc.h"
 #include "../common/common.h"
 
 static gint compare_strings (const gchar    *s1,

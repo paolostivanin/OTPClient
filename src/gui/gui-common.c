@@ -2,7 +2,7 @@
 #include <jansson.h>
 #include "message-dialogs.h"
 #include "add-common.h"
-#include "common/common.h"
+#include "../common/common.h"
 
 
 void

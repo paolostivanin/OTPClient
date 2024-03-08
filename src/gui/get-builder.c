@@ -5,7 +5,7 @@ GtkBuilder *
 get_builder_from_partial_path (const gchar *partial_path)
 {
     const gchar *prefix;
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
     // cmake trims the last '/', so we have to manually add it later on
     prefix = INSTALL_PREFIX;
 #else

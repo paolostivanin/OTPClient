@@ -4,13 +4,13 @@
 #include <termios.h>
 #include <libsecret/secret.h>
 #include "main.h"
-#include "../secret-schema.h"
+#include "../gui/secret-schema.h"
 #include "../common/common.h"
-#include "../db-misc.h"
+#include "../gui/db-misc.h"
 #include "get-data.h"
 #include "../common/exports.h"
 
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
 static gchar    *get_db_path           (void);
 #endif
 
@@ -22,7 +22,7 @@ static gboolean  get_use_secretservice (void);
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data)
 {
-#ifdef USE_FLATPAK_APP_FOLDER
+#ifdef IS_FLATPAK
     db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
     // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
     gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
@@ -82,7 +82,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 
     if (cmdline_opts->export) {
         gchar *export_directory;
-#ifdef USE_FLATPAK_APP_FOLDER
+#ifdef IS_FLATPAK
         export_directory = g_get_user_data_dir ();
 #else
         export_directory = (cmdline_opts->export_dir != NULL) ? cmdline_opts->export_dir : (gchar *)g_get_home_dir ();
@@ -168,7 +168,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     return TRUE;
 }
 
-#ifndef USE_FLATPAK_APP_FOLDER
+#ifndef IS_FLATPAK
 static gchar *
 get_db_path (void)
 {
