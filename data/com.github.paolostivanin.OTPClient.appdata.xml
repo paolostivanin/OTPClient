@@ -89,7 +89,18 @@
   </content_rating>
 
   <releases>
-    <release version="3.5.0" date="2024-03-05">
+    <release version="3.5.2" date="2024-03-08">
+      <description>
+        <p>OTPClient 3.5.2 brings some small improvements:</p>
+        <ul>
+          <li>NEW: add possibility to export plain/encrypted Authenticator Pro/2FAS backups using the CLI</li>
+          <li>FIX: improve popover layout</li>
+          <li>FIX: exporting plaing Aegis via CLI</li>
+          <li>FIX: cleanup code</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.5.1" date="2024-03-05">
       <description>
         <p>OTPClient 3.5.1 brings a small improvement and some code clean-up:</p>
         <ul>
