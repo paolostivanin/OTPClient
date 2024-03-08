@@ -6,8 +6,7 @@
 #include "get-builder.h"
 #include "message-dialogs.h"
 #include "gui-common.h"
-#include "gquarks.h"
-#include "../common/common.h"
+#include "../common/gquarks.h"
 
 typedef struct edit_data_t {
     GtkListStore *list_store;
@@ -60,11 +59,19 @@ edit_row_cb (GSimpleAction *simple    __attribute__((unused)),
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
+    update_db (app_data->db_data, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        goto end;
     }
+    reload_db (app_data->db_data, &err);
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+        goto end;
+    }
+    regenerate_model (app_data);
 
+    end:
     g_free (edit_data->new_label);
     g_free (edit_data->new_issuer);
     if (edit_data->new_secret != NULL) {

@@ -4,9 +4,7 @@
 #include <jansson.h>
 #include <time.h>
 #include <glib/gi18n.h>
-#include "../gui/file-size.h"
-#include "../gui/imports.h"
-#include "../gui/gquarks.h"
+#include "gquarks.h"
 #include "common.h"
 
 // salt and iv are both 12 bytes

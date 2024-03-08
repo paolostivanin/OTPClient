@@ -4,8 +4,7 @@
 #include "imports.h"
 #include "password-cb.h"
 #include "message-dialogs.h"
-#include "gquarks.h"
-#include "../common/common.h"
+#include "../common/gquarks.h"
 #include "gui-common.h"
 #include "db-misc.h"
 #include "../common/get-providers-data.h"
@@ -61,10 +60,15 @@ update_db_from_otps (GSList *otps, AppData *app_data)
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
+    update_db (app_data->db_data, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
         return g_strdup (err->message);
     }
+    reload_db (app_data->db_data, &err);
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        return g_strdup (err->message);
+    }
+    regenerate_model (app_data);
 
     return NULL;
 }

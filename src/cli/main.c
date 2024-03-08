@@ -1,8 +1,8 @@
 #include <glib.h>
 #include <gio/gio.h>
+#include <gcrypt.h>
 #include "version.h"
 #include "main.h"
-#include "../common/common.h"
 
 static gint      handle_local_options  (GApplication            *application,
                                         GVariantDict            *options,

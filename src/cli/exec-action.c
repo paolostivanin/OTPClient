@@ -4,11 +4,10 @@
 #include <termios.h>
 #include <libsecret/secret.h>
 #include "main.h"
-#include "../gui/secret-schema.h"
-#include "../common/common.h"
-#include "../gui/db-misc.h"
 #include "get-data.h"
 #include "../common/exports.h"
+#include "../common/secret-schema.h"
+#include "../common/db-common.h"
 
 #ifndef IS_FLATPAK
 static gchar    *get_db_path           (void);

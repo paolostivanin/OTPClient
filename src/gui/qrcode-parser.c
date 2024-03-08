@@ -4,6 +4,7 @@
 #include <glib/gstdio.h>
 #include <gcrypt.h>
 #include "../common/common.h"
+#include "gui-common.h"
 
 typedef struct image_data_t {
     gulong width;

@@ -2,7 +2,7 @@
 #include "db-misc.h"
 #include "gui-common.h"
 #include "manual-add-cb.h"
-#include "gquarks.h"
+#include "../common/gquarks.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
 
@@ -47,10 +47,15 @@ manual_add_cb (GSimpleAction *simple    __attribute__((unused)),
         result = gtk_dialog_run (GTK_DIALOG(widgets->dialog));
         if (result == GTK_RESPONSE_OK) {
             if (parse_user_data (widgets, app_data->db_data)) {
-                update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
+                update_db (app_data->db_data, &err);
                 if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
+                reload_db (app_data->db_data, &err);
+                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+                    show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+                }
+                regenerate_model (app_data);
                 retry = FALSE;
             }
         }

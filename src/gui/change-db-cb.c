@@ -6,7 +6,7 @@
 #include "db-misc.h"
 #include "password-cb.h"
 #include "db-actions.h"
-#include "secret-schema.h"
+#include "../common/secret-schema.h"
 #include "change-file-cb.h"
 
 int

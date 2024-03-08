@@ -1,10 +1,10 @@
 #include <glib.h>
+#include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
 #include <uuid/uuid.h>
-#include "../gui/imports.h"
-#include "../gui/gquarks.h"
+#include "gquarks.h"
 #include "common.h"
 
 

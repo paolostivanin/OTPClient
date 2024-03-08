@@ -1,7 +1,7 @@
 #include <string.h>
 #include "data.h"
 #include "imports.h"
-#include "parse-uri.h"
+#include "../common/parse-uri.h"
 
 static gchar *check_params (GSList *otps);
 

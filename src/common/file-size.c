@@ -1,6 +1,5 @@
 #include <gio/gio.h>
 
-
 goffset
 get_file_size (const gchar *file_path)
 {

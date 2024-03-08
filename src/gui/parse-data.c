@@ -5,10 +5,9 @@
 #include <cotp.h>
 #include "db-misc.h"
 #include "manual-add-cb.h"
-#include "gquarks.h"
+#include "../common/gquarks.h"
 #include "message-dialogs.h"
 #include "gui-common.h"
-#include "../common/common.h"
 
 
 static gboolean  is_input_valid (GtkWidget   *dialog,

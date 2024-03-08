@@ -1,7 +1,7 @@
 #pragma once
 
 #include <glib.h>
-#include "../gui/data.h"
+#include "../common/db-common.h"
 
 G_BEGIN_DECLS
 

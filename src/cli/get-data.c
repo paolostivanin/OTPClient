@@ -2,8 +2,7 @@
 #include <jansson.h>
 #include <cotp.h>
 #include <glib/gi18n.h>
-#include "../gui/db-misc.h"
-#include "../common/common.h"
+#include "../common/db-common.h"
 
 static gint compare_strings (const gchar    *s1,
                              const gchar    *s2,
@@ -132,9 +131,14 @@ get_token (json_t       *obj,
         // counter must be updated every time it is accessed
         json_object_set (obj, "counter", json_integer (counter + 1));
         GError *err = NULL;
-        update_and_reload_db (NULL, db_data, FALSE, &err);
+        update_db (db_data, &err);
         if (err != NULL) {
             g_printerr ("[ERROR] %s\n", err->message);
+        } else {
+            reload_db (db_data, &err);
+            if (err != NULL) {
+                g_printerr ("[ERROR] %s\n", err->message);
+            }
         }
     }
 }

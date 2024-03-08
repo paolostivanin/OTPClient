@@ -1,10 +1,11 @@
 #include <glib.h>
+#include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
 #include <time.h>
-#include "../gui/file-size.h"
-#include "../gui/parse-uri.h"
-#include "../gui/gquarks.h"
+#include "file-size.h"
+#include "gquarks.h"
+#include "parse-uri.h"
 
 
 GSList *
@@ -44,7 +45,7 @@ export_freeotpplus (const gchar *export_path,
     GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
     if (err == NULL) {
         json_array_foreach (json_db_data, index, db_obj) {
-            gchar *uri = get_otpauth_uri (NULL, db_obj);
+            gchar *uri = get_otpauth_uri (db_obj);
             if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), uri, g_utf8_strlen (uri, -1), NULL, &err) == -1) {
                 g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
             }

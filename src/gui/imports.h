@@ -17,25 +17,6 @@ G_BEGIN_DECLS
 #define GOOGLE_MIGRATION_FILE_ACTION_NAME   "import_google_qr_file"
 #define GOOGLE_MIGRATION_WEBCAM_ACTION_NAME "import_google_qr_webcam"
 
-typedef struct otp_object_t {
-    gchar *type;
-
-    gchar *algo;
-
-    guint32 digits;
-
-    union {
-        guint32 period;
-        guint64 counter;
-    };
-
-    gchar *account_name;
-
-    gchar *issuer;
-
-    gchar *secret;
-} otp_t;
-
 void    select_file_cb          (GSimpleAction   *simple,
                                  GVariant        *parameter,
                                  gpointer         user_data);

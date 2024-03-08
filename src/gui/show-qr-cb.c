@@ -4,9 +4,10 @@
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
 #include "data.h"
-#include "parse-uri.h"
+#include "../common/parse-uri.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
+#include "gui-common.h"
 
 #define INCHES_PER_METER (100.0/2.54)
 #define SIZE 3
@@ -24,11 +25,18 @@ show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
 {
     AppData *app_data = (AppData *)user_data;
 
-    gchar *otpauth_uri = get_otpauth_uri (app_data, NULL);
-    if (otpauth_uri == NULL) {
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkListStore *list_store = GTK_LIST_STORE(model);
+    GtkTreeIter iter;
+
+    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &iter) == FALSE) {
         show_message_dialog (app_data->main_window, "Error: a row must be selected in order to get the QR Code.", GTK_MESSAGE_ERROR);
         return;
     }
+
+    guint row_number = get_row_number_from_iter (list_store, iter);
+    json_t *db_obj = json_array_get (app_data->db_data->json_data, row_number);
+    gchar *otpauth_uri = get_otpauth_uri (db_obj);
     QRcode *qr = QRcode_encodeString8bit ((const gchar *)otpauth_uri, 0, QR_ECLEVEL_H);
     write_png (qr);
     g_free (otpauth_uri);

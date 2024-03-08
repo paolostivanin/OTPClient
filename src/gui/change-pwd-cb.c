@@ -5,8 +5,7 @@
 #include "message-dialogs.h"
 #include "db-misc.h"
 #include "password-cb.h"
-#include "../common/common.h"
-#include "secret-schema.h"
+#include "../common/secret-schema.h"
 #include "otpclient.h"
 
 
@@ -21,7 +20,15 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
     if (pwd != NULL) {
         app_data->db_data->key = pwd;
         GError *err = NULL;
-        update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
+        update_db (app_data->db_data, &err);
+        if (err != NULL) {
+            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
+            GtkApplication *app = gtk_window_get_application (GTK_WINDOW(app_data->main_window));
+            destroy_cb (app_data->main_window, app_data);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        }
+        reload_db (app_data->db_data, &err);
         if (err != NULL) {
             show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW(app_data->main_window));

@@ -5,9 +5,7 @@
 #include "imports.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
-#include "add-common.h"
 #include "get-builder.h"
-#include "../common/common.h"
 #include "gui-common.h"
 
 

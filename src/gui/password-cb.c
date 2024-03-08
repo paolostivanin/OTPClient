@@ -3,7 +3,6 @@
 #include "gui-common.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "../common/common.h"
 
 typedef struct entrywidgets_t {
     GtkWidget *entry_old;

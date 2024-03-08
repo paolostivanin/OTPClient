@@ -2,9 +2,8 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include "gquarks.h"
 #include "common.h"
-#include "../gui/gquarks.h"
-#include "../gui/imports.h"
 
 #define TWOFAS_KDF_ITERS 10000
 #define TWOFAS_SALT      256

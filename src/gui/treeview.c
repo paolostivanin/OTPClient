@@ -3,7 +3,6 @@
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "message-dialogs.h"
-#include "../common/common.h"
 
 
 typedef struct parsed_json_data_t {
@@ -128,11 +127,18 @@ delete_rows_cb (GtkTreeView        *tree_view,
     }
 
     GError *err = NULL;
-    update_and_reload_db (app_data, app_data->db_data, FALSE, &err);
+    update_db (app_data->db_data, &err);
     if (err != NULL) {
         gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
+    } else {
+        reload_db (app_data->db_data, &err);
+        if (err != NULL) {
+            gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+        }
     }
 }
 
@@ -233,13 +239,24 @@ reorder_db (AppData *app_data)
 
     // update the database and reload the changes
     GError *err = NULL;
-    update_and_reload_db (app_data, app_data->db_data, TRUE, &err);
+    update_db (app_data->db_data, &err);
     if (err != NULL) {
-        gchar *msg = g_strconcat ("[ERROR] Failed to update_and_reload_db: ", err->message, NULL);
+        gchar *msg = g_strconcat ("[ERROR] Failed to update the db: ", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
         g_clear_error (&err);
+        return;
     }
+    reload_db (app_data->db_data, &err);
+    if (err != NULL) {
+        gchar *msg = g_strconcat ("[ERROR] Failed to reload the db: ", err->message, NULL);
+        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        g_clear_error (&err);
+        return;
+    }
+    regenerate_model (app_data);
+
     g_slist_free (nodes_order_slist);
 }
 

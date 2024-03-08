@@ -1,11 +1,10 @@
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 #include <libsecret/secret.h>
-#include "otpclient.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "secret-schema.h"
-#include "../common/common.h"
+#include "../common/secret-schema.h"
+#include "gui-common.h"
 
 typedef struct settings_data_t {
     GtkWidget *dss_switch;

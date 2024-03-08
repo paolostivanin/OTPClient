@@ -4,7 +4,7 @@
 #include <libsecret/secret.h>
 #include <glib/gi18n.h>
 #include "otpclient.h"
-#include "gquarks.h"
+#include "../common/gquarks.h"
 #include "imports.h"
 #include "../common/exports.h"
 #include "message-dialogs.h"
@@ -15,7 +15,7 @@
 #include "change-db-cb.h"
 #include "new-db-cb.h"
 #include "../common/common.h"
-#include "secret-schema.h"
+#include "../common/secret-schema.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
 #include "shortcuts-cb.h"
@@ -25,6 +25,7 @@
 #include "show-qr-cb.h"
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
+#include "gui-common.h"
 
 #ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
@@ -238,7 +239,8 @@ activate (GtkApplication    *app,
         "\nIf you need more info, please visit the <a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>");
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_INFO);
         GError *tmp_err = NULL;
-        update_and_reload_db (app_data, app_data->db_data, FALSE, &tmp_err);
+        update_db (app_data->db_data, &tmp_err);
+        reload_db (app_data->db_data, &tmp_err);
         g_clear_error (&tmp_err);
     }
 
