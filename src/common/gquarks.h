@@ -10,6 +10,7 @@ G_BEGIN_DECLS
 #define FILE_TOO_BIG            13
 #define GENERIC_ERRCODE         14
 #define MEMLOCK_ERRCODE         15
+#define FILE_SIZE_SECMEM_MSG    "Selected file is too big. Please increase the secure memory size."
 
 GQuark missing_file_gquark   (void);
 

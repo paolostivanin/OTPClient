@@ -9,18 +9,23 @@
 
 
 GSList *
-get_freeotpplus_data (const gchar     *path,
-                      GError         **err)
+get_freeotpplus_data (const gchar  *path,
+                      gint32        max_file_size,
+                      GError      **err)
 {
     GSList *otps = NULL;
     goffset fs = get_file_size (path);
     if (fs < 10) {
-        g_printerr ("Couldn't get the file size (file doesn't exit or wrong file selected\n");
+        g_set_error (err, file_too_big_gquark (), GENERIC_ERRCODE, "Couldn't get the file size (file doesn't exit or wrong file selected.");
+        return NULL;
+    }
+    if (fs > max_file_size) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
     gchar *sec_buf = gcry_calloc_secure (fs, 1);
     if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
-        g_printerr("Couldn't read into memory the freeotp txt file\n");
+        g_printerr("Couldn't read into memory the freeotp txt file.\n");
         gcry_free (sec_buf);
         return NULL;
     }
