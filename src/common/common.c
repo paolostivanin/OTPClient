@@ -376,3 +376,50 @@ json_object_get_hash (json_t *obj)
 
     return hash;
 }
+
+
+void
+free_otps_gslist (GSList *otps,
+                  guint   list_len)
+{
+    otp_t *otp_data;
+    for (guint i = 0; i < list_len; i++) {
+        otp_data = g_slist_nth_data (otps, i);
+        g_free (otp_data->type);
+        g_free (otp_data->algo);
+        g_free (otp_data->account_name);
+        g_free (otp_data->issuer);
+        gcry_free (otp_data->secret);
+    }
+    g_slist_free (otps);
+}
+
+
+json_t *
+build_json_obj (const gchar *type,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *acc_key,
+                guint        digits,
+                const gchar *algo,
+                guint        period,
+                guint64      ctr)
+{
+    json_t *obj = json_object ();
+    json_object_set (obj, "type", json_string (type));
+    json_object_set (obj, "label", json_string (acc_label));
+    json_object_set (obj, "issuer", json_string (acc_iss));
+    json_object_set (obj, "secret", json_string (acc_key));
+    json_object_set (obj, "digits", json_integer (digits));
+    json_object_set (obj, "algo", json_string (algo));
+
+    json_object_set (obj, "secret", json_string (acc_key));
+
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        json_object_set (obj, "period", json_integer (period));
+    } else {
+        json_object_set (obj, "counter", json_integer (ctr));
+    }
+
+    return obj;
+}

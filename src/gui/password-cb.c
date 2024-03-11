@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
 

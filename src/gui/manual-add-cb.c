@@ -1,6 +1,6 @@
 #include <gtk/gtk.h>
 #include "db-misc.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "manual-add-cb.h"
 #include "../common/gquarks.h"
 #include "message-dialogs.h"

@@ -5,9 +5,9 @@
 #include <libsecret/secret.h>
 #include "main.h"
 #include "get-data.h"
-#include "../common/exports.h"
+#include "../common/import-export.h"
 #include "../common/secret-schema.h"
-#include "../common/db-common.h"
+#include "../common/gquarks.h"
 
 #ifndef IS_FLATPAK
 static gchar    *get_db_path           (void);
@@ -79,6 +79,51 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         list_all_acc_iss (db_data);
     }
 
+    if (cmdline_opts->import) {
+        if (!g_file_test (cmdline_opts->import_file, G_FILE_TEST_EXISTS) || !g_file_test (cmdline_opts->import_file, G_FILE_TEST_IS_REGULAR)) {
+            g_printerr (_("%s doesn't exist or is not a valid file.\n"), cmdline_opts->import_file);
+            return FALSE;
+        }
+
+        gchar *pwd = get_pwd (_("Type the password for the file you want to import: "));
+        if (pwd == NULL) {
+            return FALSE;
+        }
+
+        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, get_max_file_size_from_memlock (), &err);
+        if (otps == NULL) {
+            const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
+            gchar *msg_with_err = NULL;
+            if (err != NULL) {
+                msg_with_err = g_strconcat (msg, " The error is: ", err->message, NULL);
+            }
+            g_printerr ("%s\n", err == NULL ? msg : msg_with_err);
+            if (err != NULL) {
+                g_free (msg_with_err);
+                g_clear_error (&err);
+            }
+            gcry_free (pwd);
+
+            return FALSE;
+        }
+        gcry_free (pwd);
+
+        add_otps_to_db (otps, db_data);
+        free_otps_gslist (otps, g_slist_length (otps));
+
+        update_db (db_data, &err);
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+            g_printerr ("Error while updating the database: %s\n", err->message);
+            return FALSE;
+        }
+        reload_db (db_data, &err);
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+            g_printerr ("Error while reloading the database: %s\n", err->message);
+            return FALSE;
+        }
+        g_print ("Data successfully imported.\n");
+    }
+
     if (cmdline_opts->export) {
         gchar *export_directory;
 #ifdef IS_FLATPAK
@@ -92,8 +137,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #endif
         gboolean exported = FALSE;
         gchar *export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, "andotp_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "andotp_encrypted") == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, "andotp_encrypted") == 0) {
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
                     free_dbdata (db_data);
@@ -105,13 +150,13 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gcry_free (export_pwd);
             exported = TRUE;
         }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, "freeotpplus") == 0) {
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
             exported_file_path = g_build_filename (export_directory, "freeotpplus-exports.txt", NULL);
             ret_msg = export_freeotpplus (exported_file_path, db_data->json_data);
             exported = TRUE;
         }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, "aegis_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "aegis_encrypted") == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, "aegis_encrypted") == 0) {
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
                     free_dbdata (db_data);
@@ -123,8 +168,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gcry_free (export_pwd);
             exported = TRUE;
         }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_encrypted") == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, "twofas_encrypted") == 0) {
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
                     free_dbdata (db_data);
@@ -136,8 +181,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gcry_free (export_pwd);
             exported = TRUE;
         }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_plain") == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_encrypted") == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, "authpro_encrypted") == 0) {
+        if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
+            if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
                     free_dbdata (db_data);
@@ -164,6 +209,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         g_free (exported_file_path);
     }
+
     return TRUE;
 }
 

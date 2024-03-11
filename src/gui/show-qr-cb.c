@@ -7,7 +7,7 @@
 #include "../common/parse-uri.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 
 #define INCHES_PER_METER (100.0/2.54)
 #define SIZE 3

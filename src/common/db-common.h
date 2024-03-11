@@ -42,23 +42,29 @@ typedef struct db_data_t {
 } DatabaseData;
 
 
-void load_db               (DatabaseData   *db_data,
+void    load_db            (DatabaseData   *db_data,
                             GError        **error);
 
-void update_db             (DatabaseData  *db_data,
+void    update_db          (DatabaseData  *db_data,
                             GError       **err);
 
-void reload_db             (DatabaseData  *db_data,
+void    reload_db          (DatabaseData  *db_data,
                             GError       **err);
 
 guchar *get_db_derived_key (const gchar   *pwd,
                             DbHeaderData  *header_data);
 
-void cleanup_db_gfile      (GFile         *file,
+void    add_otps_to_db     (GSList       *otps,
+                            DatabaseData *db_data);
+
+gint    check_duplicate    (gconstpointer   data,
+                            gconstpointer   user_data);
+
+void    cleanup_db_gfile   (GFile         *file,
                             gpointer       stream,
                             GError        *err);
 
-void free_db_resources     (gcry_cipher_hd_t hd,
+void    free_db_resources  (gcry_cipher_hd_t hd,
                             guchar        *derived_key,
                             guchar        *enc_buf,
                             gchar         *dec_buf,

@@ -1,13 +1,12 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
 #include <jansson.h>
-#include "imports.h"
 #include "password-cb.h"
 #include "message-dialogs.h"
+#include "../common/import-export.h"
 #include "../common/gquarks.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "db-misc.h"
-#include "../common/get-providers-data.h"
 
 
 static gboolean  parse_data_and_update_db    (AppData       *app_data,
@@ -16,7 +15,7 @@ static gboolean  parse_data_and_update_db    (AppData       *app_data,
 
 
 void
-select_file_cb (GSimpleAction *simple,
+import_data_cb (GSimpleAction *simple,
                 GVariant      *parameter __attribute__((unused)),
                 gpointer       user_data)
 {
@@ -45,19 +44,7 @@ select_file_cb (GSimpleAction *simple,
 gchar *
 update_db_from_otps (GSList *otps, AppData *app_data)
 {
-    json_t *obj;
-    guint list_len = g_slist_length (otps);
-    for (guint i = 0; i < list_len; i++) {
-        otp_t *otp = g_slist_nth_data (otps, i);
-        obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
-        guint hash = json_object_get_hash (obj);
-        if (g_slist_find_custom (app_data->db_data->objects_hash, GUINT_TO_POINTER(hash), check_duplicate) == NULL) {
-            app_data->db_data->objects_hash = g_slist_append (app_data->db_data->objects_hash, g_memdup2 (&hash, sizeof (guint)));
-            app_data->db_data->data_to_add = g_slist_append (app_data->db_data->data_to_add, obj);
-        } else {
-            g_print ("[INFO] Duplicate element not added\n");
-        }
-    }
+    add_otps_to_db (otps, app_data->db_data);
 
     GError *err = NULL;
     update_db (app_data->db_data, &err);
@@ -74,52 +61,23 @@ update_db_from_otps (GSList *otps, AppData *app_data)
 }
 
 
-void
-free_otps_gslist (GSList *otps,
-                  guint   list_len)
-{
-    otp_t *otp_data;
-    for (guint i = 0; i < list_len; i++) {
-        otp_data = g_slist_nth_data (otps, i);
-        g_free (otp_data->type);
-        g_free (otp_data->algo);
-        g_free (otp_data->account_name);
-        g_free (otp_data->issuer);
-        gcry_free (otp_data->secret);
-    }
-    g_slist_free (otps);
-}
-
-
 static gboolean
 parse_data_and_update_db (AppData       *app_data,
                           const gchar   *filename,
                           const gchar   *action_name)
 {
     GError *err = NULL;
-    GSList *content = NULL;
-
     gchar *pwd = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0 ||
-        g_strcmp0 (action_name, AUTHPRO_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_IMPORT_ENC_ACTION_NAME) == 0) {
+
+    if (g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
         pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
         if (pwd == NULL) {
             return FALSE;
         }
     }
 
-    if (g_strcmp0 (action_name, ANDOTP_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_IMPORT_PLAIN_ACTION_NAME) == 0) {
-        content = get_andotp_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
-    } else if (g_strcmp0 (action_name, FREEOTPPLUS_IMPORT_ACTION_NAME) == 0) {
-        content = get_freeotpplus_data (filename, app_data->db_data->max_file_size_from_memlock, &err);
-    } else if (g_strcmp0 (action_name, AEGIS_IMPORT_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_IMPORT_ENC_ACTION_NAME) == 0) {
-        content = get_aegis_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
-    } else if (g_strcmp0 (action_name, AUTHPRO_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_IMPORT_PLAIN_ACTION_NAME) == 0) {
-        content = get_authpro_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
-    } else if (g_strcmp0 (action_name, TWOFAS_IMPORT_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_IMPORT_PLAIN_ACTION_NAME) == 0) {
-        content = get_twofas_data (filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
-    }
-
+    GSList *content = get_data_from_provider (action_name, filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
     if (content == NULL) {
         const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
         gchar *msg_with_err = NULL;

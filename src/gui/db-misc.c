@@ -2,7 +2,7 @@
 #include "db-misc.h"
 #include "otpclient.h"
 #include "../common/gquarks.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 
 static void  json_free (gpointer       data);
 
@@ -28,18 +28,6 @@ load_new_db (AppData  *app_data,
     update_model (app_data);
     g_slist_free_full (app_data->db_data->data_to_add, json_free);
     app_data->db_data->data_to_add = NULL;
-}
-
-
-gint
-check_duplicate (gconstpointer data,
-                 gconstpointer user_data)
-{
-    guint list_elem = *(guint *)data;
-    if (list_elem == GPOINTER_TO_UINT(user_data)) {
-        return 0;
-    }
-    return -1;
 }
 
 

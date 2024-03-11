@@ -3,7 +3,7 @@
 #include <cotp.h>
 #include "message-dialogs.h"
 #include "add-common.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "../common/common.h"
 #include "google-migration.pb-c.h"
 
@@ -28,36 +28,6 @@ get_row_number_from_iter (GtkListStore *list_store,
     gtk_tree_path_free (path);
 
     return row;
-}
-
-
-json_t *
-build_json_obj (const gchar *type,
-                const gchar *acc_label,
-                const gchar *acc_iss,
-                const gchar *acc_key,
-                guint        digits,
-                const gchar *algo,
-                guint        period,
-                guint64      ctr)
-{
-    json_t *obj = json_object ();
-    json_object_set (obj, "type", json_string (type));
-    json_object_set (obj, "label", json_string (acc_label));
-    json_object_set (obj, "issuer", json_string (acc_iss));
-    json_object_set (obj, "secret", json_string (acc_key));
-    json_object_set (obj, "digits", json_integer (digits));
-    json_object_set (obj, "algo", json_string (algo));
-
-    json_object_set (obj, "secret", json_string (acc_key));
-
-    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
-        json_object_set (obj, "period", json_integer (period));
-    } else {
-        json_object_set (obj, "counter", json_integer (ctr));
-    }
-
-    return obj;
 }
 
 

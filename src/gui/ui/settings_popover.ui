@@ -30,7 +30,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_andotp</property>
+            <property name="action-name">import_menu.andotp_encrypted</property>
             <property name="text" translatable="yes">andOTP (encrypted)</property>
           </object>
           <packing>
@@ -44,7 +44,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_andotp_plain</property>
+            <property name="action-name">import_menu.andotp_plain</property>
             <property name="text" translatable="yes">andOTP (plain)</property>
           </object>
           <packing>
@@ -58,7 +58,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_freeotpplus</property>
+            <property name="action-name">import_menu.freeotpplus_plain</property>
             <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
           </object>
           <packing>
@@ -72,7 +72,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_aegis_enc</property>
+            <property name="action-name">import_menu.aegis_encrypted</property>
             <property name="text" translatable="yes">Aegis (encrypted json)</property>
           </object>
           <packing>
@@ -86,7 +86,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_aegis</property>
+            <property name="action-name">import_menu.aegis_plain</property>
             <property name="text" translatable="yes">Aegis (plain json)</property>
           </object>
           <packing>
@@ -100,7 +100,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_authpro_enc</property>
+            <property name="action-name">import_menu.authpro_encrypted</property>
             <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
           </object>
           <packing>
@@ -114,7 +114,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_authpro_plain</property>
+            <property name="action-name">import_menu.authpro_plain</property>
             <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
           </object>
           <packing>
@@ -128,7 +128,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_twofas_enc</property>
+            <property name="action-name">import_menu.twofas_encrypted</property>
             <property name="text" translatable="yes">2FAS (encrypted json)</property>
           </object>
           <packing>
@@ -142,7 +142,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_twofas_plain</property>
+            <property name="action-name">import_menu.twofas_plain</property>
             <property name="text" translatable="yes">2FAS (plain json)</property>
           </object>
           <packing>
@@ -197,7 +197,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_andotp</property>
+            <property name="action-name">export_menu.andotp_encrypted</property>
             <property name="text" translatable="yes">andOTP (encrypted)</property>
           </object>
           <packing>
@@ -211,7 +211,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_andotp_plain</property>
+            <property name="action-name">export_menu.andotp_plain</property>
             <property name="text" translatable="yes">andOTP (plain)</property>
           </object>
           <packing>
@@ -225,7 +225,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_freeotpplus</property>
+            <property name="action-name">export_menu.freeotpplus_plain</property>
             <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
           </object>
           <packing>
@@ -239,7 +239,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_aegis</property>
+            <property name="action-name">export_menu.aegis_encrypted</property>
             <property name="text" translatable="yes">Aegis (encrypted json)</property>
           </object>
           <packing>
@@ -253,7 +253,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_aegis_plain</property>
+            <property name="action-name">export_menu.aegis_plain</property>
             <property name="text" translatable="yes">Aegis (plain json)</property>
           </object>
           <packing>
@@ -267,7 +267,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_authpro_enc</property>
+            <property name="action-name">export_menu.authpro_encrypted</property>
             <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
           </object>
           <packing>
@@ -281,7 +281,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_authpro_plain</property>
+            <property name="action-name">export_menu.authpro_plain</property>
             <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
           </object>
           <packing>
@@ -295,7 +295,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_twofas_enc</property>
+            <property name="action-name">export_menu.twofas_encrypted</property>
             <property name="text" translatable="yes">2FAS (encrypted json)</property>
           </object>
           <packing>
@@ -309,7 +309,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.export_twofas_plain</property>
+            <property name="action-name">export_menu.twofas_plain</property>
             <property name="text" translatable="yes">2FAS (plain json)</property>
           </object>
           <packing>
@@ -597,7 +597,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_google_qr_file</property>
+            <property name="action-name">import_menu.import_google_qr_file</property>
             <property name="text" translatable="yes">From file</property>
           </object>
           <packing>
@@ -611,7 +611,7 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.import_google_qr_webcam</property>
+            <property name="action-name">import_menu.import_google_qr_webcam</property>
             <property name="text" translatable="yes">From webcam</property>
           </object>
           <packing>

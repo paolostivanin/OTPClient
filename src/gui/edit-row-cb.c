@@ -1,11 +1,10 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
-#include "imports.h"
 #include "treeview.h"
 #include "db-misc.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "../common/gquarks.h"
 
 typedef struct edit_data_t {

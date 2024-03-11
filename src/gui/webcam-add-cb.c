@@ -1,10 +1,10 @@
 #include <gtk/gtk.h>
 #include <zbar.h>
 #include <gcrypt.h>
-#include "imports.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "gui-common.h"
+#include "gui-misc.h"
+#include "../common/import-export.h"
 
 
 typedef struct config_data_t {
@@ -27,7 +27,7 @@ webcam_add_cb (GSimpleAction *simple,
                gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
-    gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_MIGRATION_WEBCAM_ACTION_NAME) == 0) ? TRUE : FALSE;
+    gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_WEBCAM_ACTION_NAME) == 0) ? TRUE : FALSE;
 
     AppData *app_data = (AppData *)user_data;
 

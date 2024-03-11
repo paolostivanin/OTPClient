@@ -4,7 +4,7 @@
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "../common/secret-schema.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 
 typedef struct settings_data_t {
     GtkWidget *dss_switch;

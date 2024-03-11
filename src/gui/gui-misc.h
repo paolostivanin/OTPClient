@@ -14,15 +14,6 @@ void      icon_press_cb                (GtkEntry       *entry,
 guint     get_row_number_from_iter     (GtkListStore   *list_store,
                                         GtkTreeIter     iter);
 
-json_t   *build_json_obj               (const gchar    *type,
-                                        const gchar    *acc_label,
-                                        const gchar    *acc_iss,
-                                        const gchar    *acc_key,
-                                        guint           digits,
-                                        const gchar    *algo,
-                                        guint           period,
-                                        guint64         ctr);
-
 void      send_ok_cb                   (GtkWidget      *entry,
                                         gpointer        user_data);
 
@@ -41,5 +32,16 @@ guchar   *g_base64_decode_secure       (const gchar    *text,
                                         gsize          *out_len);
 
 GKeyFile *get_kf_ptr                   (void);
+
+void    import_data_cb          (GSimpleAction   *simple,
+                                 GVariant        *parameter,
+                                 gpointer         user_data);
+
+void    export_data_cb          (GSimpleAction   *simple,
+                                 GVariant        *parameter,
+                                 gpointer         user_data);
+
+gchar  *update_db_from_otps     (GSList          *otps,
+                                 AppData         *app_data);
 
 G_END_DECLS

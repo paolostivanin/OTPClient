@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include "version.h"
+#include "../common/import-export.h"
 #include "main.h"
 
 static gint      handle_local_options  (GApplication            *application,
@@ -15,6 +16,8 @@ static int       command_line          (GApplication            *application,
 static gboolean  parse_options         (GApplicationCommandLine *cmdline,
                                         CmdlineOpts             *cmdline_opts);
 
+static gboolean  is_valid_type         (const gchar             *type);
+
 static void      g_free_cmdline_opts   (CmdlineOpts             *co);
 
 
@@ -22,6 +25,14 @@ gint
 main (gint    argc,
       gchar **argv)
 {
+    g_autofree gchar *type_msg = g_strconcat ("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: ",
+                                         ANDOTP_PLAIN_ACTION_NAME, ", ", ANDOTP_ENC_ACTION_NAME, ", ",
+                                         AEGIS_PLAIN_ACTION_NAME, ", ", AEGIS_ENC_ACTION_NAME, ", ",
+                                         AUTHPRO_PLAIN_ACTION_NAME, ", ", AUTHPRO_ENC_ACTION_NAME, ", ",
+                                         TWOFAS_PLAIN_ACTION_NAME, ", ", TWOFAS_ENC_ACTION_NAME, ", ",
+                                         FREEOTPPLUS_PLAIN_ACTION_NAME,
+                                         NULL);
+
     GOptionEntry entries[] =
             {
 #ifndef IS_FLATPAK
@@ -33,8 +44,10 @@ main (gint    argc,
                     { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Match exactly the provided account/issuer (to be used with --show, optional)", NULL},
                     { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
                     { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
-                    { "export", 'e', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
-                    { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The export type for the database. Must be either one of: andotp_plain, andotp_encrypted, freeotpplus, aegis_plain, aegis_encrypted, twofas_plain, twofas_encrypted, authpro_plain, authpro_encrypted (to be used with --export, mandatory)", NULL },
+                    { "import", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import a database.", NULL },
+                    { "export", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
+                    { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, type_msg, NULL },
+                    { "file", 'f', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "File to import (to be used with --import, mandatory).", NULL },
 #ifndef IS_FLATPAK
                     { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
 #endif
@@ -114,6 +127,9 @@ command_line (GApplication                *application __attribute__((unused)),
     cmdline_opts->match_exact = FALSE;
     cmdline_opts->show_next = FALSE;
     cmdline_opts->list = FALSE;
+    cmdline_opts->import = FALSE;
+    cmdline_opts->import_type = NULL;
+    cmdline_opts->import_file = NULL;
     cmdline_opts->export = FALSE;
     cmdline_opts->export_type = NULL;
     cmdline_opts->export_dir = NULL;
@@ -156,10 +172,31 @@ parse_options (GApplicationCommandLine *cmdline,
 
     g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
 
+    if (g_variant_dict_lookup (options, "import", "b", &cmdline_opts->import)) {
+        if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
+            g_application_command_line_print (cmdline, "Please provide an import type.\n");
+            return FALSE;
+        } else {
+            if (!is_valid_type (cmdline_opts->import_type)) {
+                g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
+                return FALSE;
+            }
+        }
+        if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
+            g_application_command_line_print (cmdline, "Please provide a file to import.\n");
+            return FALSE;
+        }
+    }
+
     if (g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export)) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
-            g_application_command_line_print (cmdline, "Please provide at least export type.\n");
+            g_application_command_line_print (cmdline, "Please provide an export type (see --help).\n");
             return FALSE;
+        } else {
+            if (!is_valid_type (cmdline_opts->export_type)) {
+                g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
+                return FALSE;
+            }
         }
 #ifndef IS_FLATPAK
         g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir);
@@ -169,12 +206,36 @@ parse_options (GApplicationCommandLine *cmdline,
 }
 
 
+static gboolean
+is_valid_type (const gchar *type)
+{
+    const gchar *supported_types[] = {ANDOTP_PLAIN_ACTION_NAME, ANDOTP_ENC_ACTION_NAME,
+                                      AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
+                                      TWOFAS_PLAIN_ACTION_NAME, TWOFAS_ENC_ACTION_NAME,
+                                      AUTHPRO_PLAIN_ACTION_NAME, AUTHPRO_ENC_ACTION_NAME,
+                                      FREEOTPPLUS_PLAIN_ACTION_NAME};
+
+    gint array_size = sizeof(supported_types) / sizeof(supported_types[0]);
+
+    gboolean found = FALSE;
+    for (gint i = 0; i < array_size; i++) {
+        if (g_strcmp0 (type, supported_types[i]) == 0) {
+            found = TRUE;
+            break;
+        }
+    }
+    return found;
+}
+
+
 static void
 g_free_cmdline_opts (CmdlineOpts *co)
 {
     g_free (co->database);
     g_free (co->account);
     g_free (co->issuer);
+    g_free (co->import_type);
+    g_free (co->import_file);
     g_free (co->export_type);
     g_free (co->export_dir);
     g_free (co);

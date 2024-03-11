@@ -2,11 +2,11 @@
 #include <gcrypt.h>
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
-#include "imports.h"
+#include "../common/import-export.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 
 
 typedef struct gtimeout_data_t {
@@ -39,7 +39,7 @@ add_qr_from_file (GSimpleAction *simple,
                   gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
-    gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_MIGRATION_FILE_ACTION_NAME) == 0) ? TRUE : FALSE;
+    gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_FILE_ACTION_NAME) == 0) ? TRUE : FALSE;
 
     AppData *app_data = (AppData *)user_data;
 

@@ -15,6 +15,9 @@ typedef struct cmdline_opts_t {
     gboolean match_exact;
     gboolean show_next;
     gboolean list;
+    gboolean import;
+    gchar *import_type;
+    gchar *import_file;
     gboolean export;
     gchar *export_type;
     gchar *export_dir;

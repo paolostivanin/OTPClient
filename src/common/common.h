@@ -74,5 +74,16 @@ guchar           *get_authpro_derived_key        (const gchar        *password,
 
 guint32           json_object_get_hash           (json_t             *obj);
 
+void              free_otps_gslist               (GSList             *otps,
+                                                  guint               list_len);
+
+json_t           *build_json_obj                 (const gchar        *type,
+                                                  const gchar        *acc_label,
+                                                  const gchar        *acc_iss,
+                                                  const gchar        *acc_key,
+                                                  guint               digits,
+                                                  const gchar        *algo,
+                                                  guint               period,
+                                                  guint64             ctr);
 
 G_END_DECLS

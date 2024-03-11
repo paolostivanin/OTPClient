@@ -5,8 +5,8 @@
 #include <glib/gi18n.h>
 #include "otpclient.h"
 #include "../common/gquarks.h"
-#include "imports.h"
-#include "../common/exports.h"
+#include "gui-misc.h"
+#include "../common/import-export.h"
 #include "message-dialogs.h"
 #include "password-cb.h"
 #include "get-builder.h"
@@ -14,7 +14,6 @@
 #include "lock-app.h"
 #include "change-db-cb.h"
 #include "new-db-cb.h"
-#include "../common/common.h"
 #include "../common/secret-schema.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
@@ -25,7 +24,6 @@
 #include "show-qr-cb.h"
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
-#include "gui-common.h"
 
 #ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
@@ -445,27 +443,33 @@ create_main_window (gint     width,
         gtk_widget_set_sensitive (lock_btn, FALSE);
     }
 
+    static GActionEntry import_menu_entries[] = {
+            { .name = ANDOTP_PLAIN_ACTION_NAME, .activate = import_data_cb },
+            { .name = ANDOTP_ENC_ACTION_NAME, .activate = import_data_cb },
+            { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = import_data_cb },
+            { .name = AEGIS_PLAIN_ACTION_NAME, .activate = import_data_cb },
+            { .name = AEGIS_ENC_ACTION_NAME, .activate = import_data_cb },
+            { .name = AUTHPRO_PLAIN_ACTION_NAME, .activate = import_data_cb },
+            { .name = AUTHPRO_ENC_ACTION_NAME, .activate = import_data_cb },
+            { .name = TWOFAS_PLAIN_ACTION_NAME, .activate = import_data_cb },
+            { .name = TWOFAS_ENC_ACTION_NAME, .activate = import_data_cb },
+            { .name = GOOGLE_FILE_ACTION_NAME, .activate = add_qr_from_file },
+            { .name = GOOGLE_WEBCAM_ACTION_NAME, .activate = webcam_add_cb }
+    };
+
+    static GActionEntry export_menu_entries[] = {
+            { .name = ANDOTP_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = ANDOTP_ENC_ACTION_NAME, .activate = export_data_cb },
+            { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = AEGIS_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = AEGIS_ENC_ACTION_NAME, .activate = export_data_cb },
+            { .name = AUTHPRO_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = AUTHPRO_ENC_ACTION_NAME, .activate = export_data_cb },
+            { .name = TWOFAS_PLAIN_ACTION_NAME, .activate = export_data_cb },
+            { .name = TWOFAS_ENC_ACTION_NAME, .activate = export_data_cb }
+    };
+
     static GActionEntry settings_menu_entries[] = {
-            { .name = ANDOTP_IMPORT_ACTION_NAME, .activate = select_file_cb },
-            { .name = ANDOTP_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
-            { .name = FREEOTPPLUS_IMPORT_ACTION_NAME, .activate = select_file_cb },
-            { .name = AEGIS_IMPORT_ACTION_NAME, .activate = select_file_cb },
-            { .name = AEGIS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
-            { .name = AUTHPRO_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
-            { .name = AUTHPRO_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
-            { .name = TWOFAS_IMPORT_ENC_ACTION_NAME, .activate = select_file_cb },
-            { .name = TWOFAS_IMPORT_PLAIN_ACTION_NAME, .activate = select_file_cb },
-            { .name = ANDOTP_EXPORT_ACTION_NAME, .activate = export_data_cb },
-            { .name = ANDOTP_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
-            { .name = FREEOTPPLUS_EXPORT_ACTION_NAME, .activate = export_data_cb },
-            { .name = AEGIS_EXPORT_ACTION_NAME, .activate = export_data_cb },
-            { .name = AEGIS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
-            { .name = AUTHPRO_EXPORT_ENC_ACTION_NAME, .activate = export_data_cb },
-            { .name = AUTHPRO_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
-            { .name = TWOFAS_EXPORT_ENC_ACTION_NAME, .activate = export_data_cb },
-            { .name = TWOFAS_EXPORT_PLAIN_ACTION_NAME, .activate = export_data_cb },
-            { .name = GOOGLE_MIGRATION_FILE_ACTION_NAME, .activate = add_qr_from_file },
-            { .name = GOOGLE_MIGRATION_WEBCAM_ACTION_NAME, .activate = webcam_add_cb },
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
@@ -486,9 +490,18 @@ create_main_window (gint     width,
 
     GtkWidget *settings_popover = GTK_WIDGET(gtk_builder_get_object (app_data->settings_popover_builder, "settings_pop_id"));
     gtk_menu_button_set_popover (GTK_MENU_BUTTON(gtk_builder_get_object (app_data->builder, "settings_btn_id")), settings_popover);
+
     GActionGroup *settings_actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP(settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
+
+    GActionGroup *import_actions = (GActionGroup *)g_simple_action_group_new ();
+    g_action_map_add_action_entries (G_ACTION_MAP(import_actions), import_menu_entries, G_N_ELEMENTS (import_menu_entries), app_data);
+    gtk_widget_insert_action_group (settings_popover, "import_menu", import_actions);
+
+    GActionGroup *export_actions = (GActionGroup *)g_simple_action_group_new ();
+    g_action_map_add_action_entries (G_ACTION_MAP(export_actions), export_menu_entries, G_N_ELEMENTS (export_menu_entries), app_data);
+    gtk_widget_insert_action_group (settings_popover, "export_menu", export_actions);
 
     GtkWidget *add_popover = GTK_WIDGET(gtk_builder_get_object (app_data->add_popover_builder, "add_pop_id"));
     gtk_menu_button_set_popover (GTK_MENU_BUTTON(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), add_popover);

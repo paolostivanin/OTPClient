@@ -3,7 +3,7 @@
 #include <gtk/gtk.h>
 #include "data.h"
 #include "get-builder.h"
-#include "gui-common.h"
+#include "gui-misc.h"
 #include "message-dialogs.h"
 #include "otpclient.h"
 #include "lock-app.h"
