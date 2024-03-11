@@ -5,10 +5,6 @@
 #include "message-dialogs.h"
 #include "../common/import-export.h"
 
-static void show_ret_msg_dialog (GtkWidget   *mainwin,
-                                 const gchar *fpath,
-                                 const gchar *ret_msg);
-
 
 void
 export_data_cb (GSimpleAction *simple,
@@ -69,7 +65,7 @@ export_data_cb (GSimpleAction *simple,
 
     gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER(fl_diag), filename);
 
-    gchar *export_file_abs_path = NULL;
+    g_autofree gchar *export_file_abs_path = NULL;
     gint native_diag_res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(fl_diag));
     if (native_diag_res == GTK_RESPONSE_ACCEPT) {
         export_file_abs_path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(fl_diag));
@@ -84,7 +80,7 @@ export_data_cb (GSimpleAction *simple,
         return;
     }
 
-    gchar *ret_msg = NULL;
+    g_autofree gchar *ret_msg = NULL;
     if (g_strcmp0 (action_name, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0) {
         ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->json_data);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
@@ -99,30 +95,12 @@ export_data_cb (GSimpleAction *simple,
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;
     }
-    show_ret_msg_dialog (app_data->main_window, export_file_abs_path, ret_msg);
-    g_free (ret_msg);
-    g_free (export_file_abs_path);
+
+    g_autofree gchar *message = (ret_msg != NULL) ? g_strconcat ("Error while exporting data: ", ret_msg, NULL)
+                                                  : g_strconcat ("Data successfully exported to ", export_file_abs_path, NULL);
+    GtkMessageType msg_type = (ret_msg != NULL) ? GTK_MESSAGE_ERROR : GTK_MESSAGE_INFO;
+    show_message_dialog (app_data->main_window, message, msg_type);
     if (encrypted == TRUE) {
         gcry_free (password);
     }
-}
-
-
-static void
-show_ret_msg_dialog (GtkWidget   *mainwin,
-                     const gchar *fpath,
-                     const gchar *ret_msg)
-{
-    GtkMessageType msg_type;
-    gchar *message = NULL;
-
-    if (ret_msg != NULL) {
-        message = g_strconcat ("Error while exporting data: ", ret_msg, NULL);
-        msg_type = GTK_MESSAGE_ERROR;
-    } else {
-        message = g_strconcat ("Data successfully exported to ", fpath, NULL);
-        msg_type = GTK_MESSAGE_INFO;
-    }
-    show_message_dialog (mainwin, message, msg_type);
-    g_free (message);
 }

@@ -33,4 +33,6 @@ void row_selected_cb    (GtkTreeView        *tree_view,
 
 void reorder_db         (AppData            *app_data);
 
+void regenerate_model   (AppData            *app_data);
+
 G_END_DECLS

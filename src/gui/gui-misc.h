@@ -44,4 +44,7 @@ void    export_data_cb          (GSimpleAction   *simple,
 gchar  *update_db_from_otps     (GSList          *otps,
                                  AppData         *app_data);
 
+void    load_new_db              (AppData        *app_data,
+                                    GError        **err);
+
 G_END_DECLS

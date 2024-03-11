@@ -4,7 +4,6 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "../common/gquarks.h"
-#include "../common/common.h"
 
 
 typedef struct otp_data_t {

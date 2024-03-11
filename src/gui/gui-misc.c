@@ -6,6 +6,8 @@
 #include "gui-misc.h"
 #include "../common/common.h"
 #include "google-migration.pb-c.h"
+#include "../common/gquarks.h"
+#include "treeview.h"
 
 
 void
@@ -268,6 +270,39 @@ decode_migration_data (const gchar *encoded_uri)
 }
 
 
+gchar *
+update_db_from_otps (GSList *otps, AppData *app_data)
+{
+    add_otps_to_db (otps, app_data->db_data);
+
+    GError *err = NULL;
+    update_db (app_data->db_data, &err);
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        return g_strdup (err->message);
+    }
+    reload_db (app_data->db_data, &err);
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        return g_strdup (err->message);
+    }
+    regenerate_model (app_data);
+
+    return NULL;
+}
+
+
+void
+load_new_db (AppData  *app_data,
+             GError  **err)
+{
+    reload_db (app_data->db_data, err);
+    if (*err != NULL) {
+        return;
+    }
+
+    update_model (app_data);
+    g_slist_free_full (app_data->db_data->data_to_add, json_free);
+    app_data->db_data->data_to_add = NULL;
+}
 
 
 GKeyFile *

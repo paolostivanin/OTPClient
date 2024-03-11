@@ -3,7 +3,7 @@
 #include <libsecret/secret.h>
 #include "data.h"
 #include "message-dialogs.h"
-#include "db-misc.h"
+#include "gui-misc.h"
 #include "password-cb.h"
 #include "db-actions.h"
 #include "../common/secret-schema.h"

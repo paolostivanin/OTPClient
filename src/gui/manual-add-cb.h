@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../common/db-common.h"
+
 G_BEGIN_DECLS
 
 typedef struct widgets_t {

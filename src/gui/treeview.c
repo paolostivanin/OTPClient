@@ -261,6 +261,15 @@ reorder_db (AppData *app_data)
 }
 
 
+void
+regenerate_model (AppData *app_data)
+{
+    update_model (app_data);
+    g_slist_free_full (app_data->db_data->data_to_add, json_free);
+    app_data->db_data->data_to_add = NULL;
+}
+
+
 static void
 hide_all_otps_cb (GtkTreeView *tree_view,
                   gpointer     user_data)

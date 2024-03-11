@@ -3,7 +3,6 @@
 #include <libsecret/secret.h>
 #include "data.h"
 #include "message-dialogs.h"
-#include "db-misc.h"
 #include "password-cb.h"
 #include "../common/secret-schema.h"
 #include "otpclient.h"

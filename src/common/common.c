@@ -423,3 +423,10 @@ build_json_obj (const gchar *type,
 
     return obj;
 }
+
+
+void
+json_free (gpointer data)
+{
+    json_decref (data);
+}
