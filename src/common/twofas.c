@@ -2,9 +2,9 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include "gquarks.h"
 #include "common.h"
-#include "../gquarks.h"
-#include "../imports.h"
+#include "file-size.h"
 
 #define TWOFAS_KDF_ITERS 10000
 #define TWOFAS_SALT      256
@@ -47,8 +47,13 @@ static GSList   *parse_twofas_json_data         (const gchar       *data,
 GSList *
 get_twofas_data (const gchar  *path,
                  const gchar  *password,
+                 gint32        max_file_size,
                  GError      **err)
 {
+    if (get_file_size (path) > max_file_size) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        return NULL;
+    }
     return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
 }
 

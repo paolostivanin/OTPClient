@@ -1,13 +1,13 @@
 #pragma once
 
 #include <glib.h>
-#include "../data.h"
+#include "../common/db-common.h"
 
 G_BEGIN_DECLS
 
 #define MAX_ABS_PATH_LEN 256
 
-typedef struct _cmdline_opts {
+typedef struct cmdline_opts_t {
     gchar *database;
     gboolean show;
     gchar *account;
@@ -15,6 +15,9 @@ typedef struct _cmdline_opts {
     gboolean match_exact;
     gboolean show_next;
     gboolean list;
+    gboolean import;
+    gchar *import_type;
+    gchar *import_file;
     gboolean export;
     gchar *export_type;
     gchar *export_dir;

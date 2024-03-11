@@ -1,14 +1,13 @@
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <sys/resource.h>
 #include <cotp.h>
-#include <glib/gi18n.h>
 #include "gcrypt.h"
 #include "jansson.h"
 #include "common.h"
-#include "../google-migration.pb-c.h"
-#include "../file-size.h"
-#include "../gquarks.h"
+#include "file-size.h"
+#include "gquarks.h"
 
 gint32
 get_max_file_size_from_memlock (void)
@@ -69,47 +68,6 @@ get_algo_int_from_str (const gchar *algo)
 }
 
 
-guint32
-jenkins_one_at_a_time_hash (const gchar *key, gsize len)
-{
-    guint32 hash, i;
-    for (hash = i = 0; i < len; ++i) {
-        hash += key[i];
-        hash += (hash << 10);
-        hash ^= (hash >> 6);
-    }
-    hash += (hash << 3);
-    hash ^= (hash >> 11);
-    hash += (hash << 15);
-
-    return hash;
-}
-
-
-guint32
-json_object_get_hash (json_t *obj)
-{
-    const gchar *key;
-    json_t *value;
-    gchar *tmp_string = gcry_calloc_secure (256, 1);
-    json_object_foreach (obj, key, value) {
-        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
-            json_int_t v = json_integer_value (value);
-            g_snprintf (tmp_string + g_utf8_strlen (tmp_string, -1), 256, "%ld", (gint64) v);
-        } else {
-            if (g_strlcat (tmp_string, json_string_value (value), 256) > 256) {
-                g_printerr ("%s\n", _("Truncation occurred."));
-            }
-        }
-    }
-
-    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
-
-    gcry_free (tmp_string);
-
-    return hash;
-}
-
 gchar *
 secure_strdup (const gchar *src)
 {
@@ -117,26 +75,6 @@ secure_strdup (const gchar *src)
     memcpy (sec_buf, src, strlen (src) + 1);
 
     return sec_buf;
-}
-
-
-gchar *
-g_trim_whitespace (const gchar *str)
-{
-    if (g_utf8_strlen (str, -1) == 0) {
-        return NULL;
-    }
-    gchar *sec_buf = gcry_calloc_secure (strlen (str) + 1, 1);
-    int pos = 0;
-    for (int i = 0; str[i]; i++) {
-        if (str[i] != ' ') {
-            sec_buf[pos++] = str[i];
-        }
-    }
-    sec_buf[pos] = '\0';
-    gchar *secubf_newpos = (gchar *)gcry_realloc (sec_buf, strlen (sec_buf) + 1);
-
-    return secubf_newpos;
 }
 
 
@@ -176,185 +114,6 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
 }
 
 
-// Backported from Glib (needed by below function)
-static int
-unescape_character (const char *scanner)
-{
-    int first_digit;
-    int second_digit;
-
-    first_digit = g_ascii_xdigit_value (*scanner++);
-    if (first_digit < 0)
-        return -1;
-
-    second_digit = g_ascii_xdigit_value (*scanner++);
-    if (second_digit < 0)
-        return -1;
-
-    return (first_digit << 4) | second_digit;
-}
-
-
-// Backported from Glib. The only difference is that it's using gcrypt to allocate a secure buffer.
-gchar *
-g_uri_unescape_string_secure (const gchar *escaped_string,
-                              const gchar *illegal_characters)
-{
-    if (escaped_string == NULL)
-        return NULL;
-
-    const gchar *escaped_string_end = escaped_string + g_utf8_strlen (escaped_string, -1);
-
-    gchar *result = gcry_calloc_secure (escaped_string_end - escaped_string + 1, 1);
-    gchar *out = result;
-
-    const gchar *in;
-    gint character;
-    for (in = escaped_string; in < escaped_string_end; in++) {
-        character = *in;
-
-        if (*in == '%') {
-            in++;
-            if (escaped_string_end - in < 2) {
-                // Invalid escaped char (to short)
-                gcry_free (result);
-                return NULL;
-            }
-
-            character = unescape_character (in);
-
-            // Check for an illegal character. We consider '\0' illegal here.
-            if (character <= 0 ||
-                (illegal_characters != NULL &&
-                 strchr (illegal_characters, (char)character) != NULL)) {
-                gcry_free (result);
-                return NULL;
-            }
-
-            in++; // The other char will be eaten in the loop header
-        }
-        *out++ = (char)character;
-    }
-
-    *out = '\0';
-
-    return result;
-}
-
-
-guchar *
-g_base64_decode_secure (const gchar *text,
-                        gsize       *out_len)
-{
-    guchar *ret;
-    gsize input_length;
-    gint state = 0;
-    guint save = 0;
-
-    g_return_val_if_fail (text != NULL, NULL);
-    g_return_val_if_fail (out_len != NULL, NULL);
-
-    input_length = g_utf8_strlen (text, -1);
-
-    /* We can use a smaller limit here, since we know the saved state is 0,
-       +1 used to avoid calling g_malloc0(0), and hence returning NULL */
-    ret = gcry_calloc_secure ((input_length / 4) * 3 + 1, 1);
-
-    *out_len = g_base64_decode_step (text, input_length, ret, &state, &save);
-
-    return ret;
-}
-
-
-GSList *
-decode_migration_data (const gchar *encoded_uri)
-{
-    const gchar *encoded_uri_copy = encoded_uri;
-    if (g_ascii_strncasecmp (encoded_uri_copy, "otpauth-migration://offline?data=", 33) != 0) {
-        return NULL;
-    }
-    encoded_uri_copy += 33;
-    gsize out_len;
-    gchar *unesc_str = g_uri_unescape_string_secure (encoded_uri_copy, NULL);
-    guchar *data = g_base64_decode_secure (unesc_str, &out_len);
-    gcry_free (unesc_str);
-
-    GSList *uris = NULL;
-    GString *uri = NULL;
-    MigrationPayload *msg = migration_payload__unpack (NULL, out_len, data);
-    gcry_free (data);
-    for (gint i = 0; i < msg->n_otp_parameters; i++) {
-        uri = g_string_new ("otpauth://");
-        if (msg->otp_parameters[i]->type == 1) {
-            g_string_append (uri, "hotp/");
-        } else if (msg->otp_parameters[i]->type == 2) {
-            g_string_append (uri, "totp/");
-        } else {
-            g_printerr ("OTP type not recognized, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        g_string_append (uri, msg->otp_parameters[i]->name);
-        g_string_append (uri, "?");
-
-        if (msg->otp_parameters[i]->algorithm == 1) {
-            g_string_append (uri, "algorithm=SHA1&");
-        } else if (msg->otp_parameters[i]->algorithm == 2) {
-            g_string_append (uri, "algorithm=SHA256&");
-        } else if (msg->otp_parameters[i]->algorithm == 3) {
-            g_string_append (uri, "algorithm=SHA512&");
-        } else {
-            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        if (msg->otp_parameters[i]->digits == 1) {
-            g_string_append (uri, "digits=6&");
-        } else if (msg->otp_parameters[i]->digits == 2) {
-            g_string_append (uri, "digits=8&");
-        } else {
-            g_printerr ("Algorithm type not supported, skipping %s\n", msg->otp_parameters[i]->name);
-            goto end;
-        }
-
-        if (msg->otp_parameters[i]->issuer != NULL) {
-            g_string_append (uri, "issuer=");
-            g_string_append (uri, msg->otp_parameters[i]->issuer);
-            g_string_append (uri, "&");
-        }
-
-        if (msg->otp_parameters[i]->type == 1) {
-            g_string_append (uri, "counter=");
-            g_string_append_printf(uri, "%ld", msg->otp_parameters[i]->counter);
-            g_string_append (uri, "&");
-        }
-
-#ifdef COTP_OLD_LIB
-        baseencode_error_t b_err;
-#else
-        cotp_error_t b_err;
-#endif
-        gchar *b32_encoded_secret = base32_encode (msg->otp_parameters[i]->secret.data, msg->otp_parameters[i]->secret.len, &b_err);
-        if (b32_encoded_secret == NULL) {
-            g_printerr ("Error while encoding the secret (error code %d)\n", b_err);
-            goto end;
-        }
-
-        g_string_append (uri, "secret=");
-        g_string_append (uri, b32_encoded_secret);
-
-        uris = g_slist_append (uris, g_strdup (uri->str));
-
-        end:
-        g_string_free (uri, TRUE);
-    }
-
-    migration_payload__free_unpacked (msg, NULL);
-
-    return uris;
-}
-
-
 gcry_cipher_hd_t
 open_cipher_and_set_data (guchar *derived_key,
                           guchar *iv,
@@ -382,31 +141,6 @@ open_cipher_and_set_data (guchar *derived_key,
     }
 
     return hd;
-}
-
-
-GKeyFile *
-get_kf_ptr (void)
-{
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path;
-#ifndef USE_FLATPAK_APP_FOLDER
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_free (cfg_file_path);
-            return kf;
-        }
-        g_printerr ("%s\n", err->message);
-        g_clear_error (&err);
-    }
-    g_free (cfg_file_path);
-    g_key_file_free (kf);
-    return NULL;
 }
 
 
@@ -534,7 +268,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     } else if (enc_buf_size > max_file_size) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, "File is too big");
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
 
@@ -599,4 +333,100 @@ get_data_from_encrypted_backup (const gchar       *path,
     g_free (enc_buf);
 
     return decrypted_data;
+}
+
+
+static guint32
+jenkins_one_at_a_time_hash (const gchar *key, gsize len)
+{
+    guint32 hash, i;
+    for (hash = i = 0; i < len; ++i) {
+        hash += key[i];
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
+    }
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
+
+    return hash;
+}
+
+
+guint32
+json_object_get_hash (json_t *obj)
+{
+    const gchar *key;
+    json_t *value;
+    gchar *tmp_string = gcry_calloc_secure (256, 1);
+    json_object_foreach (obj, key, value) {
+        if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
+            json_int_t v = json_integer_value (value);
+            g_snprintf (tmp_string + g_utf8_strlen (tmp_string, -1), 256, "%ld", (gint64) v);
+        } else {
+            if (g_strlcat (tmp_string, json_string_value (value), 256) > 256) {
+                g_printerr ("%s\n", _("Truncation occurred."));
+            }
+        }
+    }
+
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+
+    gcry_free (tmp_string);
+
+    return hash;
+}
+
+
+void
+free_otps_gslist (GSList *otps,
+                  guint   list_len)
+{
+    otp_t *otp_data;
+    for (guint i = 0; i < list_len; i++) {
+        otp_data = g_slist_nth_data (otps, i);
+        g_free (otp_data->type);
+        g_free (otp_data->algo);
+        g_free (otp_data->account_name);
+        g_free (otp_data->issuer);
+        gcry_free (otp_data->secret);
+    }
+    g_slist_free (otps);
+}
+
+
+json_t *
+build_json_obj (const gchar *type,
+                const gchar *acc_label,
+                const gchar *acc_iss,
+                const gchar *acc_key,
+                guint        digits,
+                const gchar *algo,
+                guint        period,
+                guint64      ctr)
+{
+    json_t *obj = json_object ();
+    json_object_set (obj, "type", json_string (type));
+    json_object_set (obj, "label", json_string (acc_label));
+    json_object_set (obj, "issuer", json_string (acc_iss));
+    json_object_set (obj, "secret", json_string (acc_key));
+    json_object_set (obj, "digits", json_integer (digits));
+    json_object_set (obj, "algo", json_string (algo));
+
+    json_object_set (obj, "secret", json_string (acc_key));
+
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        json_object_set (obj, "period", json_integer (period));
+    } else {
+        json_object_set (obj, "counter", json_integer (ctr));
+    }
+
+    return obj;
+}
+
+
+void
+json_free (gpointer data)
+{
+    json_decref (data);
 }
