@@ -89,6 +89,17 @@
   </content_rating>
 
   <releases>
+    <release version="3.6.0" date="2024-03-11">
+      <description>
+        <p>OTPClient 3.6.0 brings a new feature and internal improvements:</p>
+        <ul>
+          <li>NEW: add possibility to import plain/encrypted backups using the CLI</li>
+          <li>FIX: make GUI and CLI independent, so that CLI only can be built and installed without GTK.</li>
+          <li>FIX: check file size against memlock before importing a backup</li>
+          <li>FIX: code cleanup and internal refactoring</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.5.2" date="2024-03-08">
       <description>
         <p>OTPClient 3.5.2 brings some small improvements:</p>
