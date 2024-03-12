@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2022-12-09 14:00+0100\n"
+"POT-Creation-Date: 2024-03-12 14:55+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,233 +17,94 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: ../src/cli/main.c:72
+#: src/cli/exec-action.c:52
 msgid "Type the DB decryption password: "
 msgstr ""
 
-#: ../src/cli/main.c:84
-msgid "Error while loading the database:"
+#: src/cli/exec-action.c:63
+msgid "Error while loading the database: "
 msgstr ""
 
-#. Translators: please do not translate '%s --help-show'
-#: ../src/cli/main.c:103
+#: src/cli/exec-action.c:84
 #, c-format
-msgid ""
-"Wrong argument(s). Please type '%s --help-show' to see the available "
-"options.\n"
+msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#. Translators: please do not translate 'account'
-#: ../src/cli/main.c:120
-msgid ""
-"[ERROR]: The account option (-a) must be specified and can not be empty."
+#: src/cli/exec-action.c:88
+msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#. Translators: please do not translate '%s --help-export'
-#: ../src/cli/main.c:130
-#, c-format
-msgid ""
-"Wrong argument(s). Please type '%s --help-export' to see the available "
-"options.\n"
-msgstr ""
-
-#: ../src/cli/main.c:141
+#: src/cli/exec-action.c:134
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: ../src/cli/main.c:147
-msgid ""
-"Incorrect parameters used for setting the output folder. Therefore, the "
-"exported file will be saved into the HOME directory."
-msgstr ""
-
-#: ../src/cli/main.c:157
+#: src/cli/exec-action.c:142 src/cli/exec-action.c:160
+#: src/cli/exec-action.c:173 src/cli/exec-action.c:186
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: ../src/cli/main.c:175
+#: src/cli/exec-action.c:198
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:178
+#: src/cli/exec-action.c:202
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:224
+#: src/cli/exec-action.c:244
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: ../src/cli/main.c:227
+#: src/cli/exec-action.c:247
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: ../src/cli/main.c:234
+#: src/cli/exec-action.c:255
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: ../src/cli/main.c:256
+#: src/cli/exec-action.c:278
 msgid "Couldn't get termios info"
 msgstr ""
 
-#: ../src/cli/main.c:263
+#: src/cli/exec-action.c:285
 msgid "Couldn't turn echoing off"
 msgstr ""
 
-#: ../src/cli/main.c:268
+#: src/cli/exec-action.c:290
 msgid "Couldn't read password from stdin"
 msgstr ""
 
-#: ../src/cli/help.c:38
-#, c-format
-msgid ""
-"Usage:\n"
-"  %s <main option> [option 1] [option 2] ..."
-msgstr ""
-
-#. Translators: please do not translate 'help'
-#: ../src/cli/help.c:44
-msgid "help command options:"
-msgstr ""
-
-#. Translators: please do not translate '-h, --help'
-#: ../src/cli/help.c:47
-msgid "  -h, --help\t\tShow this help"
-msgstr ""
-
-#. Translators: please do not translate '--help-show'
-#: ../src/cli/help.c:50
-msgid "  --help-show\t\tShow options"
-msgstr ""
-
-#. Translators: please do not translate '--help-export'
-#: ../src/cli/help.c:53
-msgid "  --help-export\t\tExport options"
-msgstr ""
-
-#: ../src/cli/help.c:54
-msgid "Main options:"
-msgstr ""
-
-#. Translators: please do not translate '-v, --version'
-#: ../src/cli/help.c:57
-msgid "  -v, --version\t\t\t\tShow program version"
-msgstr ""
-
-#. Translators: please do not translate 'show <-a ..> [-i ..] [-m] [-n]'
-#: ../src/cli/help.c:60
-msgid "  show <-a ..> [-i ..] [-m] [-n]\tShow a token"
-msgstr ""
-
-#. Translators: please do not translate 'list'
-#: ../src/cli/help.c:63
-msgid "  list\t\t\t\t\tList all pairs of account and issuer"
-msgstr ""
-
-#. Translators: please do not translate 'export <-t ..> [-d ..]'
-#: ../src/cli/help.c:66
-msgid "  export <-t ..> [-d ..]\t\tExport data"
-msgstr ""
-
-#. Translators: please do not translate '%s show'
-#: ../src/cli/help.c:74
-#, c-format
-msgid ""
-"Usage:\n"
-"  %s show <-a ..> [-i ..] [-m]"
-msgstr ""
-
-#. Translators: please do not translate 'show'
-#: ../src/cli/help.c:80
-msgid "show command options:"
-msgstr ""
-
-#. Translators: please do not translate '-a, --account'
-#: ../src/cli/help.c:82
-msgid "  -a, --account\t\tThe account name (mandatory)"
-msgstr ""
-
-#. Translators: please do not translate '-i, --issuer'
-#: ../src/cli/help.c:84
-msgid "  -i, --issuer\t\tThe issuer name (optional)"
-msgstr ""
-
-#. Translators: please do not translate '-m, --match-exactly'
-#: ../src/cli/help.c:86
-msgid ""
-"  -m, --match-exactly\tShow the token only if it matches exactly the account "
-"and/or the issuer (optional)"
-msgstr ""
-
-#. Translators: please do not translate '-n, --next'
-#: ../src/cli/help.c:88
-msgid ""
-"  -n, --next\tShow also the next token, not only the current one (optional, "
-"valid only for TOTP)"
-msgstr ""
-
-#. Translators: please do not translate '%s export'
-#: ../src/cli/help.c:96
-#, c-format
-msgid ""
-"Usage:\n"
-"  %s export <-t> <andotp | freeotpplus | aegis> [-d ..]"
-msgstr ""
-
-#. Translators: please do not translate 'export'
-#: ../src/cli/help.c:102
-msgid "export command options:"
-msgstr ""
-
-#. Translators: please do not translate '-t, --type'
-#: ../src/cli/help.c:104
-msgid ""
-"  -t, --type\t\tExport format. Must be either one of: andotp_plain, "
-"andotp_encrypted, freeotpplus, aegis"
-msgstr ""
-
-#. Translators: please do not translate '-d, --directory'
-#: ../src/cli/help.c:106
-msgid ""
-"  -d, --directory\tThe output directory where the exported file will be "
-"saved."
-msgstr ""
-
-#: ../src/cli/help.c:107
-msgid ""
-"\t\t\tIf nothing is specified OR flatpak is being used, the output folder "
-"will be the user's HOME directory."
-msgstr ""
-
-#: ../src/cli/get-data.c:58
+#: src/cli/get-data.c:57
 msgid ""
 "Couldn't find the data. Either the given data is wrong or is not in the "
 "database."
 msgstr ""
 
 #. Translators: please do not translate 'account'
-#: ../src/cli/get-data.c:61
+#: src/cli/get-data.c:60
 #, c-format
 msgid "Given account: %s"
 msgstr ""
 
 #. Translators: please do not translate 'issuer'
-#: ../src/cli/get-data.c:67
+#: src/cli/get-data.c:66
 #, c-format
 msgid "Given issuer: %s"
 msgstr ""
 
-#: ../src/cli/get-data.c:127
+#: src/cli/get-data.c:126
 #, c-format
 msgid "Current TOTP (valid for %d more second(s)): %s\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:131
+#: src/cli/get-data.c:130
 #, c-format
 msgid "Current HOTP: %s\n"
 msgstr ""
