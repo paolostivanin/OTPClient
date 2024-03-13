@@ -193,7 +193,7 @@ decode_migration_data (const gchar *encoded_uri)
         return NULL;
     }
     encoded_uri_copy += 33;
-    gsize out_len;
+    gsize out_len = 0;
     gchar *unesc_str = g_uri_unescape_string_secure (encoded_uri_copy, NULL);
     guchar *data = g_base64_decode_secure (unesc_str, &out_len);
     gcry_free (unesc_str);

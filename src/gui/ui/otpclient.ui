@@ -265,6 +265,8 @@
     <property name="window-position">center</property>
     <property name="type-hint">dialog</property>
     <property name="gravity">center</property>
+    <property name="default-width">400</property>
+    <property name="default-height">200</property>
     <child internal-child="vbox">
       <object class="GtkBox">
         <property name="can-focus">False</property>
