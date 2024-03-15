@@ -26,7 +26,7 @@ Highly secure and easy to use software for two-factor authentication that suppor
 | libsecret                                           | 0.20        |
 | qrencode                                            | 4.1.0       |
 
-:warning: Please note that the memlock value should be `>= 4 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
+:warning: Please note that the memlock value should be `>= 64 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
 See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
 
 ## Features
@@ -39,6 +39,8 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
 - import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
+- import and export encrypted/plain [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) backup
+- import and export encrypted/plain [2FAS](https://github.com/twofas) backup
 - import of Google's migration QR codes
 - local database is encrypted using AES256-GCM
   - key is derived using PBKDF2 with SHA512 and 100k iterations
