@@ -10,19 +10,16 @@ add_custom_command(
         ui/window.ui
 )
 
-set(GUI_HEADER_FILES
-        ../common/secret-schema.h
-        otpclient-application.h
-        otpclient-window.h
-        otpclient-types.h
+file(GLOB GUI_HEADER_FILES
+        *.h
+        ../common/*.h
 )
 
-set(GUI_SOURCE_FILES
+file(GLOB GUI_SOURCE_FILES
+        *.c
+        ../common/*.c
         ${CMAKE_CURRENT_BINARY_DIR}/resources.c
-        ../common/secret-schema.c
-        main.c
-        otpclient-application.c
-        otpclient-window.c)
+)
 
 include_directories(
         ${GTK4_INCLUDE_DIRS}

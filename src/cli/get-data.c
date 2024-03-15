@@ -2,8 +2,7 @@
 #include <jansson.h>
 #include <cotp.h>
 #include <glib/gi18n.h>
-#include "../db-misc.h"
-#include "../common/common.h"
+#include "../common/db-common.h"
 
 static gint compare_strings (const gchar    *s1,
                              const gchar    *s2,
@@ -59,21 +58,13 @@ show_token (DatabaseData *db_data,
 
         // Translators: please do not translate 'account'
         GString *msg = g_string_new (_("Given account: %s"));
-#if GLIB_CHECK_VERSION(2, 68, 0)
         g_string_replace (msg, "%s", account != NULL ? account : "<none>", 0);
-#else
-        g_string_replace_backported (msg, "%s", account != NULL ? account : "<none>", 0);
-#endif
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
 
         // Translators: please do not translate 'issuer'
         msg = g_string_new (_("Given issuer: %s"));
-#if GLIB_CHECK_VERSION(2, 68, 0)
         g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
-#else
-        g_string_replace_backported (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
-#endif
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
 
@@ -140,9 +131,14 @@ get_token (json_t       *obj,
         // counter must be updated every time it is accessed
         json_object_set (obj, "counter", json_integer (counter + 1));
         GError *err = NULL;
-        update_and_reload_db (NULL, db_data, FALSE, &err);
+        update_db (db_data, &err);
         if (err != NULL) {
             g_printerr ("[ERROR] %s\n", err->message);
+        } else {
+            reload_db (db_data, &err);
+            if (err != NULL) {
+                g_printerr ("[ERROR] %s\n", err->message);
+            }
         }
     }
 }

@@ -14,17 +14,39 @@ option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_GUI "Build the GUI" ON)
 option(BUILD_CLI "Build the CLI" OFF)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_FLAGS "-Wall -Wextra -O2 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong -Wundef -Wmissing-format-attribute")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always -Wstrict-prototypes -Wunreachable-code")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wchar-subscripts -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare")
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
+set(COMMON_C_FLAGS
+        "-Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong"
+        "-Wundef -Wmissing-format-attribute -fdiagnostics-color=always"
+        "-Wstrict-prototypes -Wunreachable-code -Wchar-subscripts"
+        "-Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align"
+        "-Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare"
+        "-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
+)
+
 if(CMAKE_COMPILER_IS_GNUCC)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pie -fPIE")
+    list(APPEND COMMON_C_FLAGS "-pie -fPIE")
+endif()
+
+if(IS_FLATPAK)
+    list(APPEND COMMON_C_FLAGS "-DIS_FLATPAK")
+endif()
+
+string(REPLACE ";" " " COMMON_C_FLAGS "${COMMON_C_FLAGS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_C_FLAGS}")
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(COMMON_LINKER_FLAGS
+            "-Wl,--no-add-needed -Wl,--as-needed -Wl,--no-undefined"
+            "-Wl,-z,relro,-z,now"
+    )
+
+    string(REPLACE ";" " " COMMON_LINKER_FLAGS "${COMMON_LINKER_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${COMMON_LINKER_FLAGS}")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${COMMON_LINKER_FLAGS}")
 endif()
 
 add_definitions(-DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\")
+
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-add-needed -Wl,--as-needed -Wl,--no-undefined")
@@ -50,23 +72,23 @@ pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
 pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.1.0)
 
 set(COMMON_INCDIRS
-    ${GCRYPT_INCLUDE_DIRS}
-    ${COTP_INCLUDE_DIRS}
-    ${JANSSON_INCLUDE_DIRS}
-    ${UUID_INCLUDE_DIRS}
-    ${PROTOC_INCLUDE_DIRS}
-    ${LIBSECRET_INCLUDE_DIRS}
-    ${LIBQRENCODE_INCLUDE_DIRS}
+        ${GCRYPT_INCLUDE_DIRS}
+        ${COTP_INCLUDE_DIRS}
+        ${JANSSON_INCLUDE_DIRS}
+        ${UUID_INCLUDE_DIRS}
+        ${PROTOC_INCLUDE_DIRS}
+        ${LIBSECRET_INCLUDE_DIRS}
+        ${LIBQRENCODE_INCLUDE_DIRS}
 )
 
 set(COMMON_LIBS
-    ${GCRYPT_LIBRARIES}
-    ${COTP_LIBRARIES}
-    ${JANSSON_LIBRARIES}
-    ${UUID_LIBRARIES}
-    ${PROTOC_LIBRARIES}
-    ${LIBSECRET_LIBRARIES}
-    ${LIBQRENCODE_LIBRARIES}
+        ${GCRYPT_LIBRARIES}
+        ${COTP_LIBRARIES}
+        ${JANSSON_LIBRARIES}
+        ${UUID_LIBRARIES}
+        ${PROTOC_LIBRARIES}
+        ${LIBSECRET_LIBRARIES}
+        ${LIBQRENCODE_LIBRARIES}
 )
 
 if(BUILD_GUI)
@@ -79,29 +101,32 @@ if(BUILD_GUI)
             ${COMMON_LIBS}
     )
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
-endif()
+
+    install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+    install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
+    install(FILES man/otpclient.1.gz DESTINATION share/man/man1)
+
+    set(GUI_UI_FILES
+            src/gui/ui/window.ui
+    )
+    install(FILES ${GUI_UI_FILES} DESTINATION share/otpclient)
+
+    set(GUI_ICON_FILES
+            data/icons/com.github.paolostivanin.OTPClient.svg
+            data/icons/com.github.paolostivanin.OTPClient-symbolic.svg
+    )
+    install(FILES ${GUI_ICON_FILES} DESTINATION share/icons/hicolor/scalable/apps)
+endif ()
 
 if(BUILD_CLI)
     add_subdirectory(src/cli)
-    target_link_libraries(${PROJECT_NAME}
+    target_link_libraries(${PROJECT_NAME}-cli
             ${COMMON_LIBS}
     )
     set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
+
+    install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
+    install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
 endif()
 
-# add glib-compile-schema for both GUI and CLI
-
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
-
-install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
-
-install(FILES data/ui/window.ui DESTINATION share/otpclient)
-install(FILES data/ui/settings.ui DESTINATION share/otpclient)
-install(FILES data/ui/shortcuts.ui DESTINATION share/otpclient)
-
-install(FILES man/otpclient.1.gz DESTINATION share/man/man1)
-install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
-
-install(FILES data/icons/com.github.paolostivanin.OTPClient.svg DESTINATION share/icons/hicolor/scalable/apps)
-install(FILES data/icons/com.github.paolostivanin.OTPClient-symbolic.svg DESTINATION share/icons/hicolor/scalable/apps)

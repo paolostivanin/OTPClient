@@ -1,14 +1,11 @@
-set(CLI_HEADER_FILES
-        ../common/secret-schema.h
-        get-data.h
-        help.h
+file(GLOB CLI_HEADER_FILES
+        *.h
+        ../common/*.h
 )
 
-set(CLI_SOURCE_FILES
-        ../common/secret-schema.c
-        get-data.c
-        help.c
-        main.c
+file(GLOB CLI_SOURCE_FILES
+        *.c
+        ../common/*.c
 )
 
 include_directories(
