@@ -12,13 +12,13 @@ Highly secure and easy to use software for two-factor authentication that suppor
 ## Requirements
 | Name                                                | Min Version |
 |-----------------------------------------------------|-------------|
-| GTK                                                 | 4.12        |
-| libadwaita                                          | 1.4.0       |
-| Glib                                                | 2.76.0      |
+| GTK                                                 | 4.14        |
+| libadwaita                                          | 1.5.0       |
+| Glib                                                | 2.78.0      |
 | jansson                                             | 2.14        |
-| libgcrypt                                           | 1.10.0      |
+| libgcrypt                                           | 1.10.1      |
 | libpng                                              | 1.6.30      |
-| [libcotp](https://github.com/paolostivanin/libcotp) | 2.0.0       |
+| [libcotp](https://github.com/paolostivanin/libcotp) | 3.0.0       |
 | zbar                                                | 0.20        |
 | protobuf-c                                          | 1.4.0       |
 | protobuf                                            | 3.21.0      |
