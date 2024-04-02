@@ -1,0 +1,473 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-03-12 14:59+0100\n"
+"PO-Revision-Date: 2024-03-31 20:53+0200\n"
+"Last-Translator: Christian Lauinger <christian@lauinger-clan.de>\n"
+"Language-Team: \n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
+
+#: src/gui/ui/otpclient.ui:8
+msgid "Change database"
+msgstr "Ändere Datenbank"
+
+#: src/gui/ui/otpclient.ui:22 src/gui/ui/otpclient.ui:140
+#: src/gui/ui/otpclient.ui:449 src/gui/ui/otpclient.ui:692
+#: src/gui/ui/otpclient.ui:753 src/gui/ui/otpclient.ui:811
+#: src/gui/ui/otpclient.ui:920 src/gui/ui/otpclient.ui:1213
+#: src/gui/ui/otpclient.ui:1521 src/gui/ui/otpclient.ui:1623
+#: src/gui/ui/otpclient.ui:1795
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#: src/gui/ui/otpclient.ui:35 src/gui/ui/otpclient.ui:153
+#: src/gui/ui/otpclient.ui:462 src/gui/ui/otpclient.ui:933
+#: src/gui/ui/otpclient.ui:1226 src/gui/ui/otpclient.ui:1534
+#: src/gui/ui/otpclient.ui:1636 src/gui/ui/otpclient.ui:1742
+#: src/gui/ui/otpclient.ui:1808 src/gui/ui/otpclient.ui:2323
+msgid "OK"
+msgstr "OK"
+
+#: src/gui/ui/otpclient.ui:63
+msgid ""
+"Use the rightmost icon on the second entry to select a different OTPClient "
+"database."
+msgstr ""
+"Benutzen Sie das Symbol ganz rechts auf dem zweiten Eintrag um eine andere "
+"OTPClient Datenbank auszuwählen."
+
+#: src/gui/ui/otpclient.ui:79 src/gui/ui/otpclient.ui:95
+#: src/gui/ui/otpclient.ui:197 src/gui/ui/otpclient.ui:215
+#: src/gui/ui/otpclient.ui:233 src/gui/ui/otpclient.ui:500
+#: src/gui/ui/otpclient.ui:1578 src/gui/ui/otpclient.ui:1680
+#: src/gui/ui/otpclient.ui:1698 src/gui/ui/otpclient.ui:2264
+msgid "Max 255 chars"
+msgstr "Max 255 Zeichen"
+
+#: src/gui/ui/otpclient.ui:82 src/gui/ui/otpclient.ui:201
+#: src/gui/ui/otpclient.ui:219 src/gui/ui/otpclient.ui:237
+#: src/gui/ui/otpclient.ui:504 src/gui/ui/otpclient.ui:1684
+#: src/gui/ui/otpclient.ui:1702 src/gui/ui/otpclient.ui:2268
+msgid "Show password"
+msgstr "Passwort anzeigen"
+
+#: src/gui/ui/otpclient.ui:99 src/gui/ui/otpclient.ui:1582
+msgid "Open database file"
+msgstr "Öffne Datenbankdatei"
+
+#: src/gui/ui/otpclient.ui:100
+msgid "Absolute path of the existing database..."
+msgstr "Aboluter Pfad zur existierenden Datenbank..."
+
+#: src/gui/ui/otpclient.ui:125
+msgid "Change password"
+msgstr "Passwort ändern"
+
+#: src/gui/ui/otpclient.ui:181
+msgid ""
+"Please type the current password, the new one, and again the new one to "
+"verify its correctness.\n"
+"                  Please note that <b>there is no way to recover a forgotten "
+"password.</b>"
+msgstr ""
+"Bitte geben Sie das aktuelle Passwort ein, dann das Neue, und nochmals das "
+"Neue um es zu verifizieren.\n"
+"                  Bitte beachten Sie das <b>es keinen Weg gibt um das "
+"vergessene Passwort wiederherzustellen.</b>"
+
+#: src/gui/ui/otpclient.ui:202
+msgid "Type current password..."
+msgstr "Tippen Sie das aktuelle Passwort..."
+
+#: src/gui/ui/otpclient.ui:220
+msgid "Type new password..."
+msgstr "Tippen Sie das neue Passwort..."
+
+#: src/gui/ui/otpclient.ui:238
+msgid "Retype new password..."
+msgstr "Wiederholen Sie das neue Passwort..."
+
+#: src/gui/ui/otpclient.ui:264
+msgid "Database info"
+msgstr "Datenbank Info"
+
+#: src/gui/ui/otpclient.ui:279
+msgid "Close"
+msgstr "Schliessen"
+
+#: src/gui/ui/otpclient.ui:309 src/gui/ui/otpclient.ui:796
+msgid "Database location"
+msgstr "Speicherort der Datenbank"
+
+#: src/gui/ui/otpclient.ui:320
+msgid "Config file location"
+msgstr "Speicherort der Konfigurationsdatei"
+
+#: src/gui/ui/otpclient.ui:331
+msgid "Entries in the database"
+msgstr "Einträge in der Datenbank"
+
+#: src/gui/ui/otpclient.ui:342
+msgid "Encryption algo"
+msgstr "Verschlüsselungsalgorithmus"
+
+#: src/gui/ui/otpclient.ui:353
+msgid "KDF iterations"
+msgstr "KDF Iterationen"
+
+#: src/gui/ui/otpclient.ui:398
+msgid "AES256-GCM"
+msgstr "AES256-GCM"
+
+#: src/gui/ui/otpclient.ui:409
+msgid "100'000"
+msgstr "100'000"
+
+#: src/gui/ui/otpclient.ui:432 src/gui/ui/otpclient.ui:1608
+#: src/gui/ui/otpclient.ui:2192
+msgid "Password"
+msgstr "Passwort"
+
+#: src/gui/ui/otpclient.ui:505 src/gui/ui/otpclient.ui:1685
+#: src/gui/ui/otpclient.ui:2269
+msgid "Type password..."
+msgstr "Passwort eingeben..."
+
+#: src/gui/ui/otpclient.ui:536
+msgid "No"
+msgstr "Nein"
+
+#: src/gui/ui/otpclient.ui:549
+msgid "Yes"
+msgstr "Ja"
+
+#: src/gui/ui/otpclient.ui:573
+msgid "Are you sure you want to <b>permanently delete</b> the selected item?"
+msgstr ""
+"Sind Sie sicher das Sie den <b>ausgewählten Eintrag</b> permant löschen "
+"wollen?"
+
+#: src/gui/ui/otpclient.ui:606 src/gui/ui/otpclient.ui:2207
+msgid "Quit"
+msgstr "Beenden"
+
+#: src/gui/ui/otpclient.ui:619
+msgid "Select another DB"
+msgstr "Andere DB wählen"
+
+#: src/gui/ui/otpclient.ui:632
+msgid "Create new DB"
+msgstr "Neue DB erstellen"
+
+#: src/gui/ui/otpclient.ui:675 src/gui/ui/otpclient.ui:737
+msgid "Scan using webcam"
+msgstr "Scannen mit Webcam"
+
+#: src/gui/ui/otpclient.ui:714
+msgid ""
+"Select the file with the QR code and copy it (CTRL-C).\n"
+"\n"
+"              If you are using <b>KDE</b>, then you must copy the file "
+"<b>before</b> selecting this option, otherwise the content won't be parsed.\n"
+"\n"
+"              This dialog will close automatically as soon as a valid qrcode "
+"has been found or after 30 seconds if nothing has been detected."
+msgstr ""
+"Wählen Sie die Datei mit dem QR-Code aus und kopieren Sie sie (STRG-C).\n"
+"\n"
+"              Wenn Sie <b>KDE</b> verwenden, müssen Sie die Datei kopieren, "
+"<b>bevor</b> Sie diese Option wählen, da der Inhalt sonst nicht geparst "
+"werden kann.\n"
+"\n"
+"              Dieser Dialog schließt sich automatisch, sobald ein gültiger "
+"QR-Code gefunden wurde oder nach 30 Sekunden, wenn nichts gefunden wurde."
+
+#: src/gui/ui/otpclient.ui:775
+msgid ""
+"Please place the qrcode <b>in front of the webcam</b>.\n"
+"This dialog will automatically close as soon as a valid qrcode\n"
+"has been found or after 30 seconds if nothing has been detected."
+msgstr ""
+"Bitte halten Sie den qrcode <b>vor die Webcam</b>.\n"
+"Dieser Dialog wird automatisch geschlossen, sobald ein gültiger qrcode\n"
+"gefunden wurde oder nach 30 Sekunden, wenn nichts gefunden wurde."
+
+#: src/gui/ui/otpclient.ui:841
+msgid ""
+"This seems to be the first time you run OTPClient on this device.\n"
+"                  Please select whether you want to restore an existing "
+"database or create a new one."
+msgstr ""
+"Dies scheint das erste Mal zu sein, dass Sie den OTPClient auf diesem Gerät "
+"ausführen.\n"
+"                  Bitte wählen Sie aus, ob Sie eine bestehende Datenbank "
+"wiederherstellen oder eine neue Datenbank erstellen möchten."
+
+#: src/gui/ui/otpclient.ui:858
+msgid "Do NOT use to import third party databases (e.g. andOTP)"
+msgstr ""
+"NICHT zum Importieren von Datenbanken von Drittanbietern (z. B. andOTP) "
+"verwenden"
+
+#: src/gui/ui/otpclient.ui:863
+msgid "Restore existing <b>OTPClient</b> database"
+msgstr "Vorhandene <b>OTPClient</b>-Datenbank wiederherstellen"
+
+#: src/gui/ui/otpclient.ui:876
+msgid "Create new database"
+msgstr "Neue Datenbank erstellen"
+
+#: src/gui/ui/otpclient.ui:905
+msgid "Edit data"
+msgstr "Daten bearbeiten"
+
+#: src/gui/ui/otpclient.ui:956
+msgid ""
+"Please note that:\n"
+"- \"account\" is <b>mandatory</b>\n"
+"- \"issuer\", while optional, is <b>highly recommended</b>\n"
+"- when changing the \"secret\", be aware that <b>only the secret</b> itself "
+"can be changed,\n"
+"but not the number of digits and/or the period/counter."
+msgstr ""
+"Please note that:\n"
+"- \"Konto\" is <b>mandatory</b>\n"
+"- \"Aussteller\" ist zwar optional, wird aber <b>dringend empfohlen</b>\n"
+"- wenn Sie das \"Geheimnis\" ändern, beachten Sie, dass <b>nur das "
+"Geheimnis</b> selbst geändert werden kann,\n"
+"aber nicht die Anzahl der Ziffern und/oder der Zeitraum/Zähler."
+
+#: src/gui/ui/otpclient.ui:1000
+msgid "Check if you want to edit the \"Account\""
+msgstr "Klicken Sie, wenn Sie das \"Konto\" bearbeiten möchten"
+
+#: src/gui/ui/otpclient.ui:1030 src/gui/ui/otpclient.ui:1316
+#: src/gui/ui/otpclient.ui:1886
+msgid "Account"
+msgstr "Konto"
+
+#: src/gui/ui/otpclient.ui:1064
+msgid "Check if you want to edit the \"Issuer\""
+msgstr "Klicken Sie, wenn Sie den \"Aussteller\" bearbeiten möchten"
+
+#: src/gui/ui/otpclient.ui:1094 src/gui/ui/otpclient.ui:1329
+#: src/gui/ui/otpclient.ui:1330 src/gui/ui/otpclient.ui:1887
+msgid "Issuer"
+msgstr "Aussteller"
+
+#: src/gui/ui/otpclient.ui:1128
+msgid "Check if you want to edit the \"Secret\""
+msgstr "Klicken Sie, wenn Sie das \"Geheimnis\" bearbeiten wollen"
+
+#: src/gui/ui/otpclient.ui:1160 src/gui/ui/otpclient.ui:1346
+msgid "Secret"
+msgstr "Geheimnis"
+
+#: src/gui/ui/otpclient.ui:1197
+msgid "Add Token"
+msgstr "Token hinzufügen"
+
+#: src/gui/ui/otpclient.ui:1262
+msgid "TOTP"
+msgstr "TOTP"
+
+#: src/gui/ui/otpclient.ui:1263
+msgid "HOTP"
+msgstr "HOTP"
+
+#: src/gui/ui/otpclient.ui:1278
+msgid "SHA1"
+msgstr "SHA1"
+
+#: src/gui/ui/otpclient.ui:1279
+msgid "SHA256"
+msgstr "SHA256"
+
+#: src/gui/ui/otpclient.ui:1280
+msgid "SHA512"
+msgstr "SHA512"
+
+#: src/gui/ui/otpclient.ui:1291
+msgid "This is a Steam code"
+msgstr "Dies ist ein Steamcode"
+
+#: src/gui/ui/otpclient.ui:1315
+msgid "Label"
+msgstr "Bezeichnung"
+
+#: src/gui/ui/otpclient.ui:1345
+msgid "Must be an uppercase base32 string. It may contain spaces. "
+msgstr ""
+"Muss eine base32-Zeichenkette in Großbuchstaben sein. Sie kann Leerzeichen "
+"enthalten. "
+
+#: src/gui/ui/otpclient.ui:1371
+msgid "Digits"
+msgstr "Ziffern"
+
+#: src/gui/ui/otpclient.ui:1383
+msgid "Between 4 and 10"
+msgstr "Zwischen 4 und 10"
+
+#: src/gui/ui/otpclient.ui:1386
+msgid "6"
+msgstr "6"
+
+#: src/gui/ui/otpclient.ui:1412
+msgid "Period"
+msgstr "Zeitraum"
+
+#: src/gui/ui/otpclient.ui:1424
+msgid "In seconds between 10 and 120"
+msgstr "In Sekunden zwischen 10 und 120"
+
+#: src/gui/ui/otpclient.ui:1427
+msgid "30"
+msgstr "30"
+
+#: src/gui/ui/otpclient.ui:1453
+msgid "Counter"
+msgstr "Zähler"
+
+#: src/gui/ui/otpclient.ui:1465
+msgid "Value decided by the server (HOTP only)"
+msgstr "Vom Server festgelegter Wert (nur HOTP)"
+
+#: src/gui/ui/otpclient.ui:1507
+msgid "New empty database"
+msgstr "Neue leere Datenbank"
+
+#: src/gui/ui/otpclient.ui:1562
+msgid ""
+"This will create and load a new empty database.\n"
+"                  The current database will <b>neither</b> be overwritten "
+"<b>nor</b> deleted."
+msgstr ""
+"Dadurch wird eine neue leere Datenbank erstellt und geladen.\n"
+"                  Tie aktuelle Datenbank wird <b>weder</b> überschrieben "
+"<b>noch</b> gelöscht."
+
+#: src/gui/ui/otpclient.ui:1583
+msgid "Absolute path of the new database..."
+msgstr "Absoluter Pfad der neuen Datenbank..."
+
+#: src/gui/ui/otpclient.ui:1664
+msgid ""
+"Choose an encryption password for the database.\n"
+"                  Please note that <b>there is no way to recover a forgotten "
+"password.</b>"
+msgstr ""
+"Wählen Sie ein Verschlüsselungspasswort für die Datenbank.\n"
+"                  Bitte beachten Sie, <b>dass es keine Möglichkeit gibt, ein "
+"vergessenes Passwort wiederherzustellen.</b>"
+
+#: src/gui/ui/otpclient.ui:1703
+msgid "Retype password..."
+msgstr "Passwort erneut eingeben..."
+
+#: src/gui/ui/otpclient.ui:1780 src/gui/ui/otpclient.ui:2154
+msgid "Settings"
+msgstr "Einstellungen"
+
+#: src/gui/ui/otpclient.ui:1838
+msgid "Show next OTP"
+msgstr "Nächstes OTP anzeigen"
+
+#: src/gui/ui/otpclient.ui:1849
+msgid "Disable notifications"
+msgstr "Benachrichtigungen deaktivieren"
+
+#: src/gui/ui/otpclient.ui:1860
+msgid "Search by"
+msgstr "Suchen nach"
+
+#: src/gui/ui/otpclient.ui:1911
+msgid "Auto lock on system lock"
+msgstr "Automatische Sperre bei Systemsperre"
+
+#: src/gui/ui/otpclient.ui:1934
+msgid "Auto lock when inactive for"
+msgstr "Automatische Sperre bei Inaktivität für"
+
+#: src/gui/ui/otpclient.ui:1948
+msgid "Never"
+msgstr "Nie"
+
+#: src/gui/ui/otpclient.ui:1949
+msgid "30s"
+msgstr "30s"
+
+#: src/gui/ui/otpclient.ui:1950
+msgid "1m"
+msgstr "2m"
+
+#: src/gui/ui/otpclient.ui:1951
+msgid "5m"
+msgstr "5m"
+
+#: src/gui/ui/otpclient.ui:1952
+msgid "15m"
+msgstr "15m"
+
+#: src/gui/ui/otpclient.ui:1953
+msgid "30m"
+msgstr "30m"
+
+#: src/gui/ui/otpclient.ui:1965
+msgid "Dark theme enabled"
+msgstr "Dunkles Thema aktiviert"
+
+#: src/gui/ui/otpclient.ui:1988
+msgid "Enable secret service"
+msgstr "Aktivieren Sie den Geheimdienst"
+
+#: src/gui/ui/otpclient.ui:2088
+msgid "OTPClient"
+msgstr "OTPClient"
+
+#: src/gui/ui/otpclient.ui:2100
+msgid "Add token"
+msgstr "Token hinzufügen"
+
+#: src/gui/ui/otpclient.ui:2121
+msgid "Toggle delete rows"
+msgstr "Zeilen löschen umschalten"
+
+#: src/gui/ui/otpclient.ui:2135
+msgid "Enable/disable rows reordering"
+msgstr "Neuordnung der Zeilen aktivieren/deaktivieren"
+
+#: src/gui/ui/otpclient.ui:2220
+msgid "Unlock"
+msgstr "Entsperren"
+
+#: src/gui/ui/otpclient.ui:2248
+msgid ""
+"The application is <b>locked</b>.\n"
+"                  Please type your password to unlock it"
+msgstr ""
+"Die Application ist <b>gesperrt</b>.\n"
+"                  Bitte geben Sie Ihr Passwort ein, um es zu entsperren"
+
+#: src/gui/ui/otpclient.ui:2294
+msgid "Warning: memlock value too low"
+msgstr "Warnung: Memlock-Wert zu niedrig"
+
+#: src/gui/ui/otpclient.ui:2310
+msgid "Exit"
+msgstr "Beenden"
+
+#: src/gui/ui/otpclient.ui:2363
+msgid "Do not show this warning again"
+msgstr "Die Warnung nicht wieder anzeigen"

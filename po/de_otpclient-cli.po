@@ -1,0 +1,116 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2024-03-12 14:55+0100\n"
+"PO-Revision-Date: 2024-03-31 20:59+0200\n"
+"Last-Translator: Christian Lauinger <christian@lauinger-clan.de>\n"
+"Language-Team: \n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 3.4.2\n"
+
+#: src/cli/exec-action.c:52
+msgid "Type the DB decryption password: "
+msgstr "Geben Sie das DB-Entschlüsselungspasswort ein: "
+
+#: src/cli/exec-action.c:63
+msgid "Error while loading the database: "
+msgstr "Fehler beim Laden der Datenbank: "
+
+#: src/cli/exec-action.c:84
+#, c-format
+msgid "%s doesn't exist or is not a valid file.\n"
+msgstr "%s existiert nicht oder ist eine ungültige Datei.\n"
+
+#: src/cli/exec-action.c:88
+msgid "Type the password for the file you want to import: "
+msgstr ""
+"Geben Sie das Kennwort für die Datei ein, die Sie importieren möchten: "
+
+#: src/cli/exec-action.c:134
+#, c-format
+msgid ""
+"%s is not a directory or the folder doesn't exist. The output will be saved "
+"into the HOME directory.\n"
+msgstr ""
+"%s ist kein Verzeichnis oder der Ordner existiert nicht. Die Ausgabe wird "
+"im HOME-Verzeichnis gespeichert.\n"
+
+#: src/cli/exec-action.c:142 src/cli/exec-action.c:160
+#: src/cli/exec-action.c:173 src/cli/exec-action.c:186
+msgid "Type the export encryption password: "
+msgstr "Geben Sie das Passwort für die Exportverschlüsselung ein: "
+
+#: src/cli/exec-action.c:198
+#, c-format
+msgid "An error occurred while exporting the data: %s\n"
+msgstr "Beim Exportieren der Daten ist ein Fehler aufgetreten: %s\n"
+
+#: src/cli/exec-action.c:202
+#, c-format
+msgid "Data successfully exported to: %s\n"
+msgstr "Daten erfolgreich exportiert nach: %s\n"
+
+#: src/cli/exec-action.c:244
+msgid "Type the absolute path to the database: "
+msgstr "Geben Sie den absoluten Pfad zur Datenbank ein: "
+
+#: src/cli/exec-action.c:247
+msgid "Couldn't get db path from stdin"
+msgstr "Konnte db-Pfad nicht von stdin abrufen"
+
+#: src/cli/exec-action.c:255
+#, c-format
+msgid "File '%s' does not exist\n"
+msgstr "Die Datei '%s' existiert nicht\n"
+
+#: src/cli/exec-action.c:278
+msgid "Couldn't get termios info"
+msgstr "Konnte keine Termi-Info bekommen"
+
+#: src/cli/exec-action.c:285
+msgid "Couldn't turn echoing off"
+msgstr "Echo kann nicht abgeschaltet werden"
+
+#: src/cli/exec-action.c:290
+msgid "Couldn't read password from stdin"
+msgstr "Konnte das Passwort nicht von stdin lesen"
+
+#: src/cli/get-data.c:57
+msgid ""
+"Couldn't find the data. Either the given data is wrong or is not in the "
+"database."
+msgstr ""
+"Die Daten konnten nicht gefunden werden. Entweder sind die angegebenen "
+"Daten falsch oder nicht in der Datenbank vorhanden."
+
+#. Translators: please do not translate 'account'
+#: src/cli/get-data.c:60
+#, c-format
+msgid "Given account: %s"
+msgstr "Gegebenes Konto:%s"
+
+#. Translators: please do not translate 'issuer'
+#: src/cli/get-data.c:66
+#, c-format
+msgid "Given issuer: %s"
+msgstr "Gegebener Aussteller: %s"
+
+#: src/cli/get-data.c:126
+#, c-format
+msgid "Current TOTP (valid for %d more second(s)): %s\n"
+msgstr "Aktueller TOTP (gültig für weitere %d Sekunde(n)): %s\n"
+
+#: src/cli/get-data.c:130
+#, c-format
+msgid "Current HOTP: %s\n"
+msgstr "Aktueller HOTP: %s\n"
