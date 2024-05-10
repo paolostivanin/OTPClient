@@ -58,8 +58,8 @@ webcam_add_cb (GSimpleAction *simple,
 
     gint response = gtk_dialog_run (GTK_DIALOG (cfg_data->diag));
     if (response == GTK_RESPONSE_CANCEL) {
+        zbar_processor_destroy (proc);
         if (cfg_data->qrcode_found) {
-            zbar_processor_destroy (proc);
             gchar *err_msg = parse_uris_migration (app_data, cfg_data->otp_uri, google_migration);
             if (err_msg != NULL) {
                 show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
@@ -92,7 +92,7 @@ static gboolean
 check_result (gpointer data)
 {
     ConfigData *cfg_data = (ConfigData *)data;
-    if (cfg_data->qrcode_found || cfg_data->counter > 30) {
+    if (cfg_data->qrcode_found || cfg_data->counter > 60) {
         gtk_dialog_response (GTK_DIALOG (cfg_data->diag), GTK_RESPONSE_CANCEL);
         cfg_data->gtimeout_exit_value = FALSE;
         return FALSE;

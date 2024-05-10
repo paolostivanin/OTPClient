@@ -717,7 +717,7 @@
 
               If you are using &lt;b&gt;KDE&lt;/b&gt;, then you must copy the file &lt;b&gt;before&lt;/b&gt; selecting this option, otherwise the content won't be parsed.
 
-              This dialog will close automatically as soon as a valid qrcode has been found or after 30 seconds if nothing has been detected.</property>
+              This dialog will close automatically as soon as a valid qrcode has been found or after 60 seconds if nothing has been detected.</property>
             <property name="use-markup">True</property>
             <property name="justify">center</property>
             <property name="wrap">True</property>

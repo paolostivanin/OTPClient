@@ -50,8 +50,10 @@ add_qr_from_file (GSimpleAction *simple,
                                                      "Cancel");
 
     GtkFileFilter *filter = gtk_file_filter_new ();
-    gtk_file_filter_set_name (filter, "QR Image (*.png)");
+    gtk_file_filter_set_name (filter, "QR Image (*.png, *.jpeg)");
     gtk_file_filter_add_pattern (filter, "*.png");
+    gtk_file_filter_add_pattern (filter, "*.jpeg");
+    gtk_file_filter_add_pattern (filter, "*.jpg");
     gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), filter);
 
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG (dialog));
