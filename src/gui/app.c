@@ -495,19 +495,20 @@ create_main_window (gint     width,
     g_action_map_add_action_entries (G_ACTION_MAP(settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
 
-    GActionGroup *import_actions = (GActionGroup *)g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP(import_actions), import_menu_entries, G_N_ELEMENTS (import_menu_entries), app_data);
-    gtk_widget_insert_action_group (settings_popover, "import_menu", import_actions);
-
     GActionGroup *export_actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP(export_actions), export_menu_entries, G_N_ELEMENTS (export_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "export_menu", export_actions);
 
     GtkWidget *add_popover = GTK_WIDGET(gtk_builder_get_object (app_data->add_popover_builder, "add_pop_id"));
     gtk_menu_button_set_popover (GTK_MENU_BUTTON(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), add_popover);
+
     GActionGroup *add_actions = (GActionGroup *)g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP(add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
+
+    GActionGroup *import_actions = (GActionGroup *)g_simple_action_group_new ();
+    g_action_map_add_action_entries (G_ACTION_MAP(import_actions), import_menu_entries, G_N_ELEMENTS (import_menu_entries), app_data);
+    gtk_widget_insert_action_group (add_popover, "import_menu", import_actions);
 
     gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
