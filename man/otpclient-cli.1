@@ -1,0 +1,104 @@
+.TH otpclient-cli 1 "26 June 2024" "otpclient-cli-3.6.0" "command-line for OTPClient"
+.SH NAME
+\fBOTPClient-CLI \fP- command-line for OTPClient
+\fB
+.SH SYNOPSIS
+.nf
+.fam C
+\fBotpclient-cli\fP [\fIOPTIONS\fP]
+
+.fam T
+.fi
+.fam T
+.fi
+.SH DESCRIPTION
+OTPClient-CLI is simplified version of OTPClient.
+.SH OPTIONS
+Help Options:
+.RS
+.TP
+.B
+\fB-h\fP, \fB--help\fP
+Show help options.
+.TP
+.B
+\fB--help-all\fP
+Show all help options.
+.TP
+.B
+\fB--help-gapplication\fP
+Show GApplication options.
+.RE
+.PP
+GApplication Options:
+.RS
+.TP
+.B
+\fB--gapplication-service\fP
+Enter GApplication service mode (use from D-Bus service files)
+.RE
+.PP
+Application Options:
+.RS
+.TP
+.B
+\fB-d\fP, \fB--database\fP
+(optional) path to the database. Default value is taken from otpclient.cfg
+.TP
+.B
+\fB-s\fP, \fB--show\fP
+Show a token for a given account.
+.TP
+.B
+\fB-a\fP, \fB--account\fP
+Account name (to be used with \fB--show\fP, mandatory)
+.TP
+.B
+\fB-i\fP, \fB--issuer\fP
+Issuer (to be used with \fB--show\fP, optional)
+.TP
+.B
+\fB-m\fP, \fB--match-exact\fP
+Match exactly the provided account/issuer (to be used with \fB--show\fP, optional)
+.TP
+.B
+\fB-n\fP, \fB--show-next\fP
+Show also next OTP (to be used with \fB--show\fP, optional)
+.TP
+.B
+\fB-l\fP, \fB--list\fP
+List all accounts and issuers for a given database.
+.TP
+.B
+\fB--import\fP
+Import a database.
+.TP
+.B
+\fB--export\fP
+Export a database.
+.TP
+.B
+\fB-t\fP, \fB--type\fP
+The import/export type for the database (to be used with \fB--import\fP/\fB--export\fP, mandatory). Must be either one of: andotp_plain, andotp_encrypted, aegis_plain, aegis_encrypted, authpro_plain, authpro_encrypted, twofas_plain, twofas_encrypted, freeotpplus_plain
+.TP
+.B
+\fB-f\fP, \fB--file\fP
+File to import (to be used with \fB--import\fP, mandatory).
+.TP
+.B
+\fB-o\fP, \fB--output-dir\fP
+The output directory (defaults to the user's home. To be used with \fB--export\fP, optional)
+.TP
+.B
+\fB-v\fP, \fB--version\fP
+Show the program version.
+.SH USAGE
+\fBotpclient-cli\fP [option 1] [option 2] \.\.\.
+.SH NOTES
+For other information and tutorials, see:
+.IP \(bu 3
+https://github.com/paolostivanin/OTPClient/wiki
+.SH AUTHOR
+OTPClient-CLI was written by Paolo Stivanin.
+.PP
+This manual page was written by Francisco Vilmar Cardoso Ruviaro for the Debian project (but may be used by others).
