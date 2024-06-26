@@ -103,7 +103,7 @@ if(BUILD_GUI)
 
     install(TARGETS ${PROJECT_NAME} DESTINATION bin)
     install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
-    install(FILES man/otpclient.1.gz DESTINATION share/man/man1)
+    install(FILES man/otpclient.1 DESTINATION share/man/man1)
 
     set(GUI_UI_FILES
             src/gui/ui/otpclient.ui
@@ -128,7 +128,7 @@ if(BUILD_CLI)
     set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
 
     install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
-    install(FILES man/otpclient-cli.1.gz DESTINATION share/man/man1)
+    install(FILES man/otpclient-cli.1 DESTINATION share/man/man1)
 endif()
 
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
