@@ -6,14 +6,15 @@
 #include "password-cb.h"
 #include "../common/secret-schema.h"
 #include "otpclient.h"
+#include "../common/macros.h"
 
 
 void
-change_password_cb (GSimpleAction *simple    __attribute__((unused)),
-                    GVariant      *parameter __attribute__((unused)),
+change_password_cb (GSimpleAction *simple UNUSED,
+                    GVariant      *parameter UNUSED,
                     gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     gchar *tmp_key = secure_strdup (app_data->db_data->key);
     gchar *pwd = prompt_for_password (app_data, tmp_key, NULL, FALSE);
     if (pwd != NULL) {
@@ -44,7 +45,7 @@ change_password_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 void
-change_pwd_cb_shortcut (GtkWidget *w __attribute__((unused)),
+change_pwd_cb_shortcut (GtkWidget *w UNUSED,
                         gpointer   user_data)
 {
     change_password_cb (NULL, NULL, user_data);

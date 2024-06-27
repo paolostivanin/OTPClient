@@ -3,6 +3,7 @@
 #include "gui-misc.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
+#include "../common/macros.h"
 
 typedef struct entrywidgets_t {
     GtkWidget *entry_old;
@@ -124,7 +125,7 @@ static void
 check_pwd_cb (GtkWidget   *entry,
               gpointer     user_data)
 {
-    EntryWidgets *entry_widgets = (EntryWidgets *) user_data;
+    CAST_USER_DATA(EntryWidgets, entry_widgets, user_data);
     if (entry_widgets->cur_pwd != NULL && g_strcmp0 (gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry_old)), entry_widgets->cur_pwd) != 0) {
         show_message_dialog (gtk_widget_get_toplevel (entry), "Old password doesn't match", GTK_MESSAGE_ERROR);
         entry_widgets->retry = TRUE;

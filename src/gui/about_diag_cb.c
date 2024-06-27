@@ -2,13 +2,14 @@
 #include <glib/gi18n.h>
 #include "version.h"
 #include "data.h"
+#include "../common/macros.h"
 
 void
-about_diag_cb (GSimpleAction *simple    __attribute__((unused)),
-               GVariant      *parameter __attribute__((unused)),
+about_diag_cb (GSimpleAction *simple UNUSED,
+               GVariant      *parameter UNUSED,
                gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     const gchar *authors[] = {"Paolo Stivanin <info@paolostivanin.com>", NULL};
     const gchar *artists[] = {"Tobias Bernard (bertob) <https://tobiasbernard.com>", NULL};

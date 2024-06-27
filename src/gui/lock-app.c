@@ -7,13 +7,14 @@
 #include "message-dialogs.h"
 #include "otpclient.h"
 #include "lock-app.h"
+#include "../common/macros.h"
 
 
 void
-lock_app (GtkWidget *w __attribute__((unused)),
+lock_app (GtkWidget *w UNUSED,
           gpointer user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     app_data->app_locked = TRUE;
 
@@ -62,15 +63,15 @@ lock_app (GtkWidget *w __attribute__((unused)),
 
 
 static void
-signal_triggered_cb (GDBusConnection *connection __attribute__((unused)),
-                     const gchar *sender_name    __attribute__((unused)),
-                     const gchar *object_path    __attribute__((unused)),
-                     const gchar *interface_name __attribute__((unused)),
-                     const gchar *signal_name    __attribute__((unused)),
+signal_triggered_cb (GDBusConnection *connection UNUSED,
+                     const gchar *sender_name UNUSED,
+                     const gchar *object_path UNUSED,
+                     const gchar *interface_name UNUSED,
+                     const gchar *signal_name UNUSED,
                      GVariant *parameters,
                      gpointer user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     gboolean is_screen_locked;
     g_variant_get (parameters, "(b)", &is_screen_locked);
     if (is_screen_locked == TRUE && app_data->app_locked == FALSE && app_data->auto_lock == TRUE) {
@@ -82,7 +83,7 @@ signal_triggered_cb (GDBusConnection *connection __attribute__((unused)),
 gboolean
 check_inactivity (gpointer user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     if (app_data->inactivity_timeout > 0 && app_data->app_locked == FALSE) {
         GDateTime *now = g_date_time_new_now_local ();
         GTimeSpan diff = g_date_time_difference (now, app_data->last_user_activity);

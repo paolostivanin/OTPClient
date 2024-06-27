@@ -2,13 +2,14 @@
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "data.h"
+#include "../common/macros.h"
 
 void
-shortcuts_window_cb (GSimpleAction *simple    __attribute__((unused)),
-                     GVariant      *parameter __attribute__((unused)),
+shortcuts_window_cb (GSimpleAction *simple UNUSED,
+                     GVariant      *parameter UNUSED,
                      gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     GtkBuilder *builder = get_builder_from_partial_path ("share/otpclient/shortcuts.ui");
     GtkWidget *overlay = GTK_WIDGET (gtk_builder_get_object (builder, "shortcuts-otpclient"));
@@ -19,7 +20,7 @@ shortcuts_window_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 void
-show_kbs_cb_shortcut (GtkWidget *w __attribute__((unused)),
+show_kbs_cb_shortcut (GtkWidget *w UNUSED,
                       gpointer   user_data)
 {
     shortcuts_window_cb (NULL, NULL, user_data);

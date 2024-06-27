@@ -15,6 +15,7 @@
 #include "change-db-cb.h"
 #include "new-db-cb.h"
 #include "../common/secret-schema.h"
+#include "../common/macros.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
 #include "shortcuts-cb.h"
@@ -78,7 +79,7 @@ static void       set_open_db_action        (GtkWidget          *btn,
 
 void
 activate (GtkApplication    *app,
-          gpointer           user_data __attribute__((unused)))
+          gpointer           user_data UNUSED)
 {
     gint32 max_file_size = get_max_file_size_from_memlock ();
 
@@ -306,7 +307,7 @@ show_memlock_warn_dialog (gint32      max_file_size,
 static gboolean
 key_pressed_cb (GtkWidget   *window,
                 GdkEventKey *event_key,
-                gpointer     user_data __attribute__((unused)))
+                gpointer     user_data UNUSED)
 {
     switch (event_key->keyval) {
         case GDK_KEY_q:
@@ -574,7 +575,7 @@ get_db_path (AppData *app_data)
 
 
 static void
-toggle_button_cb (GtkWidget *main_window __attribute__((unused)),
+toggle_button_cb (GtkWidget *main_window UNUSED,
                   gpointer   user_data)
 {
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(user_data), !gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(user_data)));
@@ -585,7 +586,7 @@ static void
 reorder_rows_cb (GtkToggleButton *btn,
                  gpointer         user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     gboolean is_btn_active = gtk_toggle_button_get_active (btn);
     gtk_tree_view_set_reorderable (GTK_TREE_VIEW(app_data->tree_view), is_btn_active);
     app_data->is_reorder_active = is_btn_active;
@@ -600,8 +601,8 @@ reorder_rows_cb (GtkToggleButton *btn,
 
 static void
 get_window_size_cb (GtkWidget      *window,
-                    GtkAllocation  *allocation __attribute__((unused)),
-                    gpointer        user_data  __attribute__((unused)))
+                    GtkAllocation  *allocation UNUSED,
+                    gpointer        user_data UNUSED)
 {
     gint w, h;
     gtk_window_get_size (GTK_WINDOW(window), &w, &h);
@@ -614,7 +615,7 @@ void
 destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     save_sort_order (app_data->tree_view);
     g_source_remove (app_data->source_id);
     g_source_remove (app_data->source_id_last_activity);
@@ -702,7 +703,7 @@ static void
 set_open_db_action (GtkWidget *btn,
                     gpointer   user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     app_data->open_db_file_action = g_strcmp0 (gtk_widget_get_name (btn), "diag_rc_restoredb_btn") == 0 ? GTK_FILE_CHOOSER_ACTION_OPEN : GTK_FILE_CHOOSER_ACTION_SAVE;
     gtk_dialog_response (GTK_DIALOG(app_data->diag_rcdb), GTK_RESPONSE_OK);
 }

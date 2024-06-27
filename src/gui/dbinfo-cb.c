@@ -1,12 +1,13 @@
 #include "data.h"
+#include "../common/macros.h"
 
 
 void
-dbinfo_cb (GSimpleAction *simple    __attribute__((unused)),
-           GVariant      *parameter __attribute__((unused)),
+dbinfo_cb (GSimpleAction *simple UNUSED,
+           GVariant      *parameter UNUSED,
            gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     GtkWidget *dbinfo_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dbinfo_diag_id"));
     GtkWidget *db_location_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dbentry_dbinfo_id"));

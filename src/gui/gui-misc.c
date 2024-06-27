@@ -7,14 +7,15 @@
 #include "../common/common.h"
 #include "google-migration.pb-c.h"
 #include "../common/gquarks.h"
+#include "../common/macros.h"
 #include "treeview.h"
 
 
 void
 icon_press_cb (GtkEntry         *entry,
-               gint              position __attribute__((unused)),
-               GdkEventButton   *event    __attribute__((unused)),
-               gpointer          data     __attribute__((unused)))
+               gint              position UNUSED,
+               GdkEventButton   *event UNUSED,
+               gpointer          data UNUSED)
 {
     gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
 }
@@ -35,7 +36,7 @@ get_row_number_from_iter (GtkListStore *list_store,
 
 void
 send_ok_cb (GtkWidget *entry,
-            gpointer   user_data __attribute__((unused)))
+            gpointer   user_data UNUSED)
 {
     gtk_dialog_response (GTK_DIALOG(gtk_widget_get_toplevel (entry)), GTK_RESPONSE_OK);
 }

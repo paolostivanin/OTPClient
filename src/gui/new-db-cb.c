@@ -8,6 +8,7 @@
 #include "db-actions.h"
 #include "../common/secret-schema.h"
 #include "change-file-cb.h"
+#include "../common/macros.h"
 
 int
 new_db (AppData *app_data)
@@ -82,11 +83,11 @@ new_db (AppData *app_data)
 
 
 void
-new_db_cb (GSimpleAction *simple    __attribute__((unused)),
-           GVariant      *parameter __attribute__((unused)),
+new_db_cb (GSimpleAction *simple UNUSED,
+           GVariant      *parameter UNUSED,
            gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     new_db (app_data);
 }

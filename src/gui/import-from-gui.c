@@ -4,8 +4,8 @@
 #include "password-cb.h"
 #include "message-dialogs.h"
 #include "../common/import-export.h"
-#include "../common/gquarks.h"
 #include "gui-misc.h"
+#include "../common/macros.h"
 
 
 static gboolean  parse_data_and_update_db    (AppData       *app_data,
@@ -15,11 +15,11 @@ static gboolean  parse_data_and_update_db    (AppData       *app_data,
 
 void
 import_data_cb (GSimpleAction *simple,
-                GVariant      *parameter __attribute__((unused)),
+                GVariant      *parameter UNUSED,
                 gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Open File",
                                                      GTK_WINDOW(app_data->main_window),
