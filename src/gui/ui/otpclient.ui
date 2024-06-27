@@ -2115,21 +2115,6 @@ but not the number of digits and/or the period/counter.</property>
               </packing>
             </child>
             <child>
-              <object class="GtkToggleButton" id="del_toggle_btn_id">
-                <property name="name">delbtn</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="tooltip-text" translatable="yes">Toggle delete rows</property>
-                <property name="image">lrs_image</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">1</property>
-              </packing>
-            </child>
-            <child>
               <object class="GtkToggleButton" id="reorder_toggle_btn_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
@@ -2140,7 +2125,7 @@ but not the number of digits and/or the period/counter.</property>
               <packing>
                 <property name="expand">False</property>
                 <property name="fill">True</property>
-                <property name="position">2</property>
+                <property name="position">1</property>
               </packing>
             </child>
             <style>

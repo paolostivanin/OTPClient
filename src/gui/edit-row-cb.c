@@ -5,6 +5,7 @@
 #include "get-builder.h"
 #include "message-dialogs.h"
 #include "../common/gquarks.h"
+#include "../common/macros.h"
 
 typedef struct edit_data_t {
     GtkListStore *list_store;
@@ -36,12 +37,12 @@ static void   set_data_in_lstore_and_json         (EditData    *edit_data);
 
 
 void
-edit_row_cb (GSimpleAction *simple    __attribute__((unused)),
-             GVariant      *parameter __attribute__((unused)),
+edit_row_cb (GSimpleAction *simple UNUSED,
+             GVariant      *parameter UNUSED,
              gpointer       user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     edit_data->db_data = app_data->db_data;
 
     GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
@@ -80,7 +81,7 @@ edit_row_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 void
-edit_row_cb_shortcut (GtkWidget *w __attribute__((unused)),
+edit_row_cb_shortcut (GtkWidget *w UNUSED,
                       gpointer   user_data)
 {
     edit_row_cb (NULL, NULL, user_data);
@@ -152,7 +153,7 @@ show_edit_dialog (EditData *edit_data,
 
 
 static void
-set_entry_editability (GtkToolButton *btn __attribute__((unused)),
+set_entry_editability (GtkToolButton *btn UNUSED,
                        gpointer       user_data)
 {
     gtk_editable_set_editable (GTK_EDITABLE (user_data), !gtk_editable_get_editable(user_data));

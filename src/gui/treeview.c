@@ -1,8 +1,11 @@
 #include <gtk/gtk.h>
 #include <jansson.h>
+#include "../common/macros.h"
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "message-dialogs.h"
+#include "edit-row-cb.h"
+#include "show-qr-cb.h"
 
 
 typedef struct parsed_json_data_t {
@@ -29,6 +32,8 @@ static gboolean clear_all_otps     (GtkTreeModel   *model,
                                     gpointer        user_data);
 
 static void     free_pjd           (ParsedData     *pjd);
+
+static gboolean on_treeview_button_press_event (GtkWidget *treeview, GdkEventButton *event, gpointer user_data);
 
 
 void
@@ -58,6 +63,9 @@ create_treeview (AppData *app_data)
     // signal emitted when CTRL+H is pressed
     g_signal_connect (app_data->tree_view, "hide-all-otps", G_CALLBACK(hide_all_otps_cb), app_data);
 
+    // signal emitted when right-clicked on a row (shows edit/delete context menu)
+    g_signal_connect(app_data->tree_view, "button-press-event", G_CALLBACK(on_treeview_button_press_event), app_data);
+
     g_object_unref (list_store);
 }
 
@@ -74,20 +82,17 @@ update_model (AppData *app_data)
 
 
 void
-delete_rows_cb (GtkTreeView        *tree_view,
-                GtkTreePath        *path,
-                GtkTreeViewColumn  *column    __attribute__((unused)),
-                gpointer            user_data)
+delete_row (AppData *app_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    g_return_if_fail (app_data->tree_view != NULL);
 
-    g_return_if_fail (tree_view != NULL);
-
-    GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
-    GtkListStore *list_store = GTK_LIST_STORE(model);
-
-    GtkTreeIter  iter;
-    gtk_tree_model_get_iter (model, &iter, path);
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(app_data->tree_view));
+    GtkTreeIter iter;
+    if (!gtk_tree_selection_get_selected (selection, &model, &iter)) {
+        // selection is empty, we don't have the iter
+        return;
+    }
 
     gboolean delete_entry = FALSE;
     GtkWidget *del_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_diag_id"));
@@ -112,7 +117,7 @@ delete_rows_cb (GtkTreeView        *tree_view,
     gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
 
     json_array_remove (app_data->db_data->json_data, db_item_position_to_delete);
-    gtk_list_store_remove (list_store, &iter);
+    gtk_list_store_remove (GTK_LIST_STORE(model), &iter);
 
     // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
     gint row_db_pos;
@@ -121,7 +126,7 @@ delete_rows_cb (GtkTreeView        *tree_view,
         gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
         if (row_db_pos > db_item_position_to_delete) {
             gint shifted_position = row_db_pos - 1;
-            gtk_list_store_set (list_store, &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
+            gtk_list_store_set (GTK_LIST_STORE(model), &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
         }
         valid = gtk_tree_model_iter_next(model, &iter);
     }
@@ -146,10 +151,10 @@ delete_rows_cb (GtkTreeView        *tree_view,
 void
 row_selected_cb (GtkTreeView        *tree_view,
                  GtkTreePath        *path,
-                 GtkTreeViewColumn  *column    __attribute__((unused)),
+                 GtkTreeViewColumn  *column UNUSED,
                  gpointer            user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     if (app_data->is_reorder_active == FALSE) {
         GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
 
@@ -271,6 +276,62 @@ regenerate_model (AppData *app_data)
 
 
 static void
+on_delete_activate (GtkMenuItem *menuitem UNUSED,
+                    gpointer     user_data)
+{
+    CAST_USER_DATA(AppData, app_data, user_data);
+
+    GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (app_data->tree_view);
+    g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data);
+    // the following function emits the "changed" signal
+    gtk_tree_selection_unselect_all (tree_selection);
+    // clear all active otps before proceeding to the deletion phase
+    g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
+
+    delete_row (app_data);
+
+    // deletion is done, re-add the signal
+    g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
+}
+
+
+static gboolean
+on_treeview_button_press_event (GtkWidget      *treeview,
+                                GdkEventButton *event,
+                                gpointer        user_data)
+{
+    CAST_USER_DATA(AppData, app_data, user_data);
+    if (event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_SECONDARY && !app_data->is_reorder_active) {
+        GtkTreePath *path;
+        GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(treeview));
+        if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL)) {
+            gtk_tree_selection_select_path (selection, path);
+            gtk_tree_path_free (path);
+
+            GtkWidget *menu = gtk_menu_new ();
+            GtkWidget *menu_item = gtk_menu_item_new_with_label ("Edit row");
+            g_signal_connect(menu_item, "activate", G_CALLBACK (edit_row_cb), app_data);
+            gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+
+            menu_item = gtk_menu_item_new_with_label ("Delete row");
+            g_signal_connect (menu_item, "activate", G_CALLBACK (on_delete_activate), app_data);
+            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
+
+            menu_item = gtk_menu_item_new_with_label ("Show QR code");
+            g_signal_connect (menu_item, "activate", G_CALLBACK (show_qr_cb), app_data);
+            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
+
+            gtk_widget_show_all (menu);
+            gtk_menu_popup_at_pointer (GTK_MENU(menu), (GdkEvent *)event);
+
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+
+static void
 hide_all_otps_cb (GtkTreeView *tree_view,
                   gpointer     user_data)
 {
@@ -280,9 +341,9 @@ hide_all_otps_cb (GtkTreeView *tree_view,
 
 static gboolean
 clear_all_otps (GtkTreeModel *model,
-                GtkTreePath  *path      __attribute__((unused)),
+                GtkTreePath  *path UNUSED,
                 GtkTreeIter  *iter,
-                gpointer      user_data __attribute__((unused)))
+                gpointer      user_data UNUSED)
 {
     gchar *otp;
     gtk_tree_model_get (model, iter, COLUMN_OTP, &otp, -1);
