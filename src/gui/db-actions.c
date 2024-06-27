@@ -3,14 +3,15 @@
 #include "data.h"
 #include "message-dialogs.h"
 #include "db-actions.h"
+#include "../common/macros.h"
 
 void
 select_file_icon_pressed_cb (GtkEntry         *entry,
-                             gint              position __attribute__((unused)),
-                             GdkEventButton   *event    __attribute__((unused)),
-                             gpointer          data)
+                             gint              position UNUSED,
+                             GdkEventButton   *even UNUSED,
+                             gpointer          user_data)
 {
-    AppData *app_data = (AppData *)data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbad-function-cast"

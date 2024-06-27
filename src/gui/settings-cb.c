@@ -5,6 +5,7 @@
 #include "get-builder.h"
 #include "../common/secret-schema.h"
 #include "gui-misc.h"
+#include "../common/macros.h"
 
 typedef struct settings_data_t {
     GtkWidget *dss_switch;
@@ -31,11 +32,11 @@ static gboolean handle_autolock               (GtkSwitch   *sw,
 
 
 void
-settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
-                    GVariant      *parameter __attribute__((unused)),
+settings_dialog_cb (GSimpleAction *simple UNUSED,
+                    GVariant      *parameter UNUSED,
                     gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     SettingsData *settings_data = g_new0 (SettingsData, 1);
     settings_data->app_data = app_data;
 
@@ -145,7 +146,7 @@ settings_dialog_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 void
-show_settings_cb_shortcut (GtkWidget *w __attribute__((unused)),
+show_settings_cb_shortcut (GtkWidget *w UNUSED,
                            gpointer   user_data)
 {
     settings_dialog_cb (NULL, NULL, user_data);
@@ -200,7 +201,7 @@ handle_secretservice_switch (GtkSwitch *sw,
    /* SecretService is disabled (TRUE), and we disable both autolock (FALSE) AND autolock timeout (0):
     *  - secret_service_switch_id must be set to sensitive
     */
-    SettingsData *settings_data = (SettingsData *)user_data;
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
     settings_data->app_data->auto_lock = state;
     if (state == FALSE && settings_data->app_data->inactivity_timeout == 0) {
         gtk_widget_set_sensitive (settings_data->dss_switch, TRUE);
@@ -220,7 +221,7 @@ handle_secretservice_combobox (GtkComboBox *cb,
    /* SecretService is disabled (TRUE), and we disable both autolock (FALSE) AND autolock timeout (0):
     *  - secret_service_switch_id must be set to sensitive
     */
-    SettingsData *settings_data = (SettingsData *)user_data;
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
     settings_data->app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(cb)), NULL, 10);
     if (settings_data->app_data->inactivity_timeout == 0 && settings_data->app_data->auto_lock == FALSE) {
         gtk_widget_set_sensitive (settings_data->dss_switch, TRUE);
@@ -231,7 +232,7 @@ handle_secretservice_combobox (GtkComboBox *cb,
 
 
 static gboolean
-handle_autolock (GtkSwitch *sw __attribute__((unused)),
+handle_autolock (GtkSwitch *sw UNUSED,
                  gboolean   state,
                  gpointer   user_data)
 {
@@ -239,7 +240,7 @@ handle_autolock (GtkSwitch *sw __attribute__((unused)),
     *  - lock_btn_id, autolock_switch_id and autolock_inactive_cb_id must be set to sensitive
     *  - add entry signal ctrl-l
     */
-    SettingsData *settings_data = (SettingsData *)user_data;
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
     if (state == FALSE) {
         gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (settings_data->app_data->builder, "lock_btn_id")), TRUE);
         gtk_widget_set_sensitive (settings_data->al_switch, TRUE);

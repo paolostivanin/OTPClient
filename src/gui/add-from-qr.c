@@ -3,6 +3,7 @@
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
 #include "../common/import-export.h"
+#include "../common/macros.h"
 #include "qrcode-parser.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
@@ -35,13 +36,13 @@ static void     image_received_func      (GtkClipboard  *clipboard,
 
 void
 add_qr_from_file (GSimpleAction *simple,
-                  GVariant      *parameter __attribute__((unused)),
+                  GVariant      *parameter UNUSED,
                   gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_FILE_ACTION_NAME) == 0) ? TRUE : FALSE;
 
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     GtkFileChooserNative *dialog = gtk_file_chooser_native_new ("Open File",
                                                      GTK_WINDOW (app_data->main_window),
@@ -69,11 +70,11 @@ add_qr_from_file (GSimpleAction *simple,
 
 
 void
-add_qr_from_clipboard (GSimpleAction *simple    __attribute__((unused)),
-                       GVariant      *parameter __attribute__((unused)),
+add_qr_from_clipboard (GSimpleAction *simple UNUSED,
+                       GVariant      *parameter UNUSED,
                        gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     GTimeoutCBData *gt_cb_data = g_new0 (GTimeoutCBData, 1);
     gt_cb_data->uris_available = FALSE;
     gt_cb_data->image_available = FALSE;
@@ -148,11 +149,11 @@ parse_file_and_update_db (const gchar *filename,
 
 
 static void
-uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
+uri_received_func (GtkClipboard  *clipboard UNUSED,
                    gchar        **uris,
                    gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     GdkPixbuf *pbuf;
     GError *err = NULL;
     if (uris != NULL && uris[0] != NULL) {
@@ -183,11 +184,11 @@ uri_received_func (GtkClipboard  *clipboard __attribute__((unused)),
 
 
 static void
-image_received_func (GtkClipboard  *clipboard __attribute__((unused)),
+image_received_func (GtkClipboard  *clipboard UNUSED,
                      GdkPixbuf     *pixbuf,
                      gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     GError  *err = NULL;
     if (pixbuf != NULL) {
         gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb.png", NULL);

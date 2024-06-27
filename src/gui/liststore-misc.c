@@ -4,6 +4,7 @@
 #include "treeview.h"
 #include "liststore-misc.h"
 #include "../common/gquarks.h"
+#include "../common/macros.h"
 
 
 typedef struct otp_data_t {
@@ -31,7 +32,7 @@ static void     clean_otp_data              (OtpData *otp_data);
 gboolean
 traverse_liststore (gpointer user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (app_data->tree_view)), foreach_func_update_otps, app_data);
 
     return TRUE;
@@ -84,11 +85,11 @@ set_otp (GtkListStore   *list_store,
 
 static gboolean
 foreach_func_update_otps (GtkTreeModel *model,
-                          GtkTreePath  *path    __attribute__((unused)),
+                          GtkTreePath  *path UNUSED,
                           GtkTreeIter  *iter,
                           gpointer      user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
     gchar *otp_type, *otp;
     guint validity, period;
     gboolean only_a_minute_left, already_updated_once;

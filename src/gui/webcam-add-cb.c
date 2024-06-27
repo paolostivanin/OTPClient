@@ -5,6 +5,7 @@
 #include "get-builder.h"
 #include "gui-misc.h"
 #include "../common/import-export.h"
+#include "../common/macros.h"
 
 
 typedef struct config_data_t {
@@ -23,13 +24,13 @@ static void     scan_qrcode     (zbar_image_t   *image,
 
 void
 webcam_add_cb (GSimpleAction *simple,
-               GVariant      *parameter __attribute__((unused)),
+               GVariant      *parameter UNUSED,
                gpointer       user_data)
 {
     const gchar *action_name = g_action_get_name (G_ACTION(simple));
     gboolean google_migration = (g_strcmp0 (action_name, GOOGLE_WEBCAM_ACTION_NAME) == 0) ? TRUE : FALSE;
 
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     ConfigData *cfg_data = g_new0 (ConfigData, 1);
 
@@ -81,7 +82,7 @@ webcam_add_cb (GSimpleAction *simple,
 
 
 void
-webcam_add_cb_shortcut (GtkWidget *w __attribute__((unused)),
+webcam_add_cb_shortcut (GtkWidget *w UNUSED,
                         gpointer   user_data)
 {
     webcam_add_cb (g_simple_action_new ("webcam", NULL), NULL, user_data);
@@ -89,9 +90,9 @@ webcam_add_cb_shortcut (GtkWidget *w __attribute__((unused)),
 
 
 static gboolean
-check_result (gpointer data)
+check_result (gpointer user_data)
 {
-    ConfigData *cfg_data = (ConfigData *)data;
+    CAST_USER_DATA(ConfigData, cfg_data, user_data);
     if (cfg_data->qrcode_found || cfg_data->counter > 60) {
         gtk_dialog_response (GTK_DIALOG (cfg_data->diag), GTK_RESPONSE_CANCEL);
         cfg_data->gtimeout_exit_value = FALSE;
@@ -106,7 +107,7 @@ static void
 scan_qrcode (zbar_image_t   *image,
              gconstpointer   user_data)
 {
-    ConfigData *cfg_data = (ConfigData *)user_data;
+    CAST_USER_DATA(ConfigData, cfg_data, user_data);
     const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
     for (; symbol; symbol = zbar_symbol_next (symbol)) {
         gchar *unesc_str = g_uri_unescape_string_secure (zbar_symbol_get_data (symbol), NULL);

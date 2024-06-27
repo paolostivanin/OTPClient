@@ -8,6 +8,7 @@
 #include "db-actions.h"
 #include "../common/secret-schema.h"
 #include "change-file-cb.h"
+#include "../common/macros.h"
 
 int
 change_db (AppData *app_data)
@@ -71,18 +72,18 @@ change_db (AppData *app_data)
 
 
 void
-change_db_cb (GSimpleAction *action_name __attribute__((unused)),
-              GVariant      *parameter __attribute__((unused)),
+change_db_cb (GSimpleAction *action_name UNUSED,
+              GVariant      *parameter UNUSED,
               gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     change_db (app_data);
 }
 
 
 void
-change_db_cb_shortcut (GtkWidget *w __attribute__((unused)),
+change_db_cb_shortcut (GtkWidget *w UNUSED,
                        gpointer   user_data)
 {
     change_db_cb (NULL, NULL, user_data);
