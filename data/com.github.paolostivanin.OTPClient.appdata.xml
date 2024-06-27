@@ -89,6 +89,18 @@
   </content_rating>
 
   <releases>
+    <release version="3.7.0" date="2024-06-28">
+      <description>
+        <p>OTPClient 3.7.0 brings the following changes:</p>
+        <ul>
+          <li>CHANGE: deleting a row, editing a row and showing the qr code is now done via right click on the target row (#359)</li>
+          <li>FIX: multiple fixes to QR handling (#370)</li>
+          <li>FIX: exporting to FreeOTP+ format (#367))</li>
+          <li>FIX: updated otpclient and otpclient-cli man pages (thanks @fvcr)</li>
+          <li>FIX: code more readable thanks to macros</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.6.0" date="2024-03-11">
       <description>
         <p>OTPClient 3.6.0 brings a new feature and internal improvements:</p>
