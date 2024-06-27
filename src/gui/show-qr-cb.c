@@ -5,6 +5,7 @@
 #include <glib/gi18n.h>
 #include "data.h"
 #include "../common/parse-uri.h"
+#include "../common/macros.h"
 #include "get-builder.h"
 #include "message-dialogs.h"
 #include "gui-misc.h"
@@ -19,11 +20,11 @@ static int    write_png       (const QRcode *qrcode);
 
 
 void
-show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
-            GVariant      *parameter __attribute__((unused)),
+show_qr_cb (GSimpleAction *simple UNUSED,
+            GVariant      *parameter UNUSED,
             gpointer       user_data)
 {
-    AppData *app_data = (AppData *)user_data;
+    CAST_USER_DATA(AppData, app_data, user_data);
 
     GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
     GtkListStore *list_store = GTK_LIST_STORE(model);
@@ -67,7 +68,7 @@ show_qr_cb (GSimpleAction *simple    __attribute__((unused)),
 
 
 void
-show_qr_cb_shortcut (GtkWidget *w __attribute__((unused)),
+show_qr_cb_shortcut (GtkWidget *w UNUSED,
                      gpointer   user_data)
 {
     show_qr_cb (NULL, NULL, user_data);

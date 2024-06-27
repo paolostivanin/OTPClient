@@ -46,14 +46,6 @@
             <child>
               <object class="GtkShortcutsShortcut">
                 <property name="visible">1</property>
-                <property name="accelerator">&lt;Ctrl&gt;d</property>
-                <property name="title" translatable="yes">Toggle delete rows</property>
-              </object>
-            </child>
-
-            <child>
-              <object class="GtkShortcutsShortcut">
-                <property name="visible">1</property>
                 <property name="accelerator">&lt;Ctrl&gt;r</property>
                 <property name="title" translatable="yes">Toggle reorder rows</property>
               </object>

@@ -20,8 +20,6 @@
 #include "shortcuts-cb.h"
 #include "webcam-add-cb.h"
 #include "manual-add-cb.h"
-#include "edit-row-cb.h"
-#include "show-qr-cb.h"
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
 
@@ -56,9 +54,6 @@ static void       toggle_button_cb          (GtkWidget          *main_window,
 
 static void       reorder_rows_cb           (GtkToggleButton *btn,
                                              gpointer         user_data);
-
-static void       del_data_cb               (GtkToggleButton    *btn,
-                                             gpointer            user_data);
 
 static void       save_sort_order           (GtkTreeView        *tree_view);
 
@@ -259,9 +254,6 @@ activate (GtkApplication    *app,
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
-    GtkToggleButton *del_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id"));
-    g_signal_connect (app_data->main_window, "toggle-delete-button", G_CALLBACK(toggle_button_cb), del_toggle_btn);
-    g_signal_connect (del_toggle_btn, "toggled", G_CALLBACK(del_data_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
 
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
@@ -473,8 +465,6 @@ create_main_window (gint     width,
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
-            { .name = "edit_row", .activate = edit_row_cb },
-            { .name = "show_qr", .activate = show_qr_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
             { .name = "dbinfo", .activate = dbinfo_cb },
@@ -600,56 +590,10 @@ reorder_rows_cb (GtkToggleButton *btn,
     gtk_tree_view_set_reorderable (GTK_TREE_VIEW(app_data->tree_view), is_btn_active);
     app_data->is_reorder_active = is_btn_active;
     gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "add_btn_main_id")), !is_btn_active);
-    gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_toggle_btn_id")), !is_btn_active);
 
     if (is_btn_active == FALSE) {
         // reordering has been disabled, so now we have to reorder and update the database itself
         reorder_db (app_data);
-    }
-}
-
-
-static void
-del_data_cb (GtkToggleButton *btn,
-             gpointer         user_data)
-{
-    AppData *app_data = (AppData *)user_data;
-
-    GtkStyleContext *gsc_btn = gtk_widget_get_style_context (GTK_WIDGET(btn));
-    GtkStyleContext *gsc_tv = gtk_widget_get_style_context (GTK_WIDGET(app_data->tree_view));
-
-    GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (app_data->tree_view);
-
-    if (gtk_toggle_button_get_active (btn)) {
-        app_data->delbtn_css_provider = gtk_css_provider_new ();
-        app_data->tv_css_provider = gtk_css_provider_new ();
-
-        gtk_css_provider_load_from_data (app_data->delbtn_css_provider, "#delbtn { background: #970000; }", -1, NULL);
-        gtk_css_provider_load_from_data (app_data->tv_css_provider, "#tv { background: #970000; }", -1, NULL);
-
-        gtk_style_context_add_provider (gsc_btn, GTK_STYLE_PROVIDER(app_data->delbtn_css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
-        gtk_style_context_add_provider (gsc_tv, GTK_STYLE_PROVIDER(app_data->tv_css_provider), GTK_STYLE_PROVIDER_PRIORITY_USER);
-
-        const gchar *msg = _("You just entered the deletion mode. You can now click on the row(s) you'd like to delete.\n"
-            "Please note that once a row has been deleted, <b>it's impossible to recover the associated data.</b>");
-
-        if (get_confirmation_from_dialog (app_data->main_window, msg)) {
-            g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data);
-            // the following function emits the "changed" signal
-            gtk_tree_selection_unselect_all (tree_selection);
-            // clear all active otps before proceeding to the deletion phase
-            g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
-            g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(delete_rows_cb), app_data);
-        } else {
-            gtk_toggle_button_set_active (btn, FALSE);
-        }
-    } else {
-        gtk_style_context_remove_provider (gsc_btn, GTK_STYLE_PROVIDER(app_data->delbtn_css_provider));
-        gtk_style_context_remove_provider (gsc_tv, GTK_STYLE_PROVIDER(app_data->tv_css_provider));
-        g_object_unref (app_data->delbtn_css_provider);
-        g_object_unref (app_data->tv_css_provider);
-        g_signal_handlers_disconnect_by_func (app_data->tree_view, delete_rows_cb, app_data);
-        g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
     }
 }
 
