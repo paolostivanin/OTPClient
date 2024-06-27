@@ -58,9 +58,12 @@ get_otpauth_uri (json_t *obj)
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "&issuer=Steam");
     }
+
+    gchar *escaped_issuer = NULL;
     if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
         g_string_append (uri, "&issuer=");
-        g_string_append (uri, json_string_value (json_object_get (obj, "issuer")));
+        escaped_issuer = g_uri_escape_string (json_string_value (json_object_get (obj, "issuer")), NULL, FALSE);
+        g_string_append (uri,escaped_issuer);
     }
 
     gchar *str_to_append = NULL;
@@ -87,6 +90,7 @@ get_otpauth_uri (json_t *obj)
 
     g_free (constructed_label);
     g_free (escaped_label);
+    g_free (escaped_issuer);
 
     return g_string_free (uri, FALSE);
 }
