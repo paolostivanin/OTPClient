@@ -23,6 +23,8 @@ static void     add_data_to_model  (DatabaseData   *db_data,
 
 static void     add_columns        (GtkTreeView    *tree_view);
 
+static void     delete_row         (AppData        *app_data);
+
 static void     hide_all_otps_cb   (GtkTreeView    *tree_view,
                                     gpointer        user_data);
 
@@ -77,73 +79,6 @@ update_model (AppData *app_data)
         GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view));
         gtk_list_store_clear (store);
         add_data_to_model (app_data->db_data, store);
-    }
-}
-
-
-void
-delete_row (AppData *app_data)
-{
-    g_return_if_fail (app_data->tree_view != NULL);
-
-    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
-    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(app_data->tree_view));
-    GtkTreeIter iter;
-    if (!gtk_tree_selection_get_selected (selection, &model, &iter)) {
-        // selection is empty, we don't have the iter
-        return;
-    }
-
-    gboolean delete_entry = FALSE;
-    GtkWidget *del_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_diag_id"));
-    gtk_window_set_transient_for (GTK_WINDOW(del_diag), GTK_WINDOW(app_data->main_window));
-    gint res = gtk_dialog_run (GTK_DIALOG(del_diag));
-    switch (res) {
-        case GTK_RESPONSE_YES:
-            delete_entry = TRUE;
-            break;
-        case GTK_RESPONSE_NO:
-        default:
-            delete_entry = FALSE;
-            break;
-    }
-    gtk_widget_hide (del_diag);
-
-    if (delete_entry == FALSE) {
-        return;
-    }
-
-    gint db_item_position_to_delete;
-    gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
-
-    json_array_remove (app_data->db_data->json_data, db_item_position_to_delete);
-    gtk_list_store_remove (GTK_LIST_STORE(model), &iter);
-
-    // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
-    gint row_db_pos;
-    gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
-    while (valid) {
-        gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
-        if (row_db_pos > db_item_position_to_delete) {
-            gint shifted_position = row_db_pos - 1;
-            gtk_list_store_set (GTK_LIST_STORE(model), &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
-        }
-        valid = gtk_tree_model_iter_next(model, &iter);
-    }
-
-    GError *err = NULL;
-    update_db (app_data->db_data, &err);
-    if (err != NULL) {
-        gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
-    } else {
-        reload_db (app_data->db_data, &err);
-        if (err != NULL) {
-            gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
-            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-            g_free (msg);
-        }
     }
 }
 
@@ -276,15 +211,80 @@ regenerate_model (AppData *app_data)
 
 
 static void
+delete_row (AppData *app_data)
+{
+    g_return_if_fail (app_data->tree_view != NULL);
+
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(app_data->tree_view));
+    GtkTreeIter iter;
+    if (!gtk_tree_selection_get_selected (selection, &model, &iter)) {
+        show_message_dialog (app_data->main_window, "No row has been selected. Nothing will be deleted.", GTK_MESSAGE_ERROR);
+        return;
+    }
+
+    gboolean delete_entry = FALSE;
+    GtkWidget *del_diag = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "del_diag_id"));
+    gtk_window_set_transient_for (GTK_WINDOW(del_diag), GTK_WINDOW(app_data->main_window));
+    gint res = gtk_dialog_run (GTK_DIALOG(del_diag));
+    switch (res) {
+        case GTK_RESPONSE_YES:
+            delete_entry = TRUE;
+            break;
+        case GTK_RESPONSE_NO:
+        default:
+            delete_entry = FALSE;
+            break;
+    }
+    gtk_widget_hide (del_diag);
+
+    if (delete_entry == FALSE) {
+        return;
+    }
+
+    gint db_item_position_to_delete;
+    gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
+
+    json_array_remove (app_data->db_data->json_data, db_item_position_to_delete);
+    gtk_list_store_remove (GTK_LIST_STORE(model), &iter);
+
+    // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
+    gint row_db_pos;
+    gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+    while (valid) {
+        gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
+        if (row_db_pos > db_item_position_to_delete) {
+            gint shifted_position = row_db_pos - 1;
+            gtk_list_store_set (GTK_LIST_STORE(model), &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
+        }
+        valid = gtk_tree_model_iter_next(model, &iter);
+    }
+
+    GError *err = NULL;
+    update_db (app_data->db_data, &err);
+    if (err != NULL) {
+        gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
+        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+    } else {
+        reload_db (app_data->db_data, &err);
+        if (err != NULL) {
+            gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+        }
+    }
+}
+
+
+static void
 on_delete_activate (GtkMenuItem *menuitem UNUSED,
                     gpointer     user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
 
-    GtkTreeSelection *tree_selection = gtk_tree_view_get_selection (app_data->tree_view);
     g_signal_handlers_disconnect_by_func (app_data->tree_view, row_selected_cb, app_data);
-    // the following function emits the "changed" signal
-    gtk_tree_selection_unselect_all (tree_selection);
+
     // clear all active otps before proceeding to the deletion phase
     g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
 

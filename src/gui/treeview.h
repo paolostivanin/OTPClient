@@ -21,11 +21,6 @@ void create_treeview    (AppData            *app_data);
 
 void update_model       (AppData            *app_data);
 
-void delete_rows_cb     (GtkTreeView        *tree_view,
-                         GtkTreePath        *path,
-                         GtkTreeViewColumn  *column,
-                         gpointer            user_data);
-
 void row_selected_cb    (GtkTreeView        *tree_view,
                          GtkTreePath        *path,
                          GtkTreeViewColumn  *column,
