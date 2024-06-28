@@ -37,9 +37,8 @@ static void   set_data_in_lstore_and_json         (EditData    *edit_data);
 
 
 void
-edit_row_cb (GSimpleAction *simple UNUSED,
-             GVariant      *parameter UNUSED,
-             gpointer       user_data)
+edit_row_cb (GtkMenuItem *menu_item UNUSED,
+             gpointer     user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
     CAST_USER_DATA(AppData, app_data, user_data);
@@ -84,7 +83,7 @@ void
 edit_row_cb_shortcut (GtkWidget *w UNUSED,
                       gpointer   user_data)
 {
-    edit_row_cb (NULL, NULL, user_data);
+    edit_row_cb (NULL, user_data);
 }
 
 

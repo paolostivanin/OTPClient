@@ -20,9 +20,8 @@ static int    write_png       (const QRcode *qrcode);
 
 
 void
-show_qr_cb (GSimpleAction *simple UNUSED,
-            GVariant      *parameter UNUSED,
-            gpointer       user_data)
+show_qr_cb (GtkMenuItem *menu_item UNUSED,
+            gpointer     user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
 
@@ -71,7 +70,7 @@ void
 show_qr_cb_shortcut (GtkWidget *w UNUSED,
                      gpointer   user_data)
 {
-    show_qr_cb (NULL, NULL, user_data);
+    show_qr_cb (NULL, user_data);
 }
 
 
