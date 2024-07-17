@@ -23,7 +23,7 @@ show_token (DatabaseData *db_data,
     gsize index;
     json_t *obj;
     gboolean found = FALSE;
-    json_array_foreach (db_data->json_data, index, obj) {
+    json_array_foreach (db_data->in_memory_json_data, index, obj) {
         const gchar *account_from_db = json_string_value (json_object_get (obj, "label"));
         const gchar *issuer_from_db = NULL;
         if (issuer != NULL) {
@@ -81,7 +81,7 @@ list_all_acc_iss (DatabaseData *db_data)
     g_print ("================\n");
     g_print ("Account | Issuer\n");
     g_print ("================\n");
-    json_array_foreach (db_data->json_data, index, obj) {
+    json_array_foreach (db_data->in_memory_json_data, index, obj) {
         g_print ("%s | %s\n", json_string_value (json_object_get (obj, "label")), json_string_value (json_object_get (obj, "issuer")));
         g_print ("----------------\n");
     }

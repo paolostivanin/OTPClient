@@ -26,8 +26,6 @@ static GSList   *get_otps_from_plain_backup     (const gchar       *path,
 
 static gboolean  is_schema_supported            (const gchar       *path);
 
-static json_t   *get_json_root                  (const gchar       *path);
-
 static void      decrypt_data                   (const gchar      **b64_data,
                                                  const gchar       *pwd,
                                                  TwofasData        *twofas_data);
@@ -288,30 +286,11 @@ is_schema_supported (const gchar *path)
 }
 
 
-static json_t *
-get_json_root (const gchar *path)
-{
-    json_error_t jerr;
-    json_t *json = json_load_file (path, 0, &jerr);
-    if (!json) {
-        g_printerr ("Error loading json: %s\n", jerr.text);
-        return FALSE;
-    }
-
-    gchar *dumped_json = json_dumps (json, 0);
-    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
-    gcry_free (dumped_json);
-
-    return root;
-}
-
-
 static void
 decrypt_data (const gchar **b64_data,
               const gchar *pwd,
               TwofasData   *twofas_data)
 {
-    // TWOFAS ignores the tag, so we don't have to check it (sigh!)
     gsize enc_data_with_tag_size, salt_out_len, iv_out_len;
     guchar *enc_data_with_tag = g_base64_decode (b64_data[0], &enc_data_with_tag_size);
     twofas_data->salt = g_base64_decode (b64_data[1], &salt_out_len);

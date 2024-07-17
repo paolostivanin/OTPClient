@@ -86,6 +86,8 @@ json_t           *build_json_obj                 (const gchar        *type,
                                                   guint               period,
                                                   guint64             ctr);
 
+json_t           *get_json_root                  (const gchar        *path);
+
 void              json_free                      (gpointer            data);
 
 G_END_DECLS

@@ -35,7 +35,7 @@ show_qr_cb (GtkMenuItem *menu_item UNUSED,
     }
 
     guint row_number = get_row_number_from_iter (list_store, iter);
-    json_t *db_obj = json_array_get (app_data->db_data->json_data, row_number);
+    json_t *db_obj = json_array_get (app_data->db_data->in_memory_json_data, row_number);
     gchar *otpauth_uri = get_otpauth_uri (db_obj);
     QRcode *qr = QRcode_encodeString8bit ((const gchar *)otpauth_uri, 0, QR_ECLEVEL_H);
     write_png (qr);

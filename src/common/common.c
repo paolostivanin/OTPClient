@@ -425,6 +425,28 @@ build_json_obj (const gchar *type,
 }
 
 
+json_t *
+get_json_root (const gchar *path)
+{
+    json_error_t jerr;
+    json_t *json = json_load_file (path, 0, &jerr);
+    if (!json) {
+        g_printerr ("Error loading the json file: %s\n", jerr.text);
+        return NULL;
+    }
+
+    gchar *dumped_json = json_dumps (json, 0);
+    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
+    if (root == NULL) {
+        g_printerr ("Error while loading the json data: %s\n", jerr.text);
+        return NULL;
+    }
+    gcry_free (dumped_json);
+
+    return root;
+}
+
+
 void
 json_free (gpointer data)
 {

@@ -8,10 +8,10 @@
 #include "common.h"
 
 
-#define NONCE_SIZE  12
-#define TAG_SIZE    16
-#define SALT_SIZE   32
-#define KEY_SIZE    32
+#define AEGIS_NONCE_SIZE  12
+#define AEGIS_TAG_SIZE    16
+#define AEGIS_SALT_SIZE   32
+#define AEGIS_KEY_SIZE    32
 
 
 static GSList *get_otps_from_plain_backup     (const gchar          *path,
@@ -89,8 +89,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *key_nonce = hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce")));
     guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
-    guchar *keybuf = gcry_malloc (KEY_SIZE);
-    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf) != 0) {
+    guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
+    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
         g_free (salt);
         g_free (enc_key);
@@ -101,7 +101,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         return NULL;
     }
 
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, NONCE_SIZE);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, AEGIS_NONCE_SIZE);
     if (hd == NULL) {
         g_free (salt);
         g_free (enc_key);
@@ -112,8 +112,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
         return NULL;
     }
 
-    guchar *master_key = gcry_calloc_secure (KEY_SIZE, 1);
-    if (gcry_cipher_decrypt (hd, master_key, KEY_SIZE, enc_key, KEY_SIZE) != 0) {
+    guchar *master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
+    if (gcry_cipher_decrypt (hd, master_key, AEGIS_KEY_SIZE, enc_key, AEGIS_KEY_SIZE) != 0) {
         g_printerr ("Error while decrypting the master key.\n");
         g_free (salt);
         g_free (enc_key);
@@ -125,7 +125,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         json_decref (json);
         return NULL;
     }
-    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, TAG_SIZE);
+    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, AEGIS_TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (master key). Either the password is wrong or the file is corrupted.");
         g_free (salt);
@@ -178,7 +178,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     if (gpg_err) {
         goto clean_and_exit;
     }
-    gpg_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    gpg_err = gcry_cipher_checktag (hd, tag, AEGIS_TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
         clean_and_exit:
@@ -238,21 +238,21 @@ export_aegis (const gchar   *export_path,
         json_object_set (slot_1, "uuid", json_string (g_strdup (uuid)));
         g_free (uuid);
 
-        salt = g_malloc0 (SALT_SIZE);
-        gcry_create_nonce (salt, SALT_SIZE);
+        salt = g_malloc0 (AEGIS_SALT_SIZE);
+        gcry_create_nonce (salt, AEGIS_SALT_SIZE);
 
-        key_nonce = g_malloc0 (NONCE_SIZE);
-        gcry_create_nonce (key_nonce, NONCE_SIZE);
+        key_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
+        gcry_create_nonce (key_nonce, AEGIS_NONCE_SIZE);
 
-        derived_master_key = gcry_calloc_secure(KEY_SIZE, 1);
-        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
+        derived_master_key = gcry_calloc_secure(AEGIS_KEY_SIZE, 1);
+        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);
             return NULL;
         }
 
-        hd = open_cipher_and_set_data (derived_master_key, key_nonce, NONCE_SIZE);
+        hd = open_cipher_and_set_data (derived_master_key, key_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
             gcry_free (derived_master_key);
             g_free (key_nonce);
@@ -260,8 +260,8 @@ export_aegis (const gchar   *export_path,
             return NULL;
         }
 
-        enc_master_key = gcry_malloc (KEY_SIZE);
-        if (gcry_cipher_encrypt (hd, enc_master_key, KEY_SIZE, derived_master_key, KEY_SIZE)) {
+        enc_master_key = gcry_malloc (AEGIS_KEY_SIZE);
+        if (gcry_cipher_encrypt (hd, enc_master_key, AEGIS_KEY_SIZE, derived_master_key, AEGIS_KEY_SIZE)) {
             g_printerr ("Error while encrypting the master key.\n");
             gcry_free (derived_master_key);
             gcry_free (enc_master_key);
@@ -271,27 +271,27 @@ export_aegis (const gchar   *export_path,
             return NULL;
         }
 
-        key_tag = g_malloc0 (TAG_SIZE);
-        gcry_cipher_gettag (hd, key_tag, TAG_SIZE);
-        json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, KEY_SIZE)));
+        key_tag = g_malloc0 (AEGIS_TAG_SIZE);
+        gcry_cipher_gettag (hd, key_tag, AEGIS_TAG_SIZE);
+        json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, AEGIS_KEY_SIZE)));
         gcry_cipher_close (hd);
 
         json_t *kp = json_object();
-        json_object_set (kp, "nonce", json_string(bytes_to_hexstr (key_nonce, NONCE_SIZE)));
-        json_object_set (kp, "tag", json_string (bytes_to_hexstr (key_tag, TAG_SIZE)));
+        json_object_set (kp, "nonce", json_string(bytes_to_hexstr (key_nonce, AEGIS_NONCE_SIZE)));
+        json_object_set (kp, "tag", json_string (bytes_to_hexstr (key_tag, AEGIS_TAG_SIZE)));
         json_object_set (slot_1, "key_params", kp);
         json_object_set (slot_1, "n", json_integer (32768));
         json_object_set (slot_1, "r", json_integer (8));
         json_object_set (slot_1, "p", json_integer (1));
-        json_object_set (slot_1, "salt", json_string (bytes_to_hexstr (salt, SALT_SIZE)));
+        json_object_set (slot_1, "salt", json_string (bytes_to_hexstr (salt, AEGIS_SALT_SIZE)));
         json_object_set (aegis_header_obj, "slots", slots_arr);
 
         json_t *db_params_obj = json_object();
-        db_nonce = g_malloc0 (NONCE_SIZE);
-        gcry_create_nonce (db_nonce, NONCE_SIZE);
-        json_object_set (db_params_obj, "nonce", json_string (bytes_to_hexstr (db_nonce, NONCE_SIZE)));
+        db_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
+        gcry_create_nonce (db_nonce, AEGIS_NONCE_SIZE);
+        json_object_set (db_params_obj, "nonce", json_string (bytes_to_hexstr (db_nonce, AEGIS_NONCE_SIZE)));
 
-        db_tag = g_malloc0 (TAG_SIZE);
+        db_tag = g_malloc0 (AEGIS_TAG_SIZE);
         // tag is computed after encryption, so we just put a placeholder here
         json_object_set (db_params_obj, "tag", json_null ());
         json_object_set (aegis_header_obj, "params", db_params_obj);
@@ -343,7 +343,7 @@ export_aegis (const gchar   *export_path,
     }
 
     if (password != NULL) {
-        hd = open_cipher_and_set_data (derived_master_key, db_nonce, NONCE_SIZE);
+        hd = open_cipher_and_set_data (derived_master_key, db_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
             goto clean_and_return;
         }
@@ -366,9 +366,9 @@ export_aegis (const gchar   *export_path,
             gcry_free (enc_master_key);
             return NULL;
         }
-        gcry_cipher_gettag (hd, db_tag, TAG_SIZE);
+        gcry_cipher_gettag (hd, db_tag, AEGIS_TAG_SIZE);
         json_t *db_params = json_object_get (aegis_header_obj, "params");
-        json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, TAG_SIZE)));
+        json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, AEGIS_TAG_SIZE)));
         g_free (dumped_db);
         gchar *b64enc_db = g_base64_encode (enc_db, db_size);
         json_object_set (root, "db", json_string (b64enc_db));
