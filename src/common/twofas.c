@@ -49,7 +49,7 @@ get_twofas_data (const gchar  *path,
                  GError      **err)
 {
     if (get_file_size (path) > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
     return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);

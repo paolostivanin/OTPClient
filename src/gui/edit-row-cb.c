@@ -58,12 +58,12 @@ edit_row_cb (GtkMenuItem *menu_item UNUSED,
 
     GError *err = NULL;
     update_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         goto end;
     }
     reload_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         goto end;
     }

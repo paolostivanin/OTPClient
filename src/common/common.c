@@ -268,7 +268,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     } else if (enc_buf_size > max_file_size) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
 

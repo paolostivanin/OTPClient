@@ -20,7 +20,7 @@ get_freeotpplus_data (const gchar  *path,
         return NULL;
     }
     if (fs > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
     gchar *sec_buf = gcry_calloc_secure (fs, 1);

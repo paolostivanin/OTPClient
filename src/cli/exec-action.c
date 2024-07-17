@@ -112,12 +112,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         free_otps_gslist (otps, g_slist_length (otps));
 
         update_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while updating the database: %s\n", err->message);
             return FALSE;
         }
         reload_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while reloading the database: %s\n", err->message);
             return FALSE;
         }

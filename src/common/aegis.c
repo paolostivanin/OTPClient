@@ -161,7 +161,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gsize out_len;
     guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
     if (out_len > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         g_free (tag);
         g_free (nonce);
         gcry_free (master_key);

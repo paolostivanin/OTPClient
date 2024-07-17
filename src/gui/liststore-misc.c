@@ -151,11 +151,11 @@ set_otp_data (OtpData  *otp_data,
         // every time HOTP is accessed, counter must be increased
         json_object_set (obj, "counter", json_integer (otp_data->counter + 1));
         update_db (app_data->db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("%s\n", err->message);
         } else {
             reload_db (app_data->db_data, &err);
-            if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+            if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
                 g_printerr ("%s\n", err->message);
             }
         }

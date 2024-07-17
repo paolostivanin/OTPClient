@@ -208,7 +208,7 @@ activate (GtkApplication    *app,
 
     GError *err = NULL;
     load_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (app_data->db_data->key);
         if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
@@ -226,7 +226,7 @@ activate (GtkApplication    *app,
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
-    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE)) {
+    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_ERRCODE)) {
         const gchar *msg = _("This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
         "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
         "- to <b>import</b> existing tokens, please click the menu button <b>on the top right</b>.\n"

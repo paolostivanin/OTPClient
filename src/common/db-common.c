@@ -15,11 +15,13 @@ static gint32    get_db_version     (const gchar      *db_path);
 
 static guchar   *get_db_derived_key (const gchar      *pwd,
                                      gint32            db_version,
-                                     const guint8     *salt);
+                                     const guint8     *salt,
+                                     GError          **err);
 
-static gchar    *decrypt_db         (DatabaseData     *db_data);
+static gchar    *decrypt_db         (DatabaseData     *db_data,
+                                     GError          **err);
 
-static gpointer  encrypt_db         (DatabaseData     *db_data,
+static void      encrypt_db         (DatabaseData     *db_data,
                                      GError          **err);
 
 static void      add_to_json        (gpointer          list_elem,
@@ -46,24 +48,15 @@ load_db (DatabaseData    *db_data,
          GError         **err)
 {
     if (!g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-        g_set_error (err, missing_file_gquark (), MISSING_FILE_CODE, "Missing database file");
+        g_set_error (err, missing_file_gquark (), MISSING_FILE_ERRCODE, "Missing database file");
         db_data->in_memory_json_data = NULL;
         return;
     }
 
     db_data->current_db_version = get_db_version (db_data->db_path);
 
-    gchar *in_memory_json = decrypt_db (db_data);
-    if (in_memory_json == TAG_MISMATCH) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
-        return;
-    } else if (in_memory_json == KEY_DERIV_ERR) {
-        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error during key derivation");
-        return;
-    } else if (in_memory_json == GENERIC_ERROR) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "An error occurred, please check stderr");
-        return;
-    }
+    gchar *in_memory_json = decrypt_db (db_data, err);
+    g_return_if_fail (err == NULL || *err == NULL);
 
     json_error_t jerr;
     db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
@@ -87,6 +80,8 @@ void
 update_db (DatabaseData  *db_data,
            GError       **err)
 {
+    g_return_if_fail (err == NULL || *err == NULL);
+
     gboolean first_run = (db_data->in_memory_json_data == NULL) ? TRUE : FALSE;
     if (first_run == TRUE) {
         db_data->in_memory_json_data = json_array ();
@@ -97,9 +92,10 @@ update_db (DatabaseData  *db_data,
 
     g_slist_foreach (db_data->data_to_add, add_to_json, db_data->in_memory_json_data);
 
-    if (encrypt_db (db_data, err) != NULL) {
+    encrypt_db (db_data, err);
+    if (err != NULL && *err != NULL) {
         if (!first_run) {
-            g_printerr ("Encrypting the new data failed, restoring original copy...\n");
+            g_printerr ("Encrypting the new data failed, restoring the original copy...\n");
             restore_db (db_data->db_path);
         } else {
             g_printerr ("Couldn't update the database (encrypt_db failed)\n");
@@ -190,9 +186,10 @@ get_db_version (const gchar *db_path)
 
 
 static guchar *
-get_db_derived_key (const gchar  *pwd,
-                    gint32        db_version,
-                    const guint8 *salt)
+get_db_derived_key (const gchar   *pwd,
+                    gint32         db_version,
+                    const guint8  *salt,
+                    GError       **err)
 {
     guchar *derived_key = NULL;
     if (db_version < 2) {
@@ -200,8 +197,8 @@ get_db_derived_key (const gchar  *pwd,
 
         derived_key = gcry_malloc_secure (key_len);
         if (derived_key == NULL) {
-            g_printerr ("%s\n", _("Couldn't allocate the needed secure memory."));
-            return SECURE_MEMORY_ALLOC_ERR;
+            g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
+            return NULL;
         }
 
         if (gcry_kdf_derive (pwd, (gsize)g_utf8_strlen (pwd, -1),
@@ -209,8 +206,8 @@ get_db_derived_key (const gchar  *pwd,
                              salt, KDF_SALT_SIZE,
                              KDF_ITERATIONS, key_len, derived_key) != GPG_ERR_NO_ERROR) {
             gcry_free (derived_key);
-            g_printerr ("%s\n", _("Error during key derivation."));
-            return KEY_DERIV_ERR;
+            g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key.");
+            return NULL;
         }
     } else {
         derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
@@ -221,20 +218,20 @@ get_db_derived_key (const gchar  *pwd,
                            pwd, (gsize)g_utf8_strlen (pwd, -1),
                            salt, KDF_SALT_SIZE,
                            NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
-            g_printerr ("Error while opening the KDF handler\n");
             gcry_free (derived_key);
+            g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key (kdf_open).");
             return NULL;
         }
         if (gcry_kdf_compute (hd, NULL) != GPG_ERR_NO_ERROR) {
-            g_printerr ("Error while computing the KDF\n");
             gcry_free (derived_key);
             gcry_kdf_close (hd);
+            g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key (kdf_compute).");
             return NULL;
         }
         if (gcry_kdf_final (hd, ARGON2ID_KEYLEN, derived_key) != GPG_ERR_NO_ERROR) {
-            g_printerr ("Error while finalizing the KDF handler\n");
             gcry_free (derived_key);
             gcry_kdf_close (hd);
+            g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key (kdf_final).");
             return NULL;
         }
         gcry_kdf_close (hd);
@@ -245,16 +242,17 @@ get_db_derived_key (const gchar  *pwd,
 
 
 static gchar *
-decrypt_db (DatabaseData *db_data)
+decrypt_db (DatabaseData *db_data,
+            GError      **err)
 {
-    GError *err = NULL;
+    g_return_val_if_fail (err == NULL || *err == NULL, NULL);
 
     GFile *in_file = g_file_new_for_path (db_data->db_path);
-    GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
+    GFileInputStream *in_stream = g_file_read (in_file, NULL, NULL);
     if (!in_stream) {
-        g_printerr ("%s\n", err->message);
-        cleanup_db_gfile (in_file, NULL, err);
-        return GENERIC_ERROR;
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the database file.");
+        g_object_unref (in_file);
+        return NULL;
     }
 
     DbHeaderData_v1 *header_data_v1 = g_new0 (DbHeaderData_v1, 1);
@@ -263,37 +261,35 @@ decrypt_db (DatabaseData *db_data)
 
     gssize res;
     if (db_data->current_db_version >= 2) {
-        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v2, header_data_size, NULL, &err);
+        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v2, header_data_size, NULL, NULL);
     } else {
-        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v1, header_data_size, NULL, &err);
+        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v1, header_data_size, NULL, NULL);
     }
     if (res == -1) {
-        g_printerr ("%s\n", err->message);
-        cleanup_db_gfile (in_file, in_stream, err);
-        g_free (header_data_v1);
-        g_free (header_data_v2);
-        return GENERIC_ERROR;
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the header data.");
+        cleanup_db_gfile (in_file, in_stream, NULL);
+        free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+        return NULL;
     }
 
     goffset input_file_size = get_file_size (db_data->db_path);
     guchar tag[TAG_SIZE];
-    if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, &err) ||
-        g_input_stream_read (G_INPUT_STREAM(in_stream), tag, TAG_SIZE, NULL, &err) == -1) {
-        g_printerr("%s\n", err->message);
-        cleanup_db_gfile (in_file, in_stream, err);
-        g_free (header_data_v1);
-        g_free (header_data_v2);
-        return GENERIC_ERROR;
+    if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, NULL) ||
+        g_input_stream_read (G_INPUT_STREAM(in_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the stored tag.");
+            cleanup_db_gfile (in_file, in_stream, NULL);
+            free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+            return NULL;
     }
 
     gsize enc_buf_size = input_file_size - header_data_size - TAG_SIZE;
     guchar *enc_buf = g_malloc0 (enc_buf_size);
-    if (!g_seekable_seek (G_SEEKABLE(in_stream), header_data_size, G_SEEK_SET, NULL, &err) ||
-        g_input_stream_read (G_INPUT_STREAM(in_stream), enc_buf, enc_buf_size, NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
-        cleanup_db_gfile (in_file, in_stream, err);
-        free_db_resources(NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
-        return GENERIC_ERROR;
+    if (!g_seekable_seek (G_SEEKABLE(in_stream), header_data_size, G_SEEK_SET, NULL, NULL) ||
+        g_input_stream_read (G_INPUT_STREAM(in_stream), enc_buf, enc_buf_size, NULL, NULL) == -1) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the encrypted data.");
+            cleanup_db_gfile (in_file, in_stream, NULL);
+            free_db_resources(NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
+            return NULL;
     }
 
     g_object_unref (in_stream);
@@ -301,13 +297,13 @@ decrypt_db (DatabaseData *db_data)
 
     guchar *derived_key = NULL;
     if (db_data->current_db_version >= 2) {
-        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v2->salt);
+        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v2->salt, err);
     } else {
-        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v1->salt);
+        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v1->salt, err);
     }
-    if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
+    if (derived_key == NULL) {
         free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
-        return (gpointer)derived_key;
+        return NULL;
     }
 
     gcry_cipher_hd_t hd;
@@ -317,8 +313,9 @@ decrypt_db (DatabaseData *db_data)
         hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
     }
     if (!hd) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
         free_db_resources (NULL, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return GENERIC_ERROR;
+        return NULL;
     }
 
     gpg_error_t gpg_err;
@@ -328,27 +325,28 @@ decrypt_db (DatabaseData *db_data)
         gpg_err = gcry_cipher_authenticate (hd, header_data_v1, header_data_size);
     }
     if (gpg_err != GPG_ERR_NO_ERROR) {
-        g_printerr ("%s\n", _("Error while processing the authenticated data."));
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
         free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return GENERIC_ERROR;
+        return NULL;
     }
 
     gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
     if (!dec_buf) {
-        g_printerr ("%s\n", _("Error while allocating secure memory."));
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
         free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return GENERIC_ERROR;
+        return NULL;
     }
 
     if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
-        g_printerr ("%s\n", _("Error while decrypting the data."));
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the data.");
         free_db_resources (hd, derived_key, enc_buf, dec_buf, header_data_v1, header_data_v2);
-        return GENERIC_ERROR;
+        return NULL;
     }
 
     if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
         free_db_resources (hd, derived_key, enc_buf, dec_buf, header_data_v1, header_data_v2);
-        return TAG_MISMATCH;
+        return NULL;
     }
 
     free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
@@ -358,18 +356,11 @@ decrypt_db (DatabaseData *db_data)
 
 
 static void
-add_to_json (gpointer list_elem,
-             gpointer json_array)
-{
-    json_array_append (json_array, json_deep_copy (list_elem));
-}
-
-
-static gpointer
 encrypt_db (DatabaseData *db_data,
             GError      **err)
 {
-    GError *local_err = NULL;
+    g_return_if_fail (err == NULL || *err == NULL);
+
     DbHeaderData_v2 *header_data = g_new0 (DbHeaderData_v2, 1);
 
     memcpy (header_data->header_name, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
@@ -378,29 +369,26 @@ encrypt_db (DatabaseData *db_data,
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
 
     GFile *out_file = g_file_new_for_path (db_data->db_path);
-    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, &local_err);
-    if (local_err != NULL) {
-        g_printerr ("%s\n", local_err->message);
+    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL);
+    if (out_stream == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to replace existing file");
-        cleanup_db_gfile (out_file, NULL, local_err);
+        g_object_unref (out_file);
         g_free (header_data);
-        return GENERIC_ERROR;
+        return;
     }
 
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), header_data, sizeof(DbHeaderData_v2), NULL, &local_err) == -1) {
-        g_printerr ("%s\n", local_err->message);
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing header data to file");
-        cleanup_db_gfile (out_file, out_stream, local_err);
+    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), header_data, sizeof(DbHeaderData_v2), NULL, NULL) == -1) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to write the header data to file");
+        cleanup_db_gfile (out_file, out_stream, NULL);
         g_free (header_data);
-        return GENERIC_ERROR;
+        return;
     }
 
-    guchar *derived_key = get_db_derived_key (db_data->key, header_data->db_version, header_data->salt);
-    if (derived_key == SECURE_MEMORY_ALLOC_ERR || derived_key == KEY_DERIV_ERR) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to derive key.\nPlease check <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">Secure Memory wiki page</a>");
-        cleanup_db_gfile (out_file, out_stream, local_err);
+    guchar *derived_key = get_db_derived_key (db_data->key, header_data->db_version, header_data->salt, err);
+    if (derived_key == NULL) {
+        cleanup_db_gfile (out_file, out_stream, NULL);
         g_free (header_data);
-        return (gpointer)derived_key;
+        return;
     }
 
     gchar *in_memory_dumped_data = json_dumps (db_data->in_memory_json_data, JSON_COMPACT);
@@ -409,45 +397,46 @@ encrypt_db (DatabaseData *db_data,
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
     if (hd == NULL) {
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to open the cipher and set the data.");
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (NULL, derived_key, enc_buffer, NULL, NULL, header_data);
-        return NULL;
+        return;
     }
 
     if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
-        g_printerr ("%s\n", _("Error while processing the authenticated data."));
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data");
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return GENERIC_ERROR;
+        return;
     }
 
     if (gcry_cipher_encrypt (hd, enc_buffer, input_data_len, in_memory_dumped_data, input_data_len) != GPG_ERR_NO_ERROR) {
-        g_printerr ("%s\n", _("Error while encrypting the data."));
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the data.");
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return GENERIC_ERROR;
+        return;
     }
     gcry_free (in_memory_dumped_data);
 
-    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buffer, input_data_len, NULL, &local_err) == -1) {
+    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buffer, input_data_len, NULL, NULL) == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing encrypted buffer to file");
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return GENERIC_ERROR;
+        return;
     }
 
     guchar tag[TAG_SIZE];
     if (gcry_cipher_gettag (hd, tag, TAG_SIZE) != GPG_ERR_NO_ERROR) {
-        g_printerr ("%s\n", _("Error while getting the tag."));
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while getting the tag.");
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return GENERIC_ERROR;
+        return;
     }
-    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, TAG_SIZE, NULL, &local_err) == -1) {
+    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing tag data to file");
-        cleanup_db_gfile (out_file, out_stream, local_err);
+        cleanup_db_gfile (out_file, out_stream, NULL);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return GENERIC_ERROR;
+        return;
     }
 
     free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
@@ -455,7 +444,15 @@ encrypt_db (DatabaseData *db_data,
 
     db_data->current_db_version = DB_VERSION;
 
-    return NULL;
+    return;
+}
+
+
+static void
+add_to_json (gpointer list_elem,
+             gpointer json_array)
+{
+    json_array_append (json_array, json_deep_copy (list_elem));
 }
 
 

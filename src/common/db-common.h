@@ -5,11 +5,6 @@
 
 G_BEGIN_DECLS
 
-#define GENERIC_ERROR           (gpointer)1
-#define TAG_MISMATCH            (gpointer)2
-#define SECURE_MEMORY_ALLOC_ERR (gpointer)3
-#define KEY_DERIV_ERR           (gpointer)4
-
 // Old parameter used to derive the db's password (v1)
 #define KDF_ITERATIONS          100000
 

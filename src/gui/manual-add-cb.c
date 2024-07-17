@@ -49,11 +49,11 @@ manual_add_cb (GSimpleAction *simple UNUSED,
         if (result == GTK_RESPONSE_OK) {
             if (parse_user_data (widgets, app_data->db_data)) {
                 update_db (app_data->db_data, &err);
-                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
                 reload_db (app_data->db_data, &err);
-                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+                if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 }
                 regenerate_model (app_data);
