@@ -5,7 +5,6 @@
 #include <jansson.h>
 #include <glib/gstdio.h>
 #include <string.h>
-#include "glibconfig.h"
 #include "gquarks.h"
 #include "db-common.h"
 #include "file-size.h"
@@ -257,7 +256,7 @@ decrypt_db (DatabaseData *db_data,
 
     DbHeaderData_v1 *header_data_v1 = g_new0 (DbHeaderData_v1, 1);
     DbHeaderData_v2 *header_data_v2 = g_new0 (DbHeaderData_v2, 1);
-    gsize header_data_size = (db_data->current_db_version >= 2) ? sizeof(DbHeaderData_v2) : sizeof(DbHeaderData_v1);
+    goffset header_data_size = (db_data->current_db_version >= 2) ? sizeof(DbHeaderData_v2) : sizeof(DbHeaderData_v1);
 
     gssize res;
     if (db_data->current_db_version >= 2) {
@@ -443,8 +442,6 @@ encrypt_db (DatabaseData *db_data,
     cleanup_db_gfile (out_file, out_stream, NULL);
 
     db_data->current_db_version = DB_VERSION;
-
-    return;
 }
 
 

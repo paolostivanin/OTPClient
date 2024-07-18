@@ -1,7 +1,5 @@
 #include "data.h"
 #include "../common/macros.h"
-#include "glib.h"
-#include "gtk/gtk.h"
 
 
 void
