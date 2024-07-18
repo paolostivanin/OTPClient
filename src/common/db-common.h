@@ -20,9 +20,6 @@ G_BEGIN_DECLS
 
 // Parameters used to derive the db's password (v2)
 #define ARGON2ID_TAGLEN         32
-#define ARGON2ID_ITER           4
-#define ARGON2ID_MEMCOST        131072 // (128 MiB)
-#define ARGON2ID_PARALLELISM    4
 #define ARGON2ID_KEYLEN         32
 
 
@@ -37,6 +34,9 @@ typedef struct db_header_data_v2_t {
     gint32 db_version;
     guint8 iv[IV_SIZE];
     guint8 salt[KDF_SALT_SIZE];
+    gint32 argon2id_iter;
+    gint32 argon2id_memcost;
+    gint32 argon2id_parallelism;
 } DbHeaderData_v2;
 
 
@@ -59,6 +59,10 @@ typedef struct db_data_t {
     gboolean key_stored;
 
     gint32 current_db_version;
+
+    gint32 argon2id_iter;
+    gint32 argon2id_memcost;
+    gint32 argon2id_parallelism;
 } DatabaseData;
 
 

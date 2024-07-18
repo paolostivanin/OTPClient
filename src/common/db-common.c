@@ -12,7 +12,7 @@
 
 static gint32    get_db_version     (const gchar      *db_path);
 
-static guchar   *get_db_derived_key (const gchar      *pwd,
+static guchar   *get_db_derived_key (DatabaseData     *db_data,
                                      gint32            db_version,
                                      const guint8     *salt,
                                      GError          **err);
@@ -66,6 +66,29 @@ load_db (DatabaseData    *db_data,
         return;
     }
 
+    if (db_data->current_db_version < 2) {
+        g_print("upgrading database to v2\n");
+        update_db (db_data, err);
+        g_return_if_fail (err == NULL || *err == NULL);
+
+        if (db_data->in_memory_json_data != NULL) {
+            json_decref (db_data->in_memory_json_data);
+        }
+        g_slist_free_full (db_data->objects_hash, g_free);
+        db_data->objects_hash = NULL;
+
+        in_memory_json = decrypt_db (db_data, err);
+        g_return_if_fail (err == NULL || *err == NULL);
+
+        db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
+        gcry_free (in_memory_json);
+        if (db_data->in_memory_json_data == NULL) {
+            gchar *msg = g_strconcat ("Error while loading json data: ", jerr.text, NULL);
+            g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE, "%s", msg);
+            return;
+        }
+    }
+
     gsize index;
     json_t *obj;
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
@@ -89,7 +112,9 @@ update_db (DatabaseData  *db_data,
         backup_db (db_data->db_path);
     }
 
-    g_slist_foreach (db_data->data_to_add, add_to_json, db_data->in_memory_json_data);
+    if (db_data->data_to_add != NULL) {
+        g_slist_foreach (db_data->data_to_add, add_to_json, db_data->in_memory_json_data);
+    }
 
     encrypt_db (db_data, err);
     if (err != NULL && *err != NULL) {
@@ -185,7 +210,7 @@ get_db_version (const gchar *db_path)
 
 
 static guchar *
-get_db_derived_key (const gchar   *pwd,
+get_db_derived_key (DatabaseData  *db_data,
                     gint32         db_version,
                     const guint8  *salt,
                     GError       **err)
@@ -200,7 +225,7 @@ get_db_derived_key (const gchar   *pwd,
             return NULL;
         }
 
-        if (gcry_kdf_derive (pwd, (gsize)g_utf8_strlen (pwd, -1),
+        if (gcry_kdf_derive (db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
                              GCRY_KDF_PBKDF2, GCRY_MD_SHA512,
                              salt, KDF_SALT_SIZE,
                              KDF_ITERATIONS, key_len, derived_key) != GPG_ERR_NO_ERROR) {
@@ -210,11 +235,11 @@ get_db_derived_key (const gchar   *pwd,
         }
     } else {
         derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
-        const unsigned long params[4] = {ARGON2ID_TAGLEN, ARGON2ID_ITER, ARGON2ID_MEMCOST, ARGON2ID_PARALLELISM};
+        const unsigned long params[4] = {ARGON2ID_TAGLEN, db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism};
         gcry_kdf_hd_t hd;
         if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                            params, 4,
-                           pwd, (gsize)g_utf8_strlen (pwd, -1),
+                           db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
                            salt, KDF_SALT_SIZE,
                            NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
             gcry_free (derived_key);
@@ -261,8 +286,15 @@ decrypt_db (DatabaseData *db_data,
     gssize res;
     if (db_data->current_db_version >= 2) {
         res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v2, header_data_size, NULL, NULL);
+        db_data->argon2id_iter = header_data_v2->argon2id_iter;
+        db_data->argon2id_memcost = header_data_v2->argon2id_memcost;
+        db_data->argon2id_parallelism = header_data_v2->argon2id_parallelism;
     } else {
         res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v1, header_data_size, NULL, NULL);
+        // when decrypting v1 db, we need to set some default values for the next re-encryption
+        db_data->argon2id_iter = 4;
+        db_data->argon2id_memcost = 131072; // (128 MiB)
+        db_data->argon2id_parallelism = 4;
     }
     if (res == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the header data.");
@@ -296,9 +328,9 @@ decrypt_db (DatabaseData *db_data,
 
     guchar *derived_key = NULL;
     if (db_data->current_db_version >= 2) {
-        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v2->salt, err);
+        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v2->salt, err);
     } else {
-        derived_key = get_db_derived_key (db_data->key, db_data->current_db_version, header_data_v1->salt, err);
+        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, err);
     }
     if (derived_key == NULL) {
         free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
@@ -366,6 +398,9 @@ encrypt_db (DatabaseData *db_data,
     header_data->db_version = DB_VERSION;
     gcry_create_nonce (header_data->iv, IV_SIZE);
     gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
+    header_data->argon2id_iter = db_data->argon2id_iter;
+    header_data->argon2id_memcost = db_data->argon2id_memcost;
+    header_data->argon2id_parallelism = db_data->argon2id_parallelism;
 
     GFile *out_file = g_file_new_for_path (db_data->db_path);
     GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL);
@@ -383,7 +418,7 @@ encrypt_db (DatabaseData *db_data,
         return;
     }
 
-    guchar *derived_key = get_db_derived_key (db_data->key, header_data->db_version, header_data->salt, err);
+    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, err);
     if (derived_key == NULL) {
         cleanup_db_gfile (out_file, out_stream, NULL);
         g_free (header_data);

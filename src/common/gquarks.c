@@ -48,3 +48,10 @@ secmem_alloc_error_gquark (void)
 {
     return g_quark_from_static_string ("secmem_alloc_error");
 }
+
+
+GQuark
+validation_error_gquark (void)
+{
+    return g_quark_from_static_string ("validation_error");
+}

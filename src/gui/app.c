@@ -23,6 +23,7 @@
 #include "manual-add-cb.h"
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
+#include "change-db-sec.h"
 
 #ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
@@ -466,6 +467,7 @@ create_main_window (gint     width,
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
+            { .name = "change_db_sec", .activate = change_db_sec_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
             { .name = "dbinfo", .activate = dbinfo_cb },

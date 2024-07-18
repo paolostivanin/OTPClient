@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.40.0 -->
 <interface>
-  <requires lib="gtk+" version="3.20"/>
+  <requires lib="gtk+" version="3.24"/>
   <object class="GtkPopoverMenu" id="settings_pop_id">
     <property name="can-focus">False</property>
     <child>
@@ -221,6 +221,20 @@
           </packing>
         </child>
         <child>
+          <object class="GtkModelButton" id="change_db_sec_model_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">settings_menu.change_db_sec</property>
+            <property name="text" translatable="yes">Change DB security settings</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">4</property>
+          </packing>
+        </child>
+        <child>
           <object class="GtkModelButton" id="dbinfo_model_btn_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
@@ -231,7 +245,7 @@
           <packing>
             <property name="expand">False</property>
             <property name="fill">True</property>
-            <property name="position">4</property>
+            <property name="position">5</property>
           </packing>
         </child>
       </object>

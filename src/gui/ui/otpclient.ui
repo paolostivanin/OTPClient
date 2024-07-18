@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Generated with glade 3.40.0 -->
 <interface>
-  <requires lib="gtk+" version="3.20"/>
+  <requires lib="gtk+" version="3.24"/>
   <object class="GtkDialog" id="changedb_diag_id">
     <property name="can-focus">False</property>
     <property name="border-width">5</property>
@@ -1223,7 +1223,7 @@ but not the number of digits and/or the period/counter.</property>
   <object class="GtkImage" id="image1">
     <property name="visible">True</property>
     <property name="can-focus">False</property>
-    <property name="icon-name">mail-send-receive</property>
+    <property name="icon-name">mail-send-receive-symbolic</property>
   </object>
   <object class="GtkApplicationWindow" id="appwindow_id">
     <property name="can-focus">False</property>
@@ -1356,11 +1356,6 @@ but not the number of digits and/or the period/counter.</property>
         </child>
       </object>
     </child>
-  </object>
-  <object class="GtkImage" id="lrs_image">
-    <property name="visible">True</property>
-    <property name="can-focus">False</property>
-    <property name="icon-name">list-remove-symbolic</property>
   </object>
   <object class="GtkDialog" id="manual_add_diag_id">
     <property name="can-focus">False</property>

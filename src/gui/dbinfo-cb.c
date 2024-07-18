@@ -24,9 +24,9 @@ dbinfo_cb (GSimpleAction *simple UNUSED,
         gtk_widget_set_visible (pbkdf2_label, FALSE);
         gtk_widget_set_visible (pbkdf2_params_label, FALSE);
         gtk_label_set_label (GTK_LABEL(kdf_algo_label), "Argon2id");
-        params = g_strconcat ("iters ", g_strdup_printf ("%d", ARGON2ID_ITER),
-                              ", memcost ", g_strdup_printf ("%d", ARGON2ID_MEMCOST), " KiB"
-                              ", parall. ", g_strdup_printf ("%d", ARGON2ID_PARALLELISM),
+        params = g_strconcat ("iters ", g_strdup_printf ("%d", app_data->db_data->argon2id_iter),
+                              ", memcost ", g_strdup_printf ("%d", app_data->db_data->argon2id_memcost), " KiB"
+                              ", parall. ", g_strdup_printf ("%d", app_data->db_data->argon2id_parallelism),
                               ", taglen ", g_strdup_printf ("%d", ARGON2ID_TAGLEN), " B", NULL);
         gtk_label_set_text(GTK_LABEL(argon2id_params_label), params);
         gtk_widget_set_visible (argon2id_label, TRUE);
