@@ -6,6 +6,7 @@
 #include <uuid/uuid.h>
 #include "gquarks.h"
 #include "common.h"
+#include "file-size.h"
 
 
 #define AEGIS_NONCE_SIZE  12
@@ -14,16 +15,16 @@
 #define AEGIS_KEY_SIZE    32
 
 
-static GSList *get_otps_from_plain_backup     (const gchar          *path,
-                                               GError              **err);
+static GSList *get_otps_from_plain_backup     (const gchar  *path,
+                                               GError      **err);
 
-static GSList *get_otps_from_encrypted_backup (const gchar          *path,
-                                               const gchar          *password,
-                                               gint32                max_file_size,
-                                               GError              **err);
+static GSList *get_otps_from_encrypted_backup (const gchar  *path,
+                                               const gchar  *password,
+                                               gint32        max_file_size,
+                                               GError      **err);
 
-static GSList *parse_aegis_json_data          (const gchar          *data,
-                                               GError              **err);
+static GSList *parse_aegis_json_data          (const gchar  *data,
+                                               GError      **err);
 
 
 GSList *
@@ -46,7 +47,7 @@ get_otps_from_plain_backup (const gchar  *path,
                             GError      **err)
 {
     json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
@@ -66,10 +67,16 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 gint32                max_file_size,
                                 GError              **err)
 {
+    // Due to icons, custom icons, etc, loading the entire json into secure memory will drain the pool and will cause
+    // the app to segfault. Since we only need the decrypted data to be handled in secure memory, we can use the standard memory
+    // for the other data.
+    json_set_alloc_funcs (g_malloc0, g_free);
+
     json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -98,6 +105,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_tag);
         gcry_free (keybuf);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -109,6 +117,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_tag);
         gcry_free (keybuf);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -123,6 +132,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (keybuf);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
     gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, AEGIS_TAG_SIZE);
@@ -136,6 +146,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (keybuf);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -155,12 +166,13 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (nonce);
         gcry_free (master_key);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
     gsize out_len;
     guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
-    if (out_len > max_file_size) {
+    if (out_len > (gint32)(max_file_size*0.85)) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         g_free (tag);
         g_free (nonce);
@@ -168,10 +180,12 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (b64decoded_db);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
     // we no longer need the json object, so we can free up some secure memory
     json_decref (json);
+    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
     gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
     gpg_err = gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
@@ -425,7 +439,7 @@ parse_aegis_json_data (const gchar *data,
                        GError     **err)
 {
     json_error_t jerr;
-    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
+    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
     if (root == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;

@@ -242,7 +242,7 @@ parse_andotp_json_data (const gchar *data,
                         GError     **err)
 {
     json_error_t jerr;
-    json_t *array = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
+    json_t *array = json_loads (data, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;

@@ -37,8 +37,8 @@ gchar *
 init_libs (gint32 max_file_size)
 {
     gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
-    if (!gcry_check_version ("1.8.0")) {
-        return g_strdup ("The required version of GCrypt is 1.8.0 or greater.");
+    if (!gcry_check_version ("1.10.1")) {
+        return g_strdup ("The required version of GCrypt is 1.10.1 or greater.");
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
@@ -418,7 +418,7 @@ build_json_obj (const gchar *type,
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));
     } else {
-        json_object_set (obj, "counter", json_integer (ctr));
+        json_object_set (obj, "counter", json_integer ((json_int_t)ctr));
     }
 
     return obj;
@@ -429,7 +429,7 @@ json_t *
 get_json_root (const gchar *path)
 {
     json_error_t jerr;
-    json_t *json = json_load_file (path, 0, &jerr);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
     if (!json) {
         g_printerr ("Error loading the json file: %s\n", jerr.text);
         return NULL;
