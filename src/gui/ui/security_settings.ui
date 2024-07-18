@@ -52,6 +52,24 @@
           </packing>
         </child>
         <child>
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="can-focus">False</property>
+            <property name="label" translatable="yes">Please &lt;b&gt;do not modify&lt;/b&gt; these values unless you know what you are really doing.
+
+Allowed values are:
+- iterations: between 2 and 8
+- memory cost: between 16384 (16 MiB) and 4194304 (4 GiB)
+- parallelism: between 2 and 128</property>
+            <property name="use-markup">True</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
           <!-- n-columns=3 n-rows=4 -->
           <object class="GtkGrid">
             <property name="visible">True</property>
@@ -155,6 +173,7 @@
               <object class="GtkEntry" id="change_db_sec_new_iter_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="max-length">1</property>
                 <property name="input-purpose">digits</property>
               </object>
               <packing>
@@ -166,6 +185,7 @@
               <object class="GtkEntry" id="change_db_sec_new_memcost_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
+                <property name="max-length">7</property>
                 <property name="input-purpose">digits</property>
               </object>
               <packing>
@@ -177,7 +197,7 @@
               <object class="GtkEntry" id="change_db_sec_new_paral_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="max-length">2</property>
+                <property name="max-length">3</property>
                 <property name="input-purpose">digits</property>
               </object>
               <packing>
