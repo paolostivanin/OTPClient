@@ -29,6 +29,8 @@ static GSList   *parse_aegis_json_data          (const gchar  *data,
 static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
                                                  GError      **err);
 
+static gchar    *remove_icons_from_db           (gchar        *decrypted_db);
+
 
 GSList *
 get_aegis_data (const gchar     *path,
@@ -53,17 +55,25 @@ get_otps_from_plain_backup (const gchar  *path,
     if (is_file_otpauth_txt (path, err)) {
         otps = get_otpauth_data (path, get_max_file_size_from_memlock (), err);
     } else {
+        // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
+        // the app to segfault. Since the file is unencrypted, we don't need to load it into secure memory.
+        json_set_alloc_funcs (g_malloc0, g_free);
         json_error_t j_err;
         json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
         if (!json) {
             gchar *msg = g_strconcat ("Error while loading the json file: ", j_err.text, NULL);
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", msg);
             g_free (msg);
+            json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
             return NULL;
         }
         gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
-        otps = parse_aegis_json_data (dumped_json, err);
+
+        gchar *cleaned_db = remove_icons_from_db (dumped_json);
         gcry_free (dumped_json);
+        otps = parse_aegis_json_data (cleaned_db, err);
+        gcry_free (cleaned_db);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
     }
     return otps;
 }
@@ -75,7 +85,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 gint32                max_file_size,
                                 GError              **err)
 {
-    // Due to icons, custom icons, etc, loading the entire json into secure memory will drain the pool and will cause
+    // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
     // the app to segfault. Since we only need the decrypted data to be handled in secure memory, we can use the standard memory
     // for the other data.
     json_set_alloc_funcs (g_malloc0, g_free);
@@ -219,12 +229,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gcry_cipher_close (hd);
     gcry_free (master_key);
 
-    // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
-    GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
-    gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
-    g_regex_unref (regex);
-    gcry_free (decrypted_db);
-
+    gchar *cleaned_db = remove_icons_from_db (decrypted_db);
     GSList *otps = parse_aegis_json_data (cleaned_db, err);
     gcry_free (cleaned_db);
 
@@ -547,4 +552,17 @@ is_file_otpauth_txt (const gchar  *file_path,
     g_object_unref (file);
 
     return result;
+}
+
+
+static gchar *
+remove_icons_from_db (gchar *decrypted_db)
+{
+    // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
+    GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
+    gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
+    g_regex_unref (regex);
+    gcry_free (decrypted_db);
+
+    return cleaned_db;
 }
