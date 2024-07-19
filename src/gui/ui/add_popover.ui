@@ -205,7 +205,7 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">import_menu.aegis_plain</property>
-            <property name="text" translatable="yes">Aegis (plain json)</property>
+            <property name="text" translatable="yes">Aegis (plain json/txt)</property>
           </object>
           <packing>
             <property name="expand">False</property>

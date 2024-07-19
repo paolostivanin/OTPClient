@@ -1,5 +1,7 @@
 #include <glib.h>
 #include "common.h"
+#include "file-size.h"
+#include "gquarks.h"
 
 static void parse_uri           (const gchar   *uri,
                                  GSList       **otps);
@@ -93,6 +95,37 @@ get_otpauth_uri (json_t *obj)
     g_free (escaped_issuer);
 
     return g_string_free (uri, FALSE);
+}
+
+
+GSList *
+get_otpauth_data (const gchar  *path,
+                  gint32        max_file_size,
+                  GError      **err)
+{
+    GSList *otps = NULL;
+    goffset fs = get_file_size (path);
+    if (fs < 10) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't get the file size (file doesn't exit or wrong file selected.");
+        return NULL;
+    }
+    if (fs > max_file_size) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        return NULL;
+    }
+
+    gchar *sec_buf = gcry_calloc_secure (fs, 1);
+    if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
+        g_set_error (err, generic_error_gquark(), GENERIC_ERRCODE, "Couldn't load the file content into memory.");
+        gcry_free (sec_buf);
+        return NULL;
+    }
+
+    set_otps_from_uris (sec_buf, &otps);
+
+    gcry_free (sec_buf);
+
+    return otps;
 }
 
 

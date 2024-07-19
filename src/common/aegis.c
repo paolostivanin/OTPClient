@@ -6,7 +6,7 @@
 #include <uuid/uuid.h>
 #include "gquarks.h"
 #include "common.h"
-#include "file-size.h"
+#include "parse-uri.h"
 
 
 #define AEGIS_NONCE_SIZE  12
@@ -15,16 +15,19 @@
 #define AEGIS_KEY_SIZE    32
 
 
-static GSList *get_otps_from_plain_backup     (const gchar  *path,
-                                               GError      **err);
+static GSList   *get_otps_from_plain_backup     (const gchar  *path,
+                                                 GError      **err);
 
-static GSList *get_otps_from_encrypted_backup (const gchar  *path,
-                                               const gchar  *password,
-                                               gint32        max_file_size,
-                                               GError      **err);
+static GSList   *get_otps_from_encrypted_backup (const gchar  *path,
+                                                 const gchar  *password,
+                                                 gint32        max_file_size,
+                                                 GError      **err);
 
-static GSList *parse_aegis_json_data          (const gchar  *data,
-                                               GError      **err);
+static GSList   *parse_aegis_json_data          (const gchar  *data,
+                                                 GError      **err);
+
+static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
+                                                 GError      **err);
 
 
 GSList *
@@ -46,17 +49,22 @@ static GSList *
 get_otps_from_plain_backup (const gchar  *path,
                             GError      **err)
 {
-    json_error_t j_err;
-    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
-    if (!json) {
-        g_printerr ("Error loading json: %s\n", j_err.text);
-        return NULL;
+    GSList *otps = NULL;
+    if (is_file_otpauth_txt (path, err)) {
+        otps = get_otpauth_data (path, get_max_file_size_from_memlock (), err);
+    } else {
+        json_error_t j_err;
+        json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
+        if (!json) {
+            gchar *msg = g_strconcat ("Error while loading the json file: ", j_err.text, NULL);
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", msg);
+            g_free (msg);
+            return NULL;
+        }
+        gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
+        otps = parse_aegis_json_data (dumped_json, err);
+        gcry_free (dumped_json);
     }
-
-    gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
-    GSList *otps = parse_aegis_json_data (dumped_json, err);
-    gcry_free (dumped_json);
-
     return otps;
 }
 
@@ -511,4 +519,32 @@ parse_aegis_json_data (const gchar *data,
     json_decref (root);
 
     return otps;
+}
+
+
+static gboolean
+is_file_otpauth_txt (const gchar  *file_path,
+                     GError      **err)
+{
+    gboolean result = FALSE;
+
+    GFile *file = g_file_new_for_path (file_path);
+    GFileInputStream *input_stream = g_file_read (file, NULL, err);
+    if (err != NULL && *err != NULL) {
+        g_object_unref (file);
+        return result;
+    }
+
+    const gchar *expected_string = "otpauth://";
+    gsize expected_string_len = g_utf8_strlen (expected_string, -1);
+    gchar buffer[expected_string_len + 1];
+    gssize bytes_read = g_input_stream_read (G_INPUT_STREAM(input_stream), buffer, expected_string_len, NULL, err);
+    if ((err == NULL || *err == NULL) && bytes_read == expected_string_len) {
+        buffer[expected_string_len] = '\0';
+        result = (g_strcmp0 (buffer, expected_string) == 0);
+        g_object_unref (input_stream);
+    }
+    g_object_unref (file);
+
+    return result;
 }
