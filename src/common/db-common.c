@@ -198,6 +198,7 @@ get_db_version (const gchar *db_path)
     gchar *header_name = g_malloc0 (g_utf8_strlen (DB_HEADER_NAME, -1) + 1);
     if (g_input_stream_read (G_INPUT_STREAM(in_stream), header_name, g_utf8_strlen (DB_HEADER_NAME, -1), NULL, &err) == -1) {
         g_printerr ("%s\n", err->message);
+        g_free (header_name);
         cleanup_db_gfile (in_file, in_stream, err);
         return -1;
     }

@@ -29,7 +29,7 @@ static GSList   *parse_aegis_json_data          (const gchar  *data,
 static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
                                                  GError      **err);
 
-static gchar    *remove_icons_from_db           (gchar        *decrypted_db);
+static gchar    *remove_icons_from_db           (const gchar  *decrypted_db);
 
 
 GSList *
@@ -67,10 +67,11 @@ get_otps_from_plain_backup (const gchar  *path,
             json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
             return NULL;
         }
-        gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
 
+        gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
         gchar *cleaned_db = remove_icons_from_db (dumped_json);
         gcry_free (dumped_json);
+
         otps = parse_aegis_json_data (cleaned_db, err);
         gcry_free (cleaned_db);
         json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
@@ -556,13 +557,12 @@ is_file_otpauth_txt (const gchar  *file_path,
 
 
 static gchar *
-remove_icons_from_db (gchar *decrypted_db)
+remove_icons_from_db (const gchar *decrypted_db)
 {
     // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
     GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
     gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
     g_regex_unref (regex);
-    gcry_free (decrypted_db);
 
     return cleaned_db;
 }
