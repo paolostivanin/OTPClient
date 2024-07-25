@@ -1,11 +1,15 @@
 #include <glib.h>
 #include "common.h"
+#include "file-size.h"
+#include "gquarks.h"
 
-static void parse_uri           (const gchar   *uri,
-                                 GSList       **otps);
+static void   parse_uri            (const gchar   *uri,
+                                    GSList       **otps);
 
-static void parse_parameters    (const gchar   *modified_uri,
-                                 otp_t         *otp);
+static void   parse_parameters     (const gchar   *modified_uri,
+                                    otp_t         *otp);
+
+static gchar *remove_null_encoding (const gchar   *uri);
 
 
 void
@@ -96,6 +100,37 @@ get_otpauth_uri (json_t *obj)
 }
 
 
+GSList *
+get_otpauth_data (const gchar  *path,
+                  gint32        max_file_size,
+                  GError      **err)
+{
+    GSList *otps = NULL;
+    goffset fs = get_file_size (path);
+    if (fs < 10) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't get the file size (file doesn't exit or wrong file selected.");
+        return NULL;
+    }
+    if (fs > max_file_size) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        return NULL;
+    }
+
+    gchar *sec_buf = gcry_calloc_secure (fs, 1);
+    if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
+        g_set_error (err, generic_error_gquark(), GENERIC_ERRCODE, "Couldn't load the file content into memory.");
+        gcry_free (sec_buf);
+        return NULL;
+    }
+
+    set_otps_from_uris (sec_buf, &otps);
+
+    gcry_free (sec_buf);
+
+    return otps;
+}
+
+
 static void
 parse_uri (const gchar   *uri,
            GSList       **otps)
@@ -135,10 +170,13 @@ static void
 parse_parameters (const gchar   *modified_uri,
                   otp_t         *otp)
 {
-    gchar **tokens = g_strsplit (modified_uri, "?", -1);
+    // https://github.com/paolostivanin/OTPClient/issues/369#issuecomment-2238703716
+    gchar *cleaned_uri = remove_null_encoding (modified_uri);
+    gchar **tokens = g_strsplit (cleaned_uri, "?", -1);
     gchar *escaped_issuer_and_label = g_uri_unescape_string (tokens[0], NULL);
-    gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer (modified_uri, g_utf8_strlen (tokens[0], -1) + 1);
+    gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer (cleaned_uri, g_utf8_strlen (tokens[0], -1) + 1);
     g_strfreev (tokens);
+    g_free (cleaned_uri);
 
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
     if (tokens[0] && tokens[1]) {
@@ -188,4 +226,15 @@ parse_parameters (const gchar   *modified_uri,
         i++;
     }
     g_strfreev (tokens);
+}
+
+
+static gchar *
+remove_null_encoding (const gchar *uri)
+{
+    GRegex *regex = g_regex_new ("%00", 0, 0, NULL);
+    gchar *cleaned_uri = g_regex_replace_literal (regex, uri, -1, 0, "", 0, NULL);
+    g_regex_unref (regex);
+
+    return cleaned_uri;
 }

@@ -112,12 +112,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         free_otps_gslist (otps, g_slist_length (otps));
 
         update_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while updating the database: %s\n", err->message);
             return FALSE;
         }
         reload_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while reloading the database: %s\n", err->message);
             return FALSE;
         }
@@ -146,13 +146,13 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
-            ret_msg = export_andotp (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_andotp (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
             exported_file_path = g_build_filename (export_directory, "freeotpplus-exports.txt", NULL);
-            ret_msg = export_freeotpplus (exported_file_path, db_data->json_data);
+            ret_msg = export_freeotpplus (exported_file_path, db_data->in_memory_json_data);
             exported = TRUE;
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
@@ -164,7 +164,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "aegis_exports.json.aes" : "aegis_exports.json", NULL);
-            ret_msg = export_aegis (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_aegis (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }
@@ -177,7 +177,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "twofas_encrypted_v4.2fas" : "twofas_plain_v4.2fas", NULL);
-            ret_msg = export_twofas (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_twofas (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }
@@ -190,7 +190,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "authpro_encrypted.bin" : "authpro_plain.json", NULL);
-            ret_msg = export_authpro (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_authpro (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }

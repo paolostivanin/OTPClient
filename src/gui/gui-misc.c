@@ -278,11 +278,11 @@ update_db_from_otps (GSList *otps, AppData *app_data)
 
     GError *err = NULL;
     update_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         return g_strdup (err->message);
     }
     reload_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         return g_strdup (err->message);
     }
     regenerate_model (app_data);

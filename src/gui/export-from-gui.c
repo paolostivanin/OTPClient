@@ -83,15 +83,15 @@ export_data_cb (GSimpleAction *simple,
 
     g_autofree gchar *ret_msg = NULL;
     if (g_strcmp0 (action_name, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0) {
-        ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->json_data);
+        ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->in_memory_json_data);
     } else if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
-        ret_msg = export_freeotpplus (export_file_abs_path, app_data->db_data->json_data);
+        ret_msg = export_freeotpplus (export_file_abs_path, app_data->db_data->in_memory_json_data);
     } else if (g_strcmp0 (action_name, AEGIS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0) {
-        ret_msg = export_aegis (export_file_abs_path, password, app_data->db_data->json_data);
+        ret_msg = export_aegis (export_file_abs_path, password, app_data->db_data->in_memory_json_data);
     } else if (g_strcmp0 (action_name, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0) {
-        ret_msg = export_authpro (export_file_abs_path, password, app_data->db_data->json_data);
+        ret_msg = export_authpro (export_file_abs_path, password, app_data->db_data->in_memory_json_data);
     } else if (g_strcmp0 (action_name, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
-        ret_msg = export_twofas (export_file_abs_path, password, app_data->db_data->json_data);
+        ret_msg = export_twofas (export_file_abs_path, password, app_data->db_data->in_memory_json_data);
     } else {
         show_message_dialog (app_data->main_window, "Invalid export action.", GTK_MESSAGE_ERROR);
         return;

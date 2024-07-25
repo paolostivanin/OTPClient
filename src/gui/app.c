@@ -23,6 +23,7 @@
 #include "manual-add-cb.h"
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
+#include "change-db-sec.h"
 
 #ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
@@ -208,7 +209,7 @@ activate (GtkApplication    *app,
 
     GError *err = NULL;
     load_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         gcry_free (app_data->db_data->key);
         if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
@@ -226,7 +227,7 @@ activate (GtkApplication    *app,
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "main_pwd", app_data->db_data->key, NULL, on_password_stored, NULL, "string", "main_pwd", NULL);
     }
 
-    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_CODE)) {
+    if (g_error_matches (err, missing_file_gquark(), MISSING_FILE_ERRCODE)) {
         const gchar *msg = _("This is the first time you run OTPClient, so you need to <b>add</b> or <b>import</b> some tokens.\n"
         "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
         "- to <b>import</b> existing tokens, please click the menu button <b>on the top right</b>.\n"
@@ -466,6 +467,7 @@ create_main_window (gint     width,
             { .name = "create_newdb", .activate = new_db_cb },
             { .name = "change_db", .activate = change_db_cb },
             { .name = "change_pwd", .activate = change_password_cb },
+            { .name = "change_db_sec", .activate = change_db_sec_cb },
             { .name = "settings", .activate = settings_dialog_cb },
             { .name = "shortcuts", .activate = shortcuts_window_cb },
             { .name = "dbinfo", .activate = dbinfo_cb },
@@ -627,7 +629,7 @@ destroy_cb (GtkWidget   *window,
     gcry_free (app_data->db_data->key);
     g_free (app_data->db_data->db_path);
     g_slist_free_full (app_data->db_data->objects_hash, g_free);
-    json_decref (app_data->db_data->json_data);
+    json_decref (app_data->db_data->in_memory_json_data);
     g_free (app_data->db_data);
     gtk_clipboard_clear (app_data->clipboard);
     g_application_withdraw_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW(app_data->main_window))), NOTIFICATION_ID);

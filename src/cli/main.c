@@ -80,7 +80,7 @@ free_dbdata (DatabaseData *db_data)
     gcry_free (db_data->key);
     g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);
-    json_decref (db_data->json_data);
+    json_decref (db_data->in_memory_json_data);
     g_free (db_data);
 }
 

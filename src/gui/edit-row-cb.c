@@ -58,12 +58,12 @@ edit_row_cb (GtkMenuItem *menu_item UNUSED,
 
     GError *err = NULL;
     update_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         goto end;
     }
     reload_db (app_data->db_data, &err);
-    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+    if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
         goto end;
     }
@@ -113,7 +113,7 @@ show_edit_dialog (EditData *edit_data,
     }
 
     guint row_number = get_row_number_from_iter (edit_data->list_store, edit_data->iter);
-    json_t *obj = json_array_get (edit_data->db_data->json_data, row_number);
+    json_t *obj = json_array_get (edit_data->db_data->in_memory_json_data, row_number);
     edit_data->current_secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
     if (edit_data->current_secret != NULL) {
         gtk_entry_set_text (GTK_ENTRY(new_sec_entry), edit_data->current_secret);
@@ -208,7 +208,7 @@ static void
 set_data_in_lstore_and_json (EditData *edit_data)
 {
     guint row_number = get_row_number_from_iter (edit_data->list_store, edit_data->iter);
-    json_t *obj = json_array_get (edit_data->db_data->json_data, row_number);
+    json_t *obj = json_array_get (edit_data->db_data->in_memory_json_data, row_number);
 
     if (edit_data->new_label != NULL) {
         gtk_list_store_set (edit_data->list_store, &edit_data->iter, COLUMN_ACC_LABEL, edit_data->new_label, -1);

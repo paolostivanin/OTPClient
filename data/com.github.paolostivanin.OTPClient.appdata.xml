@@ -89,6 +89,19 @@
   </content_rating>
 
   <releases>
+    <release version="4.0.0" date="2024-07-25">
+      <description>
+        <p>OTPClient 4.0.0 brings the following changes:</p>
+        <ul>
+          <li>CHANGE: switch from PBKDF2 to Argon2id (#358)</li>
+          <li>NEW: make Argon2id parameters configurable (#358)</li>
+          <li>NEW: add support for importing plain Aegis txt</li>
+          <li>FIX: various issues related to importing Aegis backups (#371)</li>
+          <li>FIX: improving handling of json files (#369)</li>
+          <li>FIX: show db parameters dynamically</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.7.0" date="2024-06-28">
       <description>
         <p>OTPClient 3.7.0 brings the following changes:</p>

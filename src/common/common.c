@@ -9,6 +9,7 @@
 #include "file-size.h"
 #include "gquarks.h"
 
+
 gint32
 get_max_file_size_from_memlock (void)
 {
@@ -37,8 +38,8 @@ gchar *
 init_libs (gint32 max_file_size)
 {
     gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
-    if (!gcry_check_version ("1.8.0")) {
-        return g_strdup ("The required version of GCrypt is 1.8.0 or greater.");
+    if (!gcry_check_version ("1.10.1")) {
+        return g_strdup ("The required version of GCrypt is 1.10.1 or greater.");
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
@@ -268,7 +269,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     } else if (enc_buf_size > max_file_size) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
 
@@ -418,10 +419,32 @@ build_json_obj (const gchar *type,
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));
     } else {
-        json_object_set (obj, "counter", json_integer (ctr));
+        json_object_set (obj, "counter", json_integer ((json_int_t)ctr));
     }
 
     return obj;
+}
+
+
+json_t *
+get_json_root (const gchar *path)
+{
+    json_error_t jerr;
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
+    if (!json) {
+        g_printerr ("Error loading the json file: %s\n", jerr.text);
+        return NULL;
+    }
+
+    gchar *dumped_json = json_dumps (json, 0);
+    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
+    if (root == NULL) {
+        g_printerr ("Error while loading the json data: %s\n", jerr.text);
+        return NULL;
+    }
+    gcry_free (dumped_json);
+
+    return root;
 }
 
 

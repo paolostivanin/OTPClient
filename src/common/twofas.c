@@ -26,8 +26,6 @@ static GSList   *get_otps_from_plain_backup     (const gchar       *path,
 
 static gboolean  is_schema_supported            (const gchar       *path);
 
-static json_t   *get_json_root                  (const gchar       *path);
-
 static void      decrypt_data                   (const gchar      **b64_data,
                                                  const gchar       *pwd,
                                                  TwofasData        *twofas_data);
@@ -51,7 +49,7 @@ get_twofas_data (const gchar  *path,
                  GError      **err)
 {
     if (get_file_size (path) > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
     return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
@@ -259,7 +257,7 @@ get_otps_from_plain_backup (const gchar  *path,
     }
 
     json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
@@ -288,30 +286,11 @@ is_schema_supported (const gchar *path)
 }
 
 
-static json_t *
-get_json_root (const gchar *path)
-{
-    json_error_t jerr;
-    json_t *json = json_load_file (path, 0, &jerr);
-    if (!json) {
-        g_printerr ("Error loading json: %s\n", jerr.text);
-        return FALSE;
-    }
-
-    gchar *dumped_json = json_dumps (json, 0);
-    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
-    gcry_free (dumped_json);
-
-    return root;
-}
-
-
 static void
 decrypt_data (const gchar **b64_data,
               const gchar *pwd,
               TwofasData   *twofas_data)
 {
-    // TWOFAS ignores the tag, so we don't have to check it (sigh!)
     gsize enc_data_with_tag_size, salt_out_len, iv_out_len;
     guchar *enc_data_with_tag = g_base64_decode (b64_data[0], &enc_data_with_tag_size);
     twofas_data->salt = g_base64_decode (b64_data[1], &salt_out_len);

@@ -147,7 +147,7 @@ reorder_db (AppData *app_data)
         gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &current_db_pos, -1);
         if (gtk_tree_path_get_indices (path)[0] != current_db_pos) {
             NodeInfo *node_info = g_new0 (NodeInfo, 1);
-            json_t *obj = json_array_get (app_data->db_data->json_data, current_db_pos);
+            json_t *obj = json_array_get (app_data->db_data->in_memory_json_data, current_db_pos);
             node_info->newpos = gtk_tree_path_get_indices (path)[0];
             node_info->hash = json_object_get_hash (obj);
             nodes_order_slist = g_slist_append (nodes_order_slist, g_memdup2 (node_info, sizeof (NodeInfo)));
@@ -163,14 +163,14 @@ reorder_db (AppData *app_data)
     json_t *obj;
     for (gint i = 0; i < slist_len; i++) {
         NodeInfo *ni = g_slist_nth_data (nodes_order_slist, i);
-        json_array_foreach (app_data->db_data->json_data, index, obj) {
+        json_array_foreach (app_data->db_data->in_memory_json_data, index, obj) {
             guint32 db_obj_hash = json_object_get_hash (obj);
             if (db_obj_hash == ni->hash) {
                 // remove the obj from the current position...
                 json_incref (obj);
-                json_array_remove (app_data->db_data->json_data, index);
+                json_array_remove (app_data->db_data->in_memory_json_data, index);
                 // ...and add it to the desired one
-                json_array_insert (app_data->db_data->json_data, ni->newpos, obj);
+                json_array_insert (app_data->db_data->in_memory_json_data, ni->newpos, obj);
                 json_decref (obj);
             }
         }
@@ -245,7 +245,7 @@ delete_row (AppData *app_data)
     gint db_item_position_to_delete;
     gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
 
-    json_array_remove (app_data->db_data->json_data, db_item_position_to_delete);
+    json_array_remove (app_data->db_data->in_memory_json_data, db_item_position_to_delete);
     gtk_list_store_remove (GTK_LIST_STORE(model), &iter);
 
     // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
@@ -389,7 +389,7 @@ add_data_to_model (DatabaseData *db_data,
     GtkTreeIter iter;
     ParsedData *pjd = g_new0 (ParsedData, 1);
 
-    set_json_data (db_data->json_data, pjd);
+    set_json_data (db_data->in_memory_json_data, pjd);
 
     gint i = 0;
     while (pjd->types[i] != NULL) {
