@@ -176,13 +176,11 @@ parse_parameters (const gchar   *modified_uri,
     gchar *escaped_issuer_and_label = g_uri_unescape_string (tokens[0], NULL);
     gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer (cleaned_uri, g_utf8_strlen (tokens[0], -1) + 1);
     g_strfreev (tokens);
-    g_free (cleaned_uri);
 
     tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
     if (tokens[0] && tokens[1]) {
         otp->issuer = g_strdup (g_strstrip (tokens[0]));
         otp->account_name = g_strdup (g_strstrip (tokens[1]));
-
     } else {
         otp->account_name = g_strdup (g_strstrip (tokens[0]));
     }
@@ -226,6 +224,7 @@ parse_parameters (const gchar   *modified_uri,
         i++;
     }
     g_strfreev (tokens);
+    g_free (cleaned_uri);
 }
 
 

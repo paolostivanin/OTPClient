@@ -17,17 +17,29 @@ parse_qrcode (const gchar    *png_path,
     gint width = gdk_pixbuf_get_width (pbuf);
     gint height = gdk_pixbuf_get_height (pbuf);
     guchar *raw_data = gdk_pixbuf_get_pixels (pbuf);
+    gint rowstride = gdk_pixbuf_get_rowstride (pbuf);
+    gint n_channels = gdk_pixbuf_get_n_channels (pbuf);
+
+    guchar *gray_data = g_malloc0 (width * height);
+
+    // we need to convert RGB data to grayscale, otherwise QR parsing will fail
+    for (gint y = 0; y < height; y++) {
+        for (gint x = 0; x < width; x++) {
+            guchar *p = raw_data + y * rowstride + x * n_channels;
+            gray_data[y * width + x] = (p[0] * 0.299) + (p[1] * 0.587) + (p[2] * 0.114);
+        }
+    }
+    g_object_unref (pbuf);
 
     zbar_image_t *image = zbar_image_create ();
     zbar_image_set_format (image, zbar_fourcc ('Y','8','0','0'));
     zbar_image_set_size (image, width, height);
-    zbar_image_set_data (image, raw_data, width * height, zbar_image_free_data);
+    zbar_image_set_data (image, gray_data, width * height, zbar_image_free_data);
 
     gint n = zbar_scan_image (scanner, image);
     if (n < 1) {
         zbar_image_destroy (image);
         zbar_image_scanner_destroy (scanner);
-        g_object_unref (pbuf);
         return g_strdup ("Couldn't find a valid qrcode");
     }
 
@@ -40,8 +52,6 @@ parse_qrcode (const gchar    *png_path,
 
     zbar_image_destroy (image);
     zbar_image_scanner_destroy (scanner);
-
-    g_object_unref (pbuf);
 
     return NULL;
 }
