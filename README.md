@@ -42,7 +42,7 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - import and export encrypted/plain [2FAS](https://github.com/twofas) backup
 - import of Google's migration QR codes
 - local database is encrypted using AES256-GCM
-  - key is derived using PBKDF2 with SHA512 and 100k iterations
+  - key is derived using Argon2id with the following default parameters: 4 iterations, 128 MiB memory cost, 4 parallelism, 32 taglen. The first three parameters can be changed by the user.
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
 
 ## Testing
