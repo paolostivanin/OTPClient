@@ -67,7 +67,6 @@ load_db (DatabaseData    *db_data,
     }
 
     if (db_data->current_db_version < 2) {
-        g_print("upgrading database to v2\n");
         update_db (db_data, err);
         g_return_if_fail (err == NULL || *err == NULL);
 
