@@ -89,7 +89,15 @@
   </content_rating>
 
   <releases>
-    <release version="4.0.0" date="2024-07-25">
+    <release version="4.0.1" date="2024-07-31">
+      <description>
+        <p>OTPClient 4.0.1 brings a small fix:</p>
+        <ul>
+          <li>FIX: add missing ui file to CMakeLists.txt</li>
+        </ul>
+      </description>
+    </release>
+    <release version="4.0.0" date="2024-07-30">
       <description>
         <p>OTPClient 4.0.0 brings the following changes:</p>
         <ul>
