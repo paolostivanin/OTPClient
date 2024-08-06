@@ -89,6 +89,14 @@
   </content_rating>
 
   <releases>
+    <release version="4.0.2" date="2024-08-06">
+      <description>
+        <p>OTPClient 4.0.2 brings an important fix:</p>
+        <ul>
+          <li>FIX: importing data on a first run (#376)</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.0.1" date="2024-07-31">
       <description>
         <p>OTPClient 4.0.1 brings a small fix:</p>
