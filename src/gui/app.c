@@ -118,6 +118,14 @@ activate (GtkApplication    *app,
     gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
     g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
+    if (max_file_size == ERR_MEMLOCK_VALUE) {
+        show_message_dialog (app_data->main_window, "Couldn't get the memlock limit or the value is too low. Please have a look at the"
+                                                    "<a href=\\\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\\\">secure memory</a> wiki page before re-running OTPClient.", GTK_MESSAGE_ERROR);
+        g_free (app_data->db_data);
+        g_application_quit (G_APPLICATION(app));
+        return;
+    }
+
     gchar *init_msg = init_libs (max_file_size);
     if (init_msg != NULL) {
         show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
@@ -166,7 +174,7 @@ activate (GtkApplication    *app,
     }
 #endif
 
-    if (max_file_size < LOW_MEMLOCK_VALUE && get_warn_data () == TRUE) {
+    if (max_file_size < MEMLOCK_VALUE && get_warn_data () == TRUE) {
         if (show_memlock_warn_dialog (max_file_size, app_data->builder) == TRUE) {
             g_free (app_data->db_data);
             g_free (app_data);
