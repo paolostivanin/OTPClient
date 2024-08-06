@@ -7,8 +7,9 @@
 
 G_BEGIN_DECLS
 
-#define LOW_MEMLOCK_VALUE    65536 //64KB
-#define MEMLOCK_VALUE     67108864 //64MB
+#define ERR_MEMLOCK_VALUE        1
+#define MIN_MEMLOCK_VALUE 16777216 // 16 MiB
+#define MEMLOCK_VALUE     67108864 // 64 MiB
 
 #define ANDOTP                 100
 #define AUTHPRO                101

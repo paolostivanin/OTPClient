@@ -16,21 +16,25 @@ get_max_file_size_from_memlock (void)
     const gchar *link = "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations";
     struct rlimit r;
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
-        // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your operating system's memlock limit may be too low for you. Please have a look at %s\n", link);
-        return LOW_MEMLOCK_VALUE;
-    } else {
-        if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
-            // memlock is either unlimited or bigger than needed, so defaulting to 'MEMLOCK_VALUE'
-            return MEMLOCK_VALUE;
-        } else {
-            // memlock is less than 'MEMLOCK_VALUE'
-            g_print ("[WARNING] your operating system's memlock limit may be too low for you (current value: %d bytes).\n"
-                     "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
-                     "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
-            return (gint32)r.rlim_cur;
-        }
+        g_printerr ("[ERROR] Couldn't retrieve the current memlock value. Check %s for instructions.\n", link);
+        return ERR_MEMLOCK_VALUE;
     }
+
+    if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
+        // if memlock is unlimited or sufficient, use MEMLOCK_VALUE
+        return MEMLOCK_VALUE;
+    }
+
+    if (r.rlim_cur > MIN_MEMLOCK_VALUE) {
+        g_print ("[WARNING] your operating system's memlock limit may be too low for you (current value: %d bytes).\n"
+                 "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
+                 "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
+    } else {
+        // memlock is lower than MIN_MEMLOCK_VALUE, so we need to exit because there's not enough secmem available.
+        g_printerr ("[ERROR] Current memlock limit (%d bytes) is too low for operation. Check %s for instructions.\n", (gint32)r.rlim_cur, link);
+        return ERR_MEMLOCK_VALUE;
+    }
+    return (gint32)r.rlim_cur;
 }
 
 
