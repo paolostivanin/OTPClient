@@ -19,8 +19,11 @@ G_BEGIN_DECLS
 #define TAG_SIZE                16
 
 // Parameters used to derive the db's password (v2)
-#define ARGON2ID_TAGLEN         32
-#define ARGON2ID_KEYLEN         32
+#define ARGON2ID_TAGLEN            32
+#define ARGON2ID_KEYLEN            32
+#define ARGON2ID_DEFAULT_ITER       4
+#define ARGON2ID_DEFAULT_MC    131072  //128 MiB
+#define ARGON2ID_DEFAULT_PARAL      4
 
 
 typedef struct db_header_data_v1_t {

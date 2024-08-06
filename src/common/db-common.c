@@ -106,6 +106,10 @@ update_db (DatabaseData  *db_data,
     gboolean first_run = (db_data->in_memory_json_data == NULL) ? TRUE : FALSE;
     if (first_run == TRUE) {
         db_data->in_memory_json_data = json_array ();
+        // we need some default values for the first run
+        db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
+        db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
+        db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
     } else {
         // database is backed-up only if this is not the first run
         backup_db (db_data->db_path);
@@ -292,9 +296,9 @@ decrypt_db (DatabaseData *db_data,
     } else {
         res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v1, header_data_size, NULL, NULL);
         // when decrypting v1 db, we need to set some default values for the next re-encryption
-        db_data->argon2id_iter = 4;
-        db_data->argon2id_memcost = 131072; // (128 MiB)
-        db_data->argon2id_parallelism = 4;
+        db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
+        db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
+        db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
     }
     if (res == -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the header data.");
