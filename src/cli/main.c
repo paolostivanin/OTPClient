@@ -268,29 +268,36 @@ handle_warning (gboolean *proceed,
     GIOChannel *in_channel = g_io_channel_unix_new (fileno(stdin));
 
     g_print ("\nDo you want to proceed with the current settings (Y/N)? ");
-    g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
-    if (error != NULL) {
-        g_printerr ("Error reading input: %s\n", error->message);
-        g_clear_error(&error);
-    } else if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
+    GIOStatus ret = g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
+    if (ret == G_IO_STATUS_ERROR) {
+        g_printerr ("Error reading input: %s\n", error ? error->message : "unknown error");
+        g_clear_error (&error);
+        g_free (input);
+        return;
+    }
+    if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
         g_print ("\nProceeding with current settings...\n");
         *proceed = TRUE;
     } else {
-        g_print("\nSettings not accepted.\n");
+        g_print ("\nSettings not accepted.\n");
+        g_free (input);
         return;
     }
-    g_free(input);
+    g_free (input);
 
     g_print ("\nDo you want to disable this warning (Y/N)? ");
-    g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
-    if (error != NULL) {
-        g_printerr("Error reading input: %s\n", error->message);
-        g_clear_error(&error);
-    } else if (g_ascii_strncasecmp(input, "Y", 1) == 0) {
+    ret = g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
+    if (ret == G_IO_STATUS_ERROR) {
+        g_printerr ("Error reading input: %s\n", error ? error->message : "unknown error");
+        g_clear_error (&error);
+        g_free (input);
+        return;
+    }
+    if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
         g_print("\nWarning disabled.\n");
         *show_warning = FALSE;
     } else {
-        g_print("\nWarning remains enabled.\n");
+        g_print ("\nWarning remains enabled.\n");
     }
     g_free(input);
 
