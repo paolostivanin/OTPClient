@@ -11,30 +11,22 @@
 
 
 gint32
-get_max_file_size_from_memlock (void)
+set_memlock_value (gint32 *memlock_value)
 {
-    const gchar *link = "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations";
     struct rlimit r;
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
-        g_printerr ("[ERROR] Couldn't retrieve the current memlock value. Check %s for instructions.\n", link);
-        return ERR_MEMLOCK_VALUE;
+        // if memlock cannot be retrieved, return an error
+        return MEMLOCK_ERR;
     }
 
-    if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
-        // if memlock is unlimited or sufficient, use MEMLOCK_VALUE
-        return MEMLOCK_VALUE;
+    if (r.rlim_cur < DEFAULT_MEMLOCK_VALUE) {
+        // memlock is less than the default value, so we need to warn the user that there might not be enough secmem available.
+        *memlock_value = (gint32) r.rlim_cur;
+        return MEMLOCK_TOO_LOW;
     }
 
-    if (r.rlim_cur > MIN_MEMLOCK_VALUE) {
-        g_print ("[WARNING] your operating system's memlock limit may be too low for you (current value: %d bytes).\n"
-                 "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
-                 "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
-    } else {
-        // memlock is lower than MIN_MEMLOCK_VALUE, so we need to exit because there's not enough secmem available.
-        g_printerr ("[ERROR] Current memlock limit (%d bytes) is too low for operation. Check %s for instructions.\n", (gint32)r.rlim_cur, link);
-        return ERR_MEMLOCK_VALUE;
-    }
-    return (gint32)r.rlim_cur;
+    *memlock_value = DEFAULT_MEMLOCK_VALUE;
+    return MEMLOCK_OK;
 }
 
 
@@ -456,4 +448,71 @@ void
 json_free (gpointer data)
 {
     json_decref (data);
+}
+
+
+GKeyFile *
+get_kf_ptr (void)
+{
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef IS_FLATPAK
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_free (cfg_file_path);
+            return kf;
+        }
+        g_printerr ("%s\n", err->message);
+        g_clear_error (&err);
+    }
+    g_free (cfg_file_path);
+    g_key_file_free (kf);
+    return NULL;
+}
+
+
+gboolean
+get_warn_data (void)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    gboolean show_warning = TRUE;
+    GError *err = NULL;
+    if (kf != NULL) {
+        show_warning = g_key_file_get_boolean (kf, "config", "show_memlock_warning", &err);
+        if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
+            // value is not present, so we want to show the warning
+            show_warning = TRUE;
+        }
+        g_key_file_free (kf);
+    }
+
+    return show_warning;
+}
+
+
+void
+set_warn_data (gboolean show_warning)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    GError *err = NULL;
+    if (kf != NULL) {
+        g_key_file_set_boolean (kf, "config", "show_memlock_warning", show_warning);
+        gchar *cfg_file_path;
+#ifndef IS_FLATPAK
+        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+            g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
+        }
+        g_free (cfg_file_path);
+        g_key_file_free (kf);
+    }
 }

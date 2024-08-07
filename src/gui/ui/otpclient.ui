@@ -2379,7 +2379,8 @@ but not the number of digits and/or the period/counter.</property>
             </child>
             <child>
               <object class="GtkCheckButton" id="warning_diag_check_btn_id">
-                <property name="label" translatable="yes">Do not show this warning again</property>
+                <property name="label" translatable="yes">I confirm that I want to use the current, possibly too low, memlock value.
+Do not show this warning again</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">False</property>

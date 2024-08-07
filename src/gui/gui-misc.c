@@ -304,28 +304,3 @@ load_new_db (AppData  *app_data,
     g_slist_free_full (app_data->db_data->data_to_add, json_free);
     app_data->db_data->data_to_add = NULL;
 }
-
-
-GKeyFile *
-get_kf_ptr (void)
-{
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path;
-#ifndef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_free (cfg_file_path);
-            return kf;
-        }
-        g_printerr ("%s\n", err->message);
-        g_clear_error (&err);
-    }
-    g_free (cfg_file_path);
-    g_key_file_free (kf);
-    return NULL;
-}
