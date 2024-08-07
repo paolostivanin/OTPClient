@@ -37,10 +37,6 @@ static void      migrate_secretservice_kf   (AppData            *app_data,
                                              GKeyFile           *kf,
                                              gboolean            value);
 
-static gboolean   get_warn_data             (void);
-
-static void       set_warn_data             (gboolean            show_warning);
-
 static void       create_main_window        (gint                width,
                                              gint                height,
                                              AppData            *app_data);
@@ -71,7 +67,7 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
                                              GdkEventKey        *event_key,
                                              gpointer            user_data);
 
-static gboolean   show_memlock_warn_dialog  (gint32              max_file_size,
+static gboolean   show_memlock_warn_dialog  (gint32              memlock_value,
                                              GtkBuilder         *builder);
 
 static void       set_open_db_action        (GtkWidget          *btn,
@@ -82,7 +78,8 @@ void
 activate (GtkApplication    *app,
           gpointer           user_data UNUSED)
 {
-    gint32 max_file_size = get_max_file_size_from_memlock ();
+    gint32 memlock_value = 0;
+    gint32 memlock_ret_value = set_memlock_value (&memlock_value);
 
     AppData *app_data = g_new0 (AppData, 1);
 
@@ -118,8 +115,8 @@ activate (GtkApplication    *app,
     gtk_application_add_window (GTK_APPLICATION(app), GTK_WINDOW(app_data->main_window));
     g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK(get_window_size_cb), NULL);
 
-    if (max_file_size == ERR_MEMLOCK_VALUE) {
-        gchar *msg = g_strdup_printf (_("Couldn't get the memlock limit or the value is too low. Please have a look at the"
+    if (memlock_ret_value == MEMLOCK_ERR) {
+        gchar *msg = g_strdup_printf (_("Couldn't get the memlock value, therefore secure memory cannot be allocated. Please have a look at the"
                                         "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory</a> wiki page before re-running OTPClient."));
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
@@ -128,7 +125,16 @@ activate (GtkApplication    *app,
         return;
     }
 
-    gchar *init_msg = init_libs (max_file_size);
+    if (memlock_ret_value == MEMLOCK_TOO_LOW && get_warn_data () == TRUE) {
+        if (show_memlock_warn_dialog (memlock_value, app_data->builder) == TRUE) {
+            g_free (app_data->db_data);
+            g_free (app_data);
+            g_application_quit (G_APPLICATION(app));
+            return;
+        }
+    }
+
+    gchar *init_msg = init_libs (memlock_value);
     if (init_msg != NULL) {
         show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
         g_free (init_msg);
@@ -176,16 +182,7 @@ activate (GtkApplication    *app,
     }
 #endif
 
-    if (max_file_size < MEMLOCK_VALUE && get_warn_data () == TRUE) {
-        if (show_memlock_warn_dialog (max_file_size, app_data->builder) == TRUE) {
-            g_free (app_data->db_data);
-            g_free (app_data);
-            g_application_quit (G_APPLICATION(app));
-            return;
-        }
-    }
-
-    app_data->db_data->max_file_size_from_memlock = max_file_size;
+    app_data->db_data->max_file_size_from_memlock = memlock_value;
     app_data->db_data->objects_hash = NULL;
     app_data->db_data->data_to_add = NULL;
     // subtract 3 seconds from the current time. Needed for "last_hotp" to be set on the first run
@@ -283,14 +280,12 @@ activate (GtkApplication    *app,
 
 
 static gboolean
-show_memlock_warn_dialog (gint32      max_file_size,
+show_memlock_warn_dialog (gint32      memlock_value,
                           GtkBuilder *builder)
 {
-    gchar *msg = g_strdup_printf (_("Your OS's memlock limit (%d) may be too low for you. "
-                                  "This could crash the program when importing data from 3rd party apps "
-                                  "or when a certain amount of tokens is reached. "
-                                  "Please have a look at the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki</a> page before "
-                                  "using this software with the current settings."), max_file_size);
+    gchar *msg = g_strdup_printf (_("Your operating system's memlock limit (%d bytes) may be too low. This could cause the program to crash or, worse, use insecure memory."
+                                    "Please review the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a> "
+                                    "before using this software with the current settings."), memlock_value);
     GtkWidget *warn_diag = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_id"));
     GtkLabel *warn_label = GTK_LABEL(gtk_builder_get_object (builder, "warning_diag_label_id"));
     GtkWidget *warn_chk_btn = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_check_btn_id"));
@@ -385,47 +380,6 @@ migrate_secretservice_kf (AppData  *app_data,
         show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
         g_free (err_msg);
         g_clear_error (&err);
-    }
-}
-
-static gboolean
-get_warn_data (void)
-{
-    GKeyFile *kf = get_kf_ptr ();
-    gboolean show_warning = TRUE;
-    GError *err = NULL;
-    if (kf != NULL) {
-        show_warning = g_key_file_get_boolean (kf, "config", "show_memlock_warning", &err);
-        if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
-            // value is not present, so we want to show the warning
-            show_warning = TRUE;
-        }
-        g_key_file_free (kf);
-    }
-
-    return show_warning;
-}
-
-
-static void
-set_warn_data (gboolean show_warning)
-{
-    GKeyFile *kf = get_kf_ptr ();
-    GError *err = NULL;
-    if (kf != NULL) {
-        g_key_file_set_boolean (kf, "config", "show_memlock_warning", show_warning);
-        gchar *cfg_file_path;
-#ifndef IS_FLATPAK
-        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
-        }
-        g_free (cfg_file_path);
-        g_key_file_free (kf);
     }
 }
 

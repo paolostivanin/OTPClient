@@ -7,9 +7,10 @@
 
 G_BEGIN_DECLS
 
-#define ERR_MEMLOCK_VALUE        1
-#define MIN_MEMLOCK_VALUE 16777216 // 16 MiB
-#define MEMLOCK_VALUE     67108864 // 64 MiB
+#define MEMLOCK_ERR                      1
+#define MEMLOCK_OK                       2
+#define MEMLOCK_TOO_LOW                  3
+#define DEFAULT_MEMLOCK_VALUE     67108864 // 64 MiB
 
 #define ANDOTP                 100
 #define AUTHPRO                101
@@ -40,7 +41,7 @@ typedef struct otp_object_t {
 } otp_t;
 
 
-gint32            get_max_file_size_from_memlock (void);
+gint32            set_memlock_value (gint32             *memlock_value);
 
 gchar            *init_libs                      (gint32              max_file_size);
 
@@ -90,5 +91,11 @@ json_t           *build_json_obj                 (const gchar        *type,
 json_t           *get_json_root                  (const gchar        *path);
 
 void              json_free                      (gpointer            data);
+
+GKeyFile         *get_kf_ptr                     (void);
+
+gboolean          get_warn_data                  (void);
+
+void              set_warn_data                  (gboolean            show_warning);
 
 G_END_DECLS

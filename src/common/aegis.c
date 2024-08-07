@@ -53,7 +53,9 @@ get_otps_from_plain_backup (const gchar  *path,
 {
     GSList *otps = NULL;
     if (is_file_otpauth_txt (path, err)) {
-        otps = get_otpauth_data (path, get_max_file_size_from_memlock (), err);
+        gint32 max_file_size = 0;
+        set_memlock_value (&max_file_size);
+        otps = get_otpauth_data (path, max_file_size, err);
     } else {
         // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
         // the app to segfault. Since the file is unencrypted, we don't need to load it into secure memory.

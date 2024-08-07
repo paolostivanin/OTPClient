@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
+#include <glib/gi18n.h>
 #include "version.h"
 #include "../common/import-export.h"
 #include "main.h"
@@ -17,6 +18,9 @@ static gboolean  parse_options         (GApplicationCommandLine *cmdline,
                                         CmdlineOpts             *cmdline_opts);
 
 static gboolean  is_valid_type         (const gchar             *type);
+
+static void      handle_warning        (gboolean                *proceed,
+                                        gboolean                *show_warning);
 
 static void      g_free_cmdline_opts   (CmdlineOpts             *co);
 
@@ -109,8 +113,33 @@ command_line (GApplication                *application __attribute__((unused)),
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->key_stored = FALSE;
     db_data->objects_hash = NULL;
+    db_data->max_file_size_from_memlock = 0;
 
-    db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
+    gint32 memlock_ret_value = set_memlock_value (&db_data->max_file_size_from_memlock);
+    if (memlock_ret_value == MEMLOCK_ERR) {
+        g_printerr (_("Couldn't get the memlock value, therefore secure memory cannot be allocated. Please have a look at the following page before re-running OTPClient:"
+                    "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"));
+        g_free (db_data);
+        return -1;
+    }
+
+    if (memlock_ret_value == MEMLOCK_TOO_LOW && get_warn_data () == TRUE) {
+        gchar *msg = g_strdup_printf (_("Your operating system's memlock limit (%d bytes) may be too low. This could cause the program to crash or, worse, use insecure memory."
+                                        "Please review the following page using this software with the current settings:"
+                                        "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"), db_data->max_file_size_from_memlock);
+        g_print ("%s\n", msg);
+        g_free (msg);
+
+        gboolean proceed = FALSE;
+        gboolean show_warning = TRUE;
+        handle_warning (&proceed, &show_warning);
+        if (proceed == FALSE) {
+            g_free (db_data);
+            return -1;
+        }
+        set_warn_data (show_warning);
+    }
+
     gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
     if (init_msg != NULL) {
         g_application_command_line_printerr(cmdline, "Error while initializing GCrypt: %s\n", init_msg);
@@ -225,6 +254,47 @@ is_valid_type (const gchar *type)
         }
     }
     return found;
+}
+
+
+static void
+handle_warning (gboolean *proceed,
+                gboolean *show_warning)
+{
+    GError *error = NULL;
+    gchar *input = NULL;
+    gsize len;
+
+    GIOChannel *in_channel = g_io_channel_unix_new (fileno(stdin));
+
+    g_print ("\nDo you want to proceed with the current settings (Y/N)? ");
+    g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
+    if (error != NULL) {
+        g_printerr ("Error reading input: %s\n", error->message);
+        g_clear_error(&error);
+    } else if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
+        g_print ("\nProceeding with current settings...\n");
+        *proceed = TRUE;
+    } else {
+        g_print("\nSettings not accepted.\n");
+        return;
+    }
+    g_free(input);
+
+    g_print ("\nDo you want to disable this warning (Y/N)? ");
+    g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
+    if (error != NULL) {
+        g_printerr("Error reading input: %s\n", error->message);
+        g_clear_error(&error);
+    } else if (g_ascii_strncasecmp(input, "Y", 1) == 0) {
+        g_print("\nWarning disabled.\n");
+        *show_warning = FALSE;
+    } else {
+        g_print("\nWarning remains enabled.\n");
+    }
+    g_free(input);
+
+    g_io_channel_unref(in_channel);
 }
 
 

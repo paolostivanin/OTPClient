@@ -90,7 +90,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
 
-        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, get_max_file_size_from_memlock (), &err);
+        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, &err);
         if (otps == NULL) {
             const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
             gchar *msg_with_err = NULL;

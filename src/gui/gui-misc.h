@@ -31,8 +31,6 @@ gchar    *g_uri_unescape_string_secure (const gchar    *escaped_string,
 guchar   *g_base64_decode_secure       (const gchar    *text,
                                         gsize          *out_len);
 
-GKeyFile *get_kf_ptr                   (void);
-
 void    import_data_cb          (GSimpleAction   *simple,
                                  GVariant        *parameter,
                                  gpointer         user_data);
