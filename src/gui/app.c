@@ -24,6 +24,9 @@
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
 #include "change-db-sec.h"
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+#include "tray.h"
+#endif
 
 #ifndef IS_FLATPAK
 static gchar     *get_db_path               (AppData            *app_data);
@@ -343,6 +346,7 @@ set_config_data (gint     *width,
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+        app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
         // handle migration from disable_secret_service to use_secret_service
         tmp = g_key_file_get_boolean (kf, "config", "disable_secret_service", &err);
         if (tmp == TRUE || (tmp == FALSE && err == NULL)) {
@@ -383,7 +387,6 @@ migrate_secretservice_kf (AppData  *app_data,
     }
 }
 
-
 static void
 create_main_window (gint     width,
                     gint     height,
@@ -396,6 +399,11 @@ create_main_window (gint     width,
 
     GtkWidget *lock_btn = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "lock_btn_id"));
     g_signal_connect (lock_btn, "clicked", G_CALLBACK(lock_app), app_data);
+    #ifdef ENABLE_MINIMIZE_TO_TRAY
+    if (app_data->use_tray) {
+        init_tray_icon(app_data);
+    }
+    #endif
     if (app_data->use_secret_service == TRUE) {
         // secret service is enabled, so we can't lock the app
         gtk_widget_set_sensitive (lock_btn, FALSE);

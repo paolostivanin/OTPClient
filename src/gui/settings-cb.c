@@ -6,9 +6,13 @@
 #include "../common/secret-schema.h"
 #include "gui-misc.h"
 #include "../common/macros.h"
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+#include "tray.h"
+#endif
 
 typedef struct settings_data_t {
     GtkWidget *dss_switch;
+    GtkWidget *tray_switch;
     GtkWidget *al_switch;
     GtkWidget *inactivity_cb;
     AppData *app_data;
@@ -27,6 +31,10 @@ static void     handle_secretservice_combobox (GtkComboBox *cb,
                                                gpointer     user_data);
 
 static gboolean handle_autolock               (GtkSwitch   *sw,
+                                               gboolean     state,
+                                               gpointer     user_data);
+
+static gboolean handle_tray_switch            (GtkSwitch   *sw,
                                                gboolean     state,
                                                gpointer     user_data);
 
@@ -68,6 +76,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
     app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
     app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
+    app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
     if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
         // if the key is not found, we set it to TRUE and save it to the config file.
         app_data->use_secret_service = TRUE;
@@ -86,6 +95,13 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     GtkWidget *dt_switch = GTK_WIDGET(gtk_builder_get_object (builder, "dark_theme_switch_id"));
     settings_data->dss_switch = GTK_WIDGET(gtk_builder_get_object (builder, "secret_service_switch_id"));
     g_signal_connect (settings_data->dss_switch, "state-set", G_CALLBACK(handle_autolock), settings_data);
+    settings_data->tray_switch = GTK_WIDGET(gtk_builder_get_object (builder, "tray_switch_id"));
+    #ifdef ENABLE_MINIMIZE_TO_TRAY
+    g_signal_connect (settings_data->tray_switch, "state-set", G_CALLBACK(handle_tray_switch), settings_data);
+    #else
+    GtkGrid *grid = GTK_GRID(gtk_builder_get_object(builder, "grid_settings"));
+    gtk_grid_remove_row(grid, 7);  // we cannot control visibility of the child eledments
+    #endif
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
@@ -94,6 +110,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     gtk_switch_set_active (GTK_SWITCH(settings_data->al_switch), app_data->auto_lock);
     gtk_switch_set_active (GTK_SWITCH(dt_switch), app_data->use_dark_theme);
     gtk_switch_set_active (GTK_SWITCH(settings_data->dss_switch), app_data->use_secret_service);
+    gtk_switch_set_active (GTK_SWITCH(settings_data->tray_switch), app_data->use_tray);
     gchar *active_id_string = g_strdup_printf ("%d", app_data->search_column);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(sc_cb), active_id_string);
     g_free (active_id_string);
@@ -115,6 +132,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb)), NULL, 10);
             app_data->use_dark_theme = gtk_switch_get_active (GTK_SWITCH(dt_switch));
             app_data->use_secret_service = gtk_switch_get_active (GTK_SWITCH(settings_data->dss_switch));
+            app_data->use_tray = gtk_switch_get_active (GTK_SWITCH(settings_data->tray_switch));
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
             g_key_file_set_integer (kf, "config", "search_column", app_data->search_column);
@@ -122,6 +140,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
             g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
+            g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
             if (old_ss_value == TRUE && app_data->use_secret_service == FALSE) {
                 // secret service was just disabled, so we have to clear the password from the keyring
                 secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
@@ -256,3 +275,18 @@ handle_autolock (GtkSwitch *sw UNUSED,
 
     return TRUE;
 }
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+static gboolean
+handle_tray_switch (GtkSwitch *sw UNUSED,
+                    gboolean   state,
+                    gpointer   user_data)
+{
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
+    settings_data->app_data->use_tray = state;
+    switch_tray_use (settings_data->app_data);
+    gtk_switch_set_state (GTK_SWITCH(sw), state);
+
+    return TRUE;
+}
+#endif
