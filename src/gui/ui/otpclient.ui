@@ -1991,7 +1991,7 @@ but not the number of digits and/or the period/counter.</property>
         </child>
         <child>
           <!-- n-columns=3 n-rows=7 -->
-          <object class="GtkGrid">
+          <object class="GtkGrid" id="grid_settings">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="orientation">vertical</property>
@@ -2168,6 +2168,29 @@ but not the number of digits and/or the period/counter.</property>
               <packing>
                 <property name="left-attach">1</property>
                 <property name="top-attach">6</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Enable minimize to tray</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">7</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="tray_switch_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">7</property>
               </packing>
             </child>
             <child>

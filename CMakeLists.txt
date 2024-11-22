@@ -13,6 +13,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_GUI "Build the GTK UI" ON)
 option(BUILD_CLI "Build the CLI" ON)
+option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" OFF)
 
 set(CMAKE_C_STANDARD 11)
 set(COMMON_C_FLAGS
@@ -46,8 +47,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${COMMON_LINKER_FLAGS}")
 endif()
 
-add_definitions(-DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\")
-
+add_definitions(
+    -DGETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\"
+    -DDESTINATION="${CMAKE_INSTALL_PREFIX}"
+)
+if (ENABLE_MINIMIZE_TO_TRAY)
+  add_definitions(-DENABLE_MINIMIZE_TO_TRAY=1)
+endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--no-add-needed -Wl,--as-needed -Wl,--no-undefined")
@@ -70,6 +76,9 @@ pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
 pkg_check_modules(PROTOC REQUIRED libprotobuf-c>=1.3.0)
 pkg_check_modules(LIBSECRET REQUIRED libsecret-1>=0.20.0)
 pkg_check_modules(LIBQRENCODE REQUIRED libqrencode>=4.0.2)
+if (ENABLE_MINIMIZE_TO_TRAY)
+  pkg_check_modules(APPINDICATOR REQUIRED ayatana-appindicator3-0.1)
+endif()
 
 set(COMMON_INCDIRS
         ${GCRYPT_INCLUDE_DIRS}
@@ -93,12 +102,18 @@ set(COMMON_LIBS
 
 if(BUILD_GUI)
     add_subdirectory(src/gui)
+    if(ENABLE_MINIMIZE_TO_TRAY)
+        target_include_directories(${PROJECT_NAME} PRIVATE ${APPINDICATOR_INCLUDE_DIRS})
+    endif()
     target_link_libraries(${PROJECT_NAME}
             ${GTK3_LIBRARIES}
             ${PNG_LIBRARIES}
             ${ZBAR_LIBRARIES}
             ${COMMON_LIBS}
     )
+    if(ENABLE_MINIMIZE_TO_TRAY)
+        target_link_libraries(${PROJECT_NAME} ${APPINDICATOR_LIBRARIES})
+    endif()
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
     install(TARGETS ${PROJECT_NAME} DESTINATION bin)

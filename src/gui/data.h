@@ -1,6 +1,9 @@
 #pragma once
 
 #include <gtk/gtk.h>
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+#include <libayatana-appindicator/app-indicator.h>
+#endif
 #include <jansson.h>
 #include "../common/db-common.h"
 
@@ -15,6 +18,9 @@ typedef struct app_data_t {
 
     GtkWidget *main_window;
     GtkTreeView *tree_view;
+    #ifdef ENABLE_MINIMIZE_TO_TRAY
+    AppIndicator *indicator;
+    #endif
 
     GtkClipboard *clipboard;
 
@@ -44,6 +50,8 @@ typedef struct app_data_t {
     gboolean is_reorder_active;
 
     gboolean use_secret_service;
+
+    gboolean use_tray;
 
     GDateTime *last_user_activity;
 
