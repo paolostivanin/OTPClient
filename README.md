@@ -7,6 +7,7 @@
        src="https://scan.coverity.com/projects/12749/badge.svg"/>
 </a>
 
+
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
@@ -70,3 +71,11 @@ sudo make install
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
+
+## IDE
+Developed using JetBrains CLion 
+<a href="https://www.jetbrains.com" style="display: inline-block; vertical-align: middle;">
+  <img alt="CLion logo"
+       src="https://resources.jetbrains.com/storage/products/company/brand/logos/CLion_icon.svg"
+       style="width: 25px; height: 25px; margin-left: 10px;" />
+</a>
