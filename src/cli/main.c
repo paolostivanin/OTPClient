@@ -68,7 +68,7 @@ main (gint    argc,
     g_application_add_main_option_entries (app, entries);
     g_application_set_option_context_parameter_string (app, ctx_text);
 
-    g_signal_connect (app, "handle-local-options", G_CALLBACK (handle_local_options), NULL);
+    g_signal_connect (app, "handle-local-options", G_CALLBACK(handle_local_options), NULL);
     g_signal_connect (app, "command-line", G_CALLBACK(command_line), NULL);
 
     int status = g_application_run (app, argc, argv);

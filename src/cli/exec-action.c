@@ -58,13 +58,38 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     GError *err = NULL;
-    load_db (db_data, &err);
-    if (err != NULL) {
-        gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
-        g_printerr ("%s\n", msg);
-        g_free (msg);
-        free_dbdata (db_data);
-        return FALSE;
+    // If we're creating a new database for import, skip loading
+    if (cmdline_opts->import && !g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
+        // Check if we need to create a new database for import
+        g_print ("Database file does not exist. Creating a new database...\n");
+
+        db_data->in_memory_json_data = json_object ();
+        if (!db_data->in_memory_json_data) {
+            g_printerr ("Error: Failed to initialize new database.\n");
+            g_free (db_data->db_path);
+            return FALSE;
+        }
+        // Save the empty database first
+        update_db (db_data, &err);
+        if (err != NULL) {
+            g_printerr (_("Error while creating new database: %s\n"), err->message);
+            g_clear_error (&err);
+            free_dbdata (db_data);
+            return FALSE;
+        }
+
+        g_print ("Database '%s' created successfully.\n", db_data->db_path);
+        g_print ("Please note that if you want to use this database by default, you must update the config file accordingly");
+    } else {
+        // Load existing database
+        load_db (db_data, &err);
+        if (err != NULL) {
+            gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
+            g_printerr ("%s\n", msg);
+            g_free (msg);
+            free_dbdata (db_data);
+            return FALSE;
+        }
     }
 
     if (use_secret_service == TRUE && db_data->key_stored == FALSE) {
