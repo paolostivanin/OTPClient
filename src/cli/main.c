@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <glib/gi18n.h>
+#include "../common/file-size.h"
 #include "version.h"
 #include "../common/import-export.h"
 #include "main.h"
@@ -123,21 +124,17 @@ command_line (GApplication                *application __attribute__((unused)),
         return -1;
     }
 
-    if (memlock_ret_value == MEMLOCK_TOO_LOW && get_warn_data () == TRUE) {
-        gchar *msg = g_strdup_printf (_("Your operating system's memlock limit (%d bytes) may be too low. This could cause the program to crash or, worse, use insecure memory."
-                                        "Please review the following page using this software with the current settings:"
-                                        "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"), db_data->max_file_size_from_memlock);
-        g_print ("%s\n", msg);
+    if (get_file_size (db_data->db_path) > (goffset)(db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ), db_data->max_file_size_from_memlock);
+        g_printerr ("%s\n", msg);
         g_free (msg);
-
-        gboolean proceed = FALSE;
-        gboolean show_warning = TRUE;
-        handle_warning (&proceed, &show_warning);
-        if (proceed == FALSE) {
-            g_free (db_data);
-            return -1;
-        }
-        set_warn_data (show_warning);
+        g_free (db_data);
+        return -1;
     }
 
     gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
@@ -254,54 +251,6 @@ is_valid_type (const gchar *type)
         }
     }
     return found;
-}
-
-
-static void
-handle_warning (gboolean *proceed,
-                gboolean *show_warning)
-{
-    GError *error = NULL;
-    gchar *input = NULL;
-    gsize len;
-
-    GIOChannel *in_channel = g_io_channel_unix_new (fileno(stdin));
-
-    g_print ("\nDo you want to proceed with the current settings (Y/N)? ");
-    GIOStatus ret = g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
-    if (ret == G_IO_STATUS_ERROR) {
-        g_printerr ("Error reading input: %s\n", error ? error->message : "unknown error");
-        g_clear_error (&error);
-        g_free (input);
-        return;
-    }
-    if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
-        g_print ("\nProceeding with current settings...\n");
-        *proceed = TRUE;
-    } else {
-        g_print ("\nSettings not accepted.\n");
-        g_free (input);
-        return;
-    }
-    g_free (input);
-
-    g_print ("\nDo you want to disable this warning (Y/N)? ");
-    ret = g_io_channel_read_line (in_channel, &input, &len, NULL, &error);
-    if (ret == G_IO_STATUS_ERROR) {
-        g_printerr ("Error reading input: %s\n", error ? error->message : "unknown error");
-        g_clear_error (&error);
-        g_free (input);
-        return;
-    }
-    if (g_ascii_strncasecmp (input, "Y", 1) == 0) {
-        g_print("\nWarning disabled.\n");
-        *show_warning = FALSE;
-    } else {
-        g_print ("\nWarning remains enabled.\n");
-    }
-    g_free(input);
-
-    g_io_channel_unref(in_channel);
 }
 
 

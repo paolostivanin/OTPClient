@@ -2,6 +2,9 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <time.h>
+#include <glib/gi18n.h>
+
+#include "common.h"
 #include "gquarks.h"
 #include "parse-uri.h"
 
@@ -9,8 +12,19 @@
 GSList *
 get_freeotpplus_data (const gchar  *path,
                       gint32        max_file_size,
+                      gsize         db_size,
                       GError      **err)
 {
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely import the data.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
     return get_otpauth_data (path, max_file_size, err);
 }
 
@@ -19,6 +33,16 @@ gchar *
 export_freeotpplus (const gchar *export_path,
                     json_t      *json_db_data)
 {
+    gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, NULL)) {
+        return g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely export the database.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+    }
+
     json_t *db_obj;
     gsize index;
 

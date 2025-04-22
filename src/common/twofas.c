@@ -2,6 +2,8 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <glib/gi18n.h>
+
 #include "gquarks.h"
 #include "common.h"
 #include "file-size.h"
@@ -45,13 +47,26 @@ static GSList   *parse_twofas_json_data         (const gchar       *data,
 GSList *
 get_twofas_data (const gchar  *path,
                  const gchar  *password,
-                 gint32        max_file_size,
+                 gsize         db_size,
                  GError      **err)
 {
-    if (get_file_size (path) > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
         return NULL;
     }
+
+    goffset input_size = get_file_size (path);
+    if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely import the data.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
 }
 
@@ -62,6 +77,18 @@ export_twofas (const gchar *export_path,
                json_t      *json_db_data)
 {
     GError *err = NULL;
+    gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely export the database.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     gint64 epoch_time = g_get_real_time();
 
     json_t *root = json_object ();

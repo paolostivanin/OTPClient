@@ -477,42 +477,16 @@ get_kf_ptr (void)
 
 
 gboolean
-get_warn_data (void)
+is_secmem_available (gsize    required_size,
+                     GError **err)
 {
-    GKeyFile *kf = get_kf_ptr ();
-    gboolean show_warning = TRUE;
-    GError *err = NULL;
-    if (kf != NULL) {
-        show_warning = g_key_file_get_boolean (kf, "config", "show_memlock_warning", &err);
-        if (err != NULL && (err->code == G_KEY_FILE_ERROR_KEY_NOT_FOUND || err->code == G_KEY_FILE_ERROR_INVALID_VALUE)) {
-            // value is not present, so we want to show the warning
-            show_warning = TRUE;
-        }
-        g_key_file_free (kf);
+    void *test = gcry_malloc_secure (required_size);
+    if (test == NULL) {
+        g_set_error(err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE,
+                   "Not enough secure memory available (%zu bytes requested).",
+                   required_size);
+        return FALSE;
     }
-
-    return show_warning;
-}
-
-
-void
-set_warn_data (gboolean show_warning)
-{
-    GKeyFile *kf = get_kf_ptr ();
-    GError *err = NULL;
-    if (kf != NULL) {
-        g_key_file_set_boolean (kf, "config", "show_memlock_warning", show_warning);
-        gchar *cfg_file_path;
-#ifndef IS_FLATPAK
-        cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-        cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
-        }
-        g_free (cfg_file_path);
-        g_key_file_free (kf);
-    }
+    gcry_free (test);
+    return TRUE;
 }

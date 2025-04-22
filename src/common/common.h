@@ -11,6 +11,8 @@ G_BEGIN_DECLS
 #define MEMLOCK_OK                       2
 #define MEMLOCK_TOO_LOW                  3
 #define DEFAULT_MEMLOCK_VALUE     67108864 // 64 MiB
+#define SECMEM_SIZE_THRESHOLD_RATIO   0.80
+#define SECMEM_REQUIRED_MULTIPLIER       3
 
 #define ANDOTP                 100
 #define AUTHPRO                101
@@ -94,8 +96,7 @@ void              json_free                      (gpointer            data);
 
 GKeyFile         *get_kf_ptr                     (void);
 
-gboolean          get_warn_data                  (void);
-
-void              set_warn_data                  (gboolean            show_warning);
+gboolean          is_secmem_available            (gsize               required_size,
+                                                  GError            **err);
 
 G_END_DECLS

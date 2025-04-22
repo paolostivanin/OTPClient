@@ -56,7 +56,7 @@ parse_data_and_update_db (AppData       *app_data,
         }
     }
 
-    GSList *content = get_data_from_provider (action_name, filename, pwd, app_data->db_data->max_file_size_from_memlock, &err);
+    GSList *content = get_data_from_provider (action_name, filename, pwd, app_data->db_data->max_file_size_from_memlock, json_dumpb (app_data->db_data->in_memory_json_data, NULL, 0, 0), &err);
     if (content == NULL) {
         const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
         gchar *msg_with_err = NULL;
