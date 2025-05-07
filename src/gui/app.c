@@ -24,6 +24,7 @@
 #include "dbinfo-cb.h"
 #include "change-file-cb.h"
 #include "change-db-sec.h"
+#include "../common/file-size.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
 #endif
@@ -69,9 +70,6 @@ static void       store_data                (const gchar        *param1_name,
 static gboolean   key_pressed_cb            (GtkWidget          *window,
                                              GdkEventKey        *event_key,
                                              gpointer            user_data);
-
-static gboolean   show_memlock_warn_dialog  (gint32              memlock_value,
-                                             GtkBuilder         *builder);
 
 static void       set_open_db_action        (GtkWidget          *btn,
                                              gpointer            user_data);
@@ -128,15 +126,6 @@ activate (GtkApplication    *app,
         return;
     }
 
-    if (memlock_ret_value == MEMLOCK_TOO_LOW && get_warn_data () == TRUE) {
-        if (show_memlock_warn_dialog (memlock_value, app_data->builder) == TRUE) {
-            g_free (app_data->db_data);
-            g_free (app_data);
-            g_application_quit (G_APPLICATION(app));
-            return;
-        }
-    }
-
     gchar *init_msg = init_libs (memlock_value);
     if (init_msg != NULL) {
         show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
@@ -147,13 +136,36 @@ activate (GtkApplication    *app,
     }
 
 #ifdef IS_FLATPAK
-    app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
-    gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
+    // Check if a path is already set in the config
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf != NULL) {
+        gchar *db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
+        if (db_path != NULL) {
+            app_data->db_data->db_path = db_path;
+        } else {
+            // Use the default path only if no path is set in config
+            app_data->db_data->db_path = g_build_filenam e(g_get_user_data_dir (), "otpclient-db.enc", NULL);
+            gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+            if (g_file_tes t(cfg_file_path, G_FILE_TEST_EXISTS)) {
+                g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
+                g_key_file_save_to_file (kf, cfg_file_path, NULL);
+            }
+            g_free (cfg_file_path);
+        }
+        g_key_file_free (kf);
+    } else {
+        // If no config exists yet, use the default path
+        app_data->db_data->db_path = g_build_filename (g_get_user_data_dir(), "otpclient-db.enc", NULL);
+        // Create a minimal config
+        gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+        if (!g_file_test(cfg_file_path, G_FILE_TEST_EXISTS)) {
+            GKeyFile *new_kf = g_key_file_new ();
+            g_key_file_set_string (new_kf, "config", "db_path", app_data->db_data->db_path);
+            g_key_file_save_to_file (new_kf, cfg_file_path, NULL);
+            g_key_file_free (new_kf);
+        }
+        g_free (cfg_file_path);
     }
-    g_free (cfg_file_path);
 #else
     if (!g_file_test (g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL), G_FILE_TEST_EXISTS)) {
         app_data->diag_rcdb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
@@ -196,11 +208,10 @@ activate (GtkApplication    *app,
         if (pwd == NULL) {
             g_printerr ("%s\n", _("Couldn't find the password in the secret service."));
             goto retry;
-        } else {
-            app_data->db_data->key_stored = TRUE;
-            app_data->db_data->key= secure_strdup (pwd);
-            secret_password_free (pwd);
         }
+        app_data->db_data->key_stored = TRUE;
+        app_data->db_data->key= secure_strdup (pwd);
+        secret_password_free (pwd);
     } else {
         retry:
         app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
@@ -211,10 +222,24 @@ activate (GtkApplication    *app,
                 g_free (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
-            } else {
-                goto retry_change_file;
             }
+            goto retry_change_file;
         }
+    }
+
+    if (get_file_size (app_data->db_data->db_path) > (goffset)(app_data->db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ), memlock_value);
+        g_printerr ("%s\n", msg);
+        g_free (msg);
+        g_free (app_data->db_data);
+        g_free (app_data);
+        g_application_quit (G_APPLICATION(app));
+        return;
     }
 
     GError *err = NULL;
@@ -279,37 +304,6 @@ activate (GtkApplication    *app,
     app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
 
     gtk_widget_show_all (app_data->main_window);
-}
-
-
-static gboolean
-show_memlock_warn_dialog (gint32      memlock_value,
-                          GtkBuilder *builder)
-{
-    gchar *msg = g_strdup_printf (_("Your operating system's memlock limit (%d bytes) may be too low. This could cause the program to crash or, worse, use insecure memory."
-                                    "Please review the <a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a> "
-                                    "before using this software with the current settings."), memlock_value);
-    GtkWidget *warn_diag = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_id"));
-    GtkLabel *warn_label = GTK_LABEL(gtk_builder_get_object (builder, "warning_diag_label_id"));
-    GtkWidget *warn_chk_btn = GTK_WIDGET(gtk_builder_get_object (builder, "warning_diag_check_btn_id"));
-    gtk_label_set_label (warn_label, msg);
-    gtk_widget_show_all (warn_diag);
-    gboolean quit = FALSE;
-    gint result = gtk_dialog_run (GTK_DIALOG (warn_diag));
-    switch (result) {
-        case GTK_RESPONSE_OK:
-            set_warn_data (!gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(warn_chk_btn)));
-            break;
-        case GTK_RESPONSE_CLOSE:
-        default:
-            set_warn_data (!gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(warn_chk_btn)));
-            quit = TRUE;
-            break;
-    }
-    gtk_widget_destroy (warn_diag);
-    g_free (msg);
-
-    return quit;
 }
 
 

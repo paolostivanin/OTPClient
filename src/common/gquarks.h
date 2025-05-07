@@ -13,6 +13,7 @@ G_BEGIN_DECLS
 #define SECMEM_ALLOC_ERRCODE    16
 #define NONDIGITS_ERRCODE       17
 #define OUTOFRANGE_ERRCODE      18
+#define NO_SECMEM_AVAIL_ERRCODE 19
 #define FILE_SIZE_SECMEM_MSG    "Selected file is too big. Please increase the secure memory size."
 
 GQuark missing_file_gquark       (void);

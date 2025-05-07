@@ -20,6 +20,7 @@ GSList *get_data_from_provider (const gchar  *action_name,
                                 const gchar  *filename,
                                 const gchar  *pwd,
                                 gint32        max_file_size_from_memlock,
+                                gsize         db_size,
                                 GError      **err);
 
 gchar  *export_andotp          (const gchar      *export_path,

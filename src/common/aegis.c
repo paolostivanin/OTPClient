@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
@@ -6,6 +7,7 @@
 #include <uuid/uuid.h>
 #include "gquarks.h"
 #include "common.h"
+#include "file-size.h"
 #include "parse-uri.h"
 
 
@@ -29,17 +31,31 @@ static GSList   *parse_aegis_json_data          (const gchar  *data,
 static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
                                                  GError      **err);
 
-static gchar    *remove_icons_from_db           (const gchar  *decrypted_db);
+static gchar    *remove_icons_from_db           (const gchar  *decrypted_db,
+                                                 gboolean      use_secure_memory);
 
 
 GSList *
 get_aegis_data (const gchar     *path,
                 const gchar     *password,
                 gint32           max_file_size,
+                gsize            db_size,
                 GError         **err)
 {
     if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+        return NULL;
+    }
+
+    goffset input_size = get_file_size (path);
+    if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely import the data.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
         return NULL;
     }
 
@@ -49,7 +65,7 @@ get_aegis_data (const gchar     *path,
 
 static GSList *
 get_otps_from_plain_backup (const gchar  *path,
-                            GError      **err)
+                           GError      **err)
 {
     GSList *otps = NULL;
     if (is_file_otpauth_txt (path, err)) {
@@ -71,11 +87,11 @@ get_otps_from_plain_backup (const gchar  *path,
         }
 
         gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
-        gchar *cleaned_db = remove_icons_from_db (dumped_json);
-        gcry_free (dumped_json);
+        gchar *cleaned_db = remove_icons_from_db (dumped_json, FALSE);
+        g_free (dumped_json);
 
         otps = parse_aegis_json_data (cleaned_db, err);
-        gcry_free (cleaned_db);
+        g_free (cleaned_db);
         json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
     }
     return otps;
@@ -193,7 +209,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
     gsize out_len;
     guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
-    if (out_len > (gint32)(max_file_size*0.85)) {
+    if (out_len > (gint32)(max_file_size * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        // Input data is too big, so we don't load it into secure memory
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         g_free (tag);
         g_free (nonce);
@@ -232,7 +249,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gcry_cipher_close (hd);
     gcry_free (master_key);
 
-    gchar *cleaned_db = remove_icons_from_db (decrypted_db);
+    gchar *cleaned_db = remove_icons_from_db (decrypted_db, TRUE);
     GSList *otps = parse_aegis_json_data (cleaned_db, err);
     gcry_free (cleaned_db);
 
@@ -246,6 +263,18 @@ export_aegis (const gchar   *export_path,
               json_t        *json_db_data)
 {
     GError *err = NULL;
+    gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely export the database.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     json_t *root = json_object ();
     json_object_set (root, "version", json_integer (1));
 
@@ -377,7 +406,7 @@ export_aegis (const gchar   *export_path,
         if (hd == NULL) {
             goto clean_and_return;
         }
-        size_t db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
+        db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
         guchar *enc_db = g_malloc0 (db_size);
         gchar *dumped_db = g_malloc0 (db_size);
         json_dumpb (aegis_db_obj, dumped_db, db_size, 0);
@@ -559,11 +588,15 @@ is_file_otpauth_txt (const gchar  *file_path,
 
 
 static gchar *
-remove_icons_from_db (const gchar *decrypted_db)
+remove_icons_from_db (const gchar *decrypted_db,
+                      gboolean     use_secure_memory)
 {
+    typedef gchar* (*StrDupFunc)(const gchar*);
+    StrDupFunc strdup_func = use_secure_memory == TRUE ? secure_strdup : g_strdup;
+
     // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
     GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
-    gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
+    gchar *cleaned_db = strdup_func (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
     g_regex_unref (regex);
 
     return cleaned_db;
