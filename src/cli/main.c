@@ -31,7 +31,6 @@ main (gint    argc,
       gchar **argv)
 {
     g_autofree gchar *type_msg = g_strconcat ("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: ",
-                                         ANDOTP_PLAIN_ACTION_NAME, ", ", ANDOTP_ENC_ACTION_NAME, ", ",
                                          AEGIS_PLAIN_ACTION_NAME, ", ", AEGIS_ENC_ACTION_NAME, ", ",
                                          AUTHPRO_PLAIN_ACTION_NAME, ", ", AUTHPRO_ENC_ACTION_NAME, ", ",
                                          TWOFAS_PLAIN_ACTION_NAME, ", ", TWOFAS_ENC_ACTION_NAME, ", ",
@@ -233,8 +232,7 @@ parse_options (GApplicationCommandLine *cmdline,
 static gboolean
 is_valid_type (const gchar *type)
 {
-    const gchar *supported_types[] = {ANDOTP_PLAIN_ACTION_NAME, ANDOTP_ENC_ACTION_NAME,
-                                      AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
+    const gchar *supported_types[] = {AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
                                       TWOFAS_PLAIN_ACTION_NAME, TWOFAS_ENC_ACTION_NAME,
                                       AUTHPRO_PLAIN_ACTION_NAME, AUTHPRO_ENC_ACTION_NAME,
                                       FREEOTPPLUS_PLAIN_ACTION_NAME};

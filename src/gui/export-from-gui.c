@@ -24,8 +24,9 @@ export_data_cb (GSimpleAction *simple,
 
     gboolean encrypted = FALSE;
     gchar *password = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0 ||
-        g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
         password = prompt_for_password (app_data, NULL, NULL, TRUE);
         if (password == NULL) {
             return;
@@ -49,9 +50,7 @@ export_data_cb (GSimpleAction *simple,
     gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER(fl_diag), FALSE);
 
     const gchar *filename = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0) {
-        filename = (encrypted == TRUE) ? "andotp_exports.json.aes" : "andotp_exports.json";
-    } else if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
         filename = "freeotpplus-exports.txt";
     } else if (g_strcmp0 (action_name, AEGIS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0) {
         filename = (encrypted == TRUE) ? "aegis_encrypted.json" : "aegis_export_plain.json";
@@ -82,9 +81,7 @@ export_data_cb (GSimpleAction *simple,
     }
 
     g_autofree gchar *ret_msg = NULL;
-    if (g_strcmp0 (action_name, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0) {
-        ret_msg = export_andotp (export_file_abs_path, password, app_data->db_data->in_memory_json_data);
-    } else if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
         ret_msg = export_freeotpplus (export_file_abs_path, app_data->db_data->in_memory_json_data);
     } else if (g_strcmp0 (action_name, AEGIS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0) {
         ret_msg = export_aegis (export_file_abs_path, password, app_data->db_data->in_memory_json_data);

@@ -894,7 +894,7 @@ has been found or after 30 seconds if nothing has been detected.</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">True</property>
-                <property name="tooltip-text" translatable="yes">Do NOT use to import third party databases (e.g. andOTP)</property>
+                <property name="tooltip-text" translatable="yes">Do NOT use to import third party databases (e.g. Aegis)</property>
                 <child>
                   <object class="GtkLabel">
                     <property name="visible">True</property>

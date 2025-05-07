@@ -174,19 +174,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #endif
         gboolean exported = FALSE;
         gchar *export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
-                export_pwd = get_pwd (_("Type the export encryption password: "));
-                if (export_pwd == NULL) {
-                    free_dbdata (db_data);
-                    return FALSE;
-                }
-            }
-            exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
-            ret_msg = export_andotp (exported_file_path, export_pwd, db_data->in_memory_json_data);
-            gcry_free (export_pwd);
-            exported = TRUE;
-        }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
             exported_file_path = g_build_filename (export_directory, "freeotpplus-exports.txt", NULL);
             ret_msg = export_freeotpplus (exported_file_path, db_data->in_memory_json_data);
