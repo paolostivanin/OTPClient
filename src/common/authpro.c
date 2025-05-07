@@ -227,7 +227,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
         return NULL;
     }
 
-    gchar *decrypted_json = get_data_from_encrypted_backup (path, password, max_file_size, AUTHPRO, 0, in_file, in_stream, err);
+    gchar *decrypted_json = get_data_from_encrypted_backup (path, password, max_file_size, AUTHPRO, in_file, in_stream, err);
     if (decrypted_json == NULL) {
         return NULL;
     }

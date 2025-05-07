@@ -89,6 +89,18 @@
   </content_rating>
 
   <releases>
+    <release version="4.1.0" date="2025-05-07">
+      <description>
+        <p>OTPClient 4.1.0 the followin improvements:</p>
+        <ul>
+          <li>ADDED: minimize to tray with ayatana-appindicator3 (#386 thanks a lot @len-foss)</li>
+          <li>IMPROVED: only show memlock warning dialog when secure memory is unavailable (#397)</li>
+          <li>IMPROVED: allow creating a database via CLI (#392)</li>
+          <li>FIX: allow using different databases in flatpak (#372)</li>
+          <li>CHANGED: removed andOTP support</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.0.2" date="2024-08-06">
       <description>
         <p>OTPClient 4.0.2 brings an important fix:</p>

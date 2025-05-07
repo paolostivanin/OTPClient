@@ -48,8 +48,9 @@ parse_data_and_update_db (AppData       *app_data,
     GError *err = NULL;
     gchar *pwd = NULL;
 
-    if (g_strcmp0 (action_name, ANDOTP_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0 ||
-        g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
+    if (g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0 ||
+        g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
         pwd = prompt_for_password (app_data, NULL, action_name, FALSE);
         if (pwd == NULL) {
             return FALSE;

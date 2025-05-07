@@ -404,8 +404,6 @@ create_main_window (gint     width,
     }
 
     static GActionEntry import_menu_entries[] = {
-            { .name = ANDOTP_PLAIN_ACTION_NAME, .activate = import_data_cb },
-            { .name = ANDOTP_ENC_ACTION_NAME, .activate = import_data_cb },
             { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = import_data_cb },
             { .name = AEGIS_PLAIN_ACTION_NAME, .activate = import_data_cb },
             { .name = AEGIS_ENC_ACTION_NAME, .activate = import_data_cb },
@@ -418,8 +416,6 @@ create_main_window (gint     width,
     };
 
     static GActionEntry export_menu_entries[] = {
-            { .name = ANDOTP_PLAIN_ACTION_NAME, .activate = export_data_cb },
-            { .name = ANDOTP_ENC_ACTION_NAME, .activate = export_data_cb },
             { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_PLAIN_ACTION_NAME, .activate = export_data_cb },
             { .name = AEGIS_ENC_ACTION_NAME, .activate = export_data_cb },

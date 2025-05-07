@@ -36,7 +36,6 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - support setting a custom period (between 10 and 120 seconds inclusive)
 - support SHA1, SHA256 and SHA512 algorithms
 - support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
-- import and export encrypted/plain [andOTP](https://github.com/flocke/andOTP) backup
 - import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
 - import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
 - import and export encrypted/plain [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) backup

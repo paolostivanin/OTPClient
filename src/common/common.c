@@ -177,40 +177,17 @@ get_authpro_derived_key (const gchar *password,
 }
 
 
-guchar *
-get_andotp_derived_key (const gchar  *password,
-                        const guchar *salt,
-                        guint32       iterations)
-{
-    guchar *derived_key = gcry_malloc_secure (32);
-    gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
-                                         salt, ANDOTP_IV_SALT, iterations, 32, derived_key);
-    if (g_err != GPG_ERR_NO_ERROR) {
-        g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
-        gcry_free (derived_key);
-        return NULL;
-    }
-
-    return derived_key;
-}
-
-
 gchar *
 get_data_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,
                                 gint32             max_file_size,
                                 gint32             provider,
-                                guint32            andotp_be_iterations,
                                 GFile             *in_file,
                                 GFileInputStream  *in_stream,
                                 GError           **err)
 {
     gint32 salt_size = 0, iv_size = 0, tag_size = 0;
     switch (provider) {
-        case ANDOTP:
-            salt_size = iv_size = ANDOTP_IV_SALT;
-            tag_size = ANDOTP_TAG;
-            break;
         case AUTHPRO:
             salt_size = tag_size = AUTHPRO_SALT_TAG;
             iv_size = AUTHPRO_IV;
@@ -247,10 +224,6 @@ get_data_from_encrypted_backup (const gchar       *path,
     gsize enc_buf_size;
     gint32 offset = 0;
     switch (provider) {
-        case ANDOTP:
-            // 4 is the size of iterations (int32)
-            offset = 4;
-            break;
         case AUTHPRO:
             // 16 is the size of the header
             offset = 16;
@@ -287,9 +260,6 @@ get_data_from_encrypted_backup (const gchar       *path,
 
     guchar *derived_key = NULL;
     switch (provider) {
-        case ANDOTP:
-            derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations);
-            break;
         case AUTHPRO:
             derived_key = get_authpro_derived_key (password, salt);
             break;
