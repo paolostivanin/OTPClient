@@ -22,12 +22,24 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data)
 {
 #ifdef IS_FLATPAK
-    db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
+    // Check if a path is already set in the config
+    GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
+            db_data->db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
+        }
     }
+    // If no path is defined in config or the file doesn't exist, use default
+    if (db_data->db_path == NULL) {
+        db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
+        // Create or update the config with the default path
+        if (!g_key_file_has_group (kf, "config")) {
+            g_key_file_set_string (kf, "config", "db_path", db_data->db_path);
+            g_key_file_save_to_file (kf, cfg_file_path, NULL);
+        }
+    }
+    g_key_file_free (kf);
     g_free (cfg_file_path);
 #else
     db_data->db_path = (cmdline_opts->database != NULL) ? g_strdup (cmdline_opts->database) : get_db_path ();

@@ -136,13 +136,36 @@ activate (GtkApplication    *app,
     }
 
 #ifdef IS_FLATPAK
-    app_data->db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
-    gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
+    // Check if a path is already set in the config
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf != NULL) {
+        gchar *db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
+        if (db_path != NULL) {
+            app_data->db_data->db_path = db_path;
+        } else {
+            // Use the default path only if no path is set in config
+            app_data->db_data->db_path = g_build_filenam e(g_get_user_data_dir (), "otpclient-db.enc", NULL);
+            gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+            if (g_file_tes t(cfg_file_path, G_FILE_TEST_EXISTS)) {
+                g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
+                g_key_file_save_to_file (kf, cfg_file_path, NULL);
+            }
+            g_free (cfg_file_path);
+        }
+        g_key_file_free (kf);
+    } else {
+        // If no config exists yet, use the default path
+        app_data->db_data->db_path = g_build_filename (g_get_user_data_dir(), "otpclient-db.enc", NULL);
+        // Create a minimal config
+        gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+        if (!g_file_test(cfg_file_path, G_FILE_TEST_EXISTS)) {
+            GKeyFile *new_kf = g_key_file_new ();
+            g_key_file_set_string (new_kf, "config", "db_path", app_data->db_data->db_path);
+            g_key_file_save_to_file (new_kf, cfg_file_path, NULL);
+            g_key_file_free (new_kf);
+        }
+        g_free (cfg_file_path);
     }
-    g_free (cfg_file_path);
 #else
     if (!g_file_test (g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL), G_FILE_TEST_EXISTS)) {
         app_data->diag_rcdb = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
