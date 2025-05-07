@@ -50,15 +50,14 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #endif
 
     gboolean use_secret_service = get_use_secretservice ();
-    if (use_secret_service == TRUE) {
+    if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
             goto get_pwd;
-        } else {
-            db_data->key_stored = TRUE;
-            db_data->key= secure_strdup (pwd);
-            secret_password_free (pwd);
         }
+        db_data->key_stored = TRUE;
+        db_data->key= secure_strdup (pwd);
+        secret_password_free (pwd);
     } else {
         get_pwd:
         db_data->key = get_pwd (_("Type the DB decryption password: "));
@@ -72,15 +71,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     GError *err = NULL;
     // If we're creating a new database for import, skip loading
     if (cmdline_opts->import && !g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-        // Check if we need to create a new database for import
         g_print ("Database file does not exist. Creating a new database...\n");
-
-        db_data->in_memory_json_data = json_object ();
-        if (!db_data->in_memory_json_data) {
-            g_printerr ("Error: Failed to initialize new database.\n");
-            g_free (db_data->db_path);
-            return FALSE;
-        }
         // Save the empty database first
         update_db (db_data, &err);
         if (err != NULL) {
@@ -91,7 +82,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
 
         g_print ("Database '%s' created successfully.\n", db_data->db_path);
-        g_print ("Please note that if you want to use this database by default, you must update the config file accordingly");
+        g_print ("\nATTENTION: if you want to use this database by default, you must update the config file accordingly.\n\n");
     } else {
         // Load existing database
         load_db (db_data, &err);

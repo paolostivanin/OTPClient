@@ -20,9 +20,6 @@ static gboolean  parse_options         (GApplicationCommandLine *cmdline,
 
 static gboolean  is_valid_type         (const gchar             *type);
 
-static void      handle_warning        (gboolean                *proceed,
-                                        gboolean                *show_warning);
-
 static void      g_free_cmdline_opts   (CmdlineOpts             *co);
 
 
@@ -136,7 +133,7 @@ command_line (GApplication                *application __attribute__((unused)),
 
     gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
     if (init_msg != NULL) {
-        g_application_command_line_printerr(cmdline, "Error while initializing GCrypt: %s\n", init_msg);
+        g_application_command_line_printerr (cmdline, "Error while initializing GCrypt: %s\n", init_msg);
         g_free (init_msg);
         g_free (db_data);
         return -1;
@@ -199,11 +196,10 @@ parse_options (GApplicationCommandLine *cmdline,
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
             g_application_command_line_print (cmdline, "Please provide an import type.\n");
             return FALSE;
-        } else {
-            if (!is_valid_type (cmdline_opts->import_type)) {
-                g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
-                return FALSE;
-            }
+        }
+        if (!is_valid_type (cmdline_opts->import_type)) {
+            g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
+            return FALSE;
         }
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
             g_application_command_line_print (cmdline, "Please provide a file to import.\n");
@@ -215,11 +211,10 @@ parse_options (GApplicationCommandLine *cmdline,
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
             g_application_command_line_print (cmdline, "Please provide an export type (see --help).\n");
             return FALSE;
-        } else {
-            if (!is_valid_type (cmdline_opts->export_type)) {
-                g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
-                return FALSE;
-            }
+        }
+        if (!is_valid_type (cmdline_opts->export_type)) {
+            g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
+            return FALSE;
         }
 #ifndef IS_FLATPAK
         g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir);

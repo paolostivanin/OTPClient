@@ -5,6 +5,10 @@ get_file_size (const gchar *file_path)
 {
     GError *error = NULL;
 
+    if (file_path == NULL || !g_file_test (file_path, G_FILE_TEST_EXISTS)) {
+        return 0;
+    }
+
     GFile *file = g_file_new_for_path (file_path);
     GFileInfo *info = g_file_query_info (G_FILE(file), "standard::*", G_FILE_QUERY_INFO_NONE, NULL, &error);
     if (info == NULL) {
