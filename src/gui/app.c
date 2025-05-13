@@ -144,9 +144,9 @@ activate (GtkApplication    *app,
             app_data->db_data->db_path = db_path;
         } else {
             // Use the default path only if no path is set in config
-            app_data->db_data->db_path = g_build_filenam e(g_get_user_data_dir (), "otpclient-db.enc", NULL);
+            app_data->db_data->db_path = g_build_filename(g_get_user_data_dir (), "otpclient-db.enc", NULL);
             gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-            if (g_file_tes t(cfg_file_path, G_FILE_TEST_EXISTS)) {
+            if (g_file_test(cfg_file_path, G_FILE_TEST_EXISTS)) {
                 g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
                 g_key_file_save_to_file (kf, cfg_file_path, NULL);
             }
