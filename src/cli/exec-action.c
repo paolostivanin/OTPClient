@@ -22,12 +22,24 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data)
 {
 #ifdef IS_FLATPAK
-    db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-    // on the first run the cfg file is not created in the flatpak version because we use a non-changeable db path
+    // Check if a path is already set in the config
+    GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        g_file_set_contents (cfg_file_path, "[config]", -1, NULL);
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
+            db_data->db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
+        }
     }
+    // If no path is defined in config or the file doesn't exist, use default
+    if (db_data->db_path == NULL) {
+        db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
+        // Create or update the config with the default path
+        if (!g_key_file_has_group (kf, "config")) {
+            g_key_file_set_string (kf, "config", "db_path", db_data->db_path);
+            g_key_file_save_to_file (kf, cfg_file_path, NULL);
+        }
+    }
+    g_key_file_free (kf);
     g_free (cfg_file_path);
 #else
     db_data->db_path = (cmdline_opts->database != NULL) ? g_strdup (cmdline_opts->database) : get_db_path ();
@@ -38,15 +50,14 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #endif
 
     gboolean use_secret_service = get_use_secretservice ();
-    if (use_secret_service == TRUE) {
+    if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
             goto get_pwd;
-        } else {
-            db_data->key_stored = TRUE;
-            db_data->key= secure_strdup (pwd);
-            secret_password_free (pwd);
         }
+        db_data->key_stored = TRUE;
+        db_data->key= secure_strdup (pwd);
+        secret_password_free (pwd);
     } else {
         get_pwd:
         db_data->key = get_pwd (_("Type the DB decryption password: "));
@@ -58,13 +69,30 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     GError *err = NULL;
-    load_db (db_data, &err);
-    if (err != NULL) {
-        gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
-        g_printerr ("%s\n", msg);
-        g_free (msg);
-        free_dbdata (db_data);
-        return FALSE;
+    // If we're creating a new database for import, skip loading
+    if (cmdline_opts->import && !g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
+        g_print ("Database file does not exist. Creating a new database...\n");
+        // Save the empty database first
+        update_db (db_data, &err);
+        if (err != NULL) {
+            g_printerr (_("Error while creating new database: %s\n"), err->message);
+            g_clear_error (&err);
+            free_dbdata (db_data);
+            return FALSE;
+        }
+
+        g_print ("Database '%s' created successfully.\n", db_data->db_path);
+        g_print ("\nATTENTION: if you want to use this database by default, you must update the config file accordingly.\n\n");
+    } else {
+        // Load existing database
+        load_db (db_data, &err);
+        if (err != NULL) {
+            gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
+            g_printerr ("%s\n", msg);
+            g_free (msg);
+            free_dbdata (db_data);
+            return FALSE;
+        }
     }
 
     if (use_secret_service == TRUE && db_data->key_stored == FALSE) {
@@ -90,7 +118,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
 
-        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, get_max_file_size_from_memlock (), &err);
+        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, json_dumpb (db_data->in_memory_json_data, NULL, 0, 0), &err);
         if (otps == NULL) {
             const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
             gchar *msg_with_err = NULL;
@@ -112,12 +140,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         free_otps_gslist (otps, g_slist_length (otps));
 
         update_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while updating the database: %s\n", err->message);
             return FALSE;
         }
         reload_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_CODE)) {
+        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while reloading the database: %s\n", err->message);
             return FALSE;
         }
@@ -137,22 +165,9 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #endif
         gboolean exported = FALSE;
         gchar *export_pwd = NULL, *exported_file_path = NULL, *ret_msg = NULL;
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
-            if (g_ascii_strcasecmp (cmdline_opts->export_type, ANDOTP_ENC_ACTION_NAME) == 0) {
-                export_pwd = get_pwd (_("Type the export encryption password: "));
-                if (export_pwd == NULL) {
-                    free_dbdata (db_data);
-                    return FALSE;
-                }
-            }
-            exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "andotp_exports.json.aes" : "andotp_exports.json", NULL);
-            ret_msg = export_andotp (exported_file_path, export_pwd, db_data->json_data);
-            gcry_free (export_pwd);
-            exported = TRUE;
-        }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
             exported_file_path = g_build_filename (export_directory, "freeotpplus-exports.txt", NULL);
-            ret_msg = export_freeotpplus (exported_file_path, db_data->json_data);
+            ret_msg = export_freeotpplus (exported_file_path, db_data->in_memory_json_data);
             exported = TRUE;
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
@@ -164,7 +179,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "aegis_exports.json.aes" : "aegis_exports.json", NULL);
-            ret_msg = export_aegis (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_aegis (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }
@@ -177,7 +192,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "twofas_encrypted_v4.2fas" : "twofas_plain_v4.2fas", NULL);
-            ret_msg = export_twofas (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_twofas (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }
@@ -190,7 +205,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 }
             }
             exported_file_path = g_build_filename (export_directory, export_pwd != NULL ? "authpro_encrypted.bin" : "authpro_plain.json", NULL);
-            ret_msg = export_authpro (exported_file_path, export_pwd, db_data->json_data);
+            ret_msg = export_authpro (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
         }

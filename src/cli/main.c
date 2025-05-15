@@ -1,6 +1,8 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
+#include <glib/gi18n.h>
+#include "../common/file-size.h"
 #include "version.h"
 #include "../common/import-export.h"
 #include "main.h"
@@ -26,7 +28,6 @@ main (gint    argc,
       gchar **argv)
 {
     g_autofree gchar *type_msg = g_strconcat ("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: ",
-                                         ANDOTP_PLAIN_ACTION_NAME, ", ", ANDOTP_ENC_ACTION_NAME, ", ",
                                          AEGIS_PLAIN_ACTION_NAME, ", ", AEGIS_ENC_ACTION_NAME, ", ",
                                          AUTHPRO_PLAIN_ACTION_NAME, ", ", AUTHPRO_ENC_ACTION_NAME, ", ",
                                          TWOFAS_PLAIN_ACTION_NAME, ", ", TWOFAS_ENC_ACTION_NAME, ", ",
@@ -35,9 +36,7 @@ main (gint    argc,
 
     GOptionEntry entries[] =
             {
-#ifndef IS_FLATPAK
                     { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) path to the database. Default value is taken from otpclient.cfg", NULL },
-#endif
                     { "show", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show a token for a given account.", NULL },
                     { "account", 'a', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Account name (to be used with --show, mandatory)", NULL},
                     { "issuer", 'i', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Issuer (to be used with --show, optional)", NULL},
@@ -63,7 +62,7 @@ main (gint    argc,
     g_application_add_main_option_entries (app, entries);
     g_application_set_option_context_parameter_string (app, ctx_text);
 
-    g_signal_connect (app, "handle-local-options", G_CALLBACK (handle_local_options), NULL);
+    g_signal_connect (app, "handle-local-options", G_CALLBACK(handle_local_options), NULL);
     g_signal_connect (app, "command-line", G_CALLBACK(command_line), NULL);
 
     int status = g_application_run (app, argc, argv);
@@ -80,7 +79,7 @@ free_dbdata (DatabaseData *db_data)
     gcry_free (db_data->key);
     g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);
-    json_decref (db_data->json_data);
+    json_decref (db_data->in_memory_json_data);
     g_free (db_data);
 }
 
@@ -109,11 +108,32 @@ command_line (GApplication                *application __attribute__((unused)),
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->key_stored = FALSE;
     db_data->objects_hash = NULL;
+    db_data->max_file_size_from_memlock = 0;
 
-    db_data->max_file_size_from_memlock = get_max_file_size_from_memlock ();
+    gint32 memlock_ret_value = set_memlock_value (&db_data->max_file_size_from_memlock);
+    if (memlock_ret_value == MEMLOCK_ERR) {
+        g_printerr (_("Couldn't get the memlock value, therefore secure memory cannot be allocated. Please have a look at the following page before re-running OTPClient:"
+                    "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"));
+        g_free (db_data);
+        return -1;
+    }
+
+    if (get_file_size (db_data->db_path) > (goffset)(db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ), db_data->max_file_size_from_memlock);
+        g_printerr ("%s\n", msg);
+        g_free (msg);
+        g_free (db_data);
+        return -1;
+    }
+
     gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
     if (init_msg != NULL) {
-        g_application_command_line_printerr(cmdline, "Error while initializing GCrypt: %s\n", init_msg);
+        g_application_command_line_printerr (cmdline, "Error while initializing GCrypt: %s\n", init_msg);
         g_free (init_msg);
         g_free (db_data);
         return -1;
@@ -176,11 +196,10 @@ parse_options (GApplicationCommandLine *cmdline,
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
             g_application_command_line_print (cmdline, "Please provide an import type.\n");
             return FALSE;
-        } else {
-            if (!is_valid_type (cmdline_opts->import_type)) {
-                g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
-                return FALSE;
-            }
+        }
+        if (!is_valid_type (cmdline_opts->import_type)) {
+            g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
+            return FALSE;
         }
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
             g_application_command_line_print (cmdline, "Please provide a file to import.\n");
@@ -192,11 +211,10 @@ parse_options (GApplicationCommandLine *cmdline,
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
             g_application_command_line_print (cmdline, "Please provide an export type (see --help).\n");
             return FALSE;
-        } else {
-            if (!is_valid_type (cmdline_opts->export_type)) {
-                g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
-                return FALSE;
-            }
+        }
+        if (!is_valid_type (cmdline_opts->export_type)) {
+            g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
+            return FALSE;
         }
 #ifndef IS_FLATPAK
         g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir);
@@ -209,8 +227,7 @@ parse_options (GApplicationCommandLine *cmdline,
 static gboolean
 is_valid_type (const gchar *type)
 {
-    const gchar *supported_types[] = {ANDOTP_PLAIN_ACTION_NAME, ANDOTP_ENC_ACTION_NAME,
-                                      AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
+    const gchar *supported_types[] = {AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
                                       TWOFAS_PLAIN_ACTION_NAME, TWOFAS_ENC_ACTION_NAME,
                                       AUTHPRO_PLAIN_ACTION_NAME, AUTHPRO_ENC_ACTION_NAME,
                                       FREEOTPPLUS_PLAIN_ACTION_NAME};
