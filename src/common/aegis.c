@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
@@ -6,34 +7,55 @@
 #include <uuid/uuid.h>
 #include "gquarks.h"
 #include "common.h"
+#include "file-size.h"
+#include "parse-uri.h"
 
 
-#define NONCE_SIZE  12
-#define TAG_SIZE    16
-#define SALT_SIZE   32
-#define KEY_SIZE    32
+#define AEGIS_NONCE_SIZE  12
+#define AEGIS_TAG_SIZE    16
+#define AEGIS_SALT_SIZE   32
+#define AEGIS_KEY_SIZE    32
 
 
-static GSList *get_otps_from_plain_backup     (const gchar          *path,
-                                               GError              **err);
+static GSList   *get_otps_from_plain_backup     (const gchar  *path,
+                                                 GError      **err);
 
-static GSList *get_otps_from_encrypted_backup (const gchar          *path,
-                                               const gchar          *password,
-                                               gint32                max_file_size,
-                                               GError              **err);
+static GSList   *get_otps_from_encrypted_backup (const gchar  *path,
+                                                 const gchar  *password,
+                                                 gint32        max_file_size,
+                                                 GError      **err);
 
-static GSList *parse_aegis_json_data          (const gchar          *data,
-                                               GError              **err);
+static GSList   *parse_aegis_json_data          (const gchar  *data,
+                                                 GError      **err);
+
+static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
+                                                 GError      **err);
+
+static gchar    *remove_icons_from_db           (const gchar  *decrypted_db,
+                                                 gboolean      use_secure_memory);
 
 
 GSList *
 get_aegis_data (const gchar     *path,
                 const gchar     *password,
                 gint32           max_file_size,
+                gsize            db_size,
                 GError         **err)
 {
     if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+        return NULL;
+    }
+
+    goffset input_size = get_file_size (path);
+    if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely import the data.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
         return NULL;
     }
 
@@ -43,19 +65,35 @@ get_aegis_data (const gchar     *path,
 
 static GSList *
 get_otps_from_plain_backup (const gchar  *path,
-                            GError      **err)
+                           GError      **err)
 {
-    json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
-    if (!json) {
-        g_printerr ("Error loading json: %s\n", j_err.text);
-        return NULL;
+    GSList *otps = NULL;
+    if (is_file_otpauth_txt (path, err)) {
+        gint32 max_file_size = 0;
+        set_memlock_value (&max_file_size);
+        otps = get_otpauth_data (path, max_file_size, err);
+    } else {
+        // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
+        // the app to segfault. Since the file is unencrypted, we don't need to load it into secure memory.
+        json_set_alloc_funcs (g_malloc0, g_free);
+        json_error_t j_err;
+        json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
+        if (!json) {
+            gchar *msg = g_strconcat ("Error while loading the json file: ", j_err.text, NULL);
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", msg);
+            g_free (msg);
+            json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+            return NULL;
+        }
+
+        gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
+        gchar *cleaned_db = remove_icons_from_db (dumped_json, FALSE);
+        g_free (dumped_json);
+
+        otps = parse_aegis_json_data (cleaned_db, err);
+        g_free (cleaned_db);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
     }
-
-    gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
-    GSList *otps = parse_aegis_json_data (dumped_json, err);
-    gcry_free (dumped_json);
-
     return otps;
 }
 
@@ -66,10 +104,16 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 gint32                max_file_size,
                                 GError              **err)
 {
+    // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
+    // the app to segfault. Since we only need the decrypted data to be handled in secure memory, we can use the standard memory
+    // for the other data.
+    json_set_alloc_funcs (g_malloc0, g_free);
+
     json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -89,8 +133,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *key_nonce = hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce")));
     guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
-    guchar *keybuf = gcry_malloc (KEY_SIZE);
-    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, SALT_SIZE,  p, KEY_SIZE, keybuf) != 0) {
+    guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
+    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
         g_free (salt);
         g_free (enc_key);
@@ -98,10 +142,11 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_tag);
         gcry_free (keybuf);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, NONCE_SIZE);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, AEGIS_NONCE_SIZE);
     if (hd == NULL) {
         g_free (salt);
         g_free (enc_key);
@@ -109,11 +154,12 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (key_tag);
         gcry_free (keybuf);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
-    guchar *master_key = gcry_calloc_secure (KEY_SIZE, 1);
-    if (gcry_cipher_decrypt (hd, master_key, KEY_SIZE, enc_key, KEY_SIZE) != 0) {
+    guchar *master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
+    if (gcry_cipher_decrypt (hd, master_key, AEGIS_KEY_SIZE, enc_key, AEGIS_KEY_SIZE) != 0) {
         g_printerr ("Error while decrypting the master key.\n");
         g_free (salt);
         g_free (enc_key);
@@ -123,9 +169,10 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (keybuf);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
-    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, TAG_SIZE);
+    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, AEGIS_TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (master key). Either the password is wrong or the file is corrupted.");
         g_free (salt);
@@ -136,6 +183,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
         gcry_free (keybuf);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
@@ -155,30 +203,34 @@ get_otps_from_encrypted_backup (const gchar          *path,
         g_free (nonce);
         gcry_free (master_key);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
 
     gsize out_len;
     guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
-    if (out_len > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+    if (out_len > (gint32)(max_file_size * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        // Input data is too big, so we don't load it into secure memory
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         g_free (tag);
         g_free (nonce);
         gcry_free (master_key);
         g_free (b64decoded_db);
         gcry_cipher_close (hd);
         json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
     // we no longer need the json object, so we can free up some secure memory
     json_decref (json);
+    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
 
     gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
     gpg_err = gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
     if (gpg_err) {
         goto clean_and_exit;
     }
-    gpg_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    gpg_err = gcry_cipher_checktag (hd, tag, AEGIS_TAG_SIZE);
     if (gpg_err != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
         clean_and_exit:
@@ -197,12 +249,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gcry_cipher_close (hd);
     gcry_free (master_key);
 
-    // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
-    GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
-    gchar *cleaned_db = secure_strdup (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
-    g_regex_unref (regex);
-    gcry_free (decrypted_db);
-
+    gchar *cleaned_db = remove_icons_from_db (decrypted_db, TRUE);
     GSList *otps = parse_aegis_json_data (cleaned_db, err);
     gcry_free (cleaned_db);
 
@@ -216,6 +263,18 @@ export_aegis (const gchar   *export_path,
               json_t        *json_db_data)
 {
     GError *err = NULL;
+    gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely export the database.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     json_t *root = json_object ();
     json_object_set (root, "version", json_integer (1));
 
@@ -238,21 +297,21 @@ export_aegis (const gchar   *export_path,
         json_object_set (slot_1, "uuid", json_string (g_strdup (uuid)));
         g_free (uuid);
 
-        salt = g_malloc0 (SALT_SIZE);
-        gcry_create_nonce (salt, SALT_SIZE);
+        salt = g_malloc0 (AEGIS_SALT_SIZE);
+        gcry_create_nonce (salt, AEGIS_SALT_SIZE);
 
-        key_nonce = g_malloc0 (NONCE_SIZE);
-        gcry_create_nonce (key_nonce, NONCE_SIZE);
+        key_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
+        gcry_create_nonce (key_nonce, AEGIS_NONCE_SIZE);
 
-        derived_master_key = gcry_calloc_secure(KEY_SIZE, 1);
-        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, SALT_SIZE,  1, KEY_SIZE, derived_master_key);
+        derived_master_key = gcry_calloc_secure(AEGIS_KEY_SIZE, 1);
+        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);
             return NULL;
         }
 
-        hd = open_cipher_and_set_data (derived_master_key, key_nonce, NONCE_SIZE);
+        hd = open_cipher_and_set_data (derived_master_key, key_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
             gcry_free (derived_master_key);
             g_free (key_nonce);
@@ -260,8 +319,8 @@ export_aegis (const gchar   *export_path,
             return NULL;
         }
 
-        enc_master_key = gcry_malloc (KEY_SIZE);
-        if (gcry_cipher_encrypt (hd, enc_master_key, KEY_SIZE, derived_master_key, KEY_SIZE)) {
+        enc_master_key = gcry_malloc (AEGIS_KEY_SIZE);
+        if (gcry_cipher_encrypt (hd, enc_master_key, AEGIS_KEY_SIZE, derived_master_key, AEGIS_KEY_SIZE)) {
             g_printerr ("Error while encrypting the master key.\n");
             gcry_free (derived_master_key);
             gcry_free (enc_master_key);
@@ -271,27 +330,27 @@ export_aegis (const gchar   *export_path,
             return NULL;
         }
 
-        key_tag = g_malloc0 (TAG_SIZE);
-        gcry_cipher_gettag (hd, key_tag, TAG_SIZE);
-        json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, KEY_SIZE)));
+        key_tag = g_malloc0 (AEGIS_TAG_SIZE);
+        gcry_cipher_gettag (hd, key_tag, AEGIS_TAG_SIZE);
+        json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, AEGIS_KEY_SIZE)));
         gcry_cipher_close (hd);
 
         json_t *kp = json_object();
-        json_object_set (kp, "nonce", json_string(bytes_to_hexstr (key_nonce, NONCE_SIZE)));
-        json_object_set (kp, "tag", json_string (bytes_to_hexstr (key_tag, TAG_SIZE)));
+        json_object_set (kp, "nonce", json_string(bytes_to_hexstr (key_nonce, AEGIS_NONCE_SIZE)));
+        json_object_set (kp, "tag", json_string (bytes_to_hexstr (key_tag, AEGIS_TAG_SIZE)));
         json_object_set (slot_1, "key_params", kp);
         json_object_set (slot_1, "n", json_integer (32768));
         json_object_set (slot_1, "r", json_integer (8));
         json_object_set (slot_1, "p", json_integer (1));
-        json_object_set (slot_1, "salt", json_string (bytes_to_hexstr (salt, SALT_SIZE)));
+        json_object_set (slot_1, "salt", json_string (bytes_to_hexstr (salt, AEGIS_SALT_SIZE)));
         json_object_set (aegis_header_obj, "slots", slots_arr);
 
         json_t *db_params_obj = json_object();
-        db_nonce = g_malloc0 (NONCE_SIZE);
-        gcry_create_nonce (db_nonce, NONCE_SIZE);
-        json_object_set (db_params_obj, "nonce", json_string (bytes_to_hexstr (db_nonce, NONCE_SIZE)));
+        db_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
+        gcry_create_nonce (db_nonce, AEGIS_NONCE_SIZE);
+        json_object_set (db_params_obj, "nonce", json_string (bytes_to_hexstr (db_nonce, AEGIS_NONCE_SIZE)));
 
-        db_tag = g_malloc0 (TAG_SIZE);
+        db_tag = g_malloc0 (AEGIS_TAG_SIZE);
         // tag is computed after encryption, so we just put a placeholder here
         json_object_set (db_params_obj, "tag", json_null ());
         json_object_set (aegis_header_obj, "params", db_params_obj);
@@ -343,11 +402,11 @@ export_aegis (const gchar   *export_path,
     }
 
     if (password != NULL) {
-        hd = open_cipher_and_set_data (derived_master_key, db_nonce, NONCE_SIZE);
+        hd = open_cipher_and_set_data (derived_master_key, db_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
             goto clean_and_return;
         }
-        size_t db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
+        db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
         guchar *enc_db = g_malloc0 (db_size);
         gchar *dumped_db = g_malloc0 (db_size);
         json_dumpb (aegis_db_obj, dumped_db, db_size, 0);
@@ -366,9 +425,9 @@ export_aegis (const gchar   *export_path,
             gcry_free (enc_master_key);
             return NULL;
         }
-        gcry_cipher_gettag (hd, db_tag, TAG_SIZE);
+        gcry_cipher_gettag (hd, db_tag, AEGIS_TAG_SIZE);
         json_t *db_params = json_object_get (aegis_header_obj, "params");
-        json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, TAG_SIZE)));
+        json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, AEGIS_TAG_SIZE)));
         g_free (dumped_db);
         gchar *b64enc_db = g_base64_encode (enc_db, db_size);
         json_object_set (root, "db", json_string (b64enc_db));
@@ -425,7 +484,7 @@ parse_aegis_json_data (const gchar *data,
                        GError     **err)
 {
     json_error_t jerr;
-    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
+    json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
     if (root == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
         return NULL;
@@ -497,4 +556,48 @@ parse_aegis_json_data (const gchar *data,
     json_decref (root);
 
     return otps;
+}
+
+
+static gboolean
+is_file_otpauth_txt (const gchar  *file_path,
+                     GError      **err)
+{
+    gboolean result = FALSE;
+
+    GFile *file = g_file_new_for_path (file_path);
+    GFileInputStream *input_stream = g_file_read (file, NULL, err);
+    if (err != NULL && *err != NULL) {
+        g_object_unref (file);
+        return result;
+    }
+
+    const gchar *expected_string = "otpauth://";
+    gsize expected_string_len = g_utf8_strlen (expected_string, -1);
+    gchar buffer[expected_string_len + 1];
+    gssize bytes_read = g_input_stream_read (G_INPUT_STREAM(input_stream), buffer, expected_string_len, NULL, err);
+    if ((err == NULL || *err == NULL) && bytes_read == expected_string_len) {
+        buffer[expected_string_len] = '\0';
+        result = (g_strcmp0 (buffer, expected_string) == 0);
+        g_object_unref (input_stream);
+    }
+    g_object_unref (file);
+
+    return result;
+}
+
+
+static gchar *
+remove_icons_from_db (const gchar *decrypted_db,
+                      gboolean     use_secure_memory)
+{
+    typedef gchar* (*StrDupFunc)(const gchar*);
+    StrDupFunc strdup_func = use_secure_memory == TRUE ? secure_strdup : g_strdup;
+
+    // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
+    GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
+    gchar *cleaned_db = strdup_func (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
+    g_regex_unref (regex);
+
+    return cleaned_db;
 }

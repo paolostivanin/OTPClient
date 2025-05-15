@@ -9,27 +9,24 @@
 #include "file-size.h"
 #include "gquarks.h"
 
+
 gint32
-get_max_file_size_from_memlock (void)
+set_memlock_value (gint32 *memlock_value)
 {
-    const gchar *link = "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations";
     struct rlimit r;
     if (getrlimit (RLIMIT_MEMLOCK, &r) == -1) {
-        // couldn't get memlock limit, so falling back to a default, low value
-        g_print ("[WARNING] your operating system's memlock limit may be too low for you. Please have a look at %s\n", link);
-        return LOW_MEMLOCK_VALUE;
-    } else {
-        if (r.rlim_cur == -1 || r.rlim_cur > MEMLOCK_VALUE) {
-            // memlock is either unlimited or bigger than needed, so defaulting to 'MEMLOCK_VALUE'
-            return MEMLOCK_VALUE;
-        } else {
-            // memlock is less than 'MEMLOCK_VALUE'
-            g_print ("[WARNING] your operating system's memlock limit may be too low for you (current value: %d bytes).\n"
-                     "This may cause issues when importing third parties databases or dealing with tens of tokens.\n"
-                     "For information on how to increase the memlock value, please have a look at %s\n", (gint32)r.rlim_cur, link);
-            return (gint32)r.rlim_cur;
-        }
+        // if memlock cannot be retrieved, return an error
+        return MEMLOCK_ERR;
     }
+
+    if (r.rlim_cur < DEFAULT_MEMLOCK_VALUE) {
+        // memlock is less than the default value, so we need to warn the user that there might not be enough secmem available.
+        *memlock_value = (gint32) r.rlim_cur;
+        return MEMLOCK_TOO_LOW;
+    }
+
+    *memlock_value = DEFAULT_MEMLOCK_VALUE;
+    return MEMLOCK_OK;
 }
 
 
@@ -37,8 +34,8 @@ gchar *
 init_libs (gint32 max_file_size)
 {
     gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
-    if (!gcry_check_version ("1.8.0")) {
-        return g_strdup ("The required version of GCrypt is 1.8.0 or greater.");
+    if (!gcry_check_version ("1.10.1")) {
+        return g_strdup ("The required version of GCrypt is 1.10.1 or greater.");
     }
 
     if (gcry_control (GCRYCTL_INIT_SECMEM, max_file_size, 0)) {
@@ -180,40 +177,17 @@ get_authpro_derived_key (const gchar *password,
 }
 
 
-guchar *
-get_andotp_derived_key (const gchar  *password,
-                        const guchar *salt,
-                        guint32       iterations)
-{
-    guchar *derived_key = gcry_malloc_secure (32);
-    gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA1,
-                                         salt, ANDOTP_IV_SALT, iterations, 32, derived_key);
-    if (g_err != GPG_ERR_NO_ERROR) {
-        g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
-        gcry_free (derived_key);
-        return NULL;
-    }
-
-    return derived_key;
-}
-
-
 gchar *
 get_data_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,
                                 gint32             max_file_size,
                                 gint32             provider,
-                                guint32            andotp_be_iterations,
                                 GFile             *in_file,
                                 GFileInputStream  *in_stream,
                                 GError           **err)
 {
     gint32 salt_size = 0, iv_size = 0, tag_size = 0;
     switch (provider) {
-        case ANDOTP:
-            salt_size = iv_size = ANDOTP_IV_SALT;
-            tag_size = ANDOTP_TAG;
-            break;
         case AUTHPRO:
             salt_size = tag_size = AUTHPRO_SALT_TAG;
             iv_size = AUTHPRO_IV;
@@ -250,10 +224,6 @@ get_data_from_encrypted_backup (const gchar       *path,
     gsize enc_buf_size;
     gint32 offset = 0;
     switch (provider) {
-        case ANDOTP:
-            // 4 is the size of iterations (int32)
-            offset = 4;
-            break;
         case AUTHPRO:
             // 16 is the size of the header
             offset = 16;
@@ -268,7 +238,7 @@ get_data_from_encrypted_backup (const gchar       *path,
     } else if (enc_buf_size > max_file_size) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
 
@@ -290,9 +260,6 @@ get_data_from_encrypted_backup (const gchar       *path,
 
     guchar *derived_key = NULL;
     switch (provider) {
-        case ANDOTP:
-            derived_key = get_andotp_derived_key (password, salt, andotp_be_iterations);
-            break;
         case AUTHPRO:
             derived_key = get_authpro_derived_key (password, salt);
             break;
@@ -418,10 +385,32 @@ build_json_obj (const gchar *type,
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));
     } else {
-        json_object_set (obj, "counter", json_integer (ctr));
+        json_object_set (obj, "counter", json_integer ((json_int_t)ctr));
     }
 
     return obj;
+}
+
+
+json_t *
+get_json_root (const gchar *path)
+{
+    json_error_t jerr;
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
+    if (!json) {
+        g_printerr ("Error loading the json file: %s\n", jerr.text);
+        return NULL;
+    }
+
+    gchar *dumped_json = json_dumps (json, 0);
+    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
+    if (root == NULL) {
+        g_printerr ("Error while loading the json data: %s\n", jerr.text);
+        return NULL;
+    }
+    gcry_free (dumped_json);
+
+    return root;
 }
 
 
@@ -429,4 +418,45 @@ void
 json_free (gpointer data)
 {
     json_decref (data);
+}
+
+
+GKeyFile *
+get_kf_ptr (void)
+{
+    GError *err = NULL;
+    GKeyFile *kf = g_key_file_new ();
+    gchar *cfg_file_path;
+#ifndef IS_FLATPAK
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_free (cfg_file_path);
+            return kf;
+        }
+        g_printerr ("%s\n", err->message);
+        g_clear_error (&err);
+    }
+    g_free (cfg_file_path);
+    g_key_file_free (kf);
+    return NULL;
+}
+
+
+gboolean
+is_secmem_available (gsize    required_size,
+                     GError **err)
+{
+    void *test = gcry_malloc_secure (required_size);
+    if (test == NULL) {
+        g_set_error(err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE,
+                   "Not enough secure memory available (%zu bytes requested).",
+                   required_size);
+        return FALSE;
+    }
+    gcry_free (test);
+    return TRUE;
 }

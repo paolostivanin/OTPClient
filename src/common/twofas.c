@@ -2,6 +2,8 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <glib/gi18n.h>
+
 #include "gquarks.h"
 #include "common.h"
 #include "file-size.h"
@@ -26,8 +28,6 @@ static GSList   *get_otps_from_plain_backup     (const gchar       *path,
 
 static gboolean  is_schema_supported            (const gchar       *path);
 
-static json_t   *get_json_root                  (const gchar       *path);
-
 static void      decrypt_data                   (const gchar      **b64_data,
                                                  const gchar       *pwd,
                                                  TwofasData        *twofas_data);
@@ -47,13 +47,26 @@ static GSList   *parse_twofas_json_data         (const gchar       *data,
 GSList *
 get_twofas_data (const gchar  *path,
                  const gchar  *password,
-                 gint32        max_file_size,
+                 gsize         db_size,
                  GError      **err)
 {
-    if (get_file_size (path) > max_file_size) {
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG, FILE_SIZE_SECMEM_MSG);
+    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
         return NULL;
     }
+
+    goffset input_size = get_file_size (path);
+    if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely import the data.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
 }
 
@@ -64,6 +77,18 @@ export_twofas (const gchar *export_path,
                json_t      *json_db_data)
 {
     GError *err = NULL;
+    gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
+    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
+        g_autofree gchar *msg = g_strdup_printf (_(
+            "Your system's secure memory limit is not enough to securely export the database.\n"
+            "You need to increase your system's memlock limit by following the instructions on our "
+            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+        ));
+        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        return NULL;
+    }
+
     gint64 epoch_time = g_get_real_time();
 
     json_t *root = json_object ();
@@ -259,7 +284,7 @@ get_otps_from_plain_backup (const gchar  *path,
     }
 
     json_error_t j_err;
-    json_t *json = json_load_file (path, 0, &j_err);
+    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
         return NULL;
@@ -288,30 +313,11 @@ is_schema_supported (const gchar *path)
 }
 
 
-static json_t *
-get_json_root (const gchar *path)
-{
-    json_error_t jerr;
-    json_t *json = json_load_file (path, 0, &jerr);
-    if (!json) {
-        g_printerr ("Error loading json: %s\n", jerr.text);
-        return FALSE;
-    }
-
-    gchar *dumped_json = json_dumps (json, 0);
-    json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
-    gcry_free (dumped_json);
-
-    return root;
-}
-
-
 static void
 decrypt_data (const gchar **b64_data,
               const gchar *pwd,
               TwofasData   *twofas_data)
 {
-    // TWOFAS ignores the tag, so we don't have to check it (sigh!)
     gsize enc_data_with_tag_size, salt_out_len, iv_out_len;
     guchar *enc_data_with_tag = g_base64_decode (b64_data[0], &enc_data_with_tag_size);
     twofas_data->salt = g_base64_decode (b64_data[1], &salt_out_len);

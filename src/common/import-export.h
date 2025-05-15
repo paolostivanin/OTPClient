@@ -4,8 +4,6 @@
 
 G_BEGIN_DECLS
 
-#define ANDOTP_PLAIN_ACTION_NAME        "andotp_plain"
-#define ANDOTP_ENC_ACTION_NAME          "andotp_encrypted"
 #define FREEOTPPLUS_PLAIN_ACTION_NAME   "freeotpplus_plain"
 #define AEGIS_PLAIN_ACTION_NAME         "aegis_plain"
 #define AEGIS_ENC_ACTION_NAME           "aegis_encrypted"
@@ -20,11 +18,8 @@ GSList *get_data_from_provider (const gchar  *action_name,
                                 const gchar  *filename,
                                 const gchar  *pwd,
                                 gint32        max_file_size_from_memlock,
+                                gsize         db_size,
                                 GError      **err);
-
-gchar  *export_andotp          (const gchar      *export_path,
-                                const gchar      *password,
-                                json_t           *json_db_data);
 
 gchar  *export_freeotpplus     (const gchar      *export_path,
                                 json_t           *json_db_data);

@@ -5,21 +5,42 @@
 
 G_BEGIN_DECLS
 
-#define GENERIC_ERROR           (gpointer)1
-#define TAG_MISMATCH            (gpointer)2
-#define SECURE_MEMORY_ALLOC_ERR (gpointer)3
-#define KEY_DERIV_ERR           (gpointer)4
-
-#define IV_SIZE                 16
+// Old parameter used to derive the db's password (v1)
 #define KDF_ITERATIONS          100000
+
+// Header data
+#define DB_HEADER_NAME         "OTPClient"
+#define DB_HEADER_NAME_LEN      9
+#define DB_VERSION              2
+#define IV_SIZE                 16
 #define KDF_SALT_SIZE           32
+
+// Parameter used by the encryption routine (+IV from header data)
 #define TAG_SIZE                16
 
+// Parameters used to derive the db's password (v2)
+#define ARGON2ID_TAGLEN            32
+#define ARGON2ID_KEYLEN            32
+#define ARGON2ID_DEFAULT_ITER       4
+#define ARGON2ID_DEFAULT_MC    131072  //128 MiB
+#define ARGON2ID_DEFAULT_PARAL      4
 
-typedef struct db_header_data_t {
+
+typedef struct db_header_data_v1_t {
     guint8 iv[IV_SIZE];
     guint8 salt[KDF_SALT_SIZE];
-} DbHeaderData;
+} DbHeaderData_v1;
+
+
+typedef struct db_header_data_v2_t {
+    gchar header_name[DB_HEADER_NAME_LEN];
+    gint32 db_version;
+    guint8 iv[IV_SIZE];
+    guint8 salt[KDF_SALT_SIZE];
+    gint32 argon2id_iter;
+    gint32 argon2id_memcost;
+    gint32 argon2id_parallelism;
+} DbHeaderData_v2;
 
 
 typedef struct db_data_t {
@@ -27,7 +48,7 @@ typedef struct db_data_t {
 
     gchar *key;
 
-    json_t *json_data;
+    json_t *in_memory_json_data;
 
     GSList *objects_hash;
 
@@ -39,6 +60,12 @@ typedef struct db_data_t {
     GDateTime *last_hotp_update;
 
     gboolean key_stored;
+
+    gint32 current_db_version;
+
+    gint32 argon2id_iter;
+    gint32 argon2id_memcost;
+    gint32 argon2id_parallelism;
 } DatabaseData;
 
 
@@ -51,23 +78,10 @@ void    update_db          (DatabaseData  *db_data,
 void    reload_db          (DatabaseData  *db_data,
                             GError       **err);
 
-guchar *get_db_derived_key (const gchar   *pwd,
-                            DbHeaderData  *header_data);
-
 void    add_otps_to_db     (GSList       *otps,
                             DatabaseData *db_data);
 
 gint    check_duplicate    (gconstpointer   data,
                             gconstpointer   user_data);
-
-void    cleanup_db_gfile   (GFile         *file,
-                            gpointer       stream,
-                            GError        *err);
-
-void    free_db_resources  (gcry_cipher_hd_t hd,
-                            guchar        *derived_key,
-                            guchar        *enc_buf,
-                            gchar         *dec_buf,
-                            DbHeaderData  *header_data);
 
 G_END_DECLS
