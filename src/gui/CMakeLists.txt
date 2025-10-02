@@ -1,13 +1,15 @@
-# we need to add glib-compile-resources --generate-source --target=resources.c gui.gresource.xml
-set(GLIB_FLAGS --target=resources.c)
-set(GLIB_FLAGS ${GLIB_FLAGS} --generate-source)
-set(GLIB_FLAGS ${GLIB_FLAGS} --sourcedir=${PROJECT_SOURCE_DIR}/src/gui)
+set(GRESOURCE_C ${CMAKE_CURRENT_BINARY_DIR}/resources.c)
 
 add_custom_command(
-        OUTPUT resources.c
-        COMMAND glib-compile-resources ${PROJECT_SOURCE_DIR}/src/gui/gui.gresource.xml ${GLIB_FLAGS}
-        DEPENDS gui.gresource.xml
-        ui/window.ui
+        OUTPUT ${GRESOURCE_C}
+        COMMAND glib-compile-resources
+        ${PROJECT_SOURCE_DIR}/src/gui/gui.gresource.xml
+        --target=${GRESOURCE_C}
+        --generate-source
+        --sourcedir=${PROJECT_SOURCE_DIR}/src/gui
+        DEPENDS
+        ${PROJECT_SOURCE_DIR}/src/gui/gui.gresource.xml
+        ${PROJECT_SOURCE_DIR}/src/gui/ui/window.ui
 )
 
 file(GLOB GUI_HEADER_FILES
@@ -18,8 +20,9 @@ file(GLOB GUI_HEADER_FILES
 file(GLOB GUI_SOURCE_FILES
         *.c
         ../common/*.c
-        ${CMAKE_CURRENT_BINARY_DIR}/resources.c
 )
+
+list(APPEND GUI_SOURCE_FILES ${GRESOURCE_C})
 
 include_directories(
         ${GTK4_INCLUDE_DIRS}
