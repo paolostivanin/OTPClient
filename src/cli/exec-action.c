@@ -264,8 +264,10 @@ get_db_path (void)
         g_free (db_path);
         return NULL;
     } else {
-        // remove the newline char
-        db_path[g_utf8_strlen (db_path, -1) - 1] = '\0';
+        // Remove the trailing newline (if present). This is UTF-8 safe because '\n' is a single-byte ASCII
+        // character and fgets appends it as a separate byte; no multibyte code point is modified.
+        char *nl = strchr (db_path, '\n');
+        if (nl) { *nl = '\0'; }
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
             g_printerr (_("File '%s' does not exist\n"), db_path);
             g_free (cfg_file_path);
@@ -309,9 +311,12 @@ get_pwd (const gchar *pwd_msg)
     g_print ("\n");
     tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
 
-    pwd[g_utf8_strlen (pwd, -1) - 1] = '\0';
+    // Trim trailing newline if present. Safe for UTF-8 because '\n' is a single-byte terminator
+    // added by fgets; we do not touch preceding multibyte characters.
+    char *nl = strchr (pwd, '\n');
+    if (nl) { *nl = '\0'; }
 
-    gchar *realloc_pwd = gcry_realloc (pwd, g_utf8_strlen (pwd, -1) + 1);
+    gchar *realloc_pwd = gcry_realloc (pwd, strlen (pwd) + 1);
 
     return realloc_pwd;
 }

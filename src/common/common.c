@@ -68,9 +68,15 @@ get_algo_int_from_str (const gchar *algo)
 gchar *
 secure_strdup (const gchar *src)
 {
-    gchar *sec_buf = gcry_calloc_secure (strlen (src) + 1, 1);
-    memcpy (sec_buf, src, strlen (src) + 1);
-
+    if (src == NULL) {
+        return NULL;
+    }
+    size_t len = strlen (src);
+    gchar *sec_buf = gcry_calloc_secure (len + 1, 1);
+    if (sec_buf == NULL) {
+        return NULL;
+    }
+    memcpy (sec_buf, src, len + 1);
     return sec_buf;
 }
 
@@ -78,13 +84,33 @@ secure_strdup (const gchar *src)
 guchar *
 hexstr_to_bytes (const gchar *hexstr)
 {
-    size_t len = g_utf8_strlen (hexstr, -1);
-    size_t final_len = len / 2;
-    guchar *chrs = (guchar *)g_malloc ((final_len+1) * sizeof(*chrs));
-    for (size_t i = 0, j = 0; j < final_len; i += 2, j++)
-        chrs[j] = (hexstr[i] % 32 + 9) % 25 * 16 + (hexstr[i+1] % 32 + 9) % 25;
-    chrs[final_len] = '\0';
-    return chrs;
+    if (hexstr == NULL) {
+        return NULL;
+    }
+    // Hex strings should be ASCII; use strlen, not g_utf8_strlen
+    size_t len = strlen (hexstr);
+    if (len == 0 || (len % 2) != 0) {
+        // invalid length
+        return NULL;
+    }
+
+    size_t out_len = len / 2;
+    guchar *bytes = (guchar *) g_malloc (out_len + 1); // +1 to NUL-terminate if needed by callers
+    if (bytes == NULL) {
+        return NULL;
+    }
+
+    for (size_t i = 0, j = 0; j < out_len; i += 2, j++) {
+        int hi = g_ascii_xdigit_value (hexstr[i]);
+        int lo = g_ascii_xdigit_value (hexstr[i + 1]);
+        if (hi < 0 || lo < 0) {
+            g_free (bytes);
+            return NULL;
+        }
+        bytes[j] = (guchar) ((hi << 4) | lo);
+    }
+    bytes[out_len] = '\0';
+    return bytes;
 }
 
 
