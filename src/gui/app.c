@@ -74,15 +74,33 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
 static void       set_open_db_action        (GtkWidget          *btn,
                                              gpointer            user_data);
 
+static GQuark app_data_quark = 0;
+
+
+static void
+ensure_app_data_quark (void)
+{
+    if (G_UNLIKELY (app_data_quark == 0))
+        app_data_quark = g_quark_from_static_string ("otpclient-app-data");
+}
+
 
 void
 activate (GtkApplication    *app,
           gpointer           user_data UNUSED)
 {
+    ensure_app_data_quark ();
+
+    AppData *app_data = g_object_get_qdata (G_OBJECT (app), app_data_quark);
+    if (app_data != NULL) {
+        gtk_window_present (GTK_WINDOW (app_data->main_window));
+        return;
+    }
+
     gint32 memlock_value = 0;
     gint32 memlock_ret_value = set_memlock_value (&memlock_value);
 
-    AppData *app_data = g_new0 (AppData, 1);
+    app_data = g_new0 (AppData, 1);
 
     app_data->app_locked = FALSE;
 
@@ -302,6 +320,8 @@ activate (GtkApplication    *app,
     // set last user activity to now, so we have a starting point for the autolock feature
     app_data->last_user_activity = g_date_time_new_now_local ();
     app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
+
+    g_object_set_qdata (G_OBJECT (app), app_data_quark, app_data);
 
     gtk_widget_show_all (app_data->main_window);
 }
@@ -580,6 +600,11 @@ destroy_cb (GtkWidget   *window,
             gpointer     user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
+
+    ensure_app_data_quark ();
+    GtkApplication *app = GTK_APPLICATION(gtk_window_get_application (GTK_WINDOW (window)));
+    g_object_set_qdata (G_OBJECT(app), app_data_quark, NULL);
+
     save_sort_order (app_data->tree_view);
     g_source_remove (app_data->source_id);
     g_source_remove (app_data->source_id_last_activity);
