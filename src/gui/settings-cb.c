@@ -149,6 +149,9 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
                 g_printerr ("%s\n", _("Error while saving the config file."));
             }
             gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
+            if (app_data->filter_model != NULL) {
+                gtk_tree_model_filter_refilter (app_data->filter_model);
+            }
             break;
         case GTK_RESPONSE_CANCEL:
             break;

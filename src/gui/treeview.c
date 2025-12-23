@@ -6,6 +6,7 @@
 #include "message-dialogs.h"
 #include "edit-row-cb.h"
 #include "show-qr-cb.h"
+#include "gui-misc.h"
 
 
 typedef struct parsed_json_data_t {
@@ -35,7 +36,25 @@ static gboolean clear_all_otps     (GtkTreeModel   *model,
 
 static void     free_pjd           (ParsedData     *pjd);
 
-static gboolean on_treeview_button_press_event (GtkWidget *treeview, GdkEventButton *event, gpointer user_data);
+static gboolean on_treeview_button_press_event (GtkWidget *treeview,
+                                                GdkEventButton *event,
+                                                gpointer user_data);
+
+static gboolean filter_visible_func (GtkTreeModel *model,
+                                     GtkTreeIter  *iter,
+                                     gpointer      user_data);
+
+static void     search_entry_changed_cb (GtkEntry *entry,
+                                         gpointer  user_data);
+
+static void     search_entry_activate_cb (GtkEntry *entry,
+                                          gpointer  user_data);
+
+static void     select_first_row (AppData *app_data);
+
+static gboolean get_liststore_iter_from_path (AppData     *app_data,
+                                              GtkTreePath *path,
+                                              GtkTreeIter *iter);
 
 
 void
@@ -43,17 +62,26 @@ create_treeview (AppData *app_data)
 {
     app_data->tree_view = GTK_TREE_VIEW(gtk_builder_get_object (app_data->builder, "treeview_id"));
 
-    GtkListStore *list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-                                                   G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_INT);
+    app_data->list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+                                               G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_INT);
 
     add_columns (app_data->tree_view);
 
-    add_data_to_model (app_data->db_data, list_store);
+    add_data_to_model (app_data->db_data, app_data->list_store);
 
-    gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(list_store));
+    app_data->filter_model = GTK_TREE_MODEL_FILTER(gtk_tree_model_filter_new (GTK_TREE_MODEL(app_data->list_store), NULL));
+    gtk_tree_model_filter_set_visible_func (app_data->filter_model, filter_visible_func, app_data, NULL);
+
+    gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(app_data->filter_model));
 
     // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
     gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
+    app_data->search_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "search_entry_id"));
+    if (app_data->search_entry != NULL) {
+        gtk_tree_view_set_search_entry (GTK_TREE_VIEW(app_data->tree_view), GTK_ENTRY(app_data->search_entry));
+        g_signal_connect (app_data->search_entry, "changed", G_CALLBACK(search_entry_changed_cb), app_data);
+        g_signal_connect (app_data->search_entry, "activate", G_CALLBACK(search_entry_activate_cb), app_data);
+    }
 
     GtkBindingSet *tv_binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS(app_data->tree_view));
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
@@ -68,7 +96,7 @@ create_treeview (AppData *app_data)
     // signal emitted when right-clicked on a row (shows edit/delete context menu)
     g_signal_connect(app_data->tree_view, "button-press-event", G_CALLBACK(on_treeview_button_press_event), app_data);
 
-    g_object_unref (list_store);
+    select_first_row (app_data);
 }
 
 
@@ -76,29 +104,35 @@ void
 update_model (AppData *app_data)
 {
     if (app_data->tree_view != NULL) {
-        GtkListStore *store = GTK_LIST_STORE(gtk_tree_view_get_model (app_data->tree_view));
+        GtkListStore *store = app_data->list_store;
+        if (store == NULL) {
+            return;
+        }
         gtk_list_store_clear (store);
         add_data_to_model (app_data->db_data, store);
+        if (app_data->filter_model != NULL) {
+            gtk_tree_model_filter_refilter (app_data->filter_model);
+        }
     }
 }
 
 
 void
-row_selected_cb (GtkTreeView        *tree_view,
+row_selected_cb (GtkTreeView        *tree_view UNUSED,
                  GtkTreePath        *path,
                  GtkTreeViewColumn  *column UNUSED,
                  gpointer            user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
     if (app_data->is_reorder_active == FALSE) {
-        GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
-
         GtkTreeIter iter;
-        gtk_tree_model_get_iter (model, &iter, path);
+        if (!get_liststore_iter_from_path (app_data, path, &iter)) {
+            return;
+        }
 
         gchar *otp_type, *otp_value;
-        gtk_tree_model_get (model, &iter, COLUMN_TYPE, &otp_type, -1);
-        gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+        gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_TYPE, &otp_type, -1);
+        gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
 
         GDateTime *now = g_date_time_new_now_local ();
         GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
@@ -106,16 +140,16 @@ row_selected_cb (GtkTreeView        *tree_view,
             // OTP is already set, so we update the value only if it is an HOTP
             if (g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
                 if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
-                    set_otp (GTK_LIST_STORE (model), iter, app_data);
+                    set_otp (app_data->list_store, iter, app_data);
                     g_free (otp_value);
-                    gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+                    gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
                 }
             }
         } else {
             // OTP is not already set, so we set it
-            set_otp (GTK_LIST_STORE (model), iter, app_data);
+            set_otp (app_data->list_store, iter, app_data);
             g_free (otp_value);
-            gtk_tree_model_get (model, &iter, COLUMN_OTP, &otp_value, -1);
+            gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
         }
         // and, in any case, we copy the otp to the clipboard and send a notification
         gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
@@ -138,7 +172,7 @@ reorder_db (AppData *app_data)
     GSList *nodes_order_slist = NULL;
     GtkTreeIter iter;
     guint current_db_pos;
-    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkTreeModel *model = GTK_TREE_MODEL(app_data->list_store);
 
     gint slist_len = 0;
     gboolean valid = gtk_tree_model_get_iter_first (model, &iter);
@@ -215,10 +249,9 @@ delete_row (AppData *app_data)
 {
     g_return_if_fail (app_data->tree_view != NULL);
 
-    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
-    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(app_data->tree_view));
+    GtkListStore *list_store = NULL;
     GtkTreeIter iter;
-    if (!gtk_tree_selection_get_selected (selection, &model, &iter)) {
+    if (!get_selected_liststore_iter (app_data, &list_store, &iter)) {
         show_message_dialog (app_data->main_window, "No row has been selected. Nothing will be deleted.", GTK_MESSAGE_ERROR);
         return;
     }
@@ -243,21 +276,21 @@ delete_row (AppData *app_data)
     }
 
     gint db_item_position_to_delete;
-    gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
+    gtk_tree_model_get (GTK_TREE_MODEL(list_store), &iter, COLUMN_POSITION_IN_DB, &db_item_position_to_delete, -1);
 
     json_array_remove (app_data->db_data->in_memory_json_data, db_item_position_to_delete);
-    gtk_list_store_remove (GTK_LIST_STORE(model), &iter);
+    gtk_list_store_remove (list_store, &iter);
 
     // json_array_remove shifts all items, so we have to take care of updating the real item's position in the database
     gint row_db_pos;
-    gboolean valid = gtk_tree_model_get_iter_first(model, &iter);
+    gboolean valid = gtk_tree_model_get_iter_first (GTK_TREE_MODEL(list_store), &iter);
     while (valid) {
-        gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
+        gtk_tree_model_get (GTK_TREE_MODEL(list_store), &iter, COLUMN_POSITION_IN_DB, &row_db_pos, -1);
         if (row_db_pos > db_item_position_to_delete) {
             gint shifted_position = row_db_pos - 1;
-            gtk_list_store_set (GTK_LIST_STORE(model), &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
+            gtk_list_store_set (list_store, &iter, COLUMN_POSITION_IN_DB, shifted_position, -1);
         }
-        valid = gtk_tree_model_iter_next(model, &iter);
+        valid = gtk_tree_model_iter_next(GTK_TREE_MODEL(list_store), &iter);
     }
 
     GError *err = NULL;
@@ -332,11 +365,14 @@ on_treeview_button_press_event (GtkWidget      *treeview,
 
 
 static void
-hide_all_otps_cb (GtkTreeView *tree_view,
+hide_all_otps_cb (GtkTreeView *tree_view UNUSED,
                   gpointer     user_data)
 {
-    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (tree_view)), clear_all_otps, user_data);
-}
+    CAST_USER_DATA(AppData, app_data, user_data);
+    if (app_data->list_store == NULL) {
+        return;
+    }
+    gtk_tree_model_foreach (GTK_TREE_MODEL(app_data->list_store), clear_all_otps, user_data);}
 
 
 static gboolean
@@ -356,6 +392,113 @@ clear_all_otps (GtkTreeModel *model,
 
     // do not stop walking the store, check next row
     return FALSE;
+}
+
+
+static gboolean
+filter_visible_func (GtkTreeModel *model,
+                     GtkTreeIter  *iter,
+                     gpointer      user_data)
+{
+    CAST_USER_DATA(AppData, app_data, user_data);
+    if (app_data->search_entry == NULL) {
+        return TRUE;
+    }
+
+    const gchar *query = gtk_entry_get_text (GTK_ENTRY(app_data->search_entry));
+    if (query == NULL || *query == '\0') {
+        return TRUE;
+    }
+
+    gint column = app_data->search_column + 1;
+    gchar *value = NULL;
+    gtk_tree_model_get (model, iter, column, &value, -1);
+    if (value == NULL) {
+        return FALSE;
+    }
+
+    gchar *value_folded = g_utf8_strdown (value, -1);
+    gchar *query_folded = g_utf8_strdown (query, -1);
+    gboolean match = (g_strstr_len (value_folded, -1, query_folded) != NULL);
+
+    g_free (value);
+    g_free (value_folded);
+    g_free (query_folded);
+
+    return match;
+}
+
+static void
+search_entry_changed_cb (GtkEntry *entry UNUSED,
+                         gpointer  user_data)
+{
+    CAST_USER_DATA(AppData, app_data, user_data);
+    if (app_data->filter_model != NULL) {
+        gtk_tree_model_filter_refilter (app_data->filter_model);
+    }
+    select_first_row (app_data);
+}
+
+static void
+search_entry_activate_cb (GtkEntry *entry UNUSED,
+                          gpointer  user_data)
+{
+    CAST_USER_DATA(AppData, app_data, user_data);
+    GtkTreeModel *model = GTK_TREE_MODEL(app_data->filter_model);
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (app_data->tree_view);
+    if (model == NULL) {
+        return;
+    }
+
+    if (gtk_tree_selection_count_selected_rows (selection) == 0) {
+        select_first_row (app_data);
+    }
+
+    GList *paths = gtk_tree_selection_get_selected_rows (selection, &model);
+    if (paths != NULL) {
+        GtkTreePath *path = g_list_first (paths)->data;
+        GtkTreeViewColumn *column = gtk_tree_view_get_column (app_data->tree_view, 0);
+        gtk_tree_view_row_activated (app_data->tree_view, path, column);
+        g_list_free_full (paths, (GDestroyNotify)gtk_tree_path_free);
+    }
+}
+
+static void
+select_first_row (AppData *app_data)
+{
+    if (app_data->filter_model == NULL) {
+        return;
+    }
+    GtkTreeIter iter;
+    GtkTreeModel *model = GTK_TREE_MODEL(app_data->filter_model);
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (app_data->tree_view);
+    gtk_tree_selection_unselect_all (selection);
+    if (gtk_tree_model_get_iter_first (model, &iter)) {
+        GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
+        gtk_tree_selection_select_path (selection, path);
+        gtk_tree_view_scroll_to_cell (app_data->tree_view, path, NULL, FALSE, 0.0f, 0.0f);
+        gtk_tree_path_free (path);
+    }
+}
+
+static gboolean
+get_liststore_iter_from_path (AppData     *app_data,
+                              GtkTreePath *path,
+                              GtkTreeIter *iter)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkTreeIter view_iter;
+    if (!gtk_tree_model_get_iter (model, &view_iter, path)) {
+        return FALSE;
+    }
+
+    if (GTK_IS_TREE_MODEL_FILTER (model)) {
+        gtk_tree_model_filter_convert_iter_to_child_iter (GTK_TREE_MODEL_FILTER(model), iter, &view_iter);
+        return TRUE;
+    }
+
+    *iter = view_iter;
+    return TRUE;
 }
 
 

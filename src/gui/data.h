@@ -18,6 +18,9 @@ typedef struct app_data_t {
 
     GtkWidget *main_window;
     GtkTreeView *tree_view;
+    GtkListStore *list_store;
+    GtkTreeModelFilter *filter_model;
+    GtkWidget *search_entry;
     #ifdef ENABLE_MINIMIZE_TO_TRAY
     AppIndicator *indicator;
     #endif
