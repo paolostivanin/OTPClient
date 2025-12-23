@@ -74,6 +74,12 @@ static gboolean   key_pressed_cb            (GtkWidget          *window,
 static void       set_open_db_action        (GtkWidget          *btn,
                                              gpointer            user_data);
 
+static void       init_app_defaults         (AppData            *app_data);
+
+static void       init_db_defaults          (AppData            *app_data);
+
+static void       cleanup_app_data          (AppData            *app_data);
+
 static GQuark app_data_quark = 0;
 
 
@@ -101,32 +107,22 @@ activate (GtkApplication    *app,
     gint32 memlock_ret_value = set_memlock_value (&memlock_value);
 
     app_data = g_new0 (AppData, 1);
-
-    app_data->app_locked = FALSE;
-
-    gint width = 0, height = 0;
-    app_data->show_next_otp = FALSE; // next otp not shown by default
-    app_data->disable_notifications = FALSE; // notifications enabled by default
-    app_data->auto_lock = FALSE; // disabled by default
-    app_data->inactivity_timeout = 0; // never
-    app_data->use_dark_theme = FALSE; // light theme by default
-    app_data->use_secret_service = TRUE; // secret service enabled by default
-    app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
-    // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
-    app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
+    init_app_defaults (app_data);
     app_data->builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     app_data->add_popover_builder = get_builder_from_partial_path (AP_PARTIAL_PATH);
     app_data->settings_popover_builder = get_builder_from_partial_path (SP_PARTIAL_PATH);
 
-    set_config_data (&width, &height, app_data);
-
     app_data->db_data = g_new0 (DatabaseData, 1);
-    app_data->db_data->key_stored = FALSE; // at startup, we don't know whether the key is stored or not
+    init_db_defaults (app_data);
+
+    gint width = 0;
+    gint height = 0;
+    set_config_data (&width, &height, app_data);
 
     create_main_window (width, height, app_data);
     if (app_data->main_window == NULL) {
         g_printerr ("%s\n", _("Couldn't locate the ui file, exiting..."));
-        g_free (app_data->db_data);
+        cleanup_app_data (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -138,7 +134,7 @@ activate (GtkApplication    *app,
                                         "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory</a> wiki page before re-running OTPClient."));
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
-        g_free (app_data->db_data);
+        cleanup_app_data (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -147,7 +143,7 @@ activate (GtkApplication    *app,
     if (init_msg != NULL) {
         show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
         g_free (init_msg);
-        g_free (app_data->db_data);
+        cleanup_app_data (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -196,8 +192,7 @@ activate (GtkApplication    *app,
             case GTK_RESPONSE_CANCEL:
             default:
                 gtk_widget_destroy (app_data->diag_rcdb);
-                g_free (app_data->db_data);
-                g_free (app_data);
+                cleanup_app_data (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
             case GTK_RESPONSE_OK:
@@ -207,8 +202,7 @@ activate (GtkApplication    *app,
 
     app_data->db_data->db_path = get_db_path (app_data);
     if (app_data->db_data->db_path == NULL) {
-        g_free (app_data->db_data);
-        g_free (app_data);
+        cleanup_app_data (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -235,8 +229,7 @@ activate (GtkApplication    *app,
         if (app_data->db_data->key == NULL) {
             retry_change_file:
             if (change_file (app_data) == QUIT_APP) {
-                g_free (app_data->db_data);
-                g_free (app_data);
+                cleanup_app_data (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
             }
@@ -253,8 +246,7 @@ activate (GtkApplication    *app,
         ), memlock_value);
         g_printerr ("%s\n", msg);
         g_free (msg);
-        g_free (app_data->db_data);
-        g_free (app_data);
+        cleanup_app_data (app_data);
         g_application_quit (G_APPLICATION(app));
         return;
     }
@@ -263,10 +255,9 @@ activate (GtkApplication    *app,
     load_db (app_data->db_data, &err);
     if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
         show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-        gcry_free (app_data->db_data->key);
+        g_clear_pointer (&app_data->db_data->key, gcry_free);
         if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
-            g_free (app_data->db_data);
-            g_free (app_data);
+            cleanup_app_data (app_data);
             g_clear_error (&err);
             g_application_quit (G_APPLICATION(app));
             return;
@@ -386,6 +377,7 @@ set_config_data (gint     *width,
             // key was not found, so we already migrated to the new format
             app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
         }
+        g_clear_error (&err);
         // end migration
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
@@ -414,6 +406,7 @@ migrate_secretservice_kf (AppData  *app_data,
         g_free (err_msg);
         g_clear_error (&err);
     }
+    g_free (cfg_file_path);
 }
 
 static void
@@ -720,4 +713,58 @@ set_open_db_action (GtkWidget *btn,
     CAST_USER_DATA(AppData, app_data, user_data);
     app_data->open_db_file_action = g_strcmp0 (gtk_widget_get_name (btn), "diag_rc_restoredb_btn") == 0 ? GTK_FILE_CHOOSER_ACTION_OPEN : GTK_FILE_CHOOSER_ACTION_SAVE;
     gtk_dialog_response (GTK_DIALOG(app_data->diag_rcdb), GTK_RESPONSE_OK);
+}
+
+static void
+init_app_defaults (AppData *app_data)
+{
+    app_data->app_locked = FALSE;
+    app_data->show_next_otp = FALSE; // next otp not shown by default
+    app_data->disable_notifications = FALSE; // notifications enabled by default
+    app_data->auto_lock = FALSE; // disabled by default
+    app_data->inactivity_timeout = 0; // never
+    app_data->use_dark_theme = FALSE; // light theme by default
+    app_data->use_secret_service = TRUE; // secret service enabled by default
+    app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
+    // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
+    app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
+}
+
+static void
+init_db_defaults (AppData *app_data)
+{
+    app_data->db_data->key_stored = FALSE; // at startup, we don't know whether the key is stored or not
+    app_data->db_data->max_file_size_from_memlock = 0;
+    app_data->db_data->objects_hash = NULL;
+    app_data->db_data->data_to_add = NULL;
+}
+
+static void
+cleanup_app_data (AppData *app_data)
+{
+    if (app_data == NULL) {
+        return;
+    }
+
+    if (app_data->main_window != NULL) {
+        gtk_widget_destroy (app_data->main_window);
+    }
+
+    if (app_data->builder != NULL) {
+        g_object_unref (app_data->builder);
+    }
+    if (app_data->add_popover_builder != NULL) {
+        g_object_unref (app_data->add_popover_builder);
+    }
+    if (app_data->settings_popover_builder != NULL) {
+        g_object_unref (app_data->settings_popover_builder);
+    }
+
+    if (app_data->db_data != NULL) {
+        g_clear_pointer (&app_data->db_data->db_path, g_free);
+        g_clear_pointer (&app_data->db_data->key, gcry_free);
+        g_free (app_data->db_data);
+    }
+
+    g_free (app_data);
 }

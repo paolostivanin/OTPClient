@@ -9,15 +9,8 @@
 #include "gui-misc.h"
 
 
-typedef struct parsed_json_data_t {
-    gchar **types;
-    gchar **labels;
-    gchar **issuers;
-    GArray *periods;
-} ParsedData;
-
-static void     set_json_data      (json_t         *array,
-                                    ParsedData     *pjd);
+static const gchar *json_get_string_or_empty (json_t      *obj,
+                                              const gchar *key);
 
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
@@ -33,8 +26,6 @@ static gboolean clear_all_otps     (GtkTreeModel   *model,
                                     GtkTreePath    *path,
                                     GtkTreeIter    *iter,
                                     gpointer        user_data);
-
-static void     free_pjd           (ParsedData     *pjd);
 
 static gboolean on_treeview_button_press_event (GtkWidget *treeview,
                                                 GdkEventButton *event,
@@ -132,26 +123,27 @@ row_selected_cb (GtkTreeView        *tree_view UNUSED,
             return;
         }
 
-        gchar *otp_type, *otp_value;
-        gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_TYPE, &otp_type, -1);
-        gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
+        gchar *otp_type = NULL;
+        gchar *otp_value = NULL;
+        gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter,
+                            COLUMN_TYPE, &otp_type,
+                            COLUMN_OTP, &otp_value,
+                            -1);
 
         GDateTime *now = g_date_time_new_now_local ();
         GTimeSpan diff = g_date_time_difference (now, app_data->db_data->last_hotp_update);
-        if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 3) {
-            // OTP is already set, so we update the value only if it is an HOTP
-            if (g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
-                if (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC) {
-                    set_otp (app_data->list_store, iter, app_data);
-                    g_free (otp_value);
-                    gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
-                }
-            }
-        } else {
-            // OTP is not already set, so we set it
+        gboolean should_update = (otp_value == NULL || g_utf8_strlen (otp_value, -1) <= 3);
+        if (!should_update && otp_type != NULL && g_ascii_strcasecmp (otp_type, "HOTP") == 0) {
+            should_update = (diff >= G_USEC_PER_SEC * HOTP_RATE_LIMIT_IN_SEC);
+        }
+
+        if (should_update) {
             set_otp (app_data->list_store, iter, app_data);
             g_free (otp_value);
-            gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter, COLUMN_OTP, &otp_value, -1);
+            otp_value = NULL;
+            gtk_tree_model_get (GTK_TREE_MODEL(app_data->list_store), &iter,
+                                COLUMN_OTP, &otp_value,
+                                -1);
         }
         // and, in any case, we copy the otp to the clipboard and send a notification
         gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
@@ -180,15 +172,19 @@ reorder_db (AppData *app_data)
     gboolean valid = gtk_tree_model_get_iter_first (model, &iter);
     while (valid) {
         GtkTreePath *path = gtk_tree_model_get_path (model, &iter);
+        if (path == NULL) {
+            valid = gtk_tree_model_iter_next(model, &iter);
+            continue;
+        }
         gtk_tree_model_get (model, &iter, COLUMN_POSITION_IN_DB, &current_db_pos, -1);
-        if (gtk_tree_path_get_indices (path)[0] != current_db_pos) {
+        gint *indices = gtk_tree_path_get_indices (path);
+        if (indices != NULL && indices[0] != (gint)current_db_pos) {
             NodeInfo *node_info = g_new0 (NodeInfo, 1);
             json_t *obj = json_array_get (app_data->db_data->in_memory_json_data, current_db_pos);
-            node_info->newpos = gtk_tree_path_get_indices (path)[0];
+            node_info->newpos = indices[0];
             node_info->hash = json_object_get_hash (obj);
-            nodes_order_slist = g_slist_append (nodes_order_slist, g_memdup2 (node_info, sizeof (NodeInfo)));
+            nodes_order_slist = g_slist_append (nodes_order_slist, node_info);
             slist_len++;
-            g_free (node_info);
         }
         gtk_tree_path_free (path);
         valid = gtk_tree_model_iter_next(model, &iter);
@@ -210,7 +206,6 @@ reorder_db (AppData *app_data)
                 json_decref (obj);
             }
         }
-        g_free (ni);
     }
 
     // update the database and reload the changes
@@ -233,7 +228,7 @@ reorder_db (AppData *app_data)
     }
     regenerate_model (app_data);
 
-    g_slist_free (nodes_order_slist);
+    g_slist_free_full (nodes_order_slist, g_free);
 }
 
 
@@ -301,12 +296,14 @@ delete_row (AppData *app_data)
         gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
         show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
         g_free (msg);
+        g_clear_error (&err);
     } else {
         reload_db (app_data->db_data, &err);
         if (err != NULL) {
             gchar *msg = g_strconcat ("The database update <b>FAILED</b>. The error message is:\n", err->message, NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
+            g_clear_error (&err);
         }
     }
 }
@@ -345,8 +342,8 @@ on_treeview_button_press_event (GtkWidget      *treeview,
 
             GtkWidget *menu = gtk_menu_new ();
             GtkWidget *menu_item = gtk_menu_item_new_with_label ("Edit row");
-            g_signal_connect(menu_item, "activate", G_CALLBACK (edit_row_cb), app_data);
-            gtk_menu_shell_append(GTK_MENU_SHELL(menu), menu_item);
+            g_signal_connect (menu_item, "activate", G_CALLBACK (edit_row_cb), app_data);
+            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
 
             menu_item = gtk_menu_item_new_with_label ("Delete row");
             g_signal_connect (menu_item, "activate", G_CALLBACK (on_delete_activate), app_data);
@@ -535,52 +532,34 @@ get_liststore_iter_from_path (AppData     *app_data,
 
 
 static void
-set_json_data (json_t     *array,
-               ParsedData *pjd)
-{
-    gsize array_len = json_array_size (array);
-    pjd->types = (gchar **)g_malloc0 ((array_len + 1)  * sizeof(gchar *));
-    pjd->labels = (gchar **)g_malloc0 ((array_len + 1) * sizeof(gchar *));
-    pjd->issuers = (gchar **)g_malloc0 ((array_len + 1) * sizeof(gchar *));
-    pjd->periods = g_array_new (FALSE, FALSE, sizeof(gint));
-    for (guint i = 0; i < array_len; i++) {
-        json_t *obj = json_array_get (array, i);
-        pjd->types[i] = g_strdup (json_string_value (json_object_get (obj, "type")));
-        pjd->labels[i] = g_strdup (json_string_value (json_object_get (obj, "label")));
-        pjd->issuers[i] = g_strdup (json_string_value (json_object_get (obj, "issuer")));
-        json_int_t period = json_integer_value (json_object_get (obj, "period"));
-        g_array_append_val (pjd->periods, period);
-    }
-    pjd->types[array_len] = NULL;
-    pjd->labels[array_len] = NULL;
-    pjd->issuers[array_len] = NULL;
-}
-
-
-static void
 add_data_to_model (DatabaseData *db_data,
                    GtkListStore *store)
 {
-    GtkTreeIter iter;
-    ParsedData *pjd = g_new0 (ParsedData, 1);
+    if (db_data == NULL || store == NULL || db_data->in_memory_json_data == NULL) {
+        return;
+    }
 
-    set_json_data (db_data->in_memory_json_data, pjd);
+    gsize array_len = json_array_size (db_data->in_memory_json_data);
+    for (guint i = 0; i < array_len; i++) {
+        json_t *obj = json_array_get (db_data->in_memory_json_data, i);
+        const gchar *type = json_get_string_or_empty (obj, "type");
+        const gchar *label = json_get_string_or_empty (obj, "label");
+        const gchar *issuer = json_get_string_or_empty (obj, "issuer");
+        json_t *period_value = json_object_get (obj, "period");
+        gint period = json_is_integer (period_value) ? (gint)json_integer_value (period_value) : 0;
 
-    gint i = 0;
-    while (pjd->types[i] != NULL) {
+        GtkTreeIter iter;
         gtk_list_store_append (store, &iter);
         gtk_list_store_set (store, &iter,
-                            COLUMN_TYPE, pjd->types[i],
-                            COLUMN_ACC_LABEL, pjd->labels[i],
-                            COLUMN_ACC_ISSUER, pjd->issuers[i],
-                            COLUMN_PERIOD, g_array_index (pjd->periods, gint, i),
+                            COLUMN_TYPE, type,
+                            COLUMN_ACC_LABEL, label,
+                            COLUMN_ACC_ISSUER, issuer,
+                            COLUMN_PERIOD, period,
                             COLUMN_UPDATED, FALSE,
                             COLUMN_LESS_THAN_A_MINUTE, FALSE,
                             COLUMN_POSITION_IN_DB, i,
                             -1);
-        i++;
     }
-    free_pjd (pjd);
 }
 
 
@@ -615,12 +594,15 @@ add_columns (GtkTreeView *tree_view)
 }
 
 
-static void
-free_pjd (ParsedData *pjd)
+static const gchar *
+json_get_string_or_empty (json_t      *obj,
+                          const gchar *key)
 {
-    g_strfreev (pjd->types);
-    g_strfreev (pjd->labels);
-    g_strfreev (pjd->issuers);
-    g_array_free (pjd->periods, TRUE);
-    g_free (pjd);
+    if (obj == NULL || key == NULL) {
+        return "";
+    }
+
+    json_t *value = json_object_get (obj, key);
+    const gchar *string_value = json_string_value (value);
+    return string_value != NULL ? string_value : "";
 }
