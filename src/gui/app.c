@@ -726,6 +726,7 @@ init_app_defaults (AppData *app_data)
     app_data->use_dark_theme = FALSE; // light theme by default
     app_data->use_secret_service = TRUE; // secret service enabled by default
     app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
+    app_data->use_tray = FALSE; // do not use tray by default
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
 }

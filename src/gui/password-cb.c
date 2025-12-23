@@ -122,6 +122,17 @@ prompt_for_password (AppData        *app_data,
 
 
 static void
+reset_entry_after_submit (GtkWidget *entry)
+{
+    if (entry == NULL) {
+        return;
+    }
+    gtk_entry_set_text (GTK_ENTRY(entry), "");
+    gtk_entry_set_visibility (GTK_ENTRY(entry), FALSE);
+}
+
+
+static void
 check_pwd_cb (GtkWidget   *entry,
               gpointer     user_data)
 {
@@ -137,6 +148,8 @@ check_pwd_cb (GtkWidget   *entry,
         return;
     }
     if (g_strcmp0 (gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry1)), gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry2))) == 0) {
+        reset_entry_after_submit (entry_widgets->entry_old);
+        reset_entry_after_submit (entry_widgets->entry2);
         password_cb (entry, (gpointer *)&entry_widgets->pwd);
         entry_widgets->retry = FALSE;
     } else {
@@ -154,6 +167,7 @@ password_cb (GtkWidget  *entry,
     gsize len = g_utf8_strlen (text, -1) + 1;
     *pwd = gcry_calloc_secure (len, 1);
     strncpy (*pwd, text, len);
+    reset_entry_after_submit (entry);
     GtkWidget *top_level = gtk_widget_get_toplevel (entry);
     gtk_dialog_response (GTK_DIALOG (top_level), GTK_RESPONSE_CLOSE);
 }

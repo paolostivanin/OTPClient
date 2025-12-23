@@ -57,29 +57,36 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
     if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-        gchar *msg = g_strconcat ("Couldn't get data from config file: ", err->message, NULL);
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
-        g_free (cfg_file_path);
-        g_key_file_free (kf);
+        // if config file is not set, we use the default values.
         g_clear_error (&err);
-        g_free (settings_data);
-        return;
-    }
-
-    // if key is not found, g_key_file_get_boolean returns FALSE and g_key_file_get_integer returns 0.
-    // Therefore, having these values as default is exactly what we want. So no need to check whether the key is missing.
-    app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
-    app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
-    app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
-    app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
-    app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
-    app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
-    app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
-    if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
-        // if the key is not found, we set it to TRUE and save it to the config file.
-        app_data->use_secret_service = TRUE;
-        g_clear_error (&err);
+        g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
+        g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
+        g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
+        g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
+        g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
+        g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
+        g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
+        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+            gchar *msg = g_strconcat (_("Couldn't save default settings: "), err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_WARNING);
+            g_free (msg);
+            g_clear_error (&err);
+        }
+    } else {
+        // if key is not found, g_key_file_get_boolean returns FALSE and g_key_file_get_integer returns 0.
+        // Therefore, having these values as default is exactly what we want. So no need to check whether the key is missing.
+        app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
+        app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
+        app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
+        app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
+        app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
+        app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
+        app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
+        if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+            // if the key is not found, we set it to TRUE and save it to the config file.
+            app_data->use_secret_service = TRUE;
+            g_clear_error (&err);
+        }
     }
 
     GtkBuilder *builder = get_builder_from_partial_path(UI_PARTIAL_PATH);
