@@ -2033,17 +2033,6 @@ but not the number of digits and/or the period/counter.</property>
               </packing>
             </child>
             <child>
-              <object class="GtkLabel">
-                <property name="visible">True</property>
-                <property name="can-focus">False</property>
-                <property name="label" translatable="yes">Search by</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">2</property>
-              </packing>
-            </child>
-            <child>
               <object class="GtkSwitch" id="notif_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
@@ -2053,22 +2042,6 @@ but not the number of digits and/or the period/counter.</property>
               <packing>
                 <property name="left-attach">1</property>
                 <property name="top-attach">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkComboBoxText" id="search_by_cb_id">
-                <property name="visible">True</property>
-                <property name="can-focus">False</property>
-                <property name="active">0</property>
-                <property name="active-id">0</property>
-                <items>
-                  <item id="0" translatable="yes">Account</item>
-                  <item id="1" translatable="yes">Issuer</item>
-                </items>
-              </object>
-              <packing>
-                <property name="left-attach">1</property>
-                <property name="top-attach">2</property>
               </packing>
             </child>
             <child>

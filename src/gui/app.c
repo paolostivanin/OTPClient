@@ -107,7 +107,6 @@ activate (GtkApplication    *app,
     gint width = 0, height = 0;
     app_data->show_next_otp = FALSE; // next otp not shown by default
     app_data->disable_notifications = FALSE; // notifications enabled by default
-    app_data->search_column = 0; // account
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
     app_data->use_dark_theme = FALSE; // light theme by default
@@ -373,7 +372,6 @@ set_config_data (gint     *width,
         *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
         app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
         app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
-        app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);

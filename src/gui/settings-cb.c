@@ -71,7 +71,6 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     // Therefore, having these values as default is exactly what we want. So no need to check whether the key is missing.
     app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
     app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
-    app_data->search_column = g_key_file_get_integer (kf, "config", "search_column", NULL);
     app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
     app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
     app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
@@ -87,7 +86,6 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "settings_diag_id"));
     GtkWidget *sno_switch = GTK_WIDGET(gtk_builder_get_object (builder, "nextotp_switch_id"));
     GtkWidget *dn_switch = GTK_WIDGET(gtk_builder_get_object (builder, "notif_switch_id"));
-    GtkWidget *sc_cb = GTK_WIDGET(gtk_builder_get_object (builder, "search_by_cb_id"));
     settings_data->al_switch = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_switch_id"));
     g_signal_connect (settings_data->al_switch, "state-set", G_CALLBACK(handle_secretservice_switch), settings_data);
     settings_data->inactivity_cb = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_inactive_cb_id"));
@@ -111,10 +109,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     gtk_switch_set_active (GTK_SWITCH(dt_switch), app_data->use_dark_theme);
     gtk_switch_set_active (GTK_SWITCH(settings_data->dss_switch), app_data->use_secret_service);
     gtk_switch_set_active (GTK_SWITCH(settings_data->tray_switch), app_data->use_tray);
-    gchar *active_id_string = g_strdup_printf ("%d", app_data->search_column);
-    gtk_combo_box_set_active_id (GTK_COMBO_BOX(sc_cb), active_id_string);
-    g_free (active_id_string);
-    active_id_string = g_strdup_printf ("%d", app_data->inactivity_timeout);
+    gchar *active_id_string = g_strdup_printf ("%d", app_data->inactivity_timeout);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb), active_id_string);
     g_free (active_id_string);
 
@@ -127,7 +122,6 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         case GTK_RESPONSE_OK:
             app_data->show_next_otp = gtk_switch_get_active (GTK_SWITCH(sno_switch));
             app_data->disable_notifications = gtk_switch_get_active (GTK_SWITCH(dn_switch));
-            app_data->search_column = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(sc_cb)), NULL, 10);
             app_data->auto_lock = gtk_switch_get_active (GTK_SWITCH(settings_data->al_switch));
             app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb)), NULL, 10);
             app_data->use_dark_theme = gtk_switch_get_active (GTK_SWITCH(dt_switch));
@@ -135,7 +129,6 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             app_data->use_tray = gtk_switch_get_active (GTK_SWITCH(settings_data->tray_switch));
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
-            g_key_file_set_integer (kf, "config", "search_column", app_data->search_column);
             g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
@@ -148,7 +141,6 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             if (!g_key_file_save_to_file (kf, cfg_file_path, NULL)) {
                 g_printerr ("%s\n", _("Error while saving the config file."));
             }
-            gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
             if (app_data->filter_model != NULL) {
                 gtk_tree_model_filter_refilter (app_data->filter_model);
             }
