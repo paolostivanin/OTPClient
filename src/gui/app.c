@@ -289,10 +289,7 @@ activate (GtkApplication    *app,
     GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
     g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK(toggle_button_cb), reorder_toggle_btn);
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
-    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
-
-    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), NULL);
-
+    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), app_data);
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 1000, traverse_liststore, app_data, NULL);
@@ -304,20 +301,40 @@ activate (GtkApplication    *app,
     app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
 
     gtk_widget_show_all (app_data->main_window);
+    gtk_widget_hide(app_data->search_entry);
 }
 
 
 static gboolean
 key_pressed_cb (GtkWidget   *window,
                 GdkEventKey *event_key,
-                gpointer     user_data UNUSED)
+                gpointer     user_data)
 {
+    CAST_USER_DATA(AppData, app_data, user_data);
     switch (event_key->keyval) {
         case GDK_KEY_q:
         if (event_key->state & GDK_CONTROL_MASK) {
             gtk_window_close (GTK_WINDOW(window));
         }
         break;
+        case GDK_KEY_f:
+            if (event_key->state & GDK_CONTROL_MASK) {
+                GtkWidget *search_entry = app_data->search_entry;
+                if (search_entry != NULL) {
+                    gboolean is_visible = gtk_widget_get_visible (search_entry);
+                    gtk_widget_set_visible (search_entry, !is_visible);
+                    if (!is_visible) {
+                        gtk_widget_grab_focus (search_entry);
+                    } else {
+                        gtk_entry_set_text (GTK_ENTRY(search_entry), "");
+                        if (app_data->tree_view != NULL) {
+                            gtk_widget_grab_focus (GTK_WIDGET(app_data->tree_view));
+                        }
+                    }
+                }
+                return TRUE;
+            }
+            break;
     }
     return FALSE;
 }
@@ -605,6 +622,12 @@ destroy_cb (GtkWidget   *window,
     g_object_unref (app_data->builder);
     g_object_unref (app_data->add_popover_builder);
     g_object_unref (app_data->settings_popover_builder);
+    if (app_data->filter_model != NULL) {
+        g_object_unref (app_data->filter_model);
+    }
+    if (app_data->list_store != NULL) {
+        g_object_unref (app_data->list_store);
+    }
     g_free (app_data);
     gcry_control (GCRYCTL_TERM_SECMEM);
 }
@@ -615,7 +638,11 @@ save_sort_order (GtkTreeView *tree_view)
 {
     gint id;
     GtkSortType order;
-    gtk_tree_sortable_get_sort_column_id (GTK_TREE_SORTABLE(GTK_LIST_STORE(gtk_tree_view_get_model (tree_view))), &id, &order);
+    GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
+    if (GTK_IS_TREE_MODEL_FILTER (model)) {
+        model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER(model));
+    }
+    gtk_tree_sortable_get_sort_column_id (GTK_TREE_SORTABLE(model), &id, &order);
     // store data only if it was changed
     if (id >= 0) {
         store_data ("column_id", id, "sort_order", order);

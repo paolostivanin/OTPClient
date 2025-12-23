@@ -25,11 +25,10 @@ show_qr_cb (GtkMenuItem *menu_item UNUSED,
 {
     CAST_USER_DATA(AppData, app_data, user_data);
 
-    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
-    GtkListStore *list_store = GTK_LIST_STORE(model);
+    GtkListStore *list_store = NULL;
     GtkTreeIter iter;
 
-    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &iter) == FALSE) {
+    if (!get_selected_liststore_iter (app_data, &list_store, &iter)) {
         show_message_dialog (app_data->main_window, "Error: a row must be selected in order to get the QR Code.", GTK_MESSAGE_ERROR);
         return;
     }

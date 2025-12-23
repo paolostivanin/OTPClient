@@ -33,7 +33,9 @@ gboolean
 traverse_liststore (gpointer user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
-    gtk_tree_model_foreach (GTK_TREE_MODEL(gtk_tree_view_get_model (app_data->tree_view)), foreach_func_update_otps, app_data);
+    if (app_data->list_store != NULL) {
+        gtk_tree_model_foreach (GTK_TREE_MODEL(app_data->list_store), foreach_func_update_otps, app_data);
+    }
 
     return TRUE;
 }

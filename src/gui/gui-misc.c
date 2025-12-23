@@ -304,3 +304,29 @@ load_new_db (AppData  *app_data,
     g_slist_free_full (app_data->db_data->data_to_add, json_free);
     app_data->db_data->data_to_add = NULL;
 }
+
+
+gboolean
+get_selected_liststore_iter (AppData       *app_data,
+                             GtkListStore **list_store,
+                             GtkTreeIter   *iter)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
+    GtkTreeIter view_iter;
+    if (!gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &view_iter)) {
+        return FALSE;
+    }
+
+    if (GTK_IS_TREE_MODEL_FILTER (model)) {
+        GtkTreeIter child_iter;
+        GtkTreeModel *child_model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER(model));
+        gtk_tree_model_filter_convert_iter_to_child_iter (GTK_TREE_MODEL_FILTER(model), &child_iter, &view_iter);
+        *list_store = GTK_LIST_STORE(child_model);
+        *iter = child_iter;
+        return TRUE;
+    }
+
+    *list_store = GTK_LIST_STORE(model);
+    *iter = view_iter;
+    return TRUE;
+}

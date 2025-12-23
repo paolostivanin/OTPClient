@@ -44,12 +44,8 @@ edit_row_cb (GtkMenuItem *menu_item UNUSED,
     CAST_USER_DATA(AppData, app_data, user_data);
     edit_data->db_data = app_data->db_data;
 
-    GtkTreeModel *model = gtk_tree_view_get_model (app_data->tree_view);
-
-    edit_data->list_store = GTK_LIST_STORE(model);
-
-    if (gtk_tree_selection_get_selected (gtk_tree_view_get_selection (app_data->tree_view), &model, &edit_data->iter)) {
-        gtk_tree_model_get (model, &edit_data->iter, COLUMN_ACC_LABEL, &edit_data->current_label, COLUMN_ACC_ISSUER, &edit_data->current_issuer, -1);
+    if (get_selected_liststore_iter (app_data, &edit_data->list_store, &edit_data->iter)) {
+        gtk_tree_model_get (GTK_TREE_MODEL(edit_data->list_store), &edit_data->iter, COLUMN_ACC_LABEL, &edit_data->current_label, COLUMN_ACC_ISSUER, &edit_data->current_issuer, -1);
         show_edit_dialog (edit_data, app_data);
         g_free (edit_data->current_label);
         g_free (edit_data->current_issuer);

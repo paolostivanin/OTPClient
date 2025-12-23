@@ -14,6 +14,10 @@ void      icon_press_cb                (GtkEntry       *entry,
 guint     get_row_number_from_iter     (GtkListStore   *list_store,
                                         GtkTreeIter     iter);
 
+gboolean  get_selected_liststore_iter  (AppData        *app_data,
+                                        GtkListStore  **list_store,
+                                        GtkTreeIter    *iter);
+
 void      send_ok_cb                   (GtkWidget      *entry,
                                         gpointer        user_data);
 

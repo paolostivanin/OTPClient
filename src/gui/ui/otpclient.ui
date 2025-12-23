@@ -1237,6 +1237,19 @@ but not the number of digits and/or the period/counter.</property>
         <property name="can-focus">False</property>
         <property name="orientation">vertical</property>
         <child>
+          <object class="GtkSearchEntry" id="search_entry_id">
+            <property name="visible">False</property>
+            <property name="can-focus">True</property>
+            <property name="hexpand">True</property>
+            <property name="placeholder-text" translatable="yes">Search</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
           <object class="GtkScrolledWindow" id="scrolledwin_id">
             <property name="visible">True</property>
             <property name="can-focus">True</property>
