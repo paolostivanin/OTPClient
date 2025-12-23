@@ -89,9 +89,37 @@
   </content_rating>
 
   <releases>
+    <release version="4.2.0" date="2025-12-23">
+      <description>
+        <p>OTPClient 4.2.0 the followin improvements:</p>
+        <ul>
+          <li>ADDED: interactive search (ctrl-f)</li>
+          <li>IMPROVED: search now matches query against type, account label, and issuer uniformly</li>
+          <li>IMPROVED: Streamlined treeview model population to read JSON directly with safe defaults</li>
+          <li>IMPROVED: Simplified OTP update flow and tightened reorder/delete safety and cleanup</li>
+          <li>IMPROVED: Centralized app/db default initialization and early cleanup paths in app.c</li>
+          <li>IMPROVED: Tightened error handling by clearing config migration errors and freeing the config path</li>
+          <li>IMPROVED: Made early-exit cleanup safer by avoiding double-freeing the database key</li>
+          <li>IMPROVED: Added a helper to clear password entries and reset visibility on successful submit</li>
+          <li>IMPROVED: Cleared old/new password fields before the dialog closes to avoid brief exposure</li>
+          <li>IMPROVED: Initialized settings defaults when the config load fails and persisted them to otpclient.cfg</li>
+          <li>IMPROVED: Added warning dialog only when saving fallback defaults fails</li>
+          <li>IMPROVED: cli: improve robustness and correctness in string and file handling</li>
+          <li>FIXED: duplicate windows and tray icons on re-activation (#409)</li>
+        </ul>
+      </description>
+    </release>
+    <release version="4.1.1" date="2025-05-13">
+      <description>
+        <p>OTPClient 4.1.1 the following improvements:</p>
+        <ul>
+          <li>FIXED: build issue on Flatpak</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.1.0" date="2025-05-07">
       <description>
-        <p>OTPClient 4.1.0 the followin improvements:</p>
+        <p>OTPClient 4.1.0 the following improvements:</p>
         <ul>
           <li>ADDED: minimize to tray with ayatana-appindicator3 (#386 thanks a lot @len-foss)</li>
           <li>IMPROVED: only show memlock warning dialog when secure memory is unavailable (#397)</li>
