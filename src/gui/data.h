@@ -29,7 +29,6 @@ typedef struct app_data_t {
 
     gboolean show_next_otp;
     gboolean disable_notifications;
-    gint search_column;
     gboolean auto_lock;
     gint inactivity_timeout;
 

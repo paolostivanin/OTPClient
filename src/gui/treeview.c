@@ -44,6 +44,10 @@ static gboolean filter_visible_func (GtkTreeModel *model,
                                      GtkTreeIter  *iter,
                                      gpointer      user_data);
 
+static gboolean row_matches_query (GtkTreeModel *model,
+                                   GtkTreeIter  *iter,
+                                   const gchar  *query_folded);
+
 static void     search_entry_changed_cb (GtkEntry *entry,
                                          gpointer  user_data);
 
@@ -74,8 +78,6 @@ create_treeview (AppData *app_data)
 
     gtk_tree_view_set_model (app_data->tree_view, GTK_TREE_MODEL(app_data->filter_model));
 
-    // model has id 0 for type, 1 for label, 2 for issuer, etc while ui file has 0 label and 1 issuer. That's why the  "+1"
-    gtk_tree_view_set_search_column (GTK_TREE_VIEW(app_data->tree_view), app_data->search_column + 1);
     app_data->search_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "search_entry_id"));
     if (app_data->search_entry != NULL) {
         gtk_tree_view_set_search_entry (GTK_TREE_VIEW(app_data->tree_view), GTK_ENTRY(app_data->search_entry));
@@ -372,8 +374,8 @@ hide_all_otps_cb (GtkTreeView *tree_view UNUSED,
     if (app_data->list_store == NULL) {
         return;
     }
-    gtk_tree_model_foreach (GTK_TREE_MODEL(app_data->list_store), clear_all_otps, user_data);}
-
+    gtk_tree_model_foreach (GTK_TREE_MODEL(app_data->list_store), clear_all_otps, user_data);
+}
 
 static gboolean
 clear_all_otps (GtkTreeModel *model,
@@ -410,20 +412,50 @@ filter_visible_func (GtkTreeModel *model,
         return TRUE;
     }
 
-    gint column = app_data->search_column + 1;
-    gchar *value = NULL;
-    gtk_tree_model_get (model, iter, column, &value, -1);
-    if (value == NULL) {
-        return FALSE;
+    gchar *query_folded = g_utf8_strdown (query, -1);
+    gboolean match = row_matches_query (model, iter, query_folded);
+    g_free (query_folded);
+
+    return match;
+}
+
+
+static gboolean
+row_matches_query (GtkTreeModel *model,
+                   GtkTreeIter  *iter,
+                   const gchar  *query_folded)
+{
+    gchar *type = NULL;
+    gchar *label = NULL;
+    gchar *issuer = NULL;
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &type,
+                        COLUMN_ACC_LABEL, &label,
+                        COLUMN_ACC_ISSUER, &issuer,
+                        -1);
+
+    gboolean match = FALSE;
+    if (type != NULL) {
+        gchar *type_folded = g_utf8_strdown (type, -1);
+        match = (g_strstr_len (type_folded, -1, query_folded) != NULL);
+        g_free (type_folded);
     }
 
-    gchar *value_folded = g_utf8_strdown (value, -1);
-    gchar *query_folded = g_utf8_strdown (query, -1);
-    gboolean match = (g_strstr_len (value_folded, -1, query_folded) != NULL);
+    if (!match && label != NULL) {
+        gchar *label_folded = g_utf8_strdown (label, -1);
+        match = (g_strstr_len (label_folded, -1, query_folded) != NULL);
+        g_free (label_folded);
+    }
 
-    g_free (value);
-    g_free (value_folded);
-    g_free (query_folded);
+    if (!match && issuer != NULL) {
+        gchar *issuer_folded = g_utf8_strdown (issuer, -1);
+        match = (g_strstr_len (issuer_folded, -1, query_folded) != NULL);
+        g_free (issuer_folded);
+    }
+
+    g_free (type);
+    g_free (label);
+    g_free (issuer);
 
     return match;
 }
