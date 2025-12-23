@@ -22,6 +22,7 @@ set(COMMON_C_FLAGS
         "-Wstrict-prototypes -Wunreachable-code -Wchar-subscripts"
         "-Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align"
         "-Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare"
+        "-Wno-deprecated-declarations"
         "-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3"
 )
 
@@ -69,7 +70,7 @@ pkg_check_modules(COTP REQUIRED cotp>=3.0.0)
 pkg_check_modules(PNG REQUIRED libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED jansson>=2.12)
 pkg_check_modules(ZBAR REQUIRED zbar>=0.20)
-pkg_check_modules(GTK3 REQUIRED gtk+-3.0>=3.24.0)
+pkg_check_modules(GTK4 REQUIRED gtk4>=4.0.0)
 pkg_check_modules(GLIB2 REQUIRED glib-2.0>=2.68.0)
 pkg_check_modules(GIO REQUIRED gio-2.0>=2.68.0)
 pkg_check_modules(UUID REQUIRED uuid>=2.34.0)
@@ -106,7 +107,7 @@ if(BUILD_GUI)
         target_include_directories(${PROJECT_NAME} PRIVATE ${APPINDICATOR_INCLUDE_DIRS})
     endif()
     target_link_libraries(${PROJECT_NAME}
-            ${GTK3_LIBRARIES}
+            ${GTK4_LIBRARIES}
             ${PNG_LIBRARIES}
             ${ZBAR_LIBRARIES}
             ${COMMON_LIBS}

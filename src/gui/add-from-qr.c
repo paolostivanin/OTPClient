@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include <glib/gstdio.h>
 #include <glib/gi18n.h>
@@ -25,12 +25,18 @@ static void     parse_file_and_update_db (const gchar   *filename,
                                           AppData       *app_data,
                                           gboolean       google_migration);
 
-static void     uri_received_func        (GtkClipboard  *clipboard,
-                                          gchar        **uris,
+static void     uri_received_func        (GObject       *source_object,
+                                          GAsyncResult  *result,
                                           gpointer       user_data);
 
-static void     image_received_func      (GtkClipboard  *clipboard,
-                                          GdkPixbuf     *pixbuf,
+static void     image_received_func      (GObject       *source_object,
+                                          GAsyncResult  *result,
+                                          gpointer       user_data);
+
+static void     parse_clipboard_text     (const gchar   *text,
+                                          AppData       *app_data);
+
+static void     free_pixbuf_pixels       (guchar        *pixels,
                                           gpointer       user_data);
 
 
@@ -60,9 +66,15 @@ add_qr_from_file (GSimpleAction *simple,
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG (dialog));
 
     if (res == GTK_RESPONSE_ACCEPT) {
-        gchar *filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-        parse_file_and_update_db (filename, app_data, google_migration);
-        g_free (filename);
+        GFile *file = gtk_file_chooser_get_file (GTK_FILE_CHOOSER (dialog));
+        if (file != NULL) {
+            gchar *filename = g_file_get_path (file);
+            if (filename != NULL) {
+                parse_file_and_update_db (filename, app_data, google_migration);
+                g_free (filename);
+            }
+            g_object_unref (file);
+        }
     }
 
     g_object_unref (dialog);
@@ -75,6 +87,10 @@ add_qr_from_clipboard (GSimpleAction *simple UNUSED,
                        gpointer       user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
+    if (app_data->clipboard == NULL) {
+        show_message_dialog (app_data->main_window, "Clipboard not available.", GTK_MESSAGE_ERROR);
+        return;
+    }
     GTimeoutCBData *gt_cb_data = g_new0 (GTimeoutCBData, 1);
     gt_cb_data->uris_available = FALSE;
     gt_cb_data->image_available = FALSE;
@@ -86,21 +102,21 @@ add_qr_from_clipboard (GSimpleAction *simple UNUSED,
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
     gt_cb_data->diag = GTK_WIDGET(gtk_builder_get_object (builder, "diag_qr_clipboard_id"));
-    gtk_widget_show_all (gt_cb_data->diag);
+    gtk_window_present(GTK_WINDOW(gt_cb_data->diag));
 
     gint response = gtk_dialog_run (GTK_DIALOG (gt_cb_data->diag));
     if (response == GTK_RESPONSE_CANCEL) {
         if (gt_cb_data->uris_available == TRUE) {
-            gtk_clipboard_request_uris (app_data->clipboard, (GtkClipboardURIReceivedFunc)uri_received_func, app_data);
+            gdk_clipboard_read_text_async (app_data->clipboard, NULL, uri_received_func, app_data);
         }
         if (gt_cb_data->image_available == TRUE) {
-            gtk_clipboard_request_image (app_data->clipboard, (GtkClipboardImageReceivedFunc)image_received_func, app_data);
+            gdk_clipboard_read_texture_async (app_data->clipboard, NULL, image_received_func, app_data);
         }
         if (gt_cb_data->gtimeout_exit_value == TRUE) {
             // only remove if 'check_result' returned TRUE
             g_source_remove (source_id);
         }
-        gtk_widget_destroy (gt_cb_data->diag);
+        gtk_window_destroy (GTK_WINDOW(gt_cb_data->diag));
         g_free (gt_cb_data);
     }
     g_object_unref (builder);
@@ -111,8 +127,17 @@ static gboolean
 check_result (gpointer data)
 {
     GTimeoutCBData *gt_cb_data = (GTimeoutCBData *)data;
-    gt_cb_data->uris_available = gtk_clipboard_wait_is_uris_available (gt_cb_data->app_data->clipboard);
-    gt_cb_data->image_available = gtk_clipboard_wait_is_image_available (gt_cb_data->app_data->clipboard);
+    GdkContentFormats *formats = NULL;
+    if (gt_cb_data->app_data->clipboard != NULL) {
+        formats = gdk_clipboard_get_formats(gt_cb_data->app_data->clipboard);
+    }
+    gt_cb_data->uris_available = formats != NULL
+        && (gdk_content_formats_contain_mime_type(formats, "text/uri-list")
+            || gdk_content_formats_contain_mime_type(formats, "text/plain"));
+    gt_cb_data->image_available = formats != NULL
+        && (gdk_content_formats_contain_mime_type(formats, "image/png")
+            || gdk_content_formats_contain_mime_type(formats, "image/jpeg")
+            || gdk_content_formats_contain_mime_type(formats, "image/bmp"));
     if (gt_cb_data->counter > 30 || gt_cb_data->uris_available == TRUE || gt_cb_data->image_available == TRUE) {
         gtk_dialog_response (GTK_DIALOG (gt_cb_data->diag), GTK_RESPONSE_CANCEL);
         gt_cb_data->gtimeout_exit_value = FALSE;
@@ -149,34 +174,21 @@ parse_file_and_update_db (const gchar *filename,
 
 
 static void
-uri_received_func (GtkClipboard  *clipboard UNUSED,
-                   gchar        **uris,
-                   gpointer       user_data)
+uri_received_func (GObject      *source_object,
+                   GAsyncResult *result,
+                   gpointer      user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
-    GdkPixbuf *pbuf;
     GError *err = NULL;
-    if (uris != NULL && uris[0] != NULL) {
-        glong len_fpath = g_utf8_strlen (uris[0], -1) - 7 + 1; // -7 is for file://
-        gchar *file_path = g_malloc0 (len_fpath);
-        memcpy (file_path, uris[0] + 7, len_fpath);
-        pbuf = gdk_pixbuf_new_from_file (file_path, &err);
-        g_free (file_path);
-        if (err != NULL) {
-            gchar *msg = g_strconcat ("Couldn't get QR code URI from clipboard: ", err->message, NULL);
-            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-            g_free (msg);
-        } else {
-            // here we convert the input file to a PNG file, so we are able to parse it later on.
-            gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb_uri.png", NULL);
-            gdk_pixbuf_save (pbuf, filename, "png", &err, NULL);
-            parse_file_and_update_db (filename, app_data, FALSE);
-            if (g_unlink (filename) == -1) {
-                g_printerr ("%s\n", _("Couldn't unlink the temp pixbuf."));
-            }
-            g_free (filename);
-            g_object_unref (pbuf);
-        }
+    gchar *text = gdk_clipboard_read_text_finish(GDK_CLIPBOARD(source_object), result, &err);
+    if (err != NULL) {
+        gchar *msg = g_strconcat ("Couldn't get QR code URI from clipboard: ", err->message, NULL);
+        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+        g_free (msg);
+        g_clear_error (&err);
+    } else if (text != NULL) {
+        parse_clipboard_text (text, app_data);
+        g_free (text);
     } else {
         show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
     }
@@ -184,19 +196,27 @@ uri_received_func (GtkClipboard  *clipboard UNUSED,
 
 
 static void
-image_received_func (GtkClipboard  *clipboard UNUSED,
-                     GdkPixbuf     *pixbuf,
-                     gpointer       user_data)
+image_received_func (GObject      *source_object,
+                     GAsyncResult *result,
+                     gpointer      user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
     GError  *err = NULL;
-    if (pixbuf != NULL) {
+    GdkTexture *texture = gdk_clipboard_read_texture_finish(GDK_CLIPBOARD(source_object), result, &err);
+    if (texture != NULL) {
+        int width = gdk_texture_get_width(texture);
+        int height = gdk_texture_get_height(texture);
+        gsize stride = (gsize)width * 4;
+        guchar *pixels = g_malloc(stride * height);
+        gdk_texture_download(texture, pixels, stride);
+        GdkPixbuf *pixbuf = gdk_pixbuf_new_from_data(pixels, GDK_COLORSPACE_RGB, TRUE, 8, width, height, stride, free_pixbuf_pixels, NULL);
         gchar *filename = g_build_filename (g_get_tmp_dir (), "qrcode_from_cb.png", NULL);
         gdk_pixbuf_save (pixbuf, filename, "png", &err, NULL);
         if (err != NULL) {
             gchar *msg = g_strconcat ("Couldn't save clipboard to png:\n", err->message, NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
             g_free (msg);
+            g_clear_error (&err);
         } else {
             parse_file_and_update_db (filename, app_data, FALSE);
         }
@@ -204,7 +224,69 @@ image_received_func (GtkClipboard  *clipboard UNUSED,
             g_printerr ("%s\n", _("Error while unlinking the temp png."));
         }
         g_free (filename);
+        g_object_unref (pixbuf);
+        g_object_unref (texture);
     } else {
+        if (err != NULL) {
+            gchar *msg = g_strconcat ("Couldn't get QR code image from clipboard: ", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+            g_clear_error (&err);
+            return;
+        }
         show_message_dialog (app_data->main_window, "Couldn't get QR code image from clipboard", GTK_MESSAGE_ERROR);
     }
+}
+
+static void
+parse_clipboard_text (const gchar *text,
+                      AppData     *app_data)
+{
+    gchar **lines = g_strsplit (text, "\n", -1);
+    gchar *first_line = NULL;
+    for (gint i = 0; lines[i] != NULL; i++) {
+        if (lines[i][0] != '\0') {
+            first_line = lines[i];
+            break;
+        }
+    }
+
+    if (first_line == NULL) {
+        show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
+        g_strfreev (lines);
+        return;
+    }
+
+    if (g_str_has_prefix (first_line, "file://")) {
+        GError *err = NULL;
+        gchar *filename = g_filename_from_uri (first_line, NULL, &err);
+        if (filename == NULL) {
+            gchar *msg = g_strconcat ("Couldn't get QR code URI from clipboard: ", err->message, NULL);
+            show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
+            g_free (msg);
+            g_clear_error (&err);
+            g_strfreev (lines);
+            return;
+        }
+        parse_file_and_update_db (filename, app_data, FALSE);
+        g_free (filename);
+    } else if (g_str_has_prefix (first_line, "otpauth://") || g_str_has_prefix (first_line, "otpauth-migration://")) {
+        gchar *err_msg = parse_uris_migration (app_data, first_line, FALSE);
+        if (err_msg != NULL) {
+            show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
+            g_free (err_msg);
+        } else {
+            show_message_dialog (app_data->main_window, "QRCode successfully scanned", GTK_MESSAGE_INFO);
+        }
+    } else {
+        show_message_dialog (app_data->main_window, "Couldn't get QR code URI from clipboard", GTK_MESSAGE_ERROR);
+    }
+    g_strfreev (lines);
+}
+
+static void
+free_pixbuf_pixels (guchar   *pixels,
+                    gpointer  user_data UNUSED)
+{
+    g_free (pixels);
 }

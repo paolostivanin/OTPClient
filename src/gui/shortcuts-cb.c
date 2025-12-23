@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
 #include "data.h"

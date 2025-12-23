@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include <jansson.h>
 #include "password-cb.h"
@@ -31,9 +31,15 @@ import_data_cb (GSimpleAction *simple,
 
     if (res == GTK_RESPONSE_ACCEPT) {
         GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-        gchar *filename = gtk_file_chooser_get_filename (chooser);
-        parse_data_and_update_db (app_data, filename, action_name);
-        g_free (filename);
+        GFile *file = gtk_file_chooser_get_file (chooser);
+        if (file != NULL) {
+            gchar *filename = g_file_get_path (file);
+            if (filename != NULL) {
+                parse_data_and_update_db (app_data, filename, action_name);
+                g_free (filename);
+            }
+            g_object_unref (file);
+        }
     }
 
     g_object_unref (dialog);

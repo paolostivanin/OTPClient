@@ -1,5 +1,5 @@
 #ifdef ENABLE_MINIMIZE_TO_TRAY
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <glib.h>
 #include <libayatana-appindicator/app-indicator.h>
 #include "data.h"
@@ -7,7 +7,7 @@
 gboolean hide_to_tray(GtkWidget *widget, GdkEvent *event __attribute__((unused)), gpointer user_data) {
     AppData *app_data = (AppData*) user_data;
     if (app_data->use_tray) {
-        gtk_widget_hide(widget);
+        gtk_widget_set_visible(widget, FALSE);
         return TRUE; // Prevent the app shutdown, so it just minimizes
     }
     return FALSE;
@@ -18,9 +18,8 @@ void quit_app(GtkWidget *widget __attribute__((unused)), gpointer user_data __at
     g_application_quit(G_APPLICATION(app));
 }
 
-void show_main_window(GtkMenuItem *item __attribute__((unused)), gpointer user_data) {
+void show_main_window(GtkWidget *item __attribute__((unused)), gpointer user_data) {
     AppData *app_data = (AppData*) user_data;
-    gtk_widget_show_all(GTK_WIDGET(app_data->main_window));
     gtk_window_present(GTK_WINDOW(app_data->main_window));
 }
 
@@ -40,7 +39,7 @@ void init_tray_icon(AppData *app_data) {
     g_signal_connect(quit_item, "activate", G_CALLBACK(quit_app), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit_item);
 
-    gtk_widget_show_all(menu);
+    gtk_widget_set_visible(menu, TRUE);
     app_indicator_set_menu( app_data->indicator, GTK_MENU(menu));
 
     g_signal_connect(app_data->main_window, "delete-event", G_CALLBACK(hide_to_tray), app_data);

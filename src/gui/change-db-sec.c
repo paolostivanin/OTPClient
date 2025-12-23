@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "data.h"
 #include "../common/macros.h"
 #include "get-builder.h"
@@ -25,9 +25,9 @@ change_db_sec_cb (GSimpleAction *action_name UNUSED,
     GtkWidget *secsettings_cur_iter_entry = GTK_WIDGET(gtk_builder_get_object (secset_builder, "change_db_sec_cur_iter_id"));
     GtkWidget *secsettings_cur_mc_entry = GTK_WIDGET(gtk_builder_get_object (secset_builder, "change_db_sec_cur_memcost_id"));
     GtkWidget *secsettings_cur_p_entry = GTK_WIDGET(gtk_builder_get_object (secset_builder, "change_db_sec_cur_paral_id"));
-    gtk_entry_set_text (GTK_ENTRY(secsettings_cur_iter_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_iter));
-    gtk_entry_set_text (GTK_ENTRY(secsettings_cur_mc_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_memcost));
-    gtk_entry_set_text (GTK_ENTRY(secsettings_cur_p_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_parallelism));
+    gtk_editable_set_text (GTK_EDITABLE(secsettings_cur_iter_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_iter));
+    gtk_editable_set_text (GTK_EDITABLE(secsettings_cur_mc_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_memcost));
+    gtk_editable_set_text (GTK_EDITABLE(secsettings_cur_p_entry), g_strdup_printf ("%d", app_data->db_data->argon2id_parallelism));
 
     GtkWidget *secsettings_new_iter_entry = GTK_WIDGET(gtk_builder_get_object (secset_builder, "change_db_sec_new_iter_id"));
     GtkWidget *secsettings_new_mc_entry = GTK_WIDGET(gtk_builder_get_object (secset_builder, "change_db_sec_new_memcost_id"));
@@ -39,9 +39,9 @@ change_db_sec_cb (GSimpleAction *action_name UNUSED,
     switch (result) {
         case GTK_RESPONSE_OK:
             res = validate_values (app_data,
-                                   gtk_entry_get_text (GTK_ENTRY(secsettings_new_iter_entry)),
-                                   gtk_entry_get_text (GTK_ENTRY(secsettings_new_mc_entry)),
-                                   gtk_entry_get_text (GTK_ENTRY(secsettings_new_p_entry)),
+                                   gtk_editable_get_text (GTK_EDITABLE(secsettings_new_iter_entry)),
+                                   gtk_editable_get_text (GTK_EDITABLE(secsettings_new_mc_entry)),
+                                   gtk_editable_get_text (GTK_EDITABLE(secsettings_new_p_entry)),
                                    &err);
             if (res) {
                 update_db (app_data->db_data, &err);
@@ -65,7 +65,7 @@ change_db_sec_cb (GSimpleAction *action_name UNUSED,
         default:
             break;
     }
-    gtk_widget_destroy (secsettings_diag);
+    gtk_window_destroy (GTK_WINDOW(secsettings_diag));
     g_object_unref (secset_builder);
 }
 

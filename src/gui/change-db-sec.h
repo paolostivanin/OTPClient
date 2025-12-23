@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 
 void  change_db_sec_cb (GSimpleAction *action_name,
                         GVariant      *parameter,

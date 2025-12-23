@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <png.h>
 #include <qrencode.h>
 #include <glib/gstdio.h>
@@ -20,8 +20,8 @@ static int    write_png       (const QRcode *qrcode);
 
 
 void
-show_qr_cb (GtkMenuItem *menu_item UNUSED,
-            gpointer     user_data)
+show_qr_cb (GtkWidget *menu_item UNUSED,
+            gpointer   user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
 
@@ -51,11 +51,11 @@ show_qr_cb (GtkMenuItem *menu_item UNUSED,
         return;
     }
     gtk_image_set_from_pixbuf (GTK_IMAGE(image), pbuf);
-    gtk_widget_show_all (diag);
+    gtk_window_present (GTK_WINDOW(diag));
 
     gint response = gtk_dialog_run (GTK_DIALOG(diag));
     if (response == GTK_RESPONSE_OK) {
-        gtk_widget_destroy (diag);
+        gtk_window_destroy (GTK_WINDOW(diag));
         g_object_unref (pbuf);
         g_object_unref (builder);
         if (g_unlink (PNG_OUT) == -1) {

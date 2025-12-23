@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include "gui-misc.h"
 #include "message-dialogs.h"
@@ -85,7 +85,7 @@ prompt_for_password (AppData        *app_data,
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
-    gtk_widget_show_all (dialog);
+    gtk_window_present (GTK_WINDOW(dialog));
 
     gint ret;
     do {
@@ -113,7 +113,7 @@ prompt_for_password (AppData        *app_data,
 
     g_free (entry_widgets);
 
-    gtk_widget_destroy (dialog);
+    gtk_window_destroy (GTK_WINDOW(dialog));
 
     g_object_unref (builder);
 
@@ -127,7 +127,7 @@ reset_entry_after_submit (GtkWidget *entry)
     if (entry == NULL) {
         return;
     }
-    gtk_entry_set_text (GTK_ENTRY(entry), "");
+    gtk_editable_set_text (GTK_EDITABLE(entry), "");
     gtk_entry_set_visibility (GTK_ENTRY(entry), FALSE);
 }
 
@@ -137,17 +137,17 @@ check_pwd_cb (GtkWidget   *entry,
               gpointer     user_data)
 {
     CAST_USER_DATA(EntryWidgets, entry_widgets, user_data);
-    if (entry_widgets->cur_pwd != NULL && g_strcmp0 (gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry_old)), entry_widgets->cur_pwd) != 0) {
+    if (entry_widgets->cur_pwd != NULL && g_strcmp0 (gtk_editable_get_text (GTK_EDITABLE(entry_widgets->entry_old)), entry_widgets->cur_pwd) != 0) {
         show_message_dialog (gtk_widget_get_toplevel (entry), "Old password doesn't match", GTK_MESSAGE_ERROR);
         entry_widgets->retry = TRUE;
         return;
     }
-    if (gtk_entry_get_text_length (GTK_ENTRY(entry_widgets->entry1)) < 6) {
+    if (gtk_editable_get_text_length (GTK_EDITABLE(entry_widgets->entry1)) < 6) {
         show_message_dialog (gtk_widget_get_toplevel (entry), "Password must be at least 6 characters.", GTK_MESSAGE_ERROR);
         entry_widgets->retry = TRUE;
         return;
     }
-    if (g_strcmp0 (gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry1)), gtk_entry_get_text (GTK_ENTRY(entry_widgets->entry2))) == 0) {
+    if (g_strcmp0 (gtk_editable_get_text (GTK_EDITABLE(entry_widgets->entry1)), gtk_editable_get_text (GTK_EDITABLE(entry_widgets->entry2))) == 0) {
         reset_entry_after_submit (entry_widgets->entry_old);
         reset_entry_after_submit (entry_widgets->entry2);
         password_cb (entry, (gpointer *)&entry_widgets->pwd);
@@ -163,7 +163,7 @@ static void
 password_cb (GtkWidget  *entry,
              gpointer   *pwd)
 {
-    const gchar *text = gtk_entry_get_text (GTK_ENTRY(entry));
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE(entry));
     gsize len = g_utf8_strlen (text, -1) + 1;
     *pwd = gcry_calloc_secure (len, 1);
     strncpy (*pwd, text, len);

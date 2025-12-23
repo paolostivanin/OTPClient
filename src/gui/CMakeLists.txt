@@ -9,7 +9,7 @@ file(GLOB GUI_SOURCE_FILES
 )
 
 include_directories(
-        ${GTK3_INCLUDE_DIRS}
+        ${GTK4_INCLUDE_DIRS}
         ${PNG_INCLUDE_DIRS}
         ${ZBAR_INCLUDE_DIRS}
         ${COMMON_INCDIRS}

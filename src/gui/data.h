@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include <libayatana-appindicator/app-indicator.h>
 #endif
@@ -25,7 +25,7 @@ typedef struct app_data_t {
     AppIndicator *indicator;
     #endif
 
-    GtkClipboard *clipboard;
+    GdkClipboard *clipboard;
 
     gboolean show_next_otp;
     gboolean disable_notifications;
@@ -36,6 +36,9 @@ typedef struct app_data_t {
     GtkCssProvider *tv_css_provider;
 
     GNotification *notification;
+
+    GtkShortcutController *shortcut_controller;
+    GtkShortcut *lock_shortcut;
 
     guint source_id;
     guint source_id_last_activity;

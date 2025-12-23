@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "new-db-cb.h"
 #include "change-db-cb.h"
 #include "change-file-cb.h"
@@ -33,7 +33,7 @@ change_file (AppData *app_data)
             break;
     }
 
-    gtk_widget_hide (diag_changefile);
+    gtk_widget_set_visible (diag_changefile, FALSE);
 
     return res;
 }

@@ -19,7 +19,7 @@
   </keywords>
 
   <description>
-    <p>Highly secure and easy to use OTP client written in C/GTK3 that supports both TOTP and HOTP and has the following features:</p>
+    <p>Highly secure and easy to use OTP client written in C/GTK4 that supports both TOTP and HOTP and has the following features:</p>
 <ul>
 <li>integration with the OS' secret service provider via libsecret</li>
 <li>support both TOTP and HOTP</li>

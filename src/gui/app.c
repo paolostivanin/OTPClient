@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include <jansson.h>
 #include <libsecret/secret.h>
@@ -67,9 +67,11 @@ static void       store_data                (const gchar        *param1_name,
                                              const gchar        *param2_name,
                                              gint                param2_value);
 
-static gboolean   key_pressed_cb            (GtkWidget          *window,
-                                             GdkEventKey        *event_key,
-                                             gpointer            user_data);
+static gboolean   key_pressed_cb            (GtkEventControllerKey *controller,
+                                             guint                  keyval,
+                                             guint                  keycode,
+                                             GdkModifierType        state,
+                                             gpointer               user_data);
 
 static void       set_open_db_action        (GtkWidget          *btn,
                                              gpointer            user_data);
@@ -191,12 +193,12 @@ activate (GtkApplication    *app,
         switch (response) {
             case GTK_RESPONSE_CANCEL:
             default:
-                gtk_widget_destroy (app_data->diag_rcdb);
+                gtk_window_destroy (GTK_WINDOW(app_data->diag_rcdb));
                 cleanup_app_data (app_data);
                 g_application_quit (G_APPLICATION(app));
                 return;
             case GTK_RESPONSE_OK:
-                gtk_widget_destroy (app_data->diag_rcdb);
+                gtk_window_destroy (GTK_WINDOW(app_data->diag_rcdb));
         }
     }
 
@@ -282,7 +284,8 @@ activate (GtkApplication    *app,
         g_clear_error (&tmp_err);
     }
 
-    app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
+    GdkDisplay *display = gdk_display_get_default();
+    app_data->clipboard = display != NULL ? gdk_display_get_clipboard(display) : NULL;
 
     create_treeview (app_data);
     setup_kb_shortcuts (app_data);
@@ -297,7 +300,9 @@ activate (GtkApplication    *app,
     GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON(gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
     g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK(toggle_button_cb), reorder_toggle_btn);
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK(reorder_rows_cb), app_data);
-    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK(key_pressed_cb), app_data);
+    GtkEventController *key_controller = gtk_event_controller_key_new();
+    g_signal_connect (key_controller, "key-pressed", G_CALLBACK(key_pressed_cb), app_data);
+    gtk_widget_add_controller(app_data->main_window, key_controller);
     g_signal_connect (app_data->main_window, "destroy", G_CALLBACK(destroy_cb), app_data);
 
     app_data->source_id = g_timeout_add_full (G_PRIORITY_DEFAULT, 1000, traverse_liststore, app_data, NULL);
@@ -310,25 +315,28 @@ activate (GtkApplication    *app,
 
     g_object_set_qdata (G_OBJECT (app), app_data_quark, app_data);
 
-    gtk_widget_show_all (app_data->main_window);
-    gtk_widget_hide(app_data->search_entry);
+    gtk_window_present(GTK_WINDOW(app_data->main_window));
+    gtk_widget_set_visible(app_data->search_entry, FALSE);
 }
 
 
 static gboolean
-key_pressed_cb (GtkWidget   *window,
-                GdkEventKey *event_key,
-                gpointer     user_data)
+key_pressed_cb (GtkEventControllerKey *controller,
+                guint                  keyval,
+                guint                  keycode UNUSED,
+                GdkModifierType        state,
+                gpointer               user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
-    switch (event_key->keyval) {
+    GtkWidget *window = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(controller));
+    switch (keyval) {
         case GDK_KEY_q:
-        if (event_key->state & GDK_CONTROL_MASK) {
+        if (state & GDK_CONTROL_MASK) {
             gtk_window_close (GTK_WINDOW(window));
         }
         break;
         case GDK_KEY_f:
-            if (event_key->state & GDK_CONTROL_MASK) {
+            if (state & GDK_CONTROL_MASK) {
                 GtkWidget *search_entry = app_data->search_entry;
                 if (search_entry != NULL) {
                     gboolean is_visible = gtk_widget_get_visible (search_entry);
@@ -336,7 +344,7 @@ key_pressed_cb (GtkWidget   *window,
                     if (!is_visible) {
                         gtk_widget_grab_focus (search_entry);
                     } else {
-                        gtk_entry_set_text (GTK_ENTRY(search_entry), "");
+                        gtk_editable_set_text (GTK_EDITABLE(search_entry), "");
                         if (app_data->tree_view != NULL) {
                             gtk_widget_grab_focus (GTK_WIDGET(app_data->tree_view));
                         }
@@ -493,8 +501,6 @@ create_main_window (gint     width,
     g_action_map_add_action_entries (G_ACTION_MAP(import_actions), import_menu_entries, G_N_ELEMENTS (import_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "import_menu", import_actions);
 
-    gtk_popover_set_constrain_to (GTK_POPOVER(add_popover), GTK_POPOVER_CONSTRAINT_NONE);
-    gtk_popover_set_constrain_to (GTK_POPOVER(settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
 }
 
 
@@ -535,7 +541,6 @@ get_db_path (AppData *app_data)
                                                                 "Cancel");
 
     GtkFileChooser *chooser = GTK_FILE_CHOOSER(dialog);
-    gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
     gtk_file_chooser_set_select_multiple (chooser, FALSE);
     if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
         gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
@@ -544,11 +549,17 @@ get_db_path (AppData *app_data)
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
 
     if (res == GTK_RESPONSE_ACCEPT) {
-        db_path = gtk_file_chooser_get_filename (chooser);
-        g_key_file_set_string (kf, "config", "db_path", db_path);
-        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
+        GFile *file = gtk_file_chooser_get_file (chooser);
+        if (file != NULL) {
+            db_path = g_file_get_path (file);
+            g_object_unref (file);
+        }
+        if (db_path != NULL) {
+            g_key_file_set_string (kf, "config", "db_path", db_path);
+            if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+                g_printerr ("%s\n", err->message);
+                g_clear_error (&err);
+            }
         }
     }
 
@@ -593,13 +604,11 @@ reorder_rows_cb (GtkToggleButton *btn,
 
 static void
 get_window_size_cb (GtkWidget      *window,
-                    GtkAllocation  *allocation UNUSED,
+                    GtkAllocation  *allocation,
                     gpointer        user_data UNUSED)
 {
-    gint w, h;
-    gtk_window_get_size (GTK_WINDOW(window), &w, &h);
-    g_object_set_data (G_OBJECT(window), "width", GINT_TO_POINTER(w));
-    g_object_set_data (G_OBJECT(window), "height", GINT_TO_POINTER(h));
+    g_object_set_data (G_OBJECT(window), "width", GINT_TO_POINTER(allocation->width));
+    g_object_set_data (G_OBJECT(window), "height", GINT_TO_POINTER(allocation->height));
 }
 
 
@@ -626,7 +635,9 @@ destroy_cb (GtkWidget   *window,
     g_slist_free_full (app_data->db_data->objects_hash, g_free);
     json_decref (app_data->db_data->in_memory_json_data);
     g_free (app_data->db_data);
-    gtk_clipboard_clear (app_data->clipboard);
+    if (app_data->clipboard != NULL) {
+        gdk_clipboard_set_text(app_data->clipboard, "");
+    }
     g_application_withdraw_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW(app_data->main_window))), NOTIFICATION_ID);
     g_object_unref (app_data->notification);
 #pragma GCC diagnostic push
@@ -748,7 +759,7 @@ cleanup_app_data (AppData *app_data)
     }
 
     if (app_data->main_window != NULL) {
-        gtk_widget_destroy (app_data->main_window);
+        gtk_window_destroy (GTK_WINDOW(app_data->main_window));
     }
 
     if (app_data->builder != NULL) {

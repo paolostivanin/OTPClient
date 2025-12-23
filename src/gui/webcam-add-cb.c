@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <zbar.h>
 #include <gcrypt.h>
 #include "message-dialogs.h"
@@ -55,7 +55,7 @@ webcam_add_cb (GSimpleAction *simple,
 
     guint source_id = g_timeout_add (1000, check_result, cfg_data);
 
-    gtk_widget_show_all (cfg_data->diag);
+    gtk_window_present (GTK_WINDOW(cfg_data->diag));
 
     gint response = gtk_dialog_run (GTK_DIALOG (cfg_data->diag));
     if (response == GTK_RESPONSE_CANCEL) {
@@ -74,7 +74,7 @@ webcam_add_cb (GSimpleAction *simple,
             // only remove if 'check_result' returned TRUE
             g_source_remove (source_id);
         }
-        gtk_widget_destroy (cfg_data->diag);
+        gtk_window_destroy (GTK_WINDOW(cfg_data->diag));
         g_free (cfg_data);
     }
     g_object_unref (builder);

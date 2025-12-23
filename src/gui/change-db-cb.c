@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include <libsecret/secret.h>
 #include "data.h"
@@ -20,21 +20,21 @@ change_db (AppData *app_data)
     g_object_set_data (G_OBJECT(new_changedb_entry), "action", GINT_TO_POINTER(ACTION_OPEN));
     g_signal_connect (new_changedb_entry, "icon-press", G_CALLBACK (select_file_icon_pressed_cb), app_data);
 
-    gtk_entry_set_text (GTK_ENTRY(old_changedb_entry), app_data->db_data->db_path);
+    gtk_editable_set_text (GTK_EDITABLE(old_changedb_entry), app_data->db_data->db_path);
 
     const gchar *new_db_path;
     gint result = gtk_dialog_run (GTK_DIALOG (changedb_diag));
     switch (result) {
         case GTK_RESPONSE_OK:
-            if (gtk_entry_get_text_length (GTK_ENTRY(new_changedb_entry)) == 0) {
+            if (gtk_editable_get_text_length (GTK_EDITABLE(new_changedb_entry)) == 0) {
                 show_message_dialog (app_data->main_window, "Input path cannot be empty.", GTK_MESSAGE_ERROR);
-                gtk_widget_hide (changedb_diag);
+                gtk_widget_set_visible (changedb_diag, FALSE);
                 return RETRY_CHANGE;
             }
-            new_db_path = gtk_entry_get_text (GTK_ENTRY(new_changedb_entry));
+            new_db_path = gtk_editable_get_text (GTK_EDITABLE(new_changedb_entry));
             if (!g_file_test (new_db_path, G_FILE_TEST_IS_REGULAR) || g_file_test (new_db_path,G_FILE_TEST_IS_SYMLINK)){
                 show_message_dialog (app_data->main_window, "Selected file is either a symlink or a non regular file.\nPlease choose another file.", GTK_MESSAGE_ERROR);
-                gtk_widget_hide (changedb_diag);
+                gtk_widget_set_visible (changedb_diag, FALSE);
                 return RETRY_CHANGE;
             }
             gchar *old_db_path = g_strdup (app_data->db_data->db_path);
@@ -44,7 +44,7 @@ change_db (AppData *app_data)
             gcry_free (app_data->db_data->key);
             app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
             if (app_data->db_data->key == NULL) {
-                gtk_widget_hide (changedb_diag);
+                gtk_widget_set_visible (changedb_diag, FALSE);
                 revert_db_path (app_data, old_db_path);
                 return RETRY_CHANGE;
             }
@@ -54,7 +54,7 @@ change_db (AppData *app_data)
             if (err != NULL) {
                 show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                 g_clear_error (&err);
-                gtk_widget_hide (changedb_diag);
+                gtk_widget_set_visible (changedb_diag, FALSE);
                 revert_db_path (app_data, old_db_path);
                 return RETRY_CHANGE;
             }
@@ -62,10 +62,10 @@ change_db (AppData *app_data)
             break;
         case GTK_RESPONSE_CANCEL:
         default:
-            gtk_widget_hide (changedb_diag);
+            gtk_widget_set_visible (changedb_diag, FALSE);
             return QUIT_APP;
     }
-    gtk_widget_hide (changedb_diag);
+    gtk_widget_set_visible (changedb_diag, FALSE);
 
     return CHANGE_OK;
 }

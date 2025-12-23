@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <jansson.h>
 #include <gcrypt.h>
 #include "password-cb.h"
@@ -45,8 +45,11 @@ export_data_cb (GSimpleAction *simple,
                                                                  GTK_FILE_CHOOSER_ACTION_SAVE,
                                                                  "OK",
                                                                  "Cancel");
-    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(fl_diag), base_dir);
-    gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER(fl_diag), TRUE);
+    if (base_dir != NULL) {
+        GFile *base_dir_file = g_file_new_for_path (base_dir);
+        gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(fl_diag), base_dir_file, NULL);
+        g_object_unref (base_dir_file);
+    }
     gtk_file_chooser_set_select_multiple (GTK_FILE_CHOOSER(fl_diag), FALSE);
 
     const gchar *filename = NULL;
@@ -68,7 +71,11 @@ export_data_cb (GSimpleAction *simple,
     g_autofree gchar *export_file_abs_path = NULL;
     gint native_diag_res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(fl_diag));
     if (native_diag_res == GTK_RESPONSE_ACCEPT) {
-        export_file_abs_path = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(fl_diag));
+        GFile *file = gtk_file_chooser_get_file (GTK_FILE_CHOOSER(fl_diag));
+        if (file != NULL) {
+            export_file_abs_path = g_file_get_path (file);
+            g_object_unref (file);
+        }
     }
     g_object_unref (fl_diag);
 

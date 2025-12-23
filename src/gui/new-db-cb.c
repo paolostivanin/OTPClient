@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include <libsecret/secret.h>
 #include "data.h"
@@ -23,12 +23,12 @@ new_db (AppData *app_data)
     gint result = gtk_dialog_run (GTK_DIALOG (newdb_diag));
     switch (result) {
         case GTK_RESPONSE_OK:
-            if (gtk_entry_get_text_length (GTK_ENTRY(newdb_entry)) == 0) {
+            if (gtk_editable_get_text_length (GTK_EDITABLE(newdb_entry)) == 0) {
                 show_message_dialog (app_data->main_window, "Input cannot be empty.", GTK_MESSAGE_ERROR);
-                gtk_widget_hide (newdb_diag);
+                gtk_widget_set_visible (newdb_diag, FALSE);
                 return RETRY_CHANGE;
             }
-            new_db_path_with_suffix = g_string_new (gtk_entry_get_text (GTK_ENTRY(newdb_entry)));
+            new_db_path_with_suffix = g_string_new (gtk_editable_get_text (GTK_EDITABLE(newdb_entry)));
             g_string_append (new_db_path_with_suffix, ".enc");
             if (g_file_test (new_db_path_with_suffix->str, G_FILE_TEST_IS_REGULAR) || g_file_test (new_db_path_with_suffix->str, G_FILE_TEST_IS_SYMLINK)) {
                 show_message_dialog (app_data->main_window, "Selected file already exists, please choose another filename.", GTK_MESSAGE_ERROR);
@@ -42,7 +42,7 @@ new_db (AppData *app_data)
                 gcry_free (app_data->db_data->key);
                 app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
                 if (app_data->db_data->key == NULL) {
-                    gtk_widget_hide (newdb_diag);
+                    gtk_widget_set_visible (newdb_diag, FALSE);
                     revert_db_path (app_data, old_db_path);
                     g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
@@ -53,7 +53,7 @@ new_db (AppData *app_data)
                 if (err != NULL) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                     g_clear_error (&err);
-                    gtk_widget_hide (newdb_diag);
+                    gtk_widget_set_visible (newdb_diag, FALSE);
                     revert_db_path (app_data, old_db_path);
                     g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
@@ -62,7 +62,7 @@ new_db (AppData *app_data)
                 if (err != NULL) {
                     show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
                     g_clear_error (&err);
-                    gtk_widget_hide (newdb_diag);
+                    gtk_widget_set_visible (newdb_diag, FALSE);
                     revert_db_path (app_data, old_db_path);
                     g_string_free (new_db_path_with_suffix, TRUE);
                     return RETRY_CHANGE;
@@ -73,10 +73,10 @@ new_db (AppData *app_data)
             break;
         case GTK_RESPONSE_CANCEL:
         default:
-            gtk_widget_hide (newdb_diag);
+            gtk_widget_set_visible (newdb_diag, FALSE);
             return QUIT_APP;
     }
-    gtk_widget_destroy (newdb_diag);
+    gtk_window_destroy (GTK_WINDOW(newdb_diag));
 
     return CHANGE_OK;
 }

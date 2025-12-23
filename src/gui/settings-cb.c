@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <glib/gi18n.h>
 #include <libsecret/secret.h>
 #include "message-dialogs.h"
@@ -37,6 +37,9 @@ static gboolean handle_autolock               (GtkSwitch   *sw,
 static gboolean handle_tray_switch            (GtkSwitch   *sw,
                                                gboolean     state,
                                                gpointer     user_data);
+
+static void     add_lock_shortcut             (AppData *app_data);
+static void     remove_lock_shortcut          (AppData *app_data);
 
 
 void
@@ -122,7 +125,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
 
     handle_al_ss (app_data, settings_data->al_switch, settings_data->inactivity_cb, settings_data->dss_switch);
 
-    gtk_widget_show_all (dialog);
+    gtk_window_present (GTK_WINDOW(dialog));
 
     gboolean old_ss_value = app_data->use_secret_service;
     switch (gtk_dialog_run (GTK_DIALOG(dialog))) {
@@ -160,7 +163,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     g_key_file_free (kf);
     g_free (settings_data);
 
-    gtk_widget_destroy (dialog);
+    gtk_window_destroy (GTK_WINDOW(dialog));
 
     g_object_unref (builder);
 }
@@ -266,12 +269,12 @@ handle_autolock (GtkSwitch *sw UNUSED,
         gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (settings_data->app_data->builder, "lock_btn_id")), TRUE);
         gtk_widget_set_sensitive (settings_data->al_switch, TRUE);
         gtk_widget_set_sensitive (settings_data->inactivity_cb, TRUE);
-        gtk_binding_entry_add_signal (gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(settings_data->app_data->main_window)), GDK_KEY_l, GDK_CONTROL_MASK, "lock-app", 0);
+        add_lock_shortcut (settings_data->app_data);
     } else {
         gtk_widget_set_sensitive (GTK_WIDGET(gtk_builder_get_object (settings_data->app_data->builder, "lock_btn_id")), FALSE);
         gtk_widget_set_sensitive (settings_data->al_switch, FALSE);
         gtk_widget_set_sensitive (settings_data->inactivity_cb, FALSE);
-        gtk_binding_entry_remove (gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(settings_data->app_data->main_window)), GDK_KEY_l, GDK_CONTROL_MASK);
+        remove_lock_shortcut (settings_data->app_data);
     }
     gtk_switch_set_state (GTK_SWITCH(sw), state);
 
@@ -292,3 +295,27 @@ handle_tray_switch (GtkSwitch *sw UNUSED,
     return TRUE;
 }
 #endif
+
+static void
+add_lock_shortcut (AppData *app_data)
+{
+    if (app_data->shortcut_controller == NULL || app_data->lock_shortcut != NULL) {
+        return;
+    }
+
+    GtkShortcutTrigger *trigger = gtk_keyval_trigger_new(GDK_KEY_l, GDK_CONTROL_MASK);
+    GtkShortcutAction *action = gtk_signal_action_new("lock-app");
+    app_data->lock_shortcut = gtk_shortcut_new(trigger, action);
+    gtk_shortcut_controller_add_shortcut(app_data->shortcut_controller, app_data->lock_shortcut);
+}
+
+static void
+remove_lock_shortcut (AppData *app_data)
+{
+    if (app_data->shortcut_controller == NULL || app_data->lock_shortcut == NULL) {
+        return;
+    }
+
+    gtk_shortcut_controller_remove_shortcut(app_data->shortcut_controller, app_data->lock_shortcut);
+    app_data->lock_shortcut = NULL;
+}

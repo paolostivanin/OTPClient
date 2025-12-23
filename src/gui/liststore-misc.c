@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <cotp.h>
 #include <jansson.h>
 #include "treeview.h"

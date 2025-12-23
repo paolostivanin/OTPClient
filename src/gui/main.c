@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <glib/gi18n.h>
 #include "otpclient.h"
 #include "version.h"

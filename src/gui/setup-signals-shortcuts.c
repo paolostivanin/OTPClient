@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "data.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
@@ -19,6 +19,11 @@ static void setup_signals   (void);
 
 static void connect_signals (AppData *app_data);
 
+static GtkShortcut *add_signal_shortcut (GtkShortcutController *controller,
+                                         guint                  keyval,
+                                         GdkModifierType        modifiers,
+                                         const char            *signal_name);
+
 
 void
 setup_kb_shortcuts (AppData *app_data)
@@ -28,23 +33,25 @@ setup_kb_shortcuts (AppData *app_data)
     setup_signals ();
     connect_signals (app_data);
 
-    GtkBindingSet *mw_binding_set = gtk_binding_set_by_class (GTK_APPLICATION_WINDOW_GET_CLASS(app_data->main_window));
+    app_data->shortcut_controller = GTK_SHORTCUT_CONTROLLER(gtk_shortcut_controller_new());
+    gtk_shortcut_controller_set_scope(app_data->shortcut_controller, GTK_SHORTCUT_SCOPE_GLOBAL);
+    gtk_widget_add_controller(app_data->main_window, GTK_EVENT_CONTROLLER(app_data->shortcut_controller));
 
-    gtk_binding_entry_add_signal(mw_binding_set, GDK_KEY_r, GDK_CONTROL_MASK, signal_names[0], 0);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_r, GDK_CONTROL_MASK, signal_names[0]);
     if (app_data->auto_lock == TRUE || app_data->inactivity_timeout > 0) {
         // auto-lock is enabled, so secret service is disabled, therefore we allow the shortcut
-        gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_l, GDK_CONTROL_MASK, signal_names[1], 0);
+        app_data->lock_shortcut = add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_l, GDK_CONTROL_MASK, signal_names[1]);
     }
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_b, GDK_CONTROL_MASK, signal_names[2], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_o, GDK_CONTROL_MASK, signal_names[3], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_s, GDK_CONTROL_MASK, signal_names[4], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_k, GDK_CONTROL_MASK, signal_names[5], 0);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_b, GDK_CONTROL_MASK, signal_names[2]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_o, GDK_CONTROL_MASK, signal_names[3]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_s, GDK_CONTROL_MASK, signal_names[4]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_k, GDK_CONTROL_MASK, signal_names[5]);
 
-    // GDM_MOD1_MASK: the fourth modifier key (it depends on the modifier mapping of the X server which key is interpreted as this modifier, but normally it is the Alt key).
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_w, GDK_MOD1_MASK, signal_names[6], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_m, GDK_MOD1_MASK, signal_names[7], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_e, GDK_MOD1_MASK, signal_names[8], 0);
-    gtk_binding_entry_add_signal (mw_binding_set, GDK_KEY_q, GDK_MOD1_MASK, signal_names[9], 0);
+    // GDK_ALT_MASK maps to the Alt modifier.
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_w, GDK_ALT_MASK, signal_names[6]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_m, GDK_ALT_MASK, signal_names[7]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_e, GDK_ALT_MASK, signal_names[8]);
+    add_signal_shortcut(app_data->shortcut_controller, GDK_KEY_q, GDK_ALT_MASK, signal_names[9]);
 }
 
 
@@ -77,4 +84,19 @@ connect_signals (AppData *app_data)
     for (int i = 0; i < G_N_ELEMENTS(signal_connections); ++i) {
         g_signal_connect (app_data->main_window, signal_connections[i].signal_name, signal_connections[i].callback, app_data);
     }
+}
+
+static GtkShortcut *
+add_signal_shortcut (GtkShortcutController *controller,
+                     guint                  keyval,
+                     GdkModifierType        modifiers,
+                     const char            *signal_name)
+{
+    GtkShortcutTrigger *trigger = gtk_keyval_trigger_new(keyval, modifiers);
+    GtkShortcutAction *action = gtk_signal_action_new(signal_name);
+    GtkShortcut *shortcut = gtk_shortcut_new(trigger, action);
+
+    gtk_shortcut_controller_add_shortcut(controller, shortcut);
+
+    return shortcut;
 }

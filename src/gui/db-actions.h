@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "data.h"
 
 G_BEGIN_DECLS
@@ -10,7 +10,7 @@ G_BEGIN_DECLS
 
 void select_file_icon_pressed_cb (GtkEntry       *entry,
                                   gint            position,
-                                  GdkEventButton *event,
+                                  GdkEvent       *event,
                                   gpointer        data);
 
 void update_cfg_file             (AppData        *app_data);

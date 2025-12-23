@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <string.h>
 #include <jansson.h>
 #include <gcrypt.h>
@@ -37,12 +37,12 @@ parse_user_data (Widgets        *widgets,
 {
     json_t *obj;
 
-    const gchar *acc_label = gtk_entry_get_text (GTK_ENTRY(widgets->label_entry));
-    const gchar *acc_iss = gtk_entry_get_text (GTK_ENTRY(widgets->iss_entry));
-    const gchar *acc_key = gtk_entry_get_text (GTK_ENTRY(widgets->sec_entry));
-    const gchar *digits = gtk_entry_get_text (GTK_ENTRY(widgets->digits_entry));
-    const gchar *period = gtk_entry_get_text (GTK_ENTRY(widgets->period_entry));
-    const gchar *counter = gtk_entry_get_text (GTK_ENTRY(widgets->counter_entry));
+    const gchar *acc_label = gtk_editable_get_text (GTK_EDITABLE(widgets->label_entry));
+    const gchar *acc_iss = gtk_editable_get_text (GTK_EDITABLE(widgets->iss_entry));
+    const gchar *acc_key = gtk_editable_get_text (GTK_EDITABLE(widgets->sec_entry));
+    const gchar *digits = gtk_editable_get_text (GTK_EDITABLE(widgets->digits_entry));
+    const gchar *period = gtk_editable_get_text (GTK_EDITABLE(widgets->period_entry));
+    const gchar *counter = gtk_editable_get_text (GTK_EDITABLE(widgets->counter_entry));
     gboolean period_active = gtk_widget_get_sensitive (widgets->period_entry);
     gboolean counter_active = gtk_widget_get_sensitive (widgets->counter_entry);
     gchar *acc_key_trimmed = g_trim_whitespace (acc_key);

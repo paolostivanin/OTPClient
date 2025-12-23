@@ -1,6 +1,6 @@
 #include <glib.h>
 #include <gio/gio.h>
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "data.h"
 #include "get-builder.h"
 #include "gui-misc.h"
@@ -19,7 +19,7 @@ lock_app (GtkWidget *w UNUSED,
     app_data->app_locked = TRUE;
 
     g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
-    gtk_widget_hide (GTK_WIDGET(app_data->tree_view));
+    gtk_widget_set_visible (GTK_WIDGET(app_data->tree_view), FALSE);
 
     GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
 
@@ -31,28 +31,28 @@ lock_app (GtkWidget *w UNUSED,
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
-    gtk_widget_show_all (dialog);
+    gtk_window_present (GTK_WINDOW(dialog));
 
     gint ret;
     gboolean retry = FALSE;
     do {
         ret = gtk_dialog_run (GTK_DIALOG(dialog));
         if (ret == GTK_RESPONSE_OK) {
-            if (g_strcmp0 (app_data->db_data->key, gtk_entry_get_text (GTK_ENTRY(pwd_entry))) != 0) {
+            if (g_strcmp0 (app_data->db_data->key, gtk_editable_get_text (GTK_EDITABLE(pwd_entry))) != 0) {
                 show_message_dialog (dialog, "The password is wrong, please try again.", GTK_MESSAGE_ERROR);
-                gtk_entry_set_text (GTK_ENTRY(pwd_entry), "");
+                gtk_editable_set_text (GTK_EDITABLE(pwd_entry), "");
                 retry = TRUE;
             } else {
                 retry = FALSE;
                 app_data->app_locked = FALSE;
                 app_data->last_user_activity = g_date_time_new_now_local ();
                 app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
-                gtk_widget_destroy (dialog);
+                gtk_window_destroy (GTK_WINDOW(dialog));
                 gtk_widget_show (GTK_WIDGET(app_data->tree_view));
                 g_object_unref (builder);
             }
         } else {
-            gtk_widget_destroy (dialog);
+            gtk_window_destroy (GTK_WINDOW(dialog));
             g_object_unref (builder);
             GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
             destroy_cb (app_data->main_window, app_data);

@@ -42,14 +42,14 @@ dbinfo_cb (GSimpleAction *simple UNUSED,
     }
     g_free (params);
 
-    gtk_entry_set_text (GTK_ENTRY(db_location_entry), app_data->db_data->db_path);
+    gtk_editable_set_text (GTK_EDITABLE(db_location_entry), app_data->db_data->db_path);
     gchar *cfg_file_path = NULL;
 #ifdef IS_FLATPAK
     cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #else
     cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #endif
-    gtk_entry_set_text (GTK_ENTRY(config_entry), cfg_file_path);
+    gtk_editable_set_text (GTK_EDITABLE(config_entry), cfg_file_path);
 
     gchar *num_of_entries = g_strdup_printf ("%lu", json_array_size (app_data->db_data->in_memory_json_data));
     gtk_label_set_text (GTK_LABEL(num_entries_label), num_of_entries);
@@ -58,6 +58,6 @@ dbinfo_cb (GSimpleAction *simple UNUSED,
     if (result == GTK_RESPONSE_CLOSE) {
         g_free (cfg_file_path);
         g_free (num_of_entries);
-        gtk_widget_hide (dbinfo_diag);
+        gtk_widget_set_visible (dbinfo_diag, FALSE);
     }
 }

@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 
 void
 show_message_dialog (GtkWidget      *parent,
@@ -12,7 +12,7 @@ show_message_dialog (GtkWidget      *parent,
 
     gtk_dialog_run (GTK_DIALOG(dialog));
 
-    gtk_widget_destroy (dialog);
+    gtk_window_destroy (GTK_WINDOW(dialog));
 }
 
 
@@ -27,15 +27,19 @@ get_confirmation_from_dialog (GtkWidget     *parent,
                                           "OK", GTK_RESPONSE_OK, "Cancel", GTK_RESPONSE_CANCEL,
                                            NULL);
 
-    gtk_container_set_border_width (GTK_CONTAINER(dialog), 5);
-    gtk_box_set_spacing(GTK_BOX(gtk_dialog_get_content_area (GTK_DIALOG(dialog))), 8);
-
     GtkWidget *content_area = gtk_dialog_get_content_area (GTK_DIALOG(dialog));
+
+    gtk_box_set_spacing(GTK_BOX(content_area), 8);
+    gtk_widget_set_margin_top(content_area, 5);
+    gtk_widget_set_margin_bottom(content_area, 5);
+    gtk_widget_set_margin_start(content_area, 5);
+    gtk_widget_set_margin_end(content_area, 5);
+
     GtkWidget *label = gtk_label_new (NULL);
     gtk_label_set_markup (GTK_LABEL(label), message);
     gtk_label_set_justify (GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_container_add (GTK_CONTAINER(content_area), label);
-    gtk_widget_show_all (dialog);
+    gtk_box_append(GTK_BOX(content_area), label);
+    gtk_window_present (GTK_WINDOW(dialog));
 
     gint result = gtk_dialog_run (GTK_DIALOG(dialog));
     switch (result) {
@@ -47,7 +51,7 @@ get_confirmation_from_dialog (GtkWidget     *parent,
             confirm = FALSE;
             break;
     }
-    gtk_widget_destroy (dialog);
+    gtk_window_destroy (GTK_WINDOW(dialog));
 
     return confirm;
 }

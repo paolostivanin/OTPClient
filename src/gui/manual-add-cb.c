@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "gui-misc.h"
 #include "manual-add-cb.h"
 #include "../common/gquarks.h"
@@ -62,7 +62,7 @@ manual_add_cb (GSimpleAction *simple UNUSED,
         }
     } while (result == GTK_RESPONSE_OK && retry == TRUE);
 
-    gtk_widget_destroy (widgets->dialog);
+    gtk_window_destroy (GTK_WINDOW(widgets->dialog));
     g_free (widgets);
     g_object_unref (builder);
 }
@@ -102,13 +102,13 @@ steam_toggled_cb (GtkWidget *ck_btn UNUSED,
     if (button_toggled) {
         gtk_combo_box_set_active (GTK_COMBO_BOX(widgets->otp_cb), 0); // TOTP
         gtk_combo_box_set_active (GTK_COMBO_BOX(widgets->algo_cb), 0); // SHA1
-        gtk_entry_set_text (GTK_ENTRY(widgets->iss_entry), "Steam");
-        gtk_entry_set_text (GTK_ENTRY(widgets->period_entry), "30");
-        gtk_entry_set_text (GTK_ENTRY(widgets->digits_entry), "5");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->iss_entry), "Steam");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->period_entry), "30");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->digits_entry), "5");
     } else {
-        gtk_entry_set_text (GTK_ENTRY(widgets->iss_entry), "");
-        gtk_entry_set_text (GTK_ENTRY(widgets->digits_entry), "");
-        gtk_entry_set_text (GTK_ENTRY(widgets->period_entry), "");
-        gtk_entry_set_text (GTK_ENTRY(widgets->counter_entry), "");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->iss_entry), "");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->digits_entry), "");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->period_entry), "");
+        gtk_editable_set_text (GTK_EDITABLE(widgets->counter_entry), "");
     }
 }

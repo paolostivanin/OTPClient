@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <glib/gi18n.h>
 #include "data.h"
 #include "message-dialogs.h"
@@ -8,7 +8,7 @@
 void
 select_file_icon_pressed_cb (GtkEntry         *entry,
                              gint              position UNUSED,
-                             GdkEventButton   *even UNUSED,
+                             GdkEvent         *event UNUSED,
                              gpointer          user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
@@ -26,16 +26,26 @@ select_file_icon_pressed_cb (GtkEntry         *entry,
                                                                 "Cancel");
 
     GFile *gfile_dbpath = g_file_new_for_path (app_data->db_data->db_path);
-    gchar *db_dir = g_file_get_path (g_file_get_parent (gfile_dbpath));
-    gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), db_dir);
+    GFile *gfile_dbdir = g_file_get_parent (gfile_dbpath);
+    if (gfile_dbdir != NULL) {
+        gtk_file_chooser_set_current_folder (GTK_FILE_CHOOSER(dialog), gfile_dbdir, NULL);
+    }
 
     gint res = gtk_native_dialog_run (GTK_NATIVE_DIALOG(dialog));
 
     if (res == GTK_RESPONSE_ACCEPT) {
-        gtk_entry_set_text (entry, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER(dialog)));
+        GFile *file = gtk_file_chooser_get_file (GTK_FILE_CHOOSER(dialog));
+        if (file != NULL) {
+            gchar *filename = g_file_get_path (file);
+            if (filename != NULL) {
+                gtk_editable_set_text (GTK_EDITABLE(entry), filename);
+                g_free (filename);
+            }
+            g_object_unref (file);
+        }
     }
 
-    g_free (db_dir);
+    g_clear_object (&gfile_dbdir);
     g_object_unref (gfile_dbpath);
     g_object_unref (dialog);
 }

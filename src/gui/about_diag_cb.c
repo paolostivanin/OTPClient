@@ -1,8 +1,16 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <glib/gi18n.h>
 #include "version.h"
 #include "data.h"
 #include "../common/macros.h"
+
+static void
+about_diag_response_cb (GtkDialog *dialog,
+                        gint       response_id UNUSED,
+                        gpointer   user_data UNUSED)
+{
+    gtk_window_destroy (GTK_WINDOW(dialog));
+}
 
 void
 about_diag_cb (GSimpleAction *simple UNUSED,
@@ -26,7 +34,7 @@ about_diag_cb (GSimpleAction *simple UNUSED,
     gtk_about_dialog_set_authors (GTK_ABOUT_DIALOG(ab_diag), authors);
     gtk_about_dialog_set_artists (GTK_ABOUT_DIALOG(ab_diag), artists);
     gtk_about_dialog_set_logo_icon_name (GTK_ABOUT_DIALOG(ab_diag), "com.github.paolostivanin.OTPClient");
-    g_signal_connect (ab_diag, "response", G_CALLBACK (gtk_widget_destroy), NULL);
+    g_signal_connect (ab_diag, "response", G_CALLBACK (about_diag_response_cb), NULL);
 
-    gtk_widget_show_all (ab_diag);
+    gtk_window_present (GTK_WINDOW(ab_diag));
 }

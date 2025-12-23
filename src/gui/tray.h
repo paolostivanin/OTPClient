@@ -1,6 +1,6 @@
 #pragma once
 
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include "data.h"
 
 G_BEGIN_DECLS

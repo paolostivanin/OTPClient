@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <jansson.h>
 #include <cotp.h>
 #include "message-dialogs.h"
@@ -14,7 +14,7 @@
 void
 icon_press_cb (GtkEntry         *entry,
                gint              position UNUSED,
-               GdkEventButton   *event UNUSED,
+               GdkEvent         *event UNUSED,
                gpointer          data UNUSED)
 {
     gtk_entry_set_visibility (GTK_ENTRY (entry), !gtk_entry_get_visibility (entry));
@@ -38,7 +38,10 @@ void
 send_ok_cb (GtkWidget *entry,
             gpointer   user_data UNUSED)
 {
-    gtk_dialog_response (GTK_DIALOG(gtk_widget_get_toplevel (entry)), GTK_RESPONSE_OK);
+    GtkWidget *toplevel = gtk_widget_get_toplevel (entry);
+    if (toplevel != NULL) {
+        gtk_dialog_response (GTK_DIALOG(toplevel), GTK_RESPONSE_OK);
+    }
 }
 
 

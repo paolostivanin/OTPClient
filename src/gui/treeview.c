@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <jansson.h>
 #include "../common/macros.h"
 #include "otpclient.h"
@@ -27,9 +27,11 @@ static gboolean clear_all_otps     (GtkTreeModel   *model,
                                     GtkTreeIter    *iter,
                                     gpointer        user_data);
 
-static gboolean on_treeview_button_press_event (GtkWidget *treeview,
-                                                GdkEventButton *event,
-                                                gpointer user_data);
+static void on_treeview_secondary_click (GtkGestureClick *gesture,
+                                         gint             n_press,
+                                         gdouble          x,
+                                         gdouble          y,
+                                         gpointer         user_data);
 
 static gboolean filter_visible_func (GtkTreeModel *model,
                                      GtkTreeIter  *iter,
@@ -71,14 +73,19 @@ create_treeview (AppData *app_data)
 
     app_data->search_entry = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "search_entry_id"));
     if (app_data->search_entry != NULL) {
-        gtk_tree_view_set_search_entry (GTK_TREE_VIEW(app_data->tree_view), GTK_ENTRY(app_data->search_entry));
+        gtk_tree_view_set_search_entry (GTK_TREE_VIEW(app_data->tree_view), GTK_EDITABLE(app_data->search_entry));
         g_signal_connect (app_data->search_entry, "changed", G_CALLBACK(search_entry_changed_cb), app_data);
         g_signal_connect (app_data->search_entry, "activate", G_CALLBACK(search_entry_activate_cb), app_data);
     }
 
-    GtkBindingSet *tv_binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS(app_data->tree_view));
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
-    gtk_binding_entry_add_signal (tv_binding_set, GDK_KEY_h, GDK_MOD1_MASK, "hide-all-otps", 0);
+    GtkShortcutController *tv_shortcut_controller = GTK_SHORTCUT_CONTROLLER(gtk_shortcut_controller_new());
+    GtkShortcutTrigger *trigger = gtk_keyval_trigger_new(GDK_KEY_h, GDK_ALT_MASK);
+    GtkShortcutAction *action = gtk_signal_action_new("hide-all-otps");
+    GtkShortcut *shortcut = gtk_shortcut_new(trigger, action);
+    gtk_shortcut_controller_set_scope(tv_shortcut_controller, GTK_SHORTCUT_SCOPE_LOCAL);
+    gtk_shortcut_controller_add_shortcut(tv_shortcut_controller, shortcut);
+    gtk_widget_add_controller(GTK_WIDGET(app_data->tree_view), GTK_EVENT_CONTROLLER(tv_shortcut_controller));
 
     // signal emitted when row is selected
     g_signal_connect (app_data->tree_view, "row-activated", G_CALLBACK(row_selected_cb), app_data);
@@ -87,7 +94,10 @@ create_treeview (AppData *app_data)
     g_signal_connect (app_data->tree_view, "hide-all-otps", G_CALLBACK(hide_all_otps_cb), app_data);
 
     // signal emitted when right-clicked on a row (shows edit/delete context menu)
-    g_signal_connect(app_data->tree_view, "button-press-event", G_CALLBACK(on_treeview_button_press_event), app_data);
+    GtkGesture *right_click = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(right_click), GDK_BUTTON_SECONDARY);
+    g_signal_connect(right_click, "pressed", G_CALLBACK(on_treeview_secondary_click), app_data);
+    gtk_widget_add_controller(GTK_WIDGET(app_data->tree_view), GTK_EVENT_CONTROLLER(right_click));
 
     select_first_row (app_data);
 }
@@ -146,7 +156,9 @@ row_selected_cb (GtkTreeView        *tree_view UNUSED,
                                 -1);
         }
         // and, in any case, we copy the otp to the clipboard and send a notification
-        gtk_clipboard_set_text (app_data->clipboard, otp_value, -1);
+        if (app_data->clipboard != NULL) {
+            gdk_clipboard_set_text (app_data->clipboard, otp_value);
+        }
         if (!app_data->disable_notifications) {
             g_application_send_notification (G_APPLICATION(gtk_window_get_application (GTK_WINDOW (app_data->main_window))), NOTIFICATION_ID,
                                              app_data->notification);
@@ -266,7 +278,7 @@ delete_row (AppData *app_data)
             delete_entry = FALSE;
             break;
     }
-    gtk_widget_hide (del_diag);
+    gtk_widget_set_visible (del_diag, FALSE);
 
     if (delete_entry == FALSE) {
         return;
@@ -310,8 +322,8 @@ delete_row (AppData *app_data)
 
 
 static void
-on_delete_activate (GtkMenuItem *menuitem UNUSED,
-                    gpointer     user_data)
+on_delete_activate (GtkWidget *menuitem UNUSED,
+                    gpointer   user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
 
@@ -327,39 +339,54 @@ on_delete_activate (GtkMenuItem *menuitem UNUSED,
 }
 
 
-static gboolean
-on_treeview_button_press_event (GtkWidget      *treeview,
-                                GdkEventButton *event,
-                                gpointer        user_data)
+static void
+on_treeview_secondary_click (GtkGestureClick *gesture,
+                             gint             n_press,
+                             gdouble          x,
+                             gdouble          y,
+                             gpointer         user_data)
 {
     CAST_USER_DATA(AppData, app_data, user_data);
-    if (event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_SECONDARY && !app_data->is_reorder_active) {
-        GtkTreePath *path;
-        GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(treeview));
-        if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL)) {
-            gtk_tree_selection_select_path (selection, path);
-            gtk_tree_path_free (path);
-
-            GtkWidget *menu = gtk_menu_new ();
-            GtkWidget *menu_item = gtk_menu_item_new_with_label ("Edit row");
-            g_signal_connect (menu_item, "activate", G_CALLBACK (edit_row_cb), app_data);
-            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
-
-            menu_item = gtk_menu_item_new_with_label ("Delete row");
-            g_signal_connect (menu_item, "activate", G_CALLBACK (on_delete_activate), app_data);
-            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
-
-            menu_item = gtk_menu_item_new_with_label ("Show QR code");
-            g_signal_connect (menu_item, "activate", G_CALLBACK (show_qr_cb), app_data);
-            gtk_menu_shell_append (GTK_MENU_SHELL(menu), menu_item);
-
-            gtk_widget_show_all (menu);
-            gtk_menu_popup_at_pointer (GTK_MENU(menu), (GdkEvent *)event);
-
-            return TRUE;
-        }
+    GtkWidget *treeview = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+    if (n_press != 1 || app_data->is_reorder_active) {
+        return;
     }
-    return FALSE;
+
+    GtkTreePath *path;
+    GtkTreeSelection *selection = gtk_tree_view_get_selection (GTK_TREE_VIEW(treeview));
+    if (gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(treeview), (gint)x, (gint)y, &path, NULL, NULL, NULL)) {
+        gtk_tree_selection_select_path (selection, path);
+        gtk_tree_path_free (path);
+
+        GtkWidget *popover = gtk_popover_new();
+        GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        GtkWidget *menu_item = gtk_button_new_with_label ("Edit row");
+        GdkRectangle rect = {
+            .x = (gint)x,
+            .y = (gint)y,
+            .width = 1,
+            .height = 1,
+        };
+
+        gtk_widget_set_parent(popover, treeview);
+        gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
+        gtk_popover_set_pointing_to(GTK_POPOVER(popover), &rect);
+        gtk_popover_set_child(GTK_POPOVER(popover), box);
+
+        g_signal_connect (menu_item, "clicked", G_CALLBACK (edit_row_cb), app_data);
+        gtk_box_append(GTK_BOX(box), menu_item);
+
+        menu_item = gtk_button_new_with_label ("Delete row");
+        g_signal_connect (menu_item, "clicked", G_CALLBACK (on_delete_activate), app_data);
+        gtk_box_append(GTK_BOX(box), menu_item);
+
+        menu_item = gtk_button_new_with_label ("Show QR code");
+        g_signal_connect (menu_item, "clicked", G_CALLBACK (show_qr_cb), app_data);
+        gtk_box_append(GTK_BOX(box), menu_item);
+
+        g_signal_connect_swapped(popover, "closed", G_CALLBACK(gtk_widget_unparent), popover);
+        gtk_popover_popup(GTK_POPOVER(popover));
+    }
 }
 
 
@@ -404,7 +431,7 @@ filter_visible_func (GtkTreeModel *model,
         return TRUE;
     }
 
-    const gchar *query = gtk_entry_get_text (GTK_ENTRY(app_data->search_entry));
+    const gchar *query = gtk_editable_get_text (GTK_EDITABLE(app_data->search_entry));
     if (query == NULL || *query == '\0') {
         return TRUE;
     }

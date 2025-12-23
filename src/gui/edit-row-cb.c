@@ -1,4 +1,4 @@
-#include <gtk/gtk.h>
+#include "gtk-compat.h"
 #include <gcrypt.h>
 #include "treeview.h"
 #include "gui-misc.h"
@@ -22,8 +22,8 @@ typedef struct edit_data_t {
 static void   show_edit_dialog                    (EditData   *edit_data,
                                                    AppData    *app_data);
 
-static void   set_entry_editability               (GtkToolButton *btn,
-                                                   gpointer       user_data);
+static void   set_entry_editability               (GtkWidget  *btn,
+                                                   gpointer    user_data);
 
 static gchar *get_parse_and_set_data_from_entries (EditData    *edit_data,
                                                    GtkWidget   *lab_ck_btn,
@@ -37,8 +37,8 @@ static void   set_data_in_lstore_and_json         (EditData    *edit_data);
 
 
 void
-edit_row_cb (GtkMenuItem *menu_item UNUSED,
-             gpointer     user_data)
+edit_row_cb (GtkWidget *menu_item UNUSED,
+             gpointer   user_data)
 {
     EditData *edit_data = g_new0 (EditData, 1);
     CAST_USER_DATA(AppData, app_data, user_data);
@@ -98,11 +98,11 @@ show_edit_dialog (EditData *edit_data,
     g_signal_connect (new_sec_entry, "icon-press", G_CALLBACK (icon_press_cb), NULL);
 
     if (edit_data->current_label != NULL) {
-        gtk_entry_set_text (GTK_ENTRY(new_lab_entry), edit_data->current_label);
+        gtk_editable_set_text (GTK_EDITABLE(new_lab_entry), edit_data->current_label);
     }
 
     if (edit_data->current_issuer != NULL) {
-        gtk_entry_set_text (GTK_ENTRY(new_iss_entry), edit_data->current_issuer);
+        gtk_editable_set_text (GTK_EDITABLE(new_iss_entry), edit_data->current_issuer);
         if (g_ascii_strcasecmp (edit_data->current_issuer, "steam") == 0) {
             gtk_widget_set_sensitive (new_iss_entry, FALSE);
         }
@@ -112,7 +112,7 @@ show_edit_dialog (EditData *edit_data,
     json_t *obj = json_array_get (edit_data->db_data->in_memory_json_data, row_number);
     edit_data->current_secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
     if (edit_data->current_secret != NULL) {
-        gtk_entry_set_text (GTK_ENTRY(new_sec_entry), edit_data->current_secret);
+        gtk_editable_set_text (GTK_EDITABLE(new_sec_entry), edit_data->current_secret);
     }
 
     GtkWidget *lab_ck_btn = GTK_WIDGET (gtk_builder_get_object (builder, "label_check_id"));
@@ -142,14 +142,14 @@ show_edit_dialog (EditData *edit_data,
             break;
     }
 
-    gtk_widget_destroy (diag);
+    gtk_window_destroy (GTK_WINDOW(diag));
     g_object_unref (builder);
 }
 
 
 static void
-set_entry_editability (GtkToolButton *btn UNUSED,
-                       gpointer       user_data)
+set_entry_editability (GtkWidget *btn UNUSED,
+                       gpointer   user_data)
 {
     gtk_editable_set_editable (GTK_EDITABLE (user_data), !gtk_editable_get_editable(user_data));
 }
@@ -164,9 +164,9 @@ get_parse_and_set_data_from_entries (EditData    *edit_data,
                                      GtkWidget   *sec_ck_btn,
                                      GtkWidget   *new_sec_entry)
 {
-    edit_data->new_label = g_strdup (gtk_entry_get_text (GTK_ENTRY (new_lab_entry)));
-    edit_data->new_issuer = g_strdup (gtk_entry_get_text (GTK_ENTRY (new_iss_entry)));
-    edit_data->new_secret = secure_strdup (gtk_entry_get_text (GTK_ENTRY (new_sec_entry)));
+    edit_data->new_label = g_strdup (gtk_editable_get_text (GTK_EDITABLE (new_lab_entry)));
+    edit_data->new_issuer = g_strdup (gtk_editable_get_text (GTK_EDITABLE (new_iss_entry)));
+    edit_data->new_secret = secure_strdup (gtk_editable_get_text (GTK_EDITABLE (new_sec_entry)));
 
     if (g_utf8_strlen (edit_data->new_issuer, -1) > 0) {
         if (!g_str_is_ascii (edit_data->new_issuer)) {
