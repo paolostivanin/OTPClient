@@ -1,311 +1,81 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.40.0 -->
 <interface>
-  <requires lib="gtk+" version="3.24"/>
+  <requires lib="gtk" version="4.0"/>
   <object class="GtkPopoverMenu" id="settings_pop_id">
-    <property name="can-focus">False</property>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="export_submenu_back_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="inverted">True</property>
-            <property name="centered">True</property>
-            <property name="menu-name">main</property>
-            <property name="text" translatable="yes">Back</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_freeotpplus_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.freeotpplus_plain</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_aegis_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.aegis_encrypted</property>
-            <property name="text" translatable="yes">Aegis (encrypted json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_aegis_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.aegis_plain</property>
-            <property name="text" translatable="yes">Aegis (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_authpro_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.authpro_encrypted</property>
-            <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">4</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_authpro_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.authpro_plain</property>
-            <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">5</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_twofas_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.twofas_encrypted</property>
-            <property name="text" translatable="yes">2FAS (encrypted json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">6</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_twofas_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.twofas_plain</property>
-            <property name="text" translatable="yes">2FAS (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">7</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">export_menu</property>
-        <property name="position">1</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="db_submenu_back_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="inverted">True</property>
-            <property name="centered">True</property>
-            <property name="menu-name">main</property>
-            <property name="text" translatable="yes">Back</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="newdb_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.create_newdb</property>
-            <property name="text" translatable="yes">New DB</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="change_db_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.change_db</property>
-            <property name="text" translatable="yes">Change DB</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="change_pwd_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.change_pwd</property>
-            <property name="text" translatable="yes">Change DB password</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="change_db_sec_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.change_db_sec</property>
-            <property name="text" translatable="yes">Change DB security settings</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">4</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="dbinfo_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.dbinfo</property>
-            <property name="text" translatable="yes">DB info</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">5</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">db_menu</property>
-        <property name="position">2</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="export_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="text" translatable="yes">Export</property>
-            <property name="menu-name">export_menu</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="db_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="text" translatable="yes">Database Mgmt</property>
-            <property name="menu-name">db_menu</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="shortcuts_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.shortcuts</property>
-            <property name="text" translatable="yes">Keyboard shortcuts</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">7</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="settings_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.settings</property>
-            <property name="text" translatable="yes">Settings</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">8</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="about_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">settings_menu.about</property>
-            <property name="text" translatable="yes">About</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">10</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">main</property>
-        <property name="position">3</property>
-      </packing>
-    </child>
+    <property name="menu-model">settings-menu</property>
   </object>
+  <menu id="settings-menu">
+    <section>
+      <submenu>
+        <attribute name="label" translatable="yes">Export</attribute>
+        <section>
+          <item>
+            <attribute name="label" translatable="yes">FreeOTP+ (key URI)</attribute>
+            <attribute name="action">export_menu.freeotpplus_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Aegis (encrypted json)</attribute>
+            <attribute name="action">export_menu.aegis_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Aegis (plain json)</attribute>
+            <attribute name="action">export_menu.aegis_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Authenticator Pro (encrypted)</attribute>
+            <attribute name="action">export_menu.authpro_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Authenticator Pro (plain json)</attribute>
+            <attribute name="action">export_menu.authpro_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">2FAS (encrypted json)</attribute>
+            <attribute name="action">export_menu.twofas_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">2FAS (plain json)</attribute>
+            <attribute name="action">export_menu.twofas_plain</attribute>
+          </item>
+        </section>
+      </submenu>
+      <submenu>
+        <attribute name="label" translatable="yes">Database Mgmt</attribute>
+        <section>
+          <item>
+            <attribute name="label" translatable="yes">New DB</attribute>
+            <attribute name="action">settings_menu.create_newdb</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Change DB</attribute>
+            <attribute name="action">settings_menu.change_db</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Change DB password</attribute>
+            <attribute name="action">settings_menu.change_pwd</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Change DB security settings</attribute>
+            <attribute name="action">settings_menu.change_db_sec</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">DB info</attribute>
+            <attribute name="action">settings_menu.dbinfo</attribute>
+          </item>
+        </section>
+      </submenu>
+      <item>
+        <attribute name="label" translatable="yes">Keyboard shortcuts</attribute>
+        <attribute name="action">settings_menu.shortcuts</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Settings</attribute>
+        <attribute name="action">settings_menu.settings</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">About</attribute>
+        <attribute name="action">settings_menu.about</attribute>
+      </item>
+    </section>
+  </menu>
 </interface>

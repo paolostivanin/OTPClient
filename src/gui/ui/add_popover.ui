@@ -1,320 +1,78 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.40.0 -->
 <interface>
-  <requires lib="gtk+" version="3.24"/>
+  <requires lib="gtk" version="4.0"/>
   <object class="GtkPopoverMenu" id="add_pop_id">
-    <property name="can-focus">False</property>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="add_qr_back_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="inverted">True</property>
-            <property name="centered">True</property>
-            <property name="menu-name">main</property>
-            <property name="text" translatable="yes">Back</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="webcam_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">add_menu.webcam</property>
-            <property name="text" translatable="yes">from webcam</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="add_qr_file_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">add_menu.import_qr_file</property>
-            <property name="text" translatable="yes">from file</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="add_qr_clipboard_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">add_menu.import_qr_clipboard</property>
-            <property name="text" translatable="yes">from clipboard</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">import_qr_menu</property>
-        <property name="position">1</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="import_qr_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="text" translatable="yes">Load QR</property>
-            <property name="menu-name">import_qr_menu</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="manual_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">add_menu.manual</property>
-            <property name="text" translatable="yes">Manually</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="text" translatable="yes">Import from third party</property>
-            <property name="menu-name">import_menu</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-      </object>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="import_submenu_back_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="inverted">True</property>
-            <property name="centered">True</property>
-            <property name="menu-name">main</property>
-            <property name="text" translatable="yes">Back</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_freeotpplus_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.freeotpplus_plain</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_aegis_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.aegis_encrypted</property>
-            <property name="text" translatable="yes">Aegis (encrypted json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_aegis_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.aegis_plain</property>
-            <property name="text" translatable="yes">Aegis (plain json/txt)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">3</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_authpro_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.authpro_encrypted</property>
-            <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">4</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_authpro_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.authpro_plain</property>
-            <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">5</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_twofas_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.twofas_encrypted</property>
-            <property name="text" translatable="yes">2FAS (encrypted json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">6</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_twofas_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.twofas_plain</property>
-            <property name="text" translatable="yes">2FAS (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">7</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_google_qr_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="text" translatable="yes">Load Google migration QR</property>
-            <property name="menu-name">import_google_qr_menu</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">8</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">import_menu</property>
-        <property name="position">0</property>
-      </packing>
-    </child>
-    <child>
-      <object class="GtkBox">
-        <property name="visible">True</property>
-        <property name="can-focus">False</property>
-        <property name="orientation">vertical</property>
-        <child>
-          <object class="GtkModelButton" id="import_submenu_google_back_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="inverted">True</property>
-            <property name="centered">True</property>
-            <property name="menu-name">import_menu</property>
-            <property name="text" translatable="yes">Back</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_google_qr_file_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.import_google_qr_file</property>
-            <property name="text" translatable="yes">from file</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">1</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="import_google_qr_webcam_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">import_menu.import_google_qr_webcam</property>
-            <property name="text" translatable="yes">from webcam</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">2</property>
-          </packing>
-        </child>
-      </object>
-      <packing>
-        <property name="submenu">import_google_qr_menu</property>
-        <property name="position">4</property>
-      </packing>
-    </child>
+    <property name="menu-model">add-menu</property>
   </object>
+  <menu id="add-menu">
+    <section>
+      <submenu>
+        <attribute name="label" translatable="yes">Load QR</attribute>
+        <section>
+          <item>
+            <attribute name="label" translatable="yes">from webcam</attribute>
+            <attribute name="action">add_menu.webcam</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">from file</attribute>
+            <attribute name="action">add_menu.import_qr_file</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">from clipboard</attribute>
+            <attribute name="action">add_menu.import_qr_clipboard</attribute>
+          </item>
+        </section>
+      </submenu>
+      <item>
+        <attribute name="label" translatable="yes">Manually</attribute>
+        <attribute name="action">add_menu.manual</attribute>
+      </item>
+      <submenu>
+        <attribute name="label" translatable="yes">Import from third party</attribute>
+        <section>
+          <item>
+            <attribute name="label" translatable="yes">FreeOTP+ (key URI)</attribute>
+            <attribute name="action">import_menu.freeotpplus_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Aegis (encrypted json)</attribute>
+            <attribute name="action">import_menu.aegis_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Aegis (plain json/txt)</attribute>
+            <attribute name="action">import_menu.aegis_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Authenticator Pro (encrypted)</attribute>
+            <attribute name="action">import_menu.authpro_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">Authenticator Pro (plain json)</attribute>
+            <attribute name="action">import_menu.authpro_plain</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">2FAS (encrypted json)</attribute>
+            <attribute name="action">import_menu.twofas_encrypted</attribute>
+          </item>
+          <item>
+            <attribute name="label" translatable="yes">2FAS (plain json)</attribute>
+            <attribute name="action">import_menu.twofas_plain</attribute>
+          </item>
+          <submenu>
+            <attribute name="label" translatable="yes">Load Google migration QR</attribute>
+            <section>
+              <item>
+                <attribute name="label" translatable="yes">from file</attribute>
+                <attribute name="action">import_menu.import_google_qr_file</attribute>
+              </item>
+              <item>
+                <attribute name="label" translatable="yes">from webcam</attribute>
+                <attribute name="action">import_menu.import_google_qr_webcam</attribute>
+              </item>
+            </section>
+          </submenu>
+        </section>
+      </submenu>
+    </section>
+  </menu>
 </interface>
