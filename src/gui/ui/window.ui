@@ -16,6 +16,13 @@
               </object>
             </child>
             <child type="start">
+              <object class="GtkButton" id="back_button">
+                <property name="icon-name">go-previous-symbolic</property>
+                <property name="visible">False</property>
+                <property name="tooltip-text" translatable="yes">Back</property>
+              </object>
+            </child>
+            <child type="start">
               <object class="GtkBox" id="titlebar_start_buttons_box">
                 <child>
                   <object class="GtkMenuButton" id="add_button">
@@ -99,12 +106,8 @@
                         <property name="vexpand">True</property>
                         <property name="hscrollbar-policy">never</property>
                         <child>
-                          <object class="GtkListBox" id="otp_list">
-                            <property name="selection-mode">none</property>
+                          <object class="GtkColumnView" id="otp_list">
                             <property name="vexpand">True</property>
-                            <style>
-                              <class name="boxed-list"/>
-                            </style>
                           </object>
                         </child>
                       </object>
