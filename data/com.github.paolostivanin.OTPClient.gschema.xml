@@ -2,7 +2,7 @@
 <schemalist>
   <schema path="/com/github/paolostivanin/OTPClient/" id="com.github.paolostivanin.OTPClient" gettext-domain="OTPClient">
     <key name="db-path" type="s">
-      <default>NULL</default>
+      <default>""</default>
       <summary>Database path</summary>
       <description>Absolute path to the last used database</description>
     </key>
