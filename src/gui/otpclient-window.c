@@ -63,29 +63,73 @@ add_list_row (GtkListBox   *list,
 }
 
 static void
+clear_list_box (GtkListBox *list)
+{
+    GtkWidget *child = gtk_widget_get_first_child (GTK_WIDGET (list));
+
+    while (child != NULL)
+    {
+        GtkWidget *next = gtk_widget_get_next_sibling (child);
+        gtk_list_box_remove (list, child);
+        child = next;
+    }
+}
+
+static void
+populate_otp_list (OTPClientWindow *self,
+                   guint            database_index)
+{
+    static const gchar *otp_entries_personal[][2] = {
+        { "GitHub", "user@example.com" },
+        { "1Password", "personal vault" },
+        { "Dropbox", "user@example.com" },
+        { NULL, NULL }
+    };
+    static const gchar *otp_entries_work[][2] = {
+        { "Google Workspace", "team@company.com" },
+        { "Okta", "corp-admin" },
+        { "VPN", "corp" },
+        { NULL, NULL }
+    };
+    const gchar * const (*entries)[2] = otp_entries_personal;
+
+    if (database_index == 1)
+        entries = otp_entries_work;
+
+    clear_list_box (GTK_LIST_BOX (self->otp_list));
+
+    for (guint i = 0; entries[i][0] != NULL; i++)
+        add_list_row (GTK_LIST_BOX (self->otp_list), entries[i][0], entries[i][1]);
+}
+
+static void
+database_row_selected (GtkListBox      *box,
+                       GtkListBoxRow   *row,
+                       OTPClientWindow *self)
+{
+    if (row == NULL)
+        return;
+
+    populate_otp_list (self, gtk_list_box_row_get_index (row));
+}
+
+static void
 setup_lists (OTPClientWindow *self)
 {
     static const gchar *databases[] = {
         "Personal Vault",
         "Work Accounts",
-        "Shared Tokens",
         NULL
-    };
-    static const gchar *otp_entries[][2] = {
-        { "GitHub", "user@example.com" },
-        { "AWS", "infra-root" },
-        { "VPN", "corp" },
-        { NULL, NULL }
     };
 
     for (guint i = 0; databases[i] != NULL; i++)
         add_list_row (GTK_LIST_BOX (self->database_list), databases[i], NULL);
 
-    for (guint i = 0; otp_entries[i][0] != NULL; i++)
-        add_list_row (GTK_LIST_BOX (self->otp_list), otp_entries[i][0], otp_entries[i][1]);
-
     gtk_list_box_select_row (GTK_LIST_BOX (self->database_list),
                              gtk_list_box_get_row_at_index (GTK_LIST_BOX (self->database_list), 0));
+
+    g_signal_connect (self->database_list, "row-selected", G_CALLBACK (database_row_selected), self);
+    populate_otp_list (self, 0);
 }
 
 static void

@@ -24,7 +24,7 @@
                 </child>
                 <child>
                   <object class="GtkToggleButton" id="reorder_button">
-                    <property name="icon-name">mail-send-receive</property>
+                    <property name="icon-name">view-sort-ascending-symbolic</property>
                   </object>
                 </child>
                 <style>
@@ -67,11 +67,13 @@
             </child>
             <child>
               <object class="AdwNavigationSplitView" id="split_view">
+                <property name="vexpand">True</property>
                 <property name="sidebar-width-fraction">0.3</property>
                 <property name="min-sidebar-width">180</property>
                 <property name="max-sidebar-width">320</property>
                 <child type="sidebar">
                   <object class="AdwNavigationPage">
+                    <property name="vexpand">True</property>
                     <property name="title" translatable="yes">Databases</property>
                     <property name="child">
                       <object class="GtkScrolledWindow">
@@ -90,13 +92,19 @@
                 </child>
                 <child type="content">
                   <object class="AdwNavigationPage">
+                    <property name="vexpand">True</property>
                     <property name="title" translatable="yes">Tokens</property>
                     <property name="child">
                       <object class="GtkScrolledWindow">
+                        <property name="vexpand">True</property>
                         <property name="hscrollbar-policy">never</property>
                         <child>
                           <object class="GtkListBox" id="otp_list">
                             <property name="selection-mode">none</property>
+                            <property name="vexpand">True</property>
+                            <style>
+                              <class name="boxed-list"/>
+                            </style>
                           </object>
                         </child>
                       </object>
