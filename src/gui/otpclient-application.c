@@ -32,6 +32,7 @@ static void otpclient_application_quit            (GSimpleAction *simple,
 
 static const GActionEntry otpclient_application_entries[] = {
         { .name = "about", .activate = otpclient_application_show_about },
+        { .name = "quit", .activate = otpclient_application_quit },
 };
 
 OTPClientApplication *
@@ -59,6 +60,9 @@ otpclient_application_show_about (GSimpleAction *simple,
                                   GVariant      *parameter,
                                   gpointer       user_data)
 {
+    (void) simple;
+    (void) parameter;
+
     static const gchar *developers[] = {
             "Paolo Stivanin <info@paolostivanin.com>",
             NULL
@@ -71,7 +75,7 @@ otpclient_application_show_about (GSimpleAction *simple,
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
 
-    adw_show_about_window (GTK_WINDOW(self->window),
+    adw_show_about_dialog (GTK_WIDGET(self->window),
                            "application-name", "OTPClient",
                            "application-icon", APPLICATION_ID,
                            "version", PROJECT_VER,
@@ -90,6 +94,9 @@ otpclient_application_quit (GSimpleAction *simple,
                             GVariant      *parameter,
                             gpointer       user_data)
 {
+    (void) simple;
+    (void) parameter;
+
     OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
     gtk_window_destroy (GTK_WINDOW(self->window));
 }
@@ -140,4 +147,5 @@ otpclient_application_class_init (OTPClientApplicationClass *klass)
 static void
 otpclient_application_init (OTPClientApplication *self)
 {
+    (void) self;
 }

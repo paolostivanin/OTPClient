@@ -73,6 +73,46 @@
                 </child>
               </object>
             </child>
+            <child>
+              <object class="AdwNavigationSplitView" id="split_view">
+                <property name="sidebar-width-fraction">0.3</property>
+                <property name="min-sidebar-width">180</property>
+                <property name="max-sidebar-width">320</property>
+                <child type="sidebar">
+                  <object class="AdwNavigationPage">
+                    <property name="title" translatable="yes">Databases</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <child>
+                          <object class="GtkListBox" id="database_list">
+                            <property name="selection-mode">single</property>
+                            <style>
+                              <class name="navigation-sidebar"/>
+                            </style>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+                <child type="content">
+                  <object class="AdwNavigationPage">
+                    <property name="title" translatable="yes">Tokens</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <child>
+                          <object class="GtkListBox" id="otp_list">
+                            <property name="selection-mode">none</property>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
         </child>
       </object>
