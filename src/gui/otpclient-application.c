@@ -98,7 +98,11 @@ otpclient_application_quit (GSimpleAction *simple,
     (void) parameter;
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
-    gtk_window_destroy (GTK_WINDOW(self->window));
+    if (self->window != NULL)
+    {
+        gtk_window_destroy (GTK_WINDOW(self->window));
+        self->window = NULL;
+    }
 }
 
 static void

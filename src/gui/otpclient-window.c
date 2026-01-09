@@ -107,6 +107,10 @@ validity_update_label (ValidityWidgets *widgets)
 {
     gchar label_text[8];
 
+    // Add safety check
+    if (widgets == NULL || widgets->label == NULL || !GTK_IS_LABEL (widgets->label))
+        return;
+
     g_snprintf (label_text, sizeof label_text, "%us", widgets->remaining);
     gtk_label_set_text (GTK_LABEL (widgets->label), label_text);
 }
@@ -117,8 +121,13 @@ validity_tick (gpointer data)
     GtkListItem *list_item = GTK_LIST_ITEM (data);
     ValidityWidgets *widgets;
 
-    // Check if list_item is still valid
+    // Check if list_item is still valid and not being destroyed
     if (!GTK_IS_LIST_ITEM (list_item))
+        return G_SOURCE_REMOVE;
+
+    // Check if the list item's parent widget is still valid
+    GtkWidget *child = gtk_list_item_get_child (list_item);
+    if (child == NULL || !GTK_IS_WIDGET (child))
         return G_SOURCE_REMOVE;
 
     widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
@@ -497,11 +506,26 @@ static void
 otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
-    g_clear_object (&win->settings);
-    g_clear_object (&win->otp_store);
-    g_clear_object (&win->otp_selection);
 
+    if (GTK_IS_COLUMN_VIEW (win->otp_list))
+        gtk_column_view_set_model (GTK_COLUMN_VIEW (win->otp_list), NULL);
+
+    if (GTK_IS_SINGLE_SELECTION (win->otp_selection))
+    {
+        gtk_single_selection_set_selected (win->otp_selection, GTK_INVALID_LIST_POSITION);
+        gtk_single_selection_set_model (win->otp_selection, NULL);
+    }
+
+    g_clear_object (&win->settings);
+
+    // Dispose the template FIRST, then clean up our objects
     gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
+
+    // IMPORTANT: Free otp_selection BEFORE otp_store
+    // because otp_selection holds a reference to otp_store
+    g_clear_object (&win->otp_selection);
+    g_clear_object (&win->otp_store);
+
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
 }
 
