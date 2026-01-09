@@ -10,9 +10,7 @@ struct _OTPClientWindow
     GSettings *settings;
     GtkWidget *split_view;
     GtkWidget *add_button;
-    GtkWidget *remove_button;
     GtkWidget *reorder_button;
-    GtkWidget *search_button;
     GtkWidget *search_bar;
     GtkWidget *search_entry;
     GtkWidget *lock_button;
@@ -31,8 +29,10 @@ search_func (OTPClientWindow *self,
     (void) action_name;
     (void) parameter;
 
-    gboolean button_status = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(self->search_button));
-    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON(self->search_button), !button_status);
+    gboolean search_enabled = gtk_search_bar_get_search_mode (GTK_SEARCH_BAR(self->search_bar));
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR(self->search_bar), !search_enabled);
+    if (!search_enabled)
+        gtk_widget_grab_focus (self->search_entry);
 }
 
 static void
@@ -126,9 +126,7 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
     gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, add_button);
-    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, remove_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, reorder_button);
-    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
