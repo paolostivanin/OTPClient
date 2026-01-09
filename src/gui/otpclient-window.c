@@ -344,7 +344,7 @@ add_validity_column (GtkColumnView *view)
 static void
 setup_otp_view (OTPClientWindow *self)
 {
-    self->otp_store = g_list_store_new (otp_entry_get_type ());
+    self->otp_store = G_LIST_STORE (g_object_ref_sink (g_list_store_new (otp_entry_get_type ())));
     self->otp_selection = gtk_single_selection_new (G_LIST_MODEL (self->otp_store));
 
     gtk_single_selection_set_autoselect (self->otp_selection, FALSE);
@@ -507,25 +507,25 @@ otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
 
-    if (GTK_IS_COLUMN_VIEW (win->otp_list))
+    // 1. Disconnect the view from the selection model
+    if (win->otp_list && GTK_IS_COLUMN_VIEW (win->otp_list))
         gtk_column_view_set_model (GTK_COLUMN_VIEW (win->otp_list), NULL);
 
-    if (GTK_IS_SINGLE_SELECTION (win->otp_selection))
-    {
-        gtk_single_selection_set_selected (win->otp_selection, GTK_INVALID_LIST_POSITION);
+    // 2. Disconnect the selection model from the store
+    if (win->otp_selection)
         gtk_single_selection_set_model (win->otp_selection, NULL);
-    }
 
-    g_clear_object (&win->settings);
-
-    // Dispose the template FIRST, then clean up our objects
-    gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
-
-    // IMPORTANT: Free otp_selection BEFORE otp_store
-    // because otp_selection holds a reference to otp_store
+    // 3. Clear the selection object itself
     g_clear_object (&win->otp_selection);
+
+    // 4. Clear the otp_store
     g_clear_object (&win->otp_store);
 
+    // 5. Clear other non-widget objects
+    g_clear_object (&win->settings);
+
+    // 6. Chain up
+    gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
 }
 
