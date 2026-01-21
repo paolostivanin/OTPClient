@@ -47,6 +47,8 @@ static void     search_entry_activate_cb (GtkEntry *entry,
 
 static void     select_first_row (AppData *app_data);
 
+static void     update_empty_state (AppData *app_data);
+
 static gboolean get_liststore_iter_from_path (AppData     *app_data,
                                               GtkTreePath *path,
                                               GtkTreeIter *iter);
@@ -76,6 +78,8 @@ create_treeview (AppData *app_data)
         g_signal_connect (app_data->search_entry, "activate", G_CALLBACK(search_entry_activate_cb), app_data);
     }
 
+    app_data->list_stack = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "list_stack_id"));
+
     GtkBindingSet *tv_binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS(app_data->tree_view));
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     gtk_binding_entry_add_signal (tv_binding_set, GDK_KEY_h, GDK_MOD1_MASK, "hide-all-otps", 0);
@@ -90,6 +94,7 @@ create_treeview (AppData *app_data)
     g_signal_connect(app_data->tree_view, "button-press-event", G_CALLBACK(on_treeview_button_press_event), app_data);
 
     select_first_row (app_data);
+    update_empty_state (app_data);
 }
 
 
@@ -107,6 +112,7 @@ update_model (AppData *app_data)
             gtk_tree_model_filter_refilter (app_data->filter_model);
         }
     }
+    update_empty_state (app_data);
 }
 
 
@@ -466,6 +472,7 @@ search_entry_changed_cb (GtkEntry *entry UNUSED,
         gtk_tree_model_filter_refilter (app_data->filter_model);
     }
     select_first_row (app_data);
+    update_empty_state (app_data);
 }
 
 static void
@@ -508,6 +515,18 @@ select_first_row (AppData *app_data)
         gtk_tree_view_scroll_to_cell (app_data->tree_view, path, NULL, FALSE, 0.0f, 0.0f);
         gtk_tree_path_free (path);
     }
+}
+
+static void
+update_empty_state (AppData *app_data)
+{
+    if (app_data->list_stack == NULL || app_data->filter_model == NULL) {
+        return;
+    }
+
+    GtkTreeModel *model = GTK_TREE_MODEL(app_data->filter_model);
+    gint rows = gtk_tree_model_iter_n_children (model, NULL);
+    gtk_stack_set_visible_child_name (GTK_STACK(app_data->list_stack), rows > 0 ? "list" : "empty");
 }
 
 static gboolean
