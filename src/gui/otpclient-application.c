@@ -41,10 +41,6 @@ static void       set_config_data           (gint               *width,
                                              gint               *height,
                                              AppData            *app_data);
 
-static void      migrate_secretservice_kf   (AppData            *app_data,
-                                             GKeyFile           *kf,
-                                             gboolean            value);
-
 static void       set_open_db_action        (GtkWidget          *btn,
                                              gpointer            user_data);
 
@@ -340,8 +336,6 @@ set_config_data (gint    *width,
                  AppData *app_data)
 {
     GKeyFile *kf = get_kf_ptr ();
-    GError *err = NULL;
-    gboolean tmp;
     if (kf != NULL) {
         *width = g_key_file_get_integer (kf, "config", "window_width", NULL);
         *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
@@ -351,45 +345,10 @@ set_config_data (gint    *width,
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
         app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
-        // handle migration from disable_secret_service to use_secret_service
-        tmp = g_key_file_get_boolean (kf, "config", "disable_secret_service", &err);
-        if (tmp == TRUE || (tmp == FALSE && err == NULL)) {
-            // old key was found, so we need to migrate to the new format
-            migrate_secretservice_kf (app_data, kf, !tmp);
-        }
-        if (tmp == FALSE && err != NULL) {
-            // key was not found, so we already migrated to the new format
-            app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
-        }
-        g_clear_error (&err);
-        // end migration
+        app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
-}
-
-static void
-migrate_secretservice_kf (AppData  *app_data,
-                          GKeyFile *kf,
-                          gboolean  value)
-{
-    GError *err = NULL;
-    app_data->use_secret_service = value;
-    g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
-    g_key_file_remove_key (kf, "config", "disable_secret_service", NULL);
-    gchar *cfg_file_path;
-#ifndef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-    if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-        gchar *err_msg = g_strconcat (_("Couldn't save the config file: "), err->message, NULL);
-        show_message_dialog (app_data->main_window, err_msg, GTK_MESSAGE_ERROR);
-        g_free (err_msg);
-        g_clear_error (&err);
-    }
-    g_free (cfg_file_path);
 }
 
 #ifndef IS_FLATPAK
