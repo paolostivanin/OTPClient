@@ -1233,7 +1233,7 @@ but not the number of digits and/or the period/counter.</property>
       <action-widget response="-5">edit_diag_ok_btn</action-widget>
     </action-widgets>
   </object>
-  <object class="GtkApplicationWindow" id="appwindow_id">
+  <object class="OtpclientWindow" id="appwindow_id">
     <property name="can-focus">False</property>
     <property name="window-position">center</property>
     <property name="default-width">500</property>

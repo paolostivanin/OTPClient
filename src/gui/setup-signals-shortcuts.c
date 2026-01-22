@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include "data.h"
+#include "otpclient-window.h"
 #include "change-pwd-cb.h"
 #include "settings-cb.h"
 #include "shortcuts-cb.h"
@@ -52,7 +53,11 @@ static void
 setup_signals (void)
 {
     for (int i = 0; i < G_N_ELEMENTS(signal_names); ++i) {
-        g_signal_new (signal_names[i], G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+        if (g_signal_lookup (signal_names[i], OTPCLIENT_TYPE_WINDOW) == 0) {
+            g_signal_new (signal_names[i], OTPCLIENT_TYPE_WINDOW,
+                          G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL,
+                          NULL, G_TYPE_NONE, 0);
+        }
     }
 }
 
