@@ -20,19 +20,27 @@ static gboolean  parse_options         (GApplicationCommandLine *cmdline,
 
 static gboolean  is_valid_type         (const gchar             *type);
 
+static gchar    *format_supported_types(void);
+
+static void      print_supported_types (GApplicationCommandLine *cmdline);
+
 static void      g_free_cmdline_opts   (CmdlineOpts             *co);
+
+static const gchar *supported_types[] = {AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
+                                         TWOFAS_PLAIN_ACTION_NAME, TWOFAS_ENC_ACTION_NAME,
+                                         AUTHPRO_PLAIN_ACTION_NAME, AUTHPRO_ENC_ACTION_NAME,
+                                         FREEOTPPLUS_PLAIN_ACTION_NAME,
+                                         NULL};
 
 
 gint
 main (gint    argc,
       gchar **argv)
 {
+    g_autofree gchar *supported_types_str = format_supported_types ();
     g_autofree gchar *type_msg = g_strconcat ("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: ",
-                                         AEGIS_PLAIN_ACTION_NAME, ", ", AEGIS_ENC_ACTION_NAME, ", ",
-                                         AUTHPRO_PLAIN_ACTION_NAME, ", ", AUTHPRO_ENC_ACTION_NAME, ", ",
-                                         TWOFAS_PLAIN_ACTION_NAME, ", ", TWOFAS_ENC_ACTION_NAME, ", ",
-                                         FREEOTPPLUS_PLAIN_ACTION_NAME,
-                                         NULL);
+                                              supported_types_str,
+                                              NULL);
 
     GOptionEntry entries[] =
             {
@@ -43,6 +51,7 @@ main (gint    argc,
                     { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Match exactly the provided account/issuer (to be used with --show, optional)", NULL},
                     { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
                     { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
+                    { "list-types", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List supported import/export types.", NULL },
                     { "import", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import a database.", NULL },
                     { "export", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
                     { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, type_msg, NULL },
@@ -105,6 +114,33 @@ command_line (GApplication                *application __attribute__((unused)),
               GApplicationCommandLine     *cmdline,
               gpointer                     user_data   __attribute__((unused)))
 {
+    CmdlineOpts *cmdline_opts = g_new0 (CmdlineOpts, 1);
+    cmdline_opts->database = NULL;
+    cmdline_opts->show = FALSE;
+    cmdline_opts->account = NULL;
+    cmdline_opts->issuer = NULL;
+    cmdline_opts->match_exact = FALSE;
+    cmdline_opts->show_next = FALSE;
+    cmdline_opts->list = FALSE;
+    cmdline_opts->list_types = FALSE;
+    cmdline_opts->import = FALSE;
+    cmdline_opts->import_type = NULL;
+    cmdline_opts->import_file = NULL;
+    cmdline_opts->export = FALSE;
+    cmdline_opts->export_type = NULL;
+    cmdline_opts->export_dir = NULL;
+
+    if (!parse_options (cmdline, cmdline_opts)) {
+        g_free_cmdline_opts (cmdline_opts);
+        return -1;
+    }
+
+    if (cmdline_opts->list_types) {
+        print_supported_types (cmdline);
+        g_free_cmdline_opts (cmdline_opts);
+        return 0;
+    }
+
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->key_stored = FALSE;
     db_data->objects_hash = NULL;
@@ -115,19 +151,7 @@ command_line (GApplication                *application __attribute__((unused)),
         g_printerr (_("Couldn't get the memlock value, therefore secure memory cannot be allocated. Please have a look at the following page before re-running OTPClient:"
                     "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"));
         g_free (db_data);
-        return -1;
-    }
-
-    if (get_file_size (db_data->db_path) > (goffset)(db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
-        gchar *msg = g_strdup_printf (_(
-            "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
-            "You need to increase your system's memlock limit by following the instructions on our "
-            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
-            "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
-        ), db_data->max_file_size_from_memlock);
-        g_printerr ("%s\n", msg);
-        g_free (msg);
-        g_free (db_data);
+        g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
 
@@ -136,31 +160,12 @@ command_line (GApplication                *application __attribute__((unused)),
         g_application_command_line_printerr (cmdline, "Error while initializing GCrypt: %s\n", init_msg);
         g_free (init_msg);
         g_free (db_data);
-        return -1;
-    }
-
-    CmdlineOpts *cmdline_opts = g_new0 (CmdlineOpts, 1);
-    cmdline_opts->database = NULL;
-    cmdline_opts->show = FALSE;
-    cmdline_opts->account = NULL;
-    cmdline_opts->issuer = NULL;
-    cmdline_opts->match_exact = FALSE;
-    cmdline_opts->show_next = FALSE;
-    cmdline_opts->list = FALSE;
-    cmdline_opts->import = FALSE;
-    cmdline_opts->import_type = NULL;
-    cmdline_opts->import_file = NULL;
-    cmdline_opts->export = FALSE;
-    cmdline_opts->export_type = NULL;
-    cmdline_opts->export_dir = NULL;
-
-    if (!parse_options (cmdline, cmdline_opts)) {
-        g_free (db_data);
         g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
 
     if (!exec_action (cmdline_opts, db_data)) {
+        free_dbdata (db_data);
         g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
@@ -179,20 +184,43 @@ parse_options (GApplicationCommandLine *cmdline,
     GVariantDict *options = g_application_command_line_get_options_dict (cmdline);
 
     g_variant_dict_lookup (options, "database", "s", &cmdline_opts->database);
+    g_variant_dict_lookup (options, "list-types", "b", &cmdline_opts->list_types);
 
-    if (g_variant_dict_lookup (options, "show", "b", &cmdline_opts->show)) {
-        if (!g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account)) {
-            g_application_command_line_print (cmdline, "Please provide at least the account option.\n");
-            return FALSE;
-        }
-        g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer);
-        g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact);
-        g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next);
+    g_variant_dict_lookup (options, "show", "b", &cmdline_opts->show);
+    g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
+    g_variant_dict_lookup (options, "import", "b", &cmdline_opts->import);
+    g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export);
+
+    if (cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->import + cmdline_opts->export == 0) {
+        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --import, --export, or --list-types).\n");
+        return FALSE;
     }
 
-    g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
+    if (cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->import + cmdline_opts->export > 1) {
+        g_application_command_line_print (cmdline, "Please provide only one action at a time (--show, --list, --import, --export, or --list-types).\n");
+        return FALSE;
+    }
 
-    if (g_variant_dict_lookup (options, "import", "b", &cmdline_opts->import)) {
+    if (cmdline_opts->show) {
+        g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account);
+        g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer);
+        if (cmdline_opts->account == NULL && cmdline_opts->issuer == NULL) {
+            g_application_command_line_print (cmdline, "Please provide at least the account or issuer option.\n");
+            return FALSE;
+        }
+        g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact);
+        g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next);
+    } else {
+        if (g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account) ||
+            g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer) ||
+            g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact) ||
+            g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next)) {
+            g_application_command_line_print (cmdline, "The account/issuer filters and matching options can only be used with --show.\n");
+            return FALSE;
+        }
+    }
+
+    if (cmdline_opts->import) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
             g_application_command_line_print (cmdline, "Please provide an import type.\n");
             return FALSE;
@@ -207,7 +235,7 @@ parse_options (GApplicationCommandLine *cmdline,
         }
     }
 
-    if (g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export)) {
+    if (cmdline_opts->export) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
             g_application_command_line_print (cmdline, "Please provide an export type (see --help).\n");
             return FALSE;
@@ -220,6 +248,25 @@ parse_options (GApplicationCommandLine *cmdline,
         g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir);
 #endif
     }
+
+    if (!cmdline_opts->import && !cmdline_opts->export) {
+        gchar *unused_type = NULL;
+        if (g_variant_dict_lookup (options, "type", "s", &unused_type)) {
+            g_application_command_line_print (cmdline, "The --type option can only be used with --import or --export.\n");
+            g_free (unused_type);
+            return FALSE;
+        }
+        if (g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
+            g_application_command_line_print (cmdline, "The --file option can only be used with --import.\n");
+            return FALSE;
+        }
+#ifndef IS_FLATPAK
+        if (g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir)) {
+            g_application_command_line_print (cmdline, "The --output-dir option can only be used with --export.\n");
+            return FALSE;
+        }
+#endif
+    }
     return TRUE;
 }
 
@@ -227,21 +274,26 @@ parse_options (GApplicationCommandLine *cmdline,
 static gboolean
 is_valid_type (const gchar *type)
 {
-    const gchar *supported_types[] = {AEGIS_PLAIN_ACTION_NAME, AEGIS_ENC_ACTION_NAME,
-                                      TWOFAS_PLAIN_ACTION_NAME, TWOFAS_ENC_ACTION_NAME,
-                                      AUTHPRO_PLAIN_ACTION_NAME, AUTHPRO_ENC_ACTION_NAME,
-                                      FREEOTPPLUS_PLAIN_ACTION_NAME};
-
-    gint array_size = sizeof(supported_types) / sizeof(supported_types[0]);
-
-    gboolean found = FALSE;
-    for (gint i = 0; i < array_size; i++) {
+    for (gint i = 0; supported_types[i] != NULL; i++) {
         if (g_strcmp0 (type, supported_types[i]) == 0) {
-            found = TRUE;
-            break;
+            return TRUE;
         }
     }
-    return found;
+    return FALSE;
+}
+
+static gchar *
+format_supported_types (void)
+{
+    return g_strjoinv (", ", (gchar **)supported_types);
+}
+
+
+static void
+print_supported_types (GApplicationCommandLine *cmdline)
+{
+    g_autofree gchar *supported_types_str = format_supported_types ();
+    g_application_command_line_print (cmdline, "Supported types: %s\n", supported_types_str);
 }
 
 
