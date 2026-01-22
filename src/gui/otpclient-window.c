@@ -165,8 +165,7 @@ otpclient_window_new (GtkApplication *app,
     g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK (toggle_button_cb), reorder_toggle_btn);
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK (reorder_rows_cb), app_data);
     g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK (key_pressed_cb), app_data);
-    g_signal_connect (app_data->main_window, "destroy", G_CALLBACK (destroy_cb), app_data);
-    g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK (get_window_size_cb), NULL);
+    g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK (get_window_size_cb), app_data);
 
     return OTPCLIENT_WINDOW (app_data->main_window);
 }
@@ -231,12 +230,10 @@ reorder_rows_cb (GtkToggleButton *btn,
 static void
 get_window_size_cb (GtkWidget     *window,
                     GtkAllocation *allocation UNUSED,
-                    gpointer       user_data UNUSED)
+                    gpointer       user_data)
 {
-    gint w, h;
-    gtk_window_get_size (GTK_WINDOW (window), &w, &h);
-    g_object_set_data (G_OBJECT (window), "width", GINT_TO_POINTER (w));
-    g_object_set_data (G_OBJECT (window), "height", GINT_TO_POINTER (h));
+    CAST_USER_DATA (AppData, app_data, user_data);
+    gtk_window_get_size (GTK_WINDOW (window), &app_data->window_width, &app_data->window_height);
 }
 
 void
@@ -245,34 +242,69 @@ destroy_cb (GtkWidget *window,
 {
     CAST_USER_DATA (AppData, app_data, user_data);
 
-    OtpclientApplication *app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (window)));
+    OtpclientApplication *app = NULL;
+    if (window != NULL) {
+        app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (window)));
+    } else {
+        app = OTPCLIENT_APPLICATION (g_application_get_default ());
+    }
     otpclient_application_clear_app_data (app);
 
-    save_sort_order (app_data->tree_view);
-    g_source_remove (app_data->source_id);
-    g_source_remove (app_data->source_id_last_activity);
-    g_date_time_unref (app_data->last_user_activity);
-    for (gint i = 0; i < DBUS_SERVICES; i++) {
-        g_dbus_connection_signal_unsubscribe (app_data->connection, app_data->subscription_ids[i]);
+    if (app_data->tree_view != NULL) {
+        save_sort_order (app_data->tree_view);
     }
-    g_dbus_connection_close (app_data->connection, NULL, NULL, NULL);
-    gcry_free (app_data->db_data->key);
-    g_free (app_data->db_data->db_path);
-    g_slist_free_full (app_data->db_data->objects_hash, g_free);
-    json_decref (app_data->db_data->in_memory_json_data);
-    g_free (app_data->db_data);
-    gtk_clipboard_clear (app_data->clipboard);
-    g_application_withdraw_notification (G_APPLICATION (gtk_window_get_application (GTK_WINDOW (app_data->main_window))), NOTIFICATION_ID);
-    g_object_unref (app_data->notification);
+    if (app_data->source_id != 0) {
+        g_source_remove (app_data->source_id);
+    }
+    if (app_data->source_id_last_activity != 0) {
+        g_source_remove (app_data->source_id_last_activity);
+    }
+    if (app_data->last_user_activity != NULL) {
+        g_date_time_unref (app_data->last_user_activity);
+    }
+    if (app_data->connection != NULL) {
+        for (gint i = 0; i < DBUS_SERVICES; i++) {
+            g_dbus_connection_signal_unsubscribe (app_data->connection, app_data->subscription_ids[i]);
+        }
+        g_dbus_connection_close (app_data->connection, NULL, NULL, NULL);
+    }
+    if (app_data->db_data != NULL) {
+        gcry_free (app_data->db_data->key);
+        g_free (app_data->db_data->db_path);
+        g_slist_free_full (app_data->db_data->objects_hash, g_free);
+        json_decref (app_data->db_data->in_memory_json_data);
+        g_free (app_data->db_data);
+    }
+    if (app_data->clipboard != NULL) {
+        gtk_clipboard_clear (app_data->clipboard);
+    }
+    if (app != NULL) {
+        g_application_withdraw_notification (G_APPLICATION (app), NOTIFICATION_ID);
+    }
+    if (app_data->notification != NULL) {
+        g_object_unref (app_data->notification);
+    }
+    gint w = app_data->window_width;
+    gint h = app_data->window_height;
+    if ((w == 0 || h == 0) && window != NULL) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wbad-function-cast"
-    gint w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));
-    gint h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
+        w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));
+        h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
 #pragma GCC diagnostic pop
-    save_window_size (w, h);
-    g_object_unref (app_data->builder);
-    g_object_unref (app_data->add_popover_builder);
-    g_object_unref (app_data->settings_popover_builder);
+    }
+    if (w > 0 && h > 0) {
+        save_window_size (w, h);
+    }
+    if (app_data->builder != NULL) {
+        g_object_unref (app_data->builder);
+    }
+    if (app_data->add_popover_builder != NULL) {
+        g_object_unref (app_data->add_popover_builder);
+    }
+    if (app_data->settings_popover_builder != NULL) {
+        g_object_unref (app_data->settings_popover_builder);
+    }
     if (app_data->filter_model != NULL) {
         g_object_unref (app_data->filter_model);
     }
@@ -289,8 +321,14 @@ save_sort_order (GtkTreeView *tree_view)
     gint id;
     GtkSortType order;
     GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
+    if (model == NULL) {
+        return;
+    }
     if (GTK_IS_TREE_MODEL_FILTER (model)) {
         model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER (model));
+    }
+    if (!GTK_IS_TREE_SORTABLE (model)) {
+        return;
     }
     gtk_tree_sortable_get_sort_column_id (GTK_TREE_SORTABLE (model), &id, &order);
     // store data only if it was changed

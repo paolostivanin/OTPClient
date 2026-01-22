@@ -7,15 +7,10 @@ The following list describes whether a version is eligible or not for security u
 | Version | Supported          | EOL         |
 |---------|--------------------|-------------|
 |---------|--------------------|-------------|
-| 4.1.x   | :white_check_mark: | -           |
+| 4.2.x   | :white_check_mark: | -           |
+| 4.1.x   | :white_check_mark: | 27-Feb-2026 |
 | 4.0.x   | :x:                | 30-Jun-2025 |
 | 3.7.x   | :x:                | 30-Sep-2024 |
-| 3.6.x   | :x:                | 31-Aug-2024 |
-| 3.5.x   | :x:                | 31-Mar-2024 |
-| 3.4.1   | :x:                | 31-May-2024 |
-| 3.4.0   | :x:                | 29-Feb-2024 |
-| 3.3.x   | :x:                | 29-Feb-2024 |
-| 3.2.x   | :x:                | 31-Jan-2024 |
 
 ## Reporting a Vulnerability
 

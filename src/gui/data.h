@@ -60,6 +60,9 @@ typedef struct app_data_t {
 
     GtkWidget *diag_rcdb;
     GtkFileChooserAction open_db_file_action;
+
+    gint window_width;
+    gint window_height;
 } AppData;
 
 

@@ -54,6 +54,8 @@ static void       init_db_defaults          (AppData            *app_data);
 
 static void       cleanup_app_data          (AppData            *app_data);
 
+static void       otpclient_application_shutdown (GApplication *app);
+
 struct _OtpclientApplication {
     GtkApplication parent_instance;
     AppData *app_data;
@@ -299,6 +301,7 @@ otpclient_application_class_init (OtpclientApplicationClass *klass)
 
     object_class->finalize = otpclient_application_finalize;
     app_class->activate = otpclient_application_activate;
+    app_class->shutdown = otpclient_application_shutdown;
 }
 
 static void
@@ -479,6 +482,8 @@ init_app_defaults (AppData *app_data)
     app_data->use_tray = FALSE; // do not use tray by default
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
+    app_data->window_width = 0;
+    app_data->window_height = 0;
 }
 
 static void
@@ -518,4 +523,16 @@ cleanup_app_data (AppData *app_data)
     }
 
     g_free (app_data);
+}
+
+static void
+otpclient_application_shutdown (GApplication *app)
+{
+    OtpclientApplication *self = OTPCLIENT_APPLICATION (app);
+
+    if (self->app_data != NULL) {
+        destroy_cb (NULL, self->app_data);
+    }
+
+    G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (app);
 }
