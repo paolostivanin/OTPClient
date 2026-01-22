@@ -1343,6 +1343,19 @@ but not the number of digits and/or the period/counter.</property>
                     <property name="position">2</property>
                   </packing>
                 </child>
+                <child>
+                  <object class="GtkButton" id="empty_state_add_btn_id">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="label" translatable="yes">Add your first token</property>
+                    <property name="receives-default">True</property>
+                  </object>
+                  <packing>
+                    <property name="expand">False</property>
+                    <property name="fill">True</property>
+                    <property name="position">3</property>
+                  </packing>
+                </child>
               </object>
               <packing>
                 <property name="name">empty</property>

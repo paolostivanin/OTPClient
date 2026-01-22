@@ -31,7 +31,7 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.webcam</property>
-            <property name="text" translatable="yes">from webcam</property>
+            <property name="text" translatable="yes">From Webcam</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -45,7 +45,7 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.import_qr_file</property>
-            <property name="text" translatable="yes">from file</property>
+            <property name="text" translatable="yes">From File</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -59,7 +59,7 @@
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
             <property name="action-name">add_menu.import_qr_clipboard</property>
-            <property name="text" translatable="yes">from clipboard</property>
+            <property name="text" translatable="yes">From Clipboard</property>
           </object>
           <packing>
             <property name="expand">False</property>

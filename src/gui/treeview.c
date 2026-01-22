@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <pango/pango.h>
 #include <jansson.h>
 #include "../common/macros.h"
 #include "otpclient.h"
@@ -16,6 +17,14 @@ static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
 static void     add_columns        (GtkTreeView    *tree_view);
+
+static void     add_validity_column (GtkTreeView   *tree_view);
+
+static void     validity_cell_data_func (GtkTreeViewColumn *column,
+                                         GtkCellRenderer   *renderer,
+                                         GtkTreeModel      *model,
+                                         GtkTreeIter       *iter,
+                                         gpointer           user_data);
 
 static void     delete_row         (AppData        *app_data);
 
@@ -591,6 +600,19 @@ add_column_with_attributes (GtkTreeView *tree_view,
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
     GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes (title, renderer, "text", column_id, NULL);
     gtk_tree_view_column_set_visible (column, visible);
+    gtk_tree_view_column_set_resizable (column, TRUE);
+    if (column_id == COLUMN_ACC_LABEL || column_id == COLUMN_ACC_ISSUER) {
+        gtk_tree_view_column_set_expand (column, TRUE);
+        g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+    }
+    if (column_id == COLUMN_OTP) {
+        g_object_set (renderer,
+                      "family", "monospace",
+                      "weight", PANGO_WEIGHT_NORMAL,
+                      "xalign", 0.5,
+                      NULL);
+        gtk_tree_view_column_set_min_width (column, 120);
+    }
     gtk_tree_view_append_column (tree_view, column);
 }
 
@@ -603,13 +625,63 @@ add_columns (GtkTreeView *tree_view)
     add_column_with_attributes (tree_view, "Account", COLUMN_ACC_LABEL, TRUE);
     add_column_with_attributes (tree_view, "Issuer", COLUMN_ACC_ISSUER, TRUE);
     add_column_with_attributes (tree_view, "OTP Value", COLUMN_OTP, TRUE);
-    add_column_with_attributes (tree_view, "Validity", COLUMN_VALIDITY, TRUE);
+    add_validity_column (tree_view);
 
     // Additional columns (hidden by default)
     add_column_with_attributes (tree_view, "Period", COLUMN_PERIOD, FALSE);
     add_column_with_attributes (tree_view, "Updated", COLUMN_UPDATED, FALSE);
     add_column_with_attributes (tree_view, "Less Than a Minute", COLUMN_LESS_THAN_A_MINUTE, FALSE);
     add_column_with_attributes (tree_view, "Position in Database", COLUMN_POSITION_IN_DB, FALSE);
+}
+
+
+static void
+add_validity_column (GtkTreeView *tree_view)
+{
+    GtkCellRenderer *renderer = gtk_cell_renderer_progress_new ();
+    GtkTreeViewColumn *column = gtk_tree_view_column_new ();
+    gtk_tree_view_column_set_title (column, "Validity");
+    gtk_tree_view_column_pack_start (column, renderer, TRUE);
+    gtk_tree_view_column_set_resizable (column, TRUE);
+    gtk_tree_view_column_set_min_width (column, 110);
+    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_cell_data_func, NULL, NULL);
+    gtk_tree_view_append_column (tree_view, column);
+}
+
+
+static void
+validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                         GtkCellRenderer   *renderer,
+                         GtkTreeModel      *model,
+                         GtkTreeIter       *iter,
+                         gpointer           user_data UNUSED)
+{
+    gchar *otp_type = NULL;
+    guint validity = 0;
+    guint period = 0;
+
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        -1);
+
+    if (otp_type != NULL && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
+        gint percent = (gint)((validity * 100) / period);
+        gchar *text = g_strdup_printf ("%us", validity);
+        g_object_set (renderer,
+                      "value", percent,
+                      "text", text,
+                      NULL);
+        g_free (text);
+    } else {
+        g_object_set (renderer,
+                      "value", 0,
+                      "text", "",
+                      NULL);
+    }
+
+    g_free (otp_type);
 }
 
 

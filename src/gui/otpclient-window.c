@@ -96,6 +96,11 @@ otpclient_window_new (GtkApplication *app,
         gtk_widget_set_sensitive (lock_btn, FALSE);
     }
 
+    GtkWidget *empty_state_add_btn = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "empty_state_add_btn_id"));
+    if (empty_state_add_btn != NULL) {
+        g_signal_connect (empty_state_add_btn, "clicked", G_CALLBACK (manual_add_cb_shortcut), app_data);
+    }
+
     static GActionEntry import_menu_entries[] = {
         { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = import_data_cb },
         { .name = AEGIS_PLAIN_ACTION_NAME, .activate = import_data_cb },
