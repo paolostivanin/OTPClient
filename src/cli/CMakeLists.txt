@@ -8,8 +8,4 @@ file(GLOB CLI_SOURCE_FILES
         ../common/*.c
 )
 
-include_directories(
-        ${COMMON_INCDIRS}
-)
-
 add_executable(${PROJECT_NAME}-cli ${CLI_SOURCE_FILES} ${CLI_HEADER_FILES})
