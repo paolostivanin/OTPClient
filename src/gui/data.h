@@ -21,6 +21,7 @@ typedef struct app_data_t {
     GtkListStore *list_store;
     GtkTreeModelFilter *filter_model;
     GtkWidget *search_entry;
+    GtkWidget *list_stack;
     #ifdef ENABLE_MINIMIZE_TO_TRAY
     AppIndicator *indicator;
     #endif
@@ -59,6 +60,9 @@ typedef struct app_data_t {
 
     GtkWidget *diag_rcdb;
     GtkFileChooserAction open_db_file_action;
+
+    gint window_width;
+    gint window_height;
 } AppData;
 
 

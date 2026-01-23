@@ -8,9 +8,6 @@ G_BEGIN_DECLS
 
 #define NOTIFICATION_ID "otp-copied"
 
-void     activate              (GtkApplication *app,
-                                gpointer        user_data);
-
 void     add_qr_from_file      (GSimpleAction  *simple,
                                 GVariant       *parameter,
                                 gpointer        user_data);

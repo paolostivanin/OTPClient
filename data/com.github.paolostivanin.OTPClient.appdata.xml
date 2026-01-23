@@ -89,6 +89,25 @@
   </content_rating>
 
   <releases>
+    <release version="4.3.0" date="2026-01-23">
+      <description>
+        <p>OTPClient 4.3.0 includes the following improvements and fixes:</p>
+        <ul>
+          <li>IMPROVED: Refactored the codebase to follow proper GTK coding patterns and lifecycle management</li>
+          <li>IMPROVED: Added an explicit shutdown event and hardened cleanup to safely handle partially initialized state</li>
+          <li>IMPROVED: Prevented GTK critical warnings on close while still persisting window size when available</li>
+          <li>IMPROVED: Added a main-window empty-state view with a clear call-to-action wired to the manual add flow</li>
+          <li>IMPROVED: Normalized Add menu labels to title case for improved consistency</li>
+          <li>IMPROVED: Enhanced treeview readability with resizable and expanding columns, ellipsized text, and monospace OTP formatting</li>
+          <li>IMPROVED: Replaced the validity text column with a progress bar renderer showing remaining seconds for TOTP entries</li>
+          <li>IMPROVED: Switched visual indicators from bar-based charts to a filled pie for clearer status representation</li>
+          <li>IMPROVED: Clarified header bar actions with labeled icon buttons for add and reorder controls</li>
+          <li>IMPROVED: Grouped export formats into app-specific submenus and clarified password dialog warning text</li>
+          <li>IMPROVED: Improved CLI UX for clearer and more user-friendly interactions</li>
+          <li>REMOVED: Legacy option-migration code that is no longer needed</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.2.0" date="2025-12-23">
       <description>
         <p>OTPClient 4.2.0 the followin improvements:</p>

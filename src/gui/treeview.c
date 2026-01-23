@@ -1,4 +1,5 @@
 #include <gtk/gtk.h>
+#include <pango/pango.h>
 #include <jansson.h>
 #include "../common/macros.h"
 #include "otpclient.h"
@@ -16,6 +17,17 @@ static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
 static void     add_columns        (GtkTreeView    *tree_view);
+
+static void     add_validity_column (GtkTreeView   *tree_view);
+
+static void     validity_cell_data_func (GtkTreeViewColumn *column,
+                                         GtkCellRenderer   *renderer,
+                                         GtkTreeModel      *model,
+                                         GtkTreeIter       *iter,
+                                         gpointer           user_data);
+
+static GdkPixbuf *create_validity_pixbuf (guint validity,
+                                          guint period);
 
 static void     delete_row         (AppData        *app_data);
 
@@ -47,6 +59,8 @@ static void     search_entry_activate_cb (GtkEntry *entry,
 
 static void     select_first_row (AppData *app_data);
 
+static void     update_empty_state (AppData *app_data);
+
 static gboolean get_liststore_iter_from_path (AppData     *app_data,
                                               GtkTreePath *path,
                                               GtkTreeIter *iter);
@@ -76,6 +90,8 @@ create_treeview (AppData *app_data)
         g_signal_connect (app_data->search_entry, "activate", G_CALLBACK(search_entry_activate_cb), app_data);
     }
 
+    app_data->list_stack = GTK_WIDGET(gtk_builder_get_object (app_data->builder, "list_stack_id"));
+
     GtkBindingSet *tv_binding_set = gtk_binding_set_by_class (GTK_TREE_VIEW_GET_CLASS(app_data->tree_view));
     g_signal_new ("hide-all-otps", G_TYPE_OBJECT, G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     gtk_binding_entry_add_signal (tv_binding_set, GDK_KEY_h, GDK_MOD1_MASK, "hide-all-otps", 0);
@@ -90,6 +106,7 @@ create_treeview (AppData *app_data)
     g_signal_connect(app_data->tree_view, "button-press-event", G_CALLBACK(on_treeview_button_press_event), app_data);
 
     select_first_row (app_data);
+    update_empty_state (app_data);
 }
 
 
@@ -107,6 +124,7 @@ update_model (AppData *app_data)
             gtk_tree_model_filter_refilter (app_data->filter_model);
         }
     }
+    update_empty_state (app_data);
 }
 
 
@@ -466,6 +484,7 @@ search_entry_changed_cb (GtkEntry *entry UNUSED,
         gtk_tree_model_filter_refilter (app_data->filter_model);
     }
     select_first_row (app_data);
+    update_empty_state (app_data);
 }
 
 static void
@@ -508,6 +527,18 @@ select_first_row (AppData *app_data)
         gtk_tree_view_scroll_to_cell (app_data->tree_view, path, NULL, FALSE, 0.0f, 0.0f);
         gtk_tree_path_free (path);
     }
+}
+
+static void
+update_empty_state (AppData *app_data)
+{
+    if (app_data->list_stack == NULL || app_data->filter_model == NULL) {
+        return;
+    }
+
+    GtkTreeModel *model = GTK_TREE_MODEL(app_data->filter_model);
+    gint rows = gtk_tree_model_iter_n_children (model, NULL);
+    gtk_stack_set_visible_child_name (GTK_STACK(app_data->list_stack), rows > 0 ? "list" : "empty");
 }
 
 static gboolean
@@ -572,6 +603,19 @@ add_column_with_attributes (GtkTreeView *tree_view,
     GtkCellRenderer *renderer = gtk_cell_renderer_text_new ();
     GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes (title, renderer, "text", column_id, NULL);
     gtk_tree_view_column_set_visible (column, visible);
+    gtk_tree_view_column_set_resizable (column, TRUE);
+    if (column_id == COLUMN_ACC_LABEL || column_id == COLUMN_ACC_ISSUER) {
+        gtk_tree_view_column_set_expand (column, TRUE);
+        g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+    }
+    if (column_id == COLUMN_OTP) {
+        g_object_set (renderer,
+                      "family", "monospace",
+                      "weight", PANGO_WEIGHT_NORMAL,
+                      "xalign", 0.5,
+                      NULL);
+        gtk_tree_view_column_set_min_width (column, 120);
+    }
     gtk_tree_view_append_column (tree_view, column);
 }
 
@@ -584,13 +628,104 @@ add_columns (GtkTreeView *tree_view)
     add_column_with_attributes (tree_view, "Account", COLUMN_ACC_LABEL, TRUE);
     add_column_with_attributes (tree_view, "Issuer", COLUMN_ACC_ISSUER, TRUE);
     add_column_with_attributes (tree_view, "OTP Value", COLUMN_OTP, TRUE);
-    add_column_with_attributes (tree_view, "Validity", COLUMN_VALIDITY, TRUE);
+    add_validity_column (tree_view);
 
     // Additional columns (hidden by default)
     add_column_with_attributes (tree_view, "Period", COLUMN_PERIOD, FALSE);
     add_column_with_attributes (tree_view, "Updated", COLUMN_UPDATED, FALSE);
     add_column_with_attributes (tree_view, "Less Than a Minute", COLUMN_LESS_THAN_A_MINUTE, FALSE);
     add_column_with_attributes (tree_view, "Position in Database", COLUMN_POSITION_IN_DB, FALSE);
+}
+
+
+static void
+add_validity_column (GtkTreeView *tree_view)
+{
+    GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new ();
+    GtkTreeViewColumn *column = gtk_tree_view_column_new ();
+    gtk_tree_view_column_set_title (column, "Validity");
+    gtk_tree_view_column_pack_start (column, renderer, TRUE);
+    gtk_tree_view_column_set_resizable (column, TRUE);
+    gtk_tree_view_column_set_min_width (column, 40);
+    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_cell_data_func, NULL, NULL);
+    gtk_tree_view_append_column (tree_view, column);
+}
+
+
+static void
+validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                         GtkCellRenderer   *renderer,
+                         GtkTreeModel      *model,
+                         GtkTreeIter       *iter,
+                         gpointer           user_data UNUSED)
+{
+    gchar *otp_type = NULL;
+    gchar *otp_value = NULL;
+    guint validity = 0;
+    guint period = 0;
+
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp_value,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        -1);
+
+    if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+        && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
+        GdkPixbuf *pixbuf = create_validity_pixbuf (validity, period);
+        g_object_set (renderer,
+                      "pixbuf", pixbuf,
+                      NULL);
+        if (pixbuf != NULL) {
+            g_object_unref (pixbuf);
+        }
+    } else {
+        g_object_set (renderer,
+                      "pixbuf", NULL,
+                      NULL);
+    }
+
+    g_free (otp_type);
+    g_free (otp_value);
+}
+
+
+static GdkPixbuf *
+create_validity_pixbuf (guint validity,
+                        guint period)
+{
+    const gint size = 18;
+    cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
+    cairo_t *cr = cairo_create (surface);
+    gdouble center = size / 2.0;
+    gdouble radius = size / 2.0;
+    gdouble fraction = 0.0;
+
+    if (period > 0) {
+        fraction = (gdouble)validity / (gdouble)period;
+    }
+
+    cairo_set_source_rgba (cr, 0.75, 0.75, 0.75, 0.25);
+    cairo_arc (cr, center, center, radius, 0, 2 * G_PI);
+    cairo_fill (cr);
+
+    if (validity <= 5) {
+        cairo_set_source_rgba (cr, 0.85, 0.35, 0.25, 1.0);
+    } else {
+        cairo_set_source_rgba (cr, 0.20, 0.65, 0.35, 1.0);
+    }
+    cairo_move_to (cr, center, center);
+    cairo_arc (cr, center, center, radius, -G_PI / 2.0, -G_PI / 2.0 + (2 * G_PI * fraction));
+    cairo_close_path (cr);
+    cairo_fill (cr);
+
+    GdkPixbuf *pixbuf = gdk_pixbuf_get_from_surface (surface, 0, 0, size, size);
+
+    cairo_destroy (cr);
+    cairo_surface_destroy (surface);
+
+    return pixbuf;
 }
 
 

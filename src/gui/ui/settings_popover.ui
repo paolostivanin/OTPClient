@@ -30,8 +30,8 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">export_menu.freeotpplus_plain</property>
-            <property name="text" translatable="yes">FreeOTP+ (key URI)</property>
+            <property name="menu-name">export_freeotp_menu</property>
+            <property name="text" translatable="yes">FreeOTP+</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -44,8 +44,8 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">export_menu.aegis_encrypted</property>
-            <property name="text" translatable="yes">Aegis (encrypted json)</property>
+            <property name="menu-name">export_aegis_menu</property>
+            <property name="text" translatable="yes">Aegis</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -58,8 +58,8 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">export_menu.aegis_plain</property>
-            <property name="text" translatable="yes">Aegis (plain json)</property>
+            <property name="menu-name">export_authpro_menu</property>
+            <property name="text" translatable="yes">Authenticator Pro</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -72,8 +72,8 @@
             <property name="visible">True</property>
             <property name="can-focus">True</property>
             <property name="receives-default">True</property>
-            <property name="action-name">export_menu.authpro_encrypted</property>
-            <property name="text" translatable="yes">Authenticator Pro (encrypted)</property>
+            <property name="menu-name">export_twofas_menu</property>
+            <property name="text" translatable="yes">2FAS</property>
           </object>
           <packing>
             <property name="expand">False</property>
@@ -81,52 +81,216 @@
             <property name="position">4</property>
           </packing>
         </child>
-        <child>
-          <object class="GtkModelButton" id="export_authpro_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.authpro_plain</property>
-            <property name="text" translatable="yes">Authenticator Pro (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">5</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_twofas_enc_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.twofas_encrypted</property>
-            <property name="text" translatable="yes">2FAS (encrypted json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">6</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkModelButton" id="export_twofas_plain_model_btn_id">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="receives-default">True</property>
-            <property name="action-name">export_menu.twofas_plain</property>
-            <property name="text" translatable="yes">2FAS (plain json)</property>
-          </object>
-          <packing>
-            <property name="expand">False</property>
-            <property name="fill">True</property>
-            <property name="position">7</property>
-          </packing>
-        </child>
       </object>
       <packing>
         <property name="submenu">export_menu</property>
         <property name="position">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="export_freeotpplus_back_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="inverted">True</property>
+            <property name="centered">True</property>
+            <property name="menu-name">export_menu</property>
+            <property name="text" translatable="yes">Back</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_freeotpplus_plain_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.freeotpplus_plain</property>
+            <property name="text" translatable="yes">Key URI</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">export_freeotp_menu</property>
+        <property name="position">2</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="export_aegis_back_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="inverted">True</property>
+            <property name="centered">True</property>
+            <property name="menu-name">export_menu</property>
+            <property name="text" translatable="yes">Back</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_aegis_enc_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.aegis_encrypted</property>
+            <property name="text" translatable="yes">Encrypted JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_aegis_plain_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.aegis_plain</property>
+            <property name="text" translatable="yes">Plain JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">export_aegis_menu</property>
+        <property name="position">3</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="export_authpro_back_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="inverted">True</property>
+            <property name="centered">True</property>
+            <property name="menu-name">export_menu</property>
+            <property name="text" translatable="yes">Back</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_authpro_enc_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.authpro_encrypted</property>
+            <property name="text" translatable="yes">Encrypted JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_authpro_plain_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.authpro_plain</property>
+            <property name="text" translatable="yes">Plain JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">export_authpro_menu</property>
+        <property name="position">4</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkBox">
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="orientation">vertical</property>
+        <child>
+          <object class="GtkModelButton" id="export_twofas_back_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="inverted">True</property>
+            <property name="centered">True</property>
+            <property name="menu-name">export_menu</property>
+            <property name="text" translatable="yes">Back</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_twofas_enc_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.twofas_encrypted</property>
+            <property name="text" translatable="yes">Encrypted JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkModelButton" id="export_twofas_plain_btn_id">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="receives-default">True</property>
+            <property name="action-name">export_menu.twofas_plain</property>
+            <property name="text" translatable="yes">Plain JSON</property>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">2</property>
+          </packing>
+        </child>
+      </object>
+      <packing>
+        <property name="submenu">export_twofas_menu</property>
+        <property name="position">5</property>
       </packing>
     </child>
     <child>
@@ -223,7 +387,7 @@
       </object>
       <packing>
         <property name="submenu">db_menu</property>
-        <property name="position">2</property>
+        <property name="position">6</property>
       </packing>
     </child>
     <child>
@@ -304,7 +468,7 @@
       </object>
       <packing>
         <property name="submenu">main</property>
-        <property name="position">3</property>
+        <property name="position">7</property>
       </packing>
     </child>
   </object>

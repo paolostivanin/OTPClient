@@ -6,6 +6,7 @@
 #include "main.h"
 #include "get-data.h"
 #include "../common/import-export.h"
+#include "../common/file-size.h"
 #include "../common/secret-schema.h"
 #include "../common/gquarks.h"
 
@@ -44,10 +45,23 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 #else
     db_data->db_path = (cmdline_opts->database != NULL) ? g_strdup (cmdline_opts->database) : get_db_path ();
     if (db_data->db_path == NULL) {
-        g_free (db_data);
         return FALSE;
     }
 #endif
+
+    if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
+        if (get_file_size (db_data->db_path) > (goffset)(db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
+            gchar *msg = g_strdup_printf (_(
+                "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
+                "You need to increase your system's memlock limit by following the instructions on our "
+                "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+                "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
+            ), db_data->max_file_size_from_memlock);
+            g_printerr ("%s\n", msg);
+            g_free (msg);
+            return FALSE;
+        }
+    }
 
     gboolean use_secret_service = get_use_secretservice ();
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
@@ -63,7 +77,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         db_data->key = get_pwd (_("Type the DB decryption password: "));
         if (db_data->key == NULL) {
             g_print ("Password was NULL, exiting...\n");
-            g_free (db_data);
             return FALSE;
         }
     }
@@ -77,7 +90,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         if (err != NULL) {
             g_printerr (_("Error while creating new database: %s\n"), err->message);
             g_clear_error (&err);
-            free_dbdata (db_data);
             return FALSE;
         }
 
@@ -90,7 +102,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
             g_printerr ("%s\n", msg);
             g_free (msg);
-            free_dbdata (db_data);
             return FALSE;
         }
     }
@@ -174,7 +185,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
-                    free_dbdata (db_data);
                     return FALSE;
                 }
             }
@@ -187,7 +197,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
-                    free_dbdata (db_data);
                     return FALSE;
                 }
             }
@@ -200,7 +209,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "));
                 if (export_pwd == NULL) {
-                    free_dbdata (db_data);
                     return FALSE;
                 }
             }
