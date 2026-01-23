@@ -15,6 +15,9 @@ typedef struct settings_data_t {
     GtkWidget *tray_switch;
     GtkWidget *al_switch;
     GtkWidget *inactivity_cb;
+    GtkWidget *validity_switch;
+    GtkWidget *validity_color_btn;
+    GtkWidget *validity_warning_color_btn;
     AppData *app_data;
 } SettingsData;
 
@@ -35,6 +38,10 @@ static gboolean handle_autolock               (GtkSwitch   *sw,
                                                gpointer     user_data);
 
 static gboolean handle_tray_switch            (GtkSwitch   *sw,
+                                               gboolean     state,
+                                               gpointer     user_data);
+
+static gboolean handle_validity_switch        (GtkSwitch   *sw,
                                                gboolean     state,
                                                gpointer     user_data);
 
@@ -61,6 +68,13 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         g_clear_error (&err);
         g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
         g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
+        g_key_file_set_boolean (kf, "config", "show_validity_seconds", app_data->show_validity_seconds);
+        gchar *validity_color = gdk_rgba_to_string (&app_data->validity_color);
+        gchar *warning_color = gdk_rgba_to_string (&app_data->validity_warning_color);
+        g_key_file_set_string (kf, "config", "validity_color", validity_color);
+        g_key_file_set_string (kf, "config", "validity_warning_color", warning_color);
+        g_free (validity_color);
+        g_free (warning_color);
         g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
         g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
         g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
@@ -77,6 +91,17 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         // Therefore, having these values as default is exactly what we want. So no need to check whether the key is missing.
         app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
         app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
+        app_data->show_validity_seconds = g_key_file_get_boolean (kf, "config", "show_validity_seconds", NULL);
+        gchar *validity_color = g_key_file_get_string (kf, "config", "validity_color", NULL);
+        gchar *warning_color = g_key_file_get_string (kf, "config", "validity_warning_color", NULL);
+        if (validity_color != NULL) {
+            gdk_rgba_parse (&app_data->validity_color, validity_color);
+        }
+        if (warning_color != NULL) {
+            gdk_rgba_parse (&app_data->validity_warning_color, warning_color);
+        }
+        g_free (validity_color);
+        g_free (warning_color);
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
@@ -93,6 +118,10 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "settings_diag_id"));
     GtkWidget *sno_switch = GTK_WIDGET(gtk_builder_get_object (builder, "nextotp_switch_id"));
     GtkWidget *dn_switch = GTK_WIDGET(gtk_builder_get_object (builder, "notif_switch_id"));
+    settings_data->validity_switch = GTK_WIDGET(gtk_builder_get_object (builder, "validity_seconds_switch_id"));
+    settings_data->validity_color_btn = GTK_WIDGET(gtk_builder_get_object (builder, "validity_color_btn_id"));
+    settings_data->validity_warning_color_btn = GTK_WIDGET(gtk_builder_get_object (builder, "validity_warning_color_btn_id"));
+    g_signal_connect (settings_data->validity_switch, "state-set", G_CALLBACK(handle_validity_switch), settings_data);
     settings_data->al_switch = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_switch_id"));
     g_signal_connect (settings_data->al_switch, "state-set", G_CALLBACK(handle_secretservice_switch), settings_data);
     settings_data->inactivity_cb = GTK_WIDGET(gtk_builder_get_object (builder, "autolock_inactive_cb_id"));
@@ -105,13 +134,17 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     g_signal_connect (settings_data->tray_switch, "state-set", G_CALLBACK(handle_tray_switch), settings_data);
     #else
     GtkGrid *grid = GTK_GRID(gtk_builder_get_object(builder, "grid_settings"));
-    gtk_grid_remove_row(grid, 7);  // we cannot control visibility of the child eledments
+    gtk_grid_remove_row(grid, 9);  // we cannot control visibility of the child eledments
     #endif
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
 
     gtk_switch_set_active (GTK_SWITCH(sno_switch), app_data->show_next_otp);
     gtk_switch_set_active (GTK_SWITCH(dn_switch), app_data->disable_notifications);
+    gtk_switch_set_active (GTK_SWITCH(settings_data->validity_switch), app_data->show_validity_seconds);
+    gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER(settings_data->validity_color_btn), &app_data->validity_color);
+    gtk_color_chooser_set_rgba (GTK_COLOR_CHOOSER(settings_data->validity_warning_color_btn), &app_data->validity_warning_color);
+    handle_validity_switch (GTK_SWITCH(settings_data->validity_switch), app_data->show_validity_seconds, settings_data);
     gtk_switch_set_active (GTK_SWITCH(settings_data->al_switch), app_data->auto_lock);
     gtk_switch_set_active (GTK_SWITCH(dt_switch), app_data->use_dark_theme);
     gtk_switch_set_active (GTK_SWITCH(settings_data->dss_switch), app_data->use_secret_service);
@@ -125,10 +158,16 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     gtk_widget_show_all (dialog);
 
     gboolean old_ss_value = app_data->use_secret_service;
+    gboolean old_validity_seconds = app_data->show_validity_seconds;
+    GdkRGBA old_validity_color = app_data->validity_color;
+    GdkRGBA old_validity_warning_color = app_data->validity_warning_color;
     switch (gtk_dialog_run (GTK_DIALOG(dialog))) {
         case GTK_RESPONSE_OK:
             app_data->show_next_otp = gtk_switch_get_active (GTK_SWITCH(sno_switch));
             app_data->disable_notifications = gtk_switch_get_active (GTK_SWITCH(dn_switch));
+            app_data->show_validity_seconds = gtk_switch_get_active (GTK_SWITCH(settings_data->validity_switch));
+            gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER(settings_data->validity_color_btn), &app_data->validity_color);
+            gtk_color_chooser_get_rgba (GTK_COLOR_CHOOSER(settings_data->validity_warning_color_btn), &app_data->validity_warning_color);
             app_data->auto_lock = gtk_switch_get_active (GTK_SWITCH(settings_data->al_switch));
             app_data->inactivity_timeout = (gint)g_ascii_strtoll (gtk_combo_box_get_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb)), NULL, 10);
             app_data->use_dark_theme = gtk_switch_get_active (GTK_SWITCH(dt_switch));
@@ -136,6 +175,13 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             app_data->use_tray = gtk_switch_get_active (GTK_SWITCH(settings_data->tray_switch));
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
+            g_key_file_set_boolean (kf, "config", "show_validity_seconds", app_data->show_validity_seconds);
+            gchar *validity_color = gdk_rgba_to_string (&app_data->validity_color);
+            gchar *warning_color = gdk_rgba_to_string (&app_data->validity_warning_color);
+            g_key_file_set_string (kf, "config", "validity_color", validity_color);
+            g_key_file_set_string (kf, "config", "validity_warning_color", warning_color);
+            g_free (validity_color);
+            g_free (warning_color);
             g_key_file_set_boolean (kf, "config", "auto_lock", app_data->auto_lock);
             g_key_file_set_integer (kf, "config", "inactivity_timeout", app_data->inactivity_timeout);
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
@@ -147,6 +193,11 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             }
             if (!g_key_file_save_to_file (kf, cfg_file_path, NULL)) {
                 g_printerr ("%s\n", _("Error while saving the config file."));
+            }
+            gboolean colors_changed = !gdk_rgba_equal (&old_validity_color, &app_data->validity_color)
+                || !gdk_rgba_equal (&old_validity_warning_color, &app_data->validity_warning_color);
+            if ((old_validity_seconds != app_data->show_validity_seconds || colors_changed) && app_data->tree_view != NULL) {
+                gtk_widget_queue_draw (GTK_WIDGET (app_data->tree_view));
             }
             if (app_data->filter_model != NULL) {
                 gtk_tree_model_filter_refilter (app_data->filter_model);
@@ -292,3 +343,16 @@ handle_tray_switch (GtkSwitch *sw UNUSED,
     return TRUE;
 }
 #endif
+
+static gboolean
+handle_validity_switch (GtkSwitch *sw,
+                        gboolean   state,
+                        gpointer   user_data)
+{
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
+    gtk_widget_set_sensitive (settings_data->validity_color_btn, !state);
+    gtk_widget_set_sensitive (settings_data->validity_warning_color_btn, !state);
+    gtk_switch_set_state (sw, state);
+
+    return TRUE;
+}

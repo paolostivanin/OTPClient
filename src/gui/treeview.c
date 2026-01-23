@@ -16,18 +16,27 @@ static const gchar *json_get_string_or_empty (json_t      *obj,
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
-static void     add_columns        (GtkTreeView    *tree_view);
+static void     add_columns        (AppData        *app_data);
 
-static void     add_validity_column (GtkTreeView   *tree_view);
+static void     add_validity_column (GtkTreeView   *tree_view,
+                                     AppData       *app_data);
 
-static void     validity_cell_data_func (GtkTreeViewColumn *column,
-                                         GtkCellRenderer   *renderer,
-                                         GtkTreeModel      *model,
-                                         GtkTreeIter       *iter,
-                                         gpointer           user_data);
+static void     validity_pixbuf_cell_data_func (GtkTreeViewColumn *column,
+                                                GtkCellRenderer   *renderer,
+                                                GtkTreeModel      *model,
+                                                GtkTreeIter       *iter,
+                                                gpointer           user_data);
 
-static GdkPixbuf *create_validity_pixbuf (guint validity,
-                                          guint period);
+static void     validity_text_cell_data_func (GtkTreeViewColumn *column,
+                                              GtkCellRenderer   *renderer,
+                                              GtkTreeModel      *model,
+                                              GtkTreeIter       *iter,
+                                              gpointer           user_data);
+
+static GdkPixbuf *create_validity_pixbuf (guint         validity,
+                                          guint         period,
+                                          const GdkRGBA *validity_color,
+                                          const GdkRGBA *warning_color);
 
 static void     delete_row         (AppData        *app_data);
 
@@ -74,7 +83,7 @@ create_treeview (AppData *app_data)
     app_data->list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
                                                G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_INT);
 
-    add_columns (app_data->tree_view);
+    add_columns (app_data);
 
     add_data_to_model (app_data->db_data, app_data->list_store);
 
@@ -621,14 +630,15 @@ add_column_with_attributes (GtkTreeView *tree_view,
 
 
 static void
-add_columns (GtkTreeView *tree_view)
+add_columns (AppData *app_data)
 {
+    GtkTreeView *tree_view = app_data->tree_view;
     // Main columns
     add_column_with_attributes (tree_view, "Type", COLUMN_TYPE, TRUE);
     add_column_with_attributes (tree_view, "Account", COLUMN_ACC_LABEL, TRUE);
     add_column_with_attributes (tree_view, "Issuer", COLUMN_ACC_ISSUER, TRUE);
     add_column_with_attributes (tree_view, "OTP Value", COLUMN_OTP, TRUE);
-    add_validity_column (tree_view);
+    add_validity_column (tree_view, app_data);
 
     // Additional columns (hidden by default)
     add_column_with_attributes (tree_view, "Period", COLUMN_PERIOD, FALSE);
@@ -639,26 +649,35 @@ add_columns (GtkTreeView *tree_view)
 
 
 static void
-add_validity_column (GtkTreeView *tree_view)
+add_validity_column (GtkTreeView *tree_view,
+                     AppData     *app_data)
 {
     GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new ();
+    GtkCellRenderer *text_renderer = gtk_cell_renderer_text_new ();
     GtkTreeViewColumn *column = gtk_tree_view_column_new ();
     gtk_tree_view_column_set_title (column, "Validity");
     gtk_tree_view_column_pack_start (column, renderer, TRUE);
+    gtk_tree_view_column_pack_start (column, text_renderer, TRUE);
     gtk_tree_view_column_set_resizable (column, TRUE);
     gtk_tree_view_column_set_min_width (column, 40);
-    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_cell_data_func, NULL, NULL);
+    g_object_set (text_renderer,
+                  "xalign", 0.5,
+                  "yalign", 0.5,
+                  NULL);
+    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_pixbuf_cell_data_func, app_data, NULL);
+    gtk_tree_view_column_set_cell_data_func (column, text_renderer, validity_text_cell_data_func, app_data, NULL);
     gtk_tree_view_append_column (tree_view, column);
 }
 
 
 static void
-validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
-                         GtkCellRenderer   *renderer,
-                         GtkTreeModel      *model,
-                         GtkTreeIter       *iter,
-                         gpointer           user_data UNUSED)
+validity_pixbuf_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                                GtkCellRenderer   *renderer,
+                                GtkTreeModel      *model,
+                                GtkTreeIter       *iter,
+                                gpointer           user_data)
 {
+    CAST_USER_DATA (AppData, app_data, user_data);
     gchar *otp_type = NULL;
     gchar *otp_value = NULL;
     guint validity = 0;
@@ -671,11 +690,16 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
                         COLUMN_PERIOD, &period,
                         -1);
 
-    if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+    gboolean should_show = app_data != NULL && !app_data->show_validity_seconds;
+    if (should_show && otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
         && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
-        GdkPixbuf *pixbuf = create_validity_pixbuf (validity, period);
+        GdkPixbuf *pixbuf = create_validity_pixbuf (validity,
+                                                    period,
+                                                    &app_data->validity_color,
+                                                    &app_data->validity_warning_color);
         g_object_set (renderer,
                       "pixbuf", pixbuf,
+                      "visible", TRUE,
                       NULL);
         if (pixbuf != NULL) {
             g_object_unref (pixbuf);
@@ -683,6 +707,7 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
     } else {
         g_object_set (renderer,
                       "pixbuf", NULL,
+                      "visible", FALSE,
                       NULL);
     }
 
@@ -690,10 +715,52 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
     g_free (otp_value);
 }
 
+static void
+validity_text_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                              GtkCellRenderer   *renderer,
+                              GtkTreeModel      *model,
+                              GtkTreeIter       *iter,
+                              gpointer           user_data)
+{
+    CAST_USER_DATA (AppData, app_data, user_data);
+    gchar *otp_type = NULL;
+    gchar *otp_value = NULL;
+    guint validity = 0;
+    guint period = 0;
+    gchar *text = NULL;
+
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp_value,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        -1);
+
+    gboolean should_show = app_data != NULL && app_data->show_validity_seconds;
+    if (should_show && otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+        && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
+        text = g_strdup_printf ("%u", validity);
+        g_object_set (renderer,
+                      "text", text,
+                      "visible", TRUE,
+                      NULL);
+    } else {
+        g_object_set (renderer,
+                      "text", NULL,
+                      "visible", FALSE,
+                      NULL);
+    }
+
+    g_free (text);
+    g_free (otp_type);
+    g_free (otp_value);
+}
 
 static GdkPixbuf *
-create_validity_pixbuf (guint validity,
-                        guint period)
+create_validity_pixbuf (guint         validity,
+                        guint         period,
+                        const GdkRGBA *validity_color,
+                        const GdkRGBA *warning_color)
 {
     const gint size = 18;
     cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
@@ -710,11 +777,26 @@ create_validity_pixbuf (guint validity,
     cairo_arc (cr, center, center, radius, 0, 2 * G_PI);
     cairo_fill (cr);
 
-    if (validity <= 5) {
-        cairo_set_source_rgba (cr, 0.85, 0.35, 0.25, 1.0);
-    } else {
-        cairo_set_source_rgba (cr, 0.20, 0.65, 0.35, 1.0);
+    const gboolean is_warning = validity <= 5;
+    const GdkRGBA *selected_color = is_warning ? warning_color : validity_color;
+    gdouble r = 0.20;
+    gdouble g = 0.65;
+    gdouble b = 0.35;
+    gdouble a = 1.0;
+
+    if (is_warning) {
+        r = 0.85;
+        g = 0.35;
+        b = 0.25;
     }
+
+    if (selected_color != NULL) {
+        r = selected_color->red;
+        g = selected_color->green;
+        b = selected_color->blue;
+        a = selected_color->alpha;
+    }
+    cairo_set_source_rgba (cr, r, g, b, a);
     cairo_move_to (cr, center, center);
     cairo_arc (cr, center, center, radius, -G_PI / 2.0, -G_PI / 2.0 + (2 * G_PI * fraction));
     cairo_close_path (cr);
