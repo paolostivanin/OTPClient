@@ -26,6 +26,9 @@ static void     validity_cell_data_func (GtkTreeViewColumn *column,
                                          GtkTreeIter       *iter,
                                          gpointer           user_data);
 
+static GdkPixbuf *create_validity_pixbuf (guint validity,
+                                          guint period);
+
 static void     delete_row         (AppData        *app_data);
 
 static void     hide_all_otps_cb   (GtkTreeView    *tree_view,
@@ -638,12 +641,12 @@ add_columns (GtkTreeView *tree_view)
 static void
 add_validity_column (GtkTreeView *tree_view)
 {
-    GtkCellRenderer *renderer = gtk_cell_renderer_progress_new ();
+    GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new ();
     GtkTreeViewColumn *column = gtk_tree_view_column_new ();
     gtk_tree_view_column_set_title (column, "Validity");
     gtk_tree_view_column_pack_start (column, renderer, TRUE);
     gtk_tree_view_column_set_resizable (column, TRUE);
-    gtk_tree_view_column_set_min_width (column, 110);
+    gtk_tree_view_column_set_min_width (column, 40);
     gtk_tree_view_column_set_cell_data_func (column, renderer, validity_cell_data_func, NULL, NULL);
     gtk_tree_view_append_column (tree_view, column);
 }
@@ -657,31 +660,72 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
                          gpointer           user_data UNUSED)
 {
     gchar *otp_type = NULL;
+    gchar *otp_value = NULL;
     guint validity = 0;
     guint period = 0;
 
     gtk_tree_model_get (model, iter,
                         COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp_value,
                         COLUMN_VALIDITY, &validity,
                         COLUMN_PERIOD, &period,
                         -1);
 
-    if (otp_type != NULL && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
-        gint percent = (gint)((validity * 100) / period);
-        gchar *text = g_strdup_printf ("%us", validity);
+    if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+        && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
+        GdkPixbuf *pixbuf = create_validity_pixbuf (validity, period);
         g_object_set (renderer,
-                      "value", percent,
-                      "text", text,
+                      "pixbuf", pixbuf,
                       NULL);
-        g_free (text);
+        if (pixbuf != NULL) {
+            g_object_unref (pixbuf);
+        }
     } else {
         g_object_set (renderer,
-                      "value", 0,
-                      "text", "",
+                      "pixbuf", NULL,
                       NULL);
     }
 
     g_free (otp_type);
+    g_free (otp_value);
+}
+
+
+static GdkPixbuf *
+create_validity_pixbuf (guint validity,
+                        guint period)
+{
+    const gint size = 18;
+    cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
+    cairo_t *cr = cairo_create (surface);
+    gdouble center = size / 2.0;
+    gdouble radius = size / 2.0;
+    gdouble fraction = 0.0;
+
+    if (period > 0) {
+        fraction = (gdouble)validity / (gdouble)period;
+    }
+
+    cairo_set_source_rgba (cr, 0.75, 0.75, 0.75, 0.25);
+    cairo_arc (cr, center, center, radius, 0, 2 * G_PI);
+    cairo_fill (cr);
+
+    if (validity <= 5) {
+        cairo_set_source_rgba (cr, 0.85, 0.35, 0.25, 1.0);
+    } else {
+        cairo_set_source_rgba (cr, 0.20, 0.65, 0.35, 1.0);
+    }
+    cairo_move_to (cr, center, center);
+    cairo_arc (cr, center, center, radius, -G_PI / 2.0, -G_PI / 2.0 + (2 * G_PI * fraction));
+    cairo_close_path (cr);
+    cairo_fill (cr);
+
+    GdkPixbuf *pixbuf = gdk_pixbuf_get_from_surface (surface, 0, 0, size, size);
+
+    cairo_destroy (cr);
+    cairo_surface_destroy (surface);
+
+    return pixbuf;
 }
 
 
