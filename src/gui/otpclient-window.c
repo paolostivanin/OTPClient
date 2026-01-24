@@ -257,6 +257,7 @@ destroy_cb (GtkWidget *window,
 
     if (app_data->tree_view != NULL) {
         save_sort_order (app_data->tree_view);
+        save_column_widths (app_data->tree_view);
     }
     if (app_data->source_id != 0) {
         g_source_remove (app_data->source_id);
