@@ -73,10 +73,6 @@ if(ENABLE_MINIMIZE_TO_TRAY)
     pkg_check_modules(APPINDICATOR REQUIRED IMPORTED_TARGET ayatana-appindicator3-0.1)
 endif()
 
-set(COMMON_INCDIRS
-        ${GCRYPT_INCLUDE_DIRS}
-)
-
 set(COMMON_LIBS
         PkgConfig::GCRYPT
         PkgConfig::COTP
