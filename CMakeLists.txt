@@ -57,7 +57,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 find_package(Protobuf 3.6.0 REQUIRED)
-find_package(Gcrypt 1.10.1 REQUIRED)
+pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.10.1)
 pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=3.0.0)
 pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson>=2.12)
@@ -78,7 +78,7 @@ set(COMMON_INCDIRS
 )
 
 set(COMMON_LIBS
-        ${GCRYPT_LIBRARIES}
+        PkgConfig::GCRYPT
         PkgConfig::COTP
         PkgConfig::JANSSON
         PkgConfig::UUID
