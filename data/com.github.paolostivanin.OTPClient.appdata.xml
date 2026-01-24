@@ -89,6 +89,19 @@
   </content_rating>
 
   <releases>
+    <release version="4.3.1" date="2026-01-26">
+      <description>
+        <p>OTPClient 4.3.1 includes the following improvements and fixes:</p>
+        <ul>
+          <li>IMPROVED: Added configurable colors for the countdown display.</li>
+          <li>IMPROVED: Added support for selecting the countdown display type (numeric value or cake-style).</li>
+          <li>IMPROVED: Automatically disable countdown color pickers when displaying countdown as seconds.</li>
+          <li>IMPROVED: Updated color picker sensitivity dynamically when the display mode changes.</li>
+          <li>IMPROVED: Persisted tree view column widths across application restarts.</li>
+          <li>IMPROVED: Renamed the “OTP Value” column to “OTP” and added column IDs for width tracking.</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.3.0" date="2026-01-23">
       <description>
         <p>OTPClient 4.3.0 includes the following improvements and fixes:</p>

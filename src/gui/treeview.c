@@ -2,6 +2,7 @@
 #include <pango/pango.h>
 #include <jansson.h>
 #include "../common/macros.h"
+#include "../common/common.h"
 #include "otpclient.h"
 #include "liststore-misc.h"
 #include "message-dialogs.h"
@@ -16,18 +17,33 @@ static const gchar *json_get_string_or_empty (json_t      *obj,
 static void     add_data_to_model  (DatabaseData   *db_data,
                                     GtkListStore   *store);
 
-static void     add_columns        (GtkTreeView    *tree_view);
+static void     add_columns        (AppData        *app_data);
 
-static void     add_validity_column (GtkTreeView   *tree_view);
+static void     add_validity_column (GtkTreeView   *tree_view,
+                                     AppData       *app_data);
 
-static void     validity_cell_data_func (GtkTreeViewColumn *column,
-                                         GtkCellRenderer   *renderer,
-                                         GtkTreeModel      *model,
-                                         GtkTreeIter       *iter,
-                                         gpointer           user_data);
+static void     load_column_widths (GtkTreeView   *tree_view);
 
-static GdkPixbuf *create_validity_pixbuf (guint validity,
-                                          guint period);
+static void     column_width_changed_cb (GObject    *object,
+                                         GParamSpec *pspec,
+                                         gpointer    user_data);
+
+static void     validity_pixbuf_cell_data_func (GtkTreeViewColumn *column,
+                                                GtkCellRenderer   *renderer,
+                                                GtkTreeModel      *model,
+                                                GtkTreeIter       *iter,
+                                                gpointer           user_data);
+
+static void     validity_text_cell_data_func (GtkTreeViewColumn *column,
+                                              GtkCellRenderer   *renderer,
+                                              GtkTreeModel      *model,
+                                              GtkTreeIter       *iter,
+                                              gpointer           user_data);
+
+static GdkPixbuf *create_validity_pixbuf (guint         validity,
+                                          guint         period,
+                                          const GdkRGBA *validity_color,
+                                          const GdkRGBA *warning_color);
 
 static void     delete_row         (AppData        *app_data);
 
@@ -65,6 +81,8 @@ static gboolean get_liststore_iter_from_path (AppData     *app_data,
                                               GtkTreePath *path,
                                               GtkTreeIter *iter);
 
+static gchar   *get_config_path (void);
+
 
 void
 create_treeview (AppData *app_data)
@@ -74,7 +92,8 @@ create_treeview (AppData *app_data)
     app_data->list_store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
                                                G_TYPE_UINT, G_TYPE_UINT, G_TYPE_BOOLEAN, G_TYPE_BOOLEAN, G_TYPE_INT);
 
-    add_columns (app_data->tree_view);
+    add_columns (app_data);
+    load_column_widths (app_data->tree_view);
 
     add_data_to_model (app_data->db_data, app_data->list_store);
 
@@ -109,6 +128,61 @@ create_treeview (AppData *app_data)
     update_empty_state (app_data);
 }
 
+void
+save_column_widths (GtkTreeView *tree_view)
+{
+    if (tree_view == NULL) {
+        return;
+    }
+
+    gchar *cfg_file_path = get_config_path ();
+    if (cfg_file_path == NULL) {
+        return;
+    }
+
+    GKeyFile *kf = g_key_file_new ();
+    GError *err = NULL;
+
+    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
+        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
+            g_printerr ("%s\n", err->message);
+            g_clear_error (&err);
+        }
+    } else {
+        gchar *cfg_dir = g_path_get_dirname (cfg_file_path);
+        g_mkdir_with_parents (cfg_dir, 0700);
+        g_free (cfg_dir);
+    }
+
+    GList *columns = gtk_tree_view_get_columns (tree_view);
+    for (GList *iter = columns; iter != NULL; iter = iter->next) {
+        GtkTreeViewColumn *column = GTK_TREE_VIEW_COLUMN (iter->data);
+        gpointer column_data = g_object_get_data (G_OBJECT (column), "column-id");
+        if (column_data == NULL) {
+            continue;
+        }
+        gint column_id = GPOINTER_TO_INT (column_data) - 1;
+        if (column_id < 0) {
+            continue;
+        }
+        gint width = gtk_tree_view_column_get_width (column);
+        if (width > 0) {
+            gchar *key = g_strdup_printf ("column_width_%d", column_id);
+            g_key_file_set_integer (kf, "config", key, width);
+            g_free (key);
+        }
+    }
+    g_list_free (columns);
+
+    if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
+        g_printerr ("%s\n", err->message);
+        g_clear_error (&err);
+    }
+
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
+}
+
 
 void
 update_model (AppData *app_data)
@@ -125,6 +199,49 @@ update_model (AppData *app_data)
         }
     }
     update_empty_state (app_data);
+}
+
+static void
+load_column_widths (GtkTreeView *tree_view)
+{
+    GKeyFile *kf = get_kf_ptr ();
+    if (kf == NULL || tree_view == NULL) {
+        return;
+    }
+
+    GList *columns = gtk_tree_view_get_columns (tree_view);
+    for (GList *iter = columns; iter != NULL; iter = iter->next) {
+        GtkTreeViewColumn *column = GTK_TREE_VIEW_COLUMN (iter->data);
+        gpointer column_data = g_object_get_data (G_OBJECT (column), "column-id");
+        if (column_data == NULL) {
+            continue;
+        }
+        gint column_id = GPOINTER_TO_INT (column_data) - 1;
+        if (column_id < 0) {
+            continue;
+        }
+        gchar *key = g_strdup_printf ("column_width_%d", column_id);
+        gint width = g_key_file_get_integer (kf, "config", key, NULL);
+        g_free (key);
+        if (width > 0) {
+            gtk_tree_view_column_set_sizing (column, GTK_TREE_VIEW_COLUMN_FIXED);
+            gtk_tree_view_column_set_fixed_width (column, width);
+        }
+    }
+    g_list_free (columns);
+    g_key_file_free (kf);
+}
+
+static gchar *
+get_config_path (void)
+{
+    gchar *cfg_file_path;
+#ifndef IS_FLATPAK
+    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+#else
+    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+#endif
+    return cfg_file_path;
 }
 
 
@@ -604,6 +721,8 @@ add_column_with_attributes (GtkTreeView *tree_view,
     GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes (title, renderer, "text", column_id, NULL);
     gtk_tree_view_column_set_visible (column, visible);
     gtk_tree_view_column_set_resizable (column, TRUE);
+    g_object_set_data (G_OBJECT (column), "column-id", GINT_TO_POINTER (column_id + 1));
+    g_signal_connect (column, "notify::width", G_CALLBACK (column_width_changed_cb), tree_view);
     if (column_id == COLUMN_ACC_LABEL || column_id == COLUMN_ACC_ISSUER) {
         gtk_tree_view_column_set_expand (column, TRUE);
         g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
@@ -621,14 +740,15 @@ add_column_with_attributes (GtkTreeView *tree_view,
 
 
 static void
-add_columns (GtkTreeView *tree_view)
+add_columns (AppData *app_data)
 {
+    GtkTreeView *tree_view = app_data->tree_view;
     // Main columns
     add_column_with_attributes (tree_view, "Type", COLUMN_TYPE, TRUE);
     add_column_with_attributes (tree_view, "Account", COLUMN_ACC_LABEL, TRUE);
     add_column_with_attributes (tree_view, "Issuer", COLUMN_ACC_ISSUER, TRUE);
-    add_column_with_attributes (tree_view, "OTP Value", COLUMN_OTP, TRUE);
-    add_validity_column (tree_view);
+    add_column_with_attributes (tree_view, "OTP", COLUMN_OTP, TRUE);
+    add_validity_column (tree_view, app_data);
 
     // Additional columns (hidden by default)
     add_column_with_attributes (tree_view, "Period", COLUMN_PERIOD, FALSE);
@@ -639,26 +759,37 @@ add_columns (GtkTreeView *tree_view)
 
 
 static void
-add_validity_column (GtkTreeView *tree_view)
+add_validity_column (GtkTreeView *tree_view,
+                     AppData     *app_data)
 {
     GtkCellRenderer *renderer = gtk_cell_renderer_pixbuf_new ();
+    GtkCellRenderer *text_renderer = gtk_cell_renderer_text_new ();
     GtkTreeViewColumn *column = gtk_tree_view_column_new ();
     gtk_tree_view_column_set_title (column, "Validity");
     gtk_tree_view_column_pack_start (column, renderer, TRUE);
+    gtk_tree_view_column_pack_start (column, text_renderer, TRUE);
     gtk_tree_view_column_set_resizable (column, TRUE);
     gtk_tree_view_column_set_min_width (column, 40);
-    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_cell_data_func, NULL, NULL);
+    g_object_set_data (G_OBJECT (column), "column-id", GINT_TO_POINTER (COLUMN_VALIDITY + 1));
+    g_signal_connect (column, "notify::width", G_CALLBACK (column_width_changed_cb), tree_view);
+    g_object_set (text_renderer,
+                  "xalign", 0.5,
+                  "yalign", 0.5,
+                  NULL);
+    gtk_tree_view_column_set_cell_data_func (column, renderer, validity_pixbuf_cell_data_func, app_data, NULL);
+    gtk_tree_view_column_set_cell_data_func (column, text_renderer, validity_text_cell_data_func, app_data, NULL);
     gtk_tree_view_append_column (tree_view, column);
 }
 
 
 static void
-validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
-                         GtkCellRenderer   *renderer,
-                         GtkTreeModel      *model,
-                         GtkTreeIter       *iter,
-                         gpointer           user_data UNUSED)
+validity_pixbuf_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                                GtkCellRenderer   *renderer,
+                                GtkTreeModel      *model,
+                                GtkTreeIter       *iter,
+                                gpointer           user_data)
 {
+    CAST_USER_DATA (AppData, app_data, user_data);
     gchar *otp_type = NULL;
     gchar *otp_value = NULL;
     guint validity = 0;
@@ -671,11 +802,16 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
                         COLUMN_PERIOD, &period,
                         -1);
 
-    if (otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+    gboolean should_show = app_data != NULL && !app_data->show_validity_seconds;
+    if (should_show && otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
         && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
-        GdkPixbuf *pixbuf = create_validity_pixbuf (validity, period);
+        GdkPixbuf *pixbuf = create_validity_pixbuf (validity,
+                                                    period,
+                                                    &app_data->validity_color,
+                                                    &app_data->validity_warning_color);
         g_object_set (renderer,
                       "pixbuf", pixbuf,
+                      "visible", TRUE,
                       NULL);
         if (pixbuf != NULL) {
             g_object_unref (pixbuf);
@@ -683,6 +819,7 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
     } else {
         g_object_set (renderer,
                       "pixbuf", NULL,
+                      "visible", FALSE,
                       NULL);
     }
 
@@ -690,10 +827,52 @@ validity_cell_data_func (GtkTreeViewColumn *column UNUSED,
     g_free (otp_value);
 }
 
+static void
+validity_text_cell_data_func (GtkTreeViewColumn *column UNUSED,
+                              GtkCellRenderer   *renderer,
+                              GtkTreeModel      *model,
+                              GtkTreeIter       *iter,
+                              gpointer           user_data)
+{
+    CAST_USER_DATA (AppData, app_data, user_data);
+    gchar *otp_type = NULL;
+    gchar *otp_value = NULL;
+    guint validity = 0;
+    guint period = 0;
+    gchar *text = NULL;
+
+    gtk_tree_model_get (model, iter,
+                        COLUMN_TYPE, &otp_type,
+                        COLUMN_OTP, &otp_value,
+                        COLUMN_VALIDITY, &validity,
+                        COLUMN_PERIOD, &period,
+                        -1);
+
+    gboolean should_show = app_data != NULL && app_data->show_validity_seconds;
+    if (should_show && otp_value != NULL && g_utf8_strlen (otp_value, -1) > 4 && otp_type != NULL
+        && g_ascii_strcasecmp (otp_type, "TOTP") == 0 && period > 0) {
+        text = g_strdup_printf ("%u", validity);
+        g_object_set (renderer,
+                      "text", text,
+                      "visible", TRUE,
+                      NULL);
+    } else {
+        g_object_set (renderer,
+                      "text", NULL,
+                      "visible", FALSE,
+                      NULL);
+    }
+
+    g_free (text);
+    g_free (otp_type);
+    g_free (otp_value);
+}
 
 static GdkPixbuf *
-create_validity_pixbuf (guint validity,
-                        guint period)
+create_validity_pixbuf (guint         validity,
+                        guint         period,
+                        const GdkRGBA *validity_color,
+                        const GdkRGBA *warning_color)
 {
     const gint size = 18;
     cairo_surface_t *surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, size, size);
@@ -710,11 +889,26 @@ create_validity_pixbuf (guint validity,
     cairo_arc (cr, center, center, radius, 0, 2 * G_PI);
     cairo_fill (cr);
 
-    if (validity <= 5) {
-        cairo_set_source_rgba (cr, 0.85, 0.35, 0.25, 1.0);
-    } else {
-        cairo_set_source_rgba (cr, 0.20, 0.65, 0.35, 1.0);
+    const gboolean is_warning = validity <= 5;
+    const GdkRGBA *selected_color = is_warning ? warning_color : validity_color;
+    gdouble r = 0.20;
+    gdouble g = 0.65;
+    gdouble b = 0.35;
+    gdouble a = 1.0;
+
+    if (is_warning) {
+        r = 0.85;
+        g = 0.35;
+        b = 0.25;
     }
+
+    if (selected_color != NULL) {
+        r = selected_color->red;
+        g = selected_color->green;
+        b = selected_color->blue;
+        a = selected_color->alpha;
+    }
+    cairo_set_source_rgba (cr, r, g, b, a);
     cairo_move_to (cr, center, center);
     cairo_arc (cr, center, center, radius, -G_PI / 2.0, -G_PI / 2.0 + (2 * G_PI * fraction));
     cairo_close_path (cr);
@@ -740,4 +934,12 @@ json_get_string_or_empty (json_t      *obj,
     json_t *value = json_object_get (obj, key);
     const gchar *string_value = json_string_value (value);
     return string_value != NULL ? string_value : "";
+}
+static void
+column_width_changed_cb (GObject    *object UNUSED,
+                         GParamSpec *pspec UNUSED,
+                         gpointer    user_data)
+{
+    GtkTreeView *tree_view = GTK_TREE_VIEW (user_data);
+    save_column_widths (tree_view);
 }

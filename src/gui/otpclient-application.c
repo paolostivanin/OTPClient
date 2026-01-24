@@ -52,6 +52,9 @@ static void       cleanup_app_data          (AppData            *app_data);
 
 static void       otpclient_application_shutdown (GApplication *app);
 
+static void       load_validity_colors      (GKeyFile           *kf,
+                                             AppData            *app_data);
+
 struct _OtpclientApplication {
     GtkApplication parent_instance;
     AppData *app_data;
@@ -341,11 +344,13 @@ set_config_data (gint    *width,
         *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
         app_data->show_next_otp = g_key_file_get_boolean (kf, "config", "show_next_otp", NULL);
         app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications", NULL);
+        app_data->show_validity_seconds = g_key_file_get_boolean (kf, "config", "show_validity_seconds", NULL);
         app_data->auto_lock = g_key_file_get_boolean (kf, "config", "auto_lock", NULL);
         app_data->inactivity_timeout = g_key_file_get_integer (kf, "config", "inactivity_timeout", NULL);
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
         app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
         app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
+        load_validity_colors (kf, app_data);
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
     }
@@ -433,6 +438,9 @@ init_app_defaults (AppData *app_data)
     app_data->app_locked = FALSE;
     app_data->show_next_otp = FALSE; // next otp not shown by default
     app_data->disable_notifications = FALSE; // notifications enabled by default
+    app_data->show_validity_seconds = FALSE; // validity is shown as a pie chart by default
+    gdk_rgba_parse (&app_data->validity_color, "#33A659");
+    gdk_rgba_parse (&app_data->validity_warning_color, "#D95940");
     app_data->auto_lock = FALSE; // disabled by default
     app_data->inactivity_timeout = 0; // never
     app_data->use_dark_theme = FALSE; // light theme by default
@@ -443,6 +451,27 @@ init_app_defaults (AppData *app_data)
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     app_data->window_width = 0;
     app_data->window_height = 0;
+}
+
+static void
+load_validity_colors (GKeyFile *kf,
+                      AppData  *app_data)
+{
+    if (kf == NULL || app_data == NULL) {
+        return;
+    }
+
+    gchar *validity_color = g_key_file_get_string (kf, "config", "validity_color", NULL);
+    if (validity_color != NULL) {
+        gdk_rgba_parse (&app_data->validity_color, validity_color);
+    }
+    g_free (validity_color);
+
+    gchar *warning_color = g_key_file_get_string (kf, "config", "validity_warning_color", NULL);
+    if (warning_color != NULL) {
+        gdk_rgba_parse (&app_data->validity_warning_color, warning_color);
+    }
+    g_free (warning_color);
 }
 
 static void

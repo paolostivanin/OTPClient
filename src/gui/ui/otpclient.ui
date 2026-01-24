@@ -358,7 +358,7 @@
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">3</property>
+                <property name="top-attach">4</property>
               </packing>
             </child>
             <child>
@@ -414,7 +414,7 @@
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">3</property>
+                <property name="top-attach">4</property>
               </packing>
             </child>
             <child>
@@ -424,7 +424,7 @@
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">4</property>
+                <property name="top-attach">5</property>
               </packing>
             </child>
             <child>
@@ -2160,7 +2160,7 @@ but not the number of digits and/or the period/counter.</property>
           </packing>
         </child>
         <child>
-          <!-- n-columns=3 n-rows=7 -->
+          <!-- n-columns=3 n-rows=10 -->
           <object class="GtkGrid" id="grid_settings">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
@@ -2202,6 +2202,29 @@ but not the number of digits and/or the period/counter.</property>
               </packing>
             </child>
             <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Show countdown as seconds</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="validity_seconds_switch_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">2</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkSwitch" id="nextotp_switch_id">
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
@@ -2217,11 +2240,59 @@ but not the number of digits and/or the period/counter.</property>
               <object class="GtkLabel">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
-                <property name="label" translatable="yes">Auto lock on system lock</property>
+                <property name="label" translatable="yes">Countdown color</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
                 <property name="top-attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkColorButton" id="validity_color_btn_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="use-alpha">False</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">3</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Countdown warning color</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkColorButton" id="validity_warning_color_btn_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="use-alpha">False</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">4</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Auto lock on system lock</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">5</property>
               </packing>
             </child>
             <child>
@@ -2233,7 +2304,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">3</property>
+                <property name="top-attach">5</property>
               </packing>
             </child>
             <child>
@@ -2244,7 +2315,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">4</property>
+                <property name="top-attach">6</property>
               </packing>
             </child>
             <child>
@@ -2264,7 +2335,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">4</property>
+                <property name="top-attach">6</property>
               </packing>
             </child>
             <child>
@@ -2275,7 +2346,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">5</property>
+                <property name="top-attach">7</property>
               </packing>
             </child>
             <child>
@@ -2287,7 +2358,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">5</property>
+                <property name="top-attach">7</property>
               </packing>
             </child>
             <child>
@@ -2298,7 +2369,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">6</property>
+                <property name="top-attach">8</property>
               </packing>
             </child>
             <child>
@@ -2310,7 +2381,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">6</property>
+                <property name="top-attach">8</property>
               </packing>
             </child>
             <child>
@@ -2321,7 +2392,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
-                <property name="top-attach">7</property>
+                <property name="top-attach">9</property>
               </packing>
             </child>
             <child>
@@ -2333,7 +2404,7 @@ but not the number of digits and/or the period/counter.</property>
               </object>
               <packing>
                 <property name="left-attach">1</property>
-                <property name="top-attach">7</property>
+                <property name="top-attach">9</property>
               </packing>
             </child>
             <child>

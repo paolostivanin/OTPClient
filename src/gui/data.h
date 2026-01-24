@@ -30,6 +30,9 @@ typedef struct app_data_t {
 
     gboolean show_next_otp;
     gboolean disable_notifications;
+    gboolean show_validity_seconds;
+    GdkRGBA validity_color;
+    GdkRGBA validity_warning_color;
     gboolean auto_lock;
     gint inactivity_timeout;
 

@@ -21,6 +21,8 @@ void create_treeview    (AppData            *app_data);
 
 void update_model       (AppData            *app_data);
 
+void save_column_widths (GtkTreeView        *tree_view);
+
 void row_selected_cb    (GtkTreeView        *tree_view,
                          GtkTreePath        *path,
                          GtkTreeViewColumn  *column,
