@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "4.3.1" LANGUAGES "C")
+project(OTPClient VERSION "4.4.0" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -12,10 +12,11 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 option(BUILD_GUI "Build the GTK UI" ON)
 option(BUILD_CLI "Build the CLI" ON)
+option(BUILD_SEARCH_PROVIDER "Build the search provider integration (GNOME Shell / KDE KRunner)" ON)
 option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" OFF)
+option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 
 set(COMMON_C_OPTIONS
         -Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
@@ -138,6 +139,25 @@ if(BUILD_CLI)
 
     install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
     install(FILES man/otpclient-cli.1 DESTINATION share/man/man1)
+endif()
+
+if(BUILD_SEARCH_PROVIDER)
+    add_subdirectory(src/search-provider)
+    otpclient_apply_target_settings(${PROJECT_NAME}-search-provider)
+    target_link_libraries(${PROJECT_NAME}-search-provider
+            PkgConfig::GTK3
+            ${COMMON_LIBS}
+    )
+    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION bin)
+    # GNOME Search Provider metadata
+    install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION share/gnome-shell/search-providers)
+
+    # D-Bus Service activation files (allows KRunner/GNOME to launch the binary on demand)
+    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.SearchProvider.service DESTINATION share/dbus-1/services)
+    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.KRunner.service DESTINATION share/dbus-1/services)
+
+    # KDE Plasma 6 KRunner Metadata
+    install(FILES data/krunner/com.github.paolostivanin.OTPClient.KRunner.desktop DESTINATION share/krunner/dbusplugins)
 endif()
 
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)

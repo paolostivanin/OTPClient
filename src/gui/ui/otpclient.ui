@@ -2160,7 +2160,7 @@ but not the number of digits and/or the period/counter.</property>
           </packing>
         </child>
         <child>
-          <!-- n-columns=3 n-rows=10 -->
+          <!-- n-columns=3 n-rows=11 -->
           <object class="GtkGrid" id="grid_settings">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
@@ -2405,6 +2405,29 @@ but not the number of digits and/or the period/counter.</property>
               <packing>
                 <property name="left-attach">1</property>
                 <property name="top-attach">9</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Enable search provider</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">10</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkSwitch" id="search_provider_switch_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">10</property>
               </packing>
             </child>
             <child>

@@ -61,6 +61,8 @@ typedef struct app_data_t {
 
     GDateTime *last_user_activity;
 
+    gboolean search_provider_enabled;
+
     GtkWidget *diag_rcdb;
     GtkFileChooserAction open_db_file_action;
 

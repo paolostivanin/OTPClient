@@ -44,6 +44,7 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - local database is encrypted using AES256-GCM
   - key is derived using Argon2id with the following default parameters: 4 iterations, 128 MiB memory cost, 4 parallelism, 32 taglen. The first three parameters can be changed by the user.
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
+- GNOME Shell search provider and KDE KRunner integration (requires secret service-enabled key storage)
 
 ## Testing
 * Before each release, I run PVS Studio and Coverity in order to catch even more bugs.

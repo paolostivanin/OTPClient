@@ -350,6 +350,11 @@ set_config_data (gint    *width,
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
         app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
         app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
+        if (g_key_file_has_key (kf, "config", "search_provider_enabled", NULL)) {
+            app_data->search_provider_enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", NULL);
+        } else {
+            app_data->search_provider_enabled = TRUE;
+        }
         load_validity_colors (kf, app_data);
         g_object_set (gtk_settings_get_default (), "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
         g_key_file_free (kf);
@@ -447,6 +452,7 @@ init_app_defaults (AppData *app_data)
     app_data->use_secret_service = TRUE; // secret service enabled by default
     app_data->is_reorder_active = FALSE; // when app is started, reorder is not set
     app_data->use_tray = FALSE; // do not use tray by default
+    app_data->search_provider_enabled = TRUE; // search provider enabled by default
     // open_db_file_action is set only on first startup and not when the db is deleted but the cfg file is there, therefore we need a default action
     app_data->open_db_file_action = GTK_FILE_CHOOSER_ACTION_SAVE;
     app_data->window_width = 0;
