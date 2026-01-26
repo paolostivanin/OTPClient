@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=OTPClient
+Comment=Search OTP entries
+Type=Service
+Icon=com.github.paolostivanin.OTPClient
+# These must be exactly your D-Bus identifiers
+X-KDE-ServiceTypes=Plasma/Runner
+X-Plasma-API=DBus
+X-Plasma-DBusRunner-Service=com.github.paolostivanin.OTPClient.KRunner
+X-Plasma-DBusRunner-Path=/com/github/paolostivanin/OTPClient/KRunner
+# This MUST match the filename (minus .desktop)
+X-KDE-PluginInfo-Name=com.github.paolostivanin.OTPClient.KRunner
+X-KDE-PluginInfo-EnabledByDefault=true

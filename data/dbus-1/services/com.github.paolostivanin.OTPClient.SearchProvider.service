@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=com.github.paolostivanin.OTPClient.SearchProvider
+Exec=otpclient-search-provider --gnome

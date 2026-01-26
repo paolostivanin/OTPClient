@@ -18,6 +18,7 @@ typedef struct settings_data_t {
     GtkWidget *validity_switch;
     GtkWidget *validity_color_btn;
     GtkWidget *validity_warning_color_btn;
+    GtkWidget *search_provider_switch;
     AppData *app_data;
 } SettingsData;
 
@@ -80,6 +81,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
         g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
         g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
+        g_key_file_set_boolean (kf, "config", "search_provider_enabled", app_data->search_provider_enabled);
         if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
             gchar *msg = g_strconcat (_("Couldn't save default settings: "), err->message, NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_WARNING);
@@ -107,6 +109,15 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         app_data->use_dark_theme = g_key_file_get_boolean (kf, "config", "dark_theme", NULL);
         app_data->use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", &err);
         app_data->use_tray = g_key_file_get_boolean (kf, "config", "use_tray", NULL);
+        GError *search_err = NULL;
+        app_data->search_provider_enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", &search_err);
+        if (search_err != NULL && g_error_matches (search_err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+            app_data->search_provider_enabled = TRUE;
+            g_clear_error (&search_err);
+        }
+        if (search_err != NULL) {
+            g_clear_error (&search_err);
+        }
         if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
             // if the key is not found, we set it to TRUE and save it to the config file.
             app_data->use_secret_service = TRUE;
@@ -130,6 +141,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     settings_data->dss_switch = GTK_WIDGET(gtk_builder_get_object (builder, "secret_service_switch_id"));
     g_signal_connect (settings_data->dss_switch, "state-set", G_CALLBACK(handle_autolock), settings_data);
     settings_data->tray_switch = GTK_WIDGET(gtk_builder_get_object (builder, "tray_switch_id"));
+    settings_data->search_provider_switch = GTK_WIDGET(gtk_builder_get_object (builder, "search_provider_switch_id"));
     #ifdef ENABLE_MINIMIZE_TO_TRAY
     g_signal_connect (settings_data->tray_switch, "state-set", G_CALLBACK(handle_tray_switch), settings_data);
     #else
@@ -149,6 +161,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     gtk_switch_set_active (GTK_SWITCH(dt_switch), app_data->use_dark_theme);
     gtk_switch_set_active (GTK_SWITCH(settings_data->dss_switch), app_data->use_secret_service);
     gtk_switch_set_active (GTK_SWITCH(settings_data->tray_switch), app_data->use_tray);
+    gtk_switch_set_active (GTK_SWITCH(settings_data->search_provider_switch), app_data->search_provider_enabled);
     gchar *active_id_string = g_strdup_printf ("%d", app_data->inactivity_timeout);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb), active_id_string);
     g_free (active_id_string);
@@ -173,6 +186,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             app_data->use_dark_theme = gtk_switch_get_active (GTK_SWITCH(dt_switch));
             app_data->use_secret_service = gtk_switch_get_active (GTK_SWITCH(settings_data->dss_switch));
             app_data->use_tray = gtk_switch_get_active (GTK_SWITCH(settings_data->tray_switch));
+            app_data->search_provider_enabled = gtk_switch_get_active (GTK_SWITCH(settings_data->search_provider_switch));
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
             g_key_file_set_boolean (kf, "config", "show_validity_seconds", app_data->show_validity_seconds);
@@ -187,6 +201,7 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             g_key_file_set_boolean (kf, "config", "dark_theme", app_data->use_dark_theme);
             g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
             g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
+            g_key_file_set_boolean (kf, "config", "search_provider_enabled", app_data->search_provider_enabled);
             if (old_ss_value == TRUE && app_data->use_secret_service == FALSE) {
                 // secret service was just disabled, so we have to clear the password from the keyring
                 secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
