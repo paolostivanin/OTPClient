@@ -295,38 +295,45 @@ get_db_path (void)
 static gchar *
 get_pwd (const gchar *pwd_msg)
 {
-    gchar *pwd = gcry_calloc_secure (256, 1);
+    const size_t BUFFER_SIZE = 512;
+    gchar *pwd = gcry_calloc_secure (BUFFER_SIZE, 1);
+    if (!pwd) return NULL;
+
     g_print ("%s", pwd_msg);
+    fflush (stdout);
 
     struct termios old, new;
-    if (tcgetattr (STDIN_FILENO, &old) != 0) {
-        g_printerr ("%s\n", _("Couldn't get termios info"));
-        gcry_free (pwd);
-        return NULL;
+    gboolean term_fixed = FALSE;
+    if (tcgetattr (STDIN_FILENO, &old) == 0) {
+        new = old;
+        new.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
+        if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) == 0) {
+            term_fixed = TRUE;
+        }
     }
-    new = old;
-    new.c_lflag &= ~ECHO;
-    if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) != 0) {
-        g_printerr ("%s\n", _("Couldn't turn echoing off"));
-        gcry_free (pwd);
-        return NULL;
+
+    // Use read() instead of fgets to bypass stdio buffering
+    size_t len = 0;
+    while (len < BUFFER_SIZE - 1) {
+        ssize_t n = read (STDIN_FILENO, &pwd[len], 1);
+        if (n <= 0 || pwd[len] == '\n') break;
+        len++;
     }
-    if (fgets (pwd, 256, stdin) == NULL) {
-        g_printerr ("%s\n", _("Couldn't read password from stdin"));
-        gcry_free (pwd);
-        return NULL;
+    pwd[len] = '\0';
+
+    if (term_fixed) {
+        tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
     }
     g_print ("\n");
-    tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
 
-    // Trim trailing newline if present. Safe for UTF-8 because '\n' is a single-byte terminator
-    // added by fgets; we do not touch preceding multibyte characters.
-    char *nl = strchr (pwd, '\n');
-    if (nl) { *nl = '\0'; }
+    if (len == 0) {
+        g_printerr ("%s\n", _("Empty password not allowed"));
+        gcry_free (pwd);
+        return NULL;
+    }
 
-    gchar *realloc_pwd = gcry_realloc (pwd, strlen (pwd) + 1);
-
-    return realloc_pwd;
+    // Skip realloc to keep the secret in its original locked memory page
+    return pwd;
 }
 
 
