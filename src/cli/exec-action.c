@@ -3,6 +3,7 @@
 #include <gcrypt.h>
 #include <termios.h>
 #include <libsecret/secret.h>
+#include <fcntl.h>
 #include "main.h"
 #include "get-data.h"
 #include "../common/import-export.h"
@@ -14,7 +15,8 @@
 static gchar    *get_db_path           (void);
 #endif
 
-static gchar    *get_pwd               (const gchar *pwd_msg);
+static gchar    *get_pwd               (const gchar *pwd_msg,
+                                        int password_fd);
 
 static gboolean  get_use_secretservice (void);
 
@@ -64,6 +66,14 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     gboolean use_secret_service = get_use_secretservice ();
+    int password_fd = STDIN_FILENO;
+    if (cmdline_opts->password_file) {
+        password_fd = open(cmdline_opts->password_file, O_RDONLY);
+        if (password_fd < 0) {
+            g_print ("Failed to open file, exiting...\n");
+            return FALSE;
+        }
+    }
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (pwd == NULL) {
@@ -74,11 +84,17 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         secret_password_free (pwd);
     } else {
         get_pwd:
-        db_data->key = get_pwd (_("Type the DB decryption password: "));
+        db_data->key = get_pwd (_("Type the DB decryption password: "), password_fd);
         if (db_data->key == NULL) {
             g_print ("Password was NULL, exiting...\n");
+            if (password_fd != STDIN_FILENO) {
+                close(password_fd);
+            }
             return FALSE;
         }
+    }
+    if (password_fd != STDIN_FILENO) {
+        close(password_fd);
     }
 
     GError *err = NULL;
@@ -124,7 +140,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
 
-        gchar *pwd = get_pwd (_("Type the password for the file you want to import: "));
+        gchar *pwd = get_pwd (_("Type the password for the file you want to import: "), STDIN_FILENO);
         if (pwd == NULL) {
             return FALSE;
         }
@@ -183,7 +199,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
-                export_pwd = get_pwd (_("Type the export encryption password: "));
+                export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {
                     return FALSE;
                 }
@@ -195,7 +211,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
-                export_pwd = get_pwd (_("Type the export encryption password: "));
+                export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {
                     return FALSE;
                 }
@@ -207,7 +223,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
-                export_pwd = get_pwd (_("Type the export encryption password: "));
+                export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {
                     return FALSE;
                 }
@@ -293,21 +309,24 @@ get_db_path (void)
 
 
 static gchar *
-get_pwd (const gchar *pwd_msg)
+get_pwd (const gchar *pwd_msg,
+         int password_fd)
 {
     const size_t BUFFER_SIZE = 512;
     gchar *pwd = gcry_calloc_secure (BUFFER_SIZE, 1);
     if (!pwd) return NULL;
 
-    g_print ("%s", pwd_msg);
-    fflush (stdout);
+    if (isatty(password_fd)) {
+        g_print ("%s", pwd_msg);
+        fflush (stdout);
+    }
 
     struct termios old, new;
     gboolean term_fixed = FALSE;
-    if (tcgetattr (STDIN_FILENO, &old) == 0) {
+    if (tcgetattr (password_fd, &old) == 0) {
         new = old;
         new.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
-        if (tcsetattr (STDIN_FILENO, TCSAFLUSH, &new) == 0) {
+        if (tcsetattr (password_fd, TCSAFLUSH, &new) == 0) {
             term_fixed = TRUE;
         }
     }
@@ -315,14 +334,14 @@ get_pwd (const gchar *pwd_msg)
     // Use read() instead of fgets to bypass stdio buffering
     size_t len = 0;
     while (len < BUFFER_SIZE - 1) {
-        ssize_t n = read (STDIN_FILENO, &pwd[len], 1);
+        ssize_t n = read (password_fd, &pwd[len], 1);
         if (n <= 0 || pwd[len] == '\n') break;
         len++;
     }
     pwd[len] = '\0';
 
     if (term_fixed) {
-        tcsetattr (STDIN_FILENO, TCSAFLUSH, &old);
+        tcsetattr (password_fd, TCSAFLUSH, &old);
     }
     g_print ("\n");
 

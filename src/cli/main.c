@@ -59,6 +59,7 @@ main (gint    argc,
 #ifndef IS_FLATPAK
                     { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
 #endif
+                    {"password-file", 'p', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) Read database password from a file instead of stdin.", NULL},
                     { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
                     { NULL }
             };
@@ -129,6 +130,7 @@ command_line (GApplication                *application __attribute__((unused)),
     cmdline_opts->export = FALSE;
     cmdline_opts->export_type = NULL;
     cmdline_opts->export_dir = NULL;
+    cmdline_opts->password_file = NULL;
 
     if (!parse_options (cmdline, cmdline_opts)) {
         g_free_cmdline_opts (cmdline_opts);
@@ -185,6 +187,7 @@ parse_options (GApplicationCommandLine *cmdline,
 
     g_variant_dict_lookup (options, "database", "s", &cmdline_opts->database);
     g_variant_dict_lookup (options, "list-types", "b", &cmdline_opts->list_types);
+    g_variant_dict_lookup (options, "password-file", "s", &cmdline_opts->password_file);
 
     g_variant_dict_lookup (options, "show", "b", &cmdline_opts->show);
     g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
@@ -307,5 +310,6 @@ g_free_cmdline_opts (CmdlineOpts *co)
     g_free (co->import_file);
     g_free (co->export_type);
     g_free (co->export_dir);
+    g_free (co->password_file);
     g_free (co);
 }
