@@ -4,6 +4,7 @@
 #include <termios.h>
 #include <libsecret/secret.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include "main.h"
 #include "get-data.h"
 #include "../common/import-export.h"
@@ -70,7 +71,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     if (cmdline_opts->password_file) {
         password_fd = open(cmdline_opts->password_file, O_RDONLY);
         if (password_fd < 0) {
-            g_print ("Failed to open file, exiting...\n");
+            g_printerr ("Failed to open password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
             return FALSE;
         }
     }
@@ -343,7 +344,9 @@ get_pwd (const gchar *pwd_msg,
     if (term_fixed) {
         tcsetattr (password_fd, TCSAFLUSH, &old);
     }
-    g_print ("\n");
+    if (isatty (password_fd)) {
+        g_print ("\n");
+    }
 
     if (len == 0) {
         g_printerr ("%s\n", _("Empty password not allowed"));
