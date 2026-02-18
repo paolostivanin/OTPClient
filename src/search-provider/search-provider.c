@@ -17,6 +17,8 @@
 #define GNOME_BUS "com.github.paolostivanin.OTPClient.SearchProvider"
 #define GNOME_PATH "/com/github/paolostivanin/OTPClient/SearchProvider"
 
+static gint32 global_max_file_size = 0;
+
 typedef struct otp_search_entry_t {
     gchar *id;
     gchar *label;
@@ -29,7 +31,6 @@ static void otp_search_entry_free (OtpSearchEntry *entry);
 static GPtrArray *load_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
-static gchar *get_otp_for_id (const gchar *id);
 static void send_notification (const gchar *label, const gchar *otp_value);
 static gchar *get_db_path (void);
 static gboolean get_use_secret_service (void);
@@ -144,7 +145,10 @@ static gchar *get_entry_otp_value (json_t *obj) {
         gint64 counter = json_integer_value (json_object_get (obj, "counter"));
         token = get_hotp (secret, counter, digits, algo, &cotp_err);
     }
-    return token ? g_strdup (token) : NULL;
+    if (token == NULL) return NULL;
+    gchar *result = g_strdup (token);
+    g_free (token);
+    return result;
 }
 
 static GPtrArray *load_entries (void) {
@@ -153,9 +157,7 @@ static GPtrArray *load_entries (void) {
     if (!db_path) return entries;
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->db_path = db_path;
-    if (set_memlock_value (&db_data->max_file_size_from_memlock) == MEMLOCK_ERR) {
-        g_free (db_data->db_path); g_free (db_data); return entries;
-    }
+    db_data->max_file_size_from_memlock = global_max_file_size;
     if (get_use_secret_service ()) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (!pwd) { g_free (db_data->db_path); g_free (db_data); return entries; }
@@ -169,6 +171,7 @@ static GPtrArray *load_entries (void) {
             g_clear_error (&err);
         }
         gcry_free (db_data->key);
+        g_slist_free_full (db_data->objects_hash, g_free);
         g_free (db_data->db_path);
         g_free (db_data);
         return entries;
@@ -185,23 +188,12 @@ static GPtrArray *load_entries (void) {
         entry->otp_value = get_entry_otp_value (obj);
         g_ptr_array_add (entries, entry);
     }
-    gcry_free (db_data->key); json_decref (db_data->in_memory_json_data); g_free (db_data->db_path); g_free (db_data);
+    gcry_free (db_data->key);
+    json_decref (db_data->in_memory_json_data);
+    g_slist_free_full (db_data->objects_hash, g_free);
+    g_free (db_data->db_path);
+    g_free (db_data);
     return entries;
-}
-
-static gchar *get_otp_for_id (const gchar *id) {
-    if (!id || !*id) return NULL;
-    GPtrArray *entries = load_entries();
-    gchar *otp = NULL;
-    for (guint i = 0; i < entries->len; i++) {
-        OtpSearchEntry *e = g_ptr_array_index(entries, i);
-        if (g_strcmp0(e->id, id) == 0) {
-            otp = g_strdup(e->otp_value);
-            break;
-        }
-    }
-    g_ptr_array_free(entries, TRUE);
-    return otp;
 }
 
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len) {
@@ -272,14 +264,18 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
     } else if (g_strcmp0 (method, "ActivateResult") == 0) {
         const gchar *id;
         g_variant_get (params, "(&s^as u)", &id, NULL, NULL);
-        g_autofree gchar *otp = get_otp_for_id (id);
+        g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = load_entries();
+        GPtrArray *entries = load_entries ();
         for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index(entries, i);
-            if (g_strcmp0(e->id, id) == 0) { label = g_strdup(e->label); break; }
+            OtpSearchEntry *e = g_ptr_array_index (entries, i);
+            if (g_strcmp0 (e->id, id) == 0) {
+                otp = g_strdup (e->otp_value);
+                label = g_strdup (e->label);
+                break;
+            }
         }
-        g_ptr_array_free(entries, TRUE);
+        g_ptr_array_free (entries, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else { g_dbus_method_invocation_return_value (inv, NULL); }
@@ -314,14 +310,18 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
     } else if (g_strcmp0 (method, "Run") == 0) {
         const gchar *id;
         g_variant_get (params, "(&s&s)", &id, NULL);
-        g_autofree gchar *otp = get_otp_for_id (id);
+        g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = load_entries();
+        GPtrArray *entries = load_entries ();
         for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index(entries, i);
-            if (g_strcmp0(e->id, id) == 0) { label = g_strdup(e->label); break; }
+            OtpSearchEntry *e = g_ptr_array_index (entries, i);
+            if (g_strcmp0 (e->id, id) == 0) {
+                otp = g_strdup (e->otp_value);
+                label = g_strdup (e->label);
+                break;
+            }
         }
-        g_ptr_array_free(entries, TRUE);
+        g_ptr_array_free (entries, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else if (g_strcmp0 (method, "Actions") == 0) {
@@ -333,12 +333,16 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
 static const GDBusInterfaceVTable k_vtable = { handle_krunner_call, NULL, NULL, {0} };
 static const GDBusInterfaceVTable g_vtable = { handle_gnome_call, NULL, NULL, {0} };
 
-static void on_bus_acquired (GDBusConnection *conn, const gchar *name G_GNUC_UNUSED, gpointer data G_GNUC_UNUSED) {
+static void on_krunner_bus_acquired (GDBusConnection *conn, const gchar *name G_GNUC_UNUSED, gpointer data G_GNUC_UNUSED) {
     g_autoptr(GError) error = NULL;
-    g_autoptr(GDBusNodeInfo) k_node = g_dbus_node_info_new_for_xml (krunner_introspection_xml, &error);
-    g_dbus_connection_register_object (conn, KRUNNER_PATH, k_node->interfaces[0], &k_vtable, NULL, NULL, NULL);
-    g_autoptr(GDBusNodeInfo) g_node = g_dbus_node_info_new_for_xml (gnome_introspection_xml, &error);
-    g_dbus_connection_register_object (conn, GNOME_PATH, g_node->interfaces[0], &g_vtable, NULL, NULL, NULL);
+    g_autoptr(GDBusNodeInfo) node = g_dbus_node_info_new_for_xml (krunner_introspection_xml, &error);
+    if (node) g_dbus_connection_register_object (conn, KRUNNER_PATH, node->interfaces[0], &k_vtable, NULL, NULL, NULL);
+}
+
+static void on_gnome_bus_acquired (GDBusConnection *conn, const gchar *name G_GNUC_UNUSED, gpointer data G_GNUC_UNUSED) {
+    g_autoptr(GError) error = NULL;
+    g_autoptr(GDBusNodeInfo) node = g_dbus_node_info_new_for_xml (gnome_introspection_xml, &error);
+    if (node) g_dbus_connection_register_object (conn, GNOME_PATH, node->interfaces[0], &g_vtable, NULL, NULL, NULL);
 }
 
 int main (int argc, char **argv) {
@@ -356,9 +360,21 @@ int main (int argc, char **argv) {
             else if (g_strstr_len (dl, -1, "gnome")) force_gnome = TRUE;
         }
     }
-    if (force_kde) g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_bus_acquired, NULL, NULL, NULL, NULL);
-    if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_bus_acquired, NULL, NULL, NULL, NULL);
     if (!force_kde && !force_gnome) return 0;
+
+    if (set_memlock_value (&global_max_file_size) == MEMLOCK_ERR) {
+        g_printerr ("Couldn't get the memlock value.\n");
+        return 1;
+    }
+    gchar *init_msg = init_libs (global_max_file_size);
+    if (init_msg != NULL) {
+        g_printerr ("Error while initializing GCrypt: %s\n", init_msg);
+        g_free (init_msg);
+        return 1;
+    }
+
+    if (force_kde) g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_krunner_bus_acquired, NULL, NULL, NULL, NULL);
+    if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_gnome_bus_acquired, NULL, NULL, NULL, NULL);
     g_main_loop_run (g_main_loop_new (NULL, FALSE));
     return 0;
 }
