@@ -12,6 +12,8 @@
 G_BEGIN_DECLS
 
 typedef struct app_data_t {
+    /* Non-owning references to the builders held by OtpclientWindow.
+     * Do NOT g_object_unref() these — the window's dispose handles that. */
     GtkBuilder *builder;
     GtkBuilder *add_popover_builder;
     GtkBuilder *settings_popover_builder;
