@@ -20,7 +20,7 @@ option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
 
 set(COMMON_C_OPTIONS
         -Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
-        -Wundef -Wmissing-format-attribute -fdiagnostics-color=always
+        -Wundef -fdiagnostics-color=always
         -Wstrict-prototypes -Wunreachable-code -Wchar-subscripts
         -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align
         -Werror=format-security -Werror=implicit-function-declaration -Wno-sign-compare
@@ -34,7 +34,7 @@ set(COMMON_COMPILE_DEFINITIONS
 
 set(COMMON_LINK_OPTIONS)
 
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     list(APPEND COMMON_C_OPTIONS -fPIE)
     list(APPEND COMMON_LINK_OPTIONS -pie)
 endif()
@@ -49,7 +49,7 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     list(APPEND COMMON_LINK_OPTIONS
-            "-Wl,--no-add-needed"
+            "-Wl,--no-copy-dt-needed-entries"
             "-Wl,--as-needed"
             "-Wl,--no-undefined"
             "-Wl,-z,relro,-z,now"
@@ -57,7 +57,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 find_package(PkgConfig REQUIRED)
-find_package(Protobuf 3.6.0 REQUIRED)
 pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.10.1)
 pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=3.0.0)
 pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng>=1.6.30)
@@ -109,9 +108,9 @@ if(BUILD_GUI)
     )
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "otpclient")
 
-    install(TARGETS ${PROJECT_NAME} DESTINATION bin)
-    install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION share/applications)
-    install(FILES man/otpclient.1 DESTINATION share/man/man1)
+    install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES man/otpclient.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
     set(GUI_UI_FILES
             src/gui/ui/otpclient.ui
@@ -120,13 +119,13 @@ if(BUILD_GUI)
             src/gui/ui/security_settings.ui
             src/gui/ui/shortcuts.ui
     )
-    install(FILES ${GUI_UI_FILES} DESTINATION share/otpclient)
+    install(FILES ${GUI_UI_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/otpclient)
 
     set(GUI_ICON_FILES
             data/icons/com.github.paolostivanin.OTPClient.svg
             data/icons/com.github.paolostivanin.OTPClient-symbolic.svg
     )
-    install(FILES ${GUI_ICON_FILES} DESTINATION share/icons/hicolor/scalable/apps)
+    install(FILES ${GUI_ICON_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 endif ()
 
 if(BUILD_CLI)
@@ -137,8 +136,8 @@ if(BUILD_CLI)
     )
     set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
 
-    install(TARGETS ${PROJECT_NAME}-cli DESTINATION bin)
-    install(FILES man/otpclient-cli.1 DESTINATION share/man/man1)
+    install(TARGETS ${PROJECT_NAME}-cli DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES man/otpclient-cli.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 endif()
 
 if(BUILD_SEARCH_PROVIDER)
@@ -148,16 +147,16 @@ if(BUILD_SEARCH_PROVIDER)
             PkgConfig::GTK3
             ${COMMON_LIBS}
     )
-    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION bin)
+    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_BINDIR})
     # GNOME Search Provider metadata
-    install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION share/gnome-shell/search-providers)
+    install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION ${CMAKE_INSTALL_DATADIR}/gnome-shell/search-providers)
 
     # D-Bus Service activation files (allows KRunner/GNOME to launch the binary on demand)
-    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.SearchProvider.service DESTINATION share/dbus-1/services)
-    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.KRunner.service DESTINATION share/dbus-1/services)
+    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.SearchProvider.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
+    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.KRunner.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 
     # KDE Plasma 6 KRunner Metadata
-    install(FILES data/krunner/com.github.paolostivanin.OTPClient.KRunner.desktop DESTINATION share/krunner/dbusplugins)
+    install(FILES data/krunner/com.github.paolostivanin.OTPClient.KRunner.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/krunner/dbusplugins)
 endif()
 
-install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION share/metainfo)
+install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
