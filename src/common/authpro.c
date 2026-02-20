@@ -94,7 +94,7 @@ export_authpro (const gchar *export_path,
                 json_object_set(export_obj, "Issuer", json_object_get (db_obj, "issuer"));
             }
         }
-        const gchar *label = json_string_value (json_object_get (db_obj, "issuer"));
+        const gchar *label = json_string_value (json_object_get (db_obj, "label"));
         if (label != NULL) {
             json_object_set (export_obj, "Username", json_object_get (db_obj, "label"));
         }
@@ -103,14 +103,16 @@ export_authpro (const gchar *export_path,
         json_object_set (export_obj, "Ranking", json_integer (0));
         json_object_set (export_obj, "Icon", json_null());
         json_object_set (export_obj, "Pin", json_null());
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA1") == 0) {
+        const gchar *algo = json_string_value (json_object_get (db_obj, "algo"));
+        if (algo != NULL && g_ascii_strcasecmp (algo, "SHA1") == 0) {
             json_object_set (export_obj, "Algorithm", json_integer (0));
-        } else if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA256") == 0) {
+        } else if (algo != NULL && g_ascii_strcasecmp (algo, "SHA256") == 0) {
             json_object_set (export_obj, "Algorithm", json_integer (1));
-        } else if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "algo")), "SHA512") == 0) {
+        } else if (algo != NULL && g_ascii_strcasecmp (algo, "SHA512") == 0) {
             json_object_set (export_obj, "Algorithm", json_integer (2));
         }
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        const gchar *type = json_string_value (json_object_get (db_obj, "type"));
+        if (type != NULL && g_ascii_strcasecmp (type, "TOTP") == 0) {
             json_object_set (export_obj, "Period", json_object_get (db_obj, "period"));
             json_object_set (export_obj, "Counter", json_integer (0));
             json_object_set (export_obj, "Type", is_steam ? json_integer (4) : json_integer (2));

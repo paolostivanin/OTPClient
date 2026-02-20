@@ -163,9 +163,9 @@ add_otps_to_db (GSList       *otps,
     for (guint i = 0; i < list_len; i++) {
         otp_t *otp = g_slist_nth_data (otps, i);
         obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
-        guint hash = json_object_get_hash (obj);
-        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER(hash), check_duplicate) == NULL) {
-            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint)));
+        guint32 hash = json_object_get_hash (obj);
+        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) == NULL) {
+            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
             db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
         } else {
             g_print ("[INFO] Duplicate element not added\n");
@@ -178,8 +178,8 @@ gint
 check_duplicate (gconstpointer data,
                  gconstpointer user_data)
 {
-    guint list_elem = *(guint *)data;
-    if (list_elem == GPOINTER_TO_UINT(user_data)) {
+    guint32 list_elem = *(guint32 *)data;
+    if (list_elem == (guint32)GPOINTER_TO_UINT(user_data)) {
         return 0;
     }
     return -1;

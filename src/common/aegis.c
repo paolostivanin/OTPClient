@@ -113,6 +113,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while loading the Aegis backup: %s", j_err.text);
         json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
@@ -136,6 +137,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
     if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the Aegis decryption key.");
         g_free (salt);
         g_free (enc_key);
         g_free (key_nonce);
@@ -148,6 +150,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, AEGIS_NONCE_SIZE);
     if (hd == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the Aegis cipher handle.");
         g_free (salt);
         g_free (enc_key);
         g_free (key_nonce);
@@ -161,6 +164,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
     if (gcry_cipher_decrypt (hd, master_key, AEGIS_KEY_SIZE, enc_key, AEGIS_KEY_SIZE) != 0) {
         g_printerr ("Error while decrypting the master key.\n");
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the Aegis master key.");
         g_free (salt);
         g_free (enc_key);
         g_free (key_nonce);
@@ -199,6 +203,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
     hd = open_cipher_and_set_data (master_key, nonce, 12);
     if (hd == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the Aegis database cipher handle.");
         g_free (tag);
         g_free (nonce);
         gcry_free (master_key);
@@ -308,6 +313,8 @@ export_aegis (const gchar   *export_path,
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);
+            g_free (key_nonce);
+            g_free (salt);
             return NULL;
         }
 
@@ -511,7 +518,10 @@ parse_aegis_json_data (const gchar *data,
 
         gboolean skip = FALSE;
         const gchar *type = json_string_value (json_object_get (obj, "type"));
-        if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        if (type == NULL) {
+            g_printerr ("Skipping token due to missing type field\n");
+            skip = TRUE;
+        } else if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup (type);
             otp->period = (guint32)json_integer_value (json_object_get (info_obj, "period"));
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
@@ -532,7 +542,10 @@ parse_aegis_json_data (const gchar *data,
         }
 
         const gchar *algo = json_string_value (json_object_get (info_obj, "algo"));
-        if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
+        if (algo == NULL) {
+            g_printerr ("Skipping token due to missing algo field\n");
+            skip = TRUE;
+        } else if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
             g_ascii_strcasecmp (algo, "SHA256") == 0 ||
             g_ascii_strcasecmp (algo, "SHA512") == 0) {
                 otp->algo = g_ascii_strup (algo, -1);

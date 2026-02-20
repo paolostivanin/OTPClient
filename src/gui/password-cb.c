@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <string.h>
 #include "gui-misc.h"
 #include "message-dialogs.h"
 #include "get-builder.h"
@@ -102,9 +103,9 @@ prompt_for_password (AppData        *app_data,
     gchar *pwd = NULL;
     if (entry_widgets->pwd != NULL) {
         gcry_free (current_key);
-        gsize len = g_utf8_strlen (entry_widgets->pwd, -1) + 1;
+        gsize len = strlen (entry_widgets->pwd) + 1;
         pwd = gcry_calloc_secure (len, 1);
-        strncpy (pwd, entry_widgets->pwd, len);
+        memcpy (pwd, entry_widgets->pwd, len);
         gcry_free (entry_widgets->pwd);
     }
     if (entry_widgets->cur_pwd != NULL) {
@@ -164,9 +165,9 @@ password_cb (GtkWidget  *entry,
              gpointer   *pwd)
 {
     const gchar *text = gtk_entry_get_text (GTK_ENTRY(entry));
-    gsize len = g_utf8_strlen (text, -1) + 1;
+    gsize len = strlen (text) + 1;
     *pwd = gcry_calloc_secure (len, 1);
-    strncpy (*pwd, text, len);
+    memcpy (*pwd, text, len);
     reset_entry_after_submit (entry);
     GtkWidget *top_level = gtk_widget_get_toplevel (entry);
     gtk_dialog_response (GTK_DIALOG (top_level), GTK_RESPONSE_CLOSE);
