@@ -38,27 +38,37 @@ get_otpauth_uri (json_t *obj)
 
     GString *uri = g_string_new (NULL);
     g_string_append (uri, "otpauth://");
+
     const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+    const gchar *label  = json_string_value (json_object_get (obj, "label"));
+    const gchar *type   = json_string_value (json_object_get (obj, "type"));
+    const gchar *secret = json_string_value (json_object_get (obj, "secret"));
+    const gchar *algo   = json_string_value (json_object_get (obj, "algo"));
+
+    if (label  == NULL) label  = "";
+    if (type   == NULL) type   = "totp";
+    if (secret == NULL) secret = "";
+    if (algo   == NULL) algo   = "SHA1";
+
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "totp/");
-        constructed_label = g_strconcat ("Steam:", json_string_value (json_object_get (obj, "label")), NULL);
+        constructed_label = g_strconcat ("Steam:", label, NULL);
     } else {
-        g_string_append (uri, g_utf8_strdown (json_string_value (json_object_get (obj, "type")),  -1));
+        gchar *type_lower = g_utf8_strdown (type, -1);
+        g_string_append (uri, type_lower);
+        g_free (type_lower);
         g_string_append (uri, "/");
         if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
-            constructed_label = g_strconcat (json_string_value (json_object_get (obj, "issuer")),
-                                             ":",
-                                             json_string_value (json_object_get (obj, "label")),
-                                             NULL);
+            constructed_label = g_strconcat (issuer, ":", label, NULL);
         } else {
-            constructed_label = g_strdup (json_string_value (json_object_get (obj, "label")));
+            constructed_label = g_strdup (label);
         }
     }
 
     gchar *escaped_label = g_uri_escape_string (constructed_label, NULL, FALSE);
     g_string_append (uri, escaped_label);
     g_string_append (uri, "?secret=");
-    g_string_append (uri, json_string_value (json_object_get (obj, "secret")));
+    g_string_append (uri, secret);
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "&issuer=Steam");
     }
@@ -66,26 +76,26 @@ get_otpauth_uri (json_t *obj)
     gchar *escaped_issuer = NULL;
     if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
         g_string_append (uri, "&issuer=");
-        escaped_issuer = g_uri_escape_string (json_string_value (json_object_get (obj, "issuer")), NULL, FALSE);
-        g_string_append (uri,escaped_issuer);
+        escaped_issuer = g_uri_escape_string (issuer, NULL, FALSE);
+        g_string_append (uri, escaped_issuer);
     }
 
     gchar *str_to_append = NULL;
     g_string_append (uri, "&digits=");
-    str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "digits")));
-    g_string_append (uri,str_to_append);
+    str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "digits")));
+    g_string_append (uri, str_to_append);
     g_free (str_to_append);
     g_string_append (uri, "&algorithm=");
-    g_string_append (uri, json_string_value ( json_object_get (obj, "algo")));
+    g_string_append (uri, algo);
 
-    if (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         g_string_append (uri, "&period=");
-        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "period")));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "period")));
         g_string_append (uri, str_to_append);
         g_free (str_to_append);
     } else {
         g_string_append (uri, "&counter=");
-        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "counter")));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "counter")));
         g_string_append (uri, str_to_append);
         g_free (str_to_append);
     }
@@ -116,16 +126,14 @@ get_otpauth_data (const gchar  *path,
         return NULL;
     }
 
-    gchar *sec_buf = gcry_calloc_secure (fs, 1);
-    if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
-        g_set_error (err, generic_error_gquark(), GENERIC_ERRCODE, "Couldn't load the file content into memory.");
-        gcry_free (sec_buf);
+    gchar *file_buf = NULL;
+    if (!g_file_get_contents (path, &file_buf, NULL, err)) {
         return NULL;
     }
 
-    set_otps_from_uris (sec_buf, &otps);
+    set_otps_from_uris (file_buf, &otps);
 
-    gcry_free (sec_buf);
+    g_free (file_buf);
 
     return otps;
 }
@@ -204,11 +212,17 @@ parse_parameters (const gchar   *modified_uri,
             tokens[i] -= 10;
         } else if (g_ascii_strncasecmp (tokens[i], "period=", 7) == 0) {
             tokens[i] += 7;
-            otp->period = (guint8) g_ascii_strtoll (tokens[i], NULL, 10);
+            gint64 period_val = g_ascii_strtoll (tokens[i], NULL, 10);
+            if (period_val > 0 && period_val <= G_MAXUINT32) {
+                otp->period = (guint32) period_val;
+            }
             tokens[i] -= 7;
         } else if (g_ascii_strncasecmp (tokens[i], "digits=", 7) == 0) {
             tokens[i] += 7;
-            otp->digits = (guint8) g_ascii_strtoll (tokens[i], NULL, 10);
+            gint64 digits_val = g_ascii_strtoll (tokens[i], NULL, 10);
+            if (digits_val >= 6 && digits_val <= 8) {
+                otp->digits = (guint32) digits_val;
+            }
             tokens[i] -= 7;
         } else if (g_ascii_strncasecmp (tokens[i], "issuer=", 7) == 0) {
             tokens[i] += 7;

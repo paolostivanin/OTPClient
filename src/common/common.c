@@ -220,14 +220,14 @@ get_data_from_encrypted_backup (const gchar       *path,
             break;
     }
 
-    guchar salt[salt_size];
+    g_autofree guchar *salt = g_malloc0 (salt_size);
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, salt_size, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
 
-    guchar iv[iv_size];
+    g_autofree guchar *iv = g_malloc0 (iv_size);
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, iv_size, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
@@ -240,7 +240,7 @@ get_data_from_encrypted_backup (const gchar       *path,
         g_object_unref (in_file);
         return NULL;
     }
-    guchar tag[tag_size];
+    g_autofree guchar *tag = g_malloc0 (tag_size);
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, tag_size, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
@@ -405,8 +405,6 @@ build_json_obj (const gchar *type,
     json_object_set (obj, "secret", json_string (acc_key));
     json_object_set (obj, "digits", json_integer (digits));
     json_object_set (obj, "algo", json_string (algo));
-
-    json_object_set (obj, "secret", json_string (acc_key));
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));
