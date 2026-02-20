@@ -7,7 +7,7 @@ The following list describes whether a version is eligible or not for security u
 | Version | Supported              | EOL         |
 |---------|------------------------|-------------|
 | 4.4.x   | :white_check_mark: Yes | -           |
-| 4.3.x   | :white_check_mark: Yes | 27-Feb-2026 |
+| 4.3.x   | :white_check_mark: Yes | -           |
 | 4.2.x   | :x: No                 | 20-Feb-2026 |
 | 4.1.x   | :x: No                 | 06-Feb-2026 |
 | 4.0.x   | :x: No                 | 30-Jun-2025 |

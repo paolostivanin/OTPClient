@@ -1,5 +1,6 @@
 #include <gtk/gtk.h>
 #include <gcrypt.h>
+#include <jansson.h>
 #include "otpclient-window.h"
 #include "otpclient-application.h"
 #include "otpclient.h"
@@ -16,51 +17,53 @@
 #include "manual-add-cb.h"
 #include "dbinfo-cb.h"
 #include "change-db-sec.h"
+#include "config-misc.h"
+#include "treeview.h"
+#include "get-builder.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
 #endif
 
-static void       get_window_size_cb (GtkWidget         *window,
-                                      GtkAllocation     *allocation,
-                                      gpointer           user_data);
+static gboolean   key_pressed_cb        (GtkEventControllerKey *controller,
+                                          guint                  keyval,
+                                          guint                  keycode,
+                                          GdkModifierType        state,
+                                          gpointer               user_data);
 
-static gboolean   key_pressed_cb     (GtkWidget         *window,
-                                      GdkEventKey       *event_key,
-                                      gpointer           user_data);
+static void       reorder_rows_cb       (GtkToggleButton       *btn,
+                                          gpointer               user_data);
 
-static void       toggle_button_cb   (GtkWidget         *main_window,
-                                      gpointer           user_data);
-
-static void       reorder_rows_cb    (GtkToggleButton   *btn,
-                                      gpointer           user_data);
-
-static void       save_sort_order    (GtkTreeView       *tree_view);
-
-static void       save_window_size   (gint               width,
-                                      gint               height);
-
-static void       store_data         (const gchar       *param1_name,
-                                      gint               param1_value,
-                                      const gchar       *param2_name,
-                                      gint               param2_value);
+static gboolean   configure_event_cb    (GtkWidget             *window,
+                                          GdkEventConfigure     *event,
+                                          gpointer               user_data);
 
 struct _OtpclientWindow {
-    GtkApplicationWindow parent_instance;
-};
+    GtkApplicationWindow  parent_instance;
 
-struct _OtpclientWindowClass {
-    GtkApplicationWindowClass parent_class;
+    /* All three builders are owned here; app_data holds non-owning references */
+    GtkBuilder *builder;
+    GtkBuilder *add_popover_builder;
+    GtkBuilder *settings_popover_builder;
 };
 
 G_DEFINE_TYPE (OtpclientWindow, otpclient_window, GTK_TYPE_APPLICATION_WINDOW)
 
 static void
+otpclient_window_dispose (GObject *object)
+{
+    OtpclientWindow *self = OTPCLIENT_WINDOW (object);
+
+    g_clear_object (&self->builder);
+    g_clear_object (&self->add_popover_builder);
+    g_clear_object (&self->settings_popover_builder);
+
+    G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
+}
+
+static void
 otpclient_window_class_init (OtpclientWindowClass *klass)
 {
-    (void) klass;
-    g_signal_new ("toggle-reorder-button", OTPCLIENT_TYPE_WINDOW,
-                  G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION, 0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
+    G_OBJECT_CLASS (klass)->dispose = otpclient_window_dispose;
 }
 
 static void
@@ -75,120 +78,208 @@ otpclient_window_new (GtkApplication *app,
                       gint            height,
                       AppData        *app_data)
 {
-    app_data->main_window = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "appwindow_id"));
-    if (app_data->main_window == NULL) {
+    /* Load all three UI files; the builder instantiates OtpclientWindow from the
+     * XML template ("appwindow_id"), so we do NOT call g_object_new() separately. */
+    GtkBuilder *builder              = get_builder_from_partial_path (UI_PARTIAL_PATH);
+    GtkBuilder *add_popover_builder  = get_builder_from_partial_path (AP_PARTIAL_PATH);
+    GtkBuilder *settings_popover_builder = get_builder_from_partial_path (SP_PARTIAL_PATH);
+
+    GtkWidget *main_window = GTK_WIDGET (gtk_builder_get_object (builder, "appwindow_id"));
+    if (main_window == NULL) {
+        g_object_unref (builder);
+        g_object_unref (add_popover_builder);
+        g_object_unref (settings_popover_builder);
         return NULL;
     }
 
-    gtk_window_set_application (GTK_WINDOW (app_data->main_window), app);
-    gtk_window_set_icon_name (GTK_WINDOW (app_data->main_window), "otpclient");
-    gtk_window_set_default_size (GTK_WINDOW (app_data->main_window), (width >= 150) ? width : 500, (height >= 150) ? height : 300);
+    /* Transfer builder ownership to the window instance */
+    OtpclientWindow *win = OTPCLIENT_WINDOW (main_window);
+    win->builder                   = builder;
+    win->add_popover_builder       = add_popover_builder;
+    win->settings_popover_builder  = settings_popover_builder;
 
-    GtkWidget *lock_btn = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "lock_btn_id"));
-    g_signal_connect (lock_btn, "clicked", G_CALLBACK (lock_app), app_data);
+    /* Publish non-owning references so the rest of the code can reach them */
+    app_data->builder                   = builder;
+    app_data->add_popover_builder       = add_popover_builder;
+    app_data->settings_popover_builder  = settings_popover_builder;
+    app_data->main_window               = main_window;
+
+    gtk_window_set_application (GTK_WINDOW (main_window), app);
+    gtk_window_set_icon_name (GTK_WINDOW (main_window), "otpclient");
+    gtk_window_set_default_size (GTK_WINDOW (main_window),
+                                 (width  >= 150) ? width  : 500,
+                                 (height >= 150) ? height : 300);
+
+    /* Lock button */
+    GtkWidget *lock_btn = GTK_WIDGET (gtk_builder_get_object (builder, "lock_btn_id"));
+    if (app_data->use_secret_service) {
+        /* Secret service stores the key, so manual locking is not available */
+        gtk_widget_set_sensitive (lock_btn, FALSE);
+    } else {
+        g_signal_connect (lock_btn, "clicked", G_CALLBACK (lock_app), app_data);
+    }
+
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     if (app_data->use_tray) {
         init_tray_icon (app_data);
     }
 #endif
-    if (app_data->use_secret_service == TRUE) {
-        // secret service is enabled, so we can't lock the app
-        gtk_widget_set_sensitive (lock_btn, FALSE);
+
+    /* Empty-state "add" shortcut button */
+    GtkWidget *empty_state_add_btn =
+        GTK_WIDGET (gtk_builder_get_object (builder, "empty_state_add_btn_id"));
+    if (empty_state_add_btn != NULL) {
+        g_signal_connect (empty_state_add_btn, "clicked",
+                          G_CALLBACK (manual_add_cb_shortcut), app_data);
     }
 
-    GtkWidget *empty_state_add_btn = GTK_WIDGET (gtk_builder_get_object (app_data->builder, "empty_state_add_btn_id"));
-    if (empty_state_add_btn != NULL) {
-        g_signal_connect (empty_state_add_btn, "clicked", G_CALLBACK (manual_add_cb_shortcut), app_data);
-    }
+    /* ── Action groups ─────────────────────────────────────────────── */
 
     static GActionEntry import_menu_entries[] = {
         { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = import_data_cb },
-        { .name = AEGIS_PLAIN_ACTION_NAME, .activate = import_data_cb },
-        { .name = AEGIS_ENC_ACTION_NAME, .activate = import_data_cb },
-        { .name = AUTHPRO_PLAIN_ACTION_NAME, .activate = import_data_cb },
-        { .name = AUTHPRO_ENC_ACTION_NAME, .activate = import_data_cb },
-        { .name = TWOFAS_PLAIN_ACTION_NAME, .activate = import_data_cb },
-        { .name = TWOFAS_ENC_ACTION_NAME, .activate = import_data_cb },
-        { .name = GOOGLE_FILE_ACTION_NAME, .activate = add_qr_from_file },
-        { .name = GOOGLE_WEBCAM_ACTION_NAME, .activate = webcam_add_cb }
+        { .name = AEGIS_PLAIN_ACTION_NAME,       .activate = import_data_cb },
+        { .name = AEGIS_ENC_ACTION_NAME,         .activate = import_data_cb },
+        { .name = AUTHPRO_PLAIN_ACTION_NAME,     .activate = import_data_cb },
+        { .name = AUTHPRO_ENC_ACTION_NAME,       .activate = import_data_cb },
+        { .name = TWOFAS_PLAIN_ACTION_NAME,      .activate = import_data_cb },
+        { .name = TWOFAS_ENC_ACTION_NAME,        .activate = import_data_cb },
+        { .name = GOOGLE_FILE_ACTION_NAME,       .activate = add_qr_from_file },
+        { .name = GOOGLE_WEBCAM_ACTION_NAME,     .activate = webcam_add_cb },
     };
 
     static GActionEntry export_menu_entries[] = {
         { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = export_data_cb },
-        { .name = AEGIS_PLAIN_ACTION_NAME, .activate = export_data_cb },
-        { .name = AEGIS_ENC_ACTION_NAME, .activate = export_data_cb },
-        { .name = AUTHPRO_PLAIN_ACTION_NAME, .activate = export_data_cb },
-        { .name = AUTHPRO_ENC_ACTION_NAME, .activate = export_data_cb },
-        { .name = TWOFAS_PLAIN_ACTION_NAME, .activate = export_data_cb },
-        { .name = TWOFAS_ENC_ACTION_NAME, .activate = export_data_cb }
+        { .name = AEGIS_PLAIN_ACTION_NAME,       .activate = export_data_cb },
+        { .name = AEGIS_ENC_ACTION_NAME,         .activate = export_data_cb },
+        { .name = AUTHPRO_PLAIN_ACTION_NAME,     .activate = export_data_cb },
+        { .name = AUTHPRO_ENC_ACTION_NAME,       .activate = export_data_cb },
+        { .name = TWOFAS_PLAIN_ACTION_NAME,      .activate = export_data_cb },
+        { .name = TWOFAS_ENC_ACTION_NAME,        .activate = export_data_cb },
     };
 
     static GActionEntry settings_menu_entries[] = {
-        { .name = "create_newdb", .activate = new_db_cb },
-        { .name = "change_db", .activate = change_db_cb },
-        { .name = "change_pwd", .activate = change_password_cb },
+        { .name = "create_newdb",  .activate = new_db_cb },
+        { .name = "change_db",     .activate = change_db_cb },
+        { .name = "change_pwd",    .activate = change_password_cb },
         { .name = "change_db_sec", .activate = change_db_sec_cb },
-        { .name = "settings", .activate = settings_dialog_cb },
-        { .name = "shortcuts", .activate = shortcuts_window_cb },
-        { .name = "dbinfo", .activate = dbinfo_cb },
-        { .name = "about", .activate = about_diag_cb }
+        { .name = "settings",      .activate = settings_dialog_cb },
+        { .name = "shortcuts",     .activate = shortcuts_window_cb },
+        { .name = "dbinfo",        .activate = dbinfo_cb },
+        { .name = "about",         .activate = about_diag_cb },
     };
 
     static GActionEntry add_menu_entries[] = {
-        { .name = "webcam", .activate = webcam_add_cb },
-        { .name = "import_qr_file", .activate = add_qr_from_file },
+        { .name = "webcam",              .activate = webcam_add_cb },
+        { .name = "import_qr_file",      .activate = add_qr_from_file },
         { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
-        { .name = "manual", .activate = manual_add_cb }
+        { .name = "manual",              .activate = manual_add_cb },
     };
 
-    GtkWidget *settings_popover = GTK_WIDGET (gtk_builder_get_object (app_data->settings_popover_builder, "settings_pop_id"));
-    gtk_menu_button_set_popover (GTK_MENU_BUTTON (gtk_builder_get_object (app_data->builder, "settings_btn_id")), settings_popover);
+    GtkWidget *settings_popover =
+        GTK_WIDGET (gtk_builder_get_object (settings_popover_builder, "settings_pop_id"));
+    gtk_menu_button_set_popover (
+        GTK_MENU_BUTTON (gtk_builder_get_object (builder, "settings_btn_id")),
+        settings_popover);
 
     GActionGroup *settings_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (settings_actions), settings_menu_entries, G_N_ELEMENTS (settings_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP (settings_actions),
+                                     settings_menu_entries,
+                                     G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
 
     GActionGroup *export_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (export_actions), export_menu_entries, G_N_ELEMENTS (export_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP (export_actions),
+                                     export_menu_entries,
+                                     G_N_ELEMENTS (export_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "export_menu", export_actions);
 
-    GtkWidget *add_popover = GTK_WIDGET (gtk_builder_get_object (app_data->add_popover_builder, "add_pop_id"));
-    gtk_menu_button_set_popover (GTK_MENU_BUTTON (gtk_builder_get_object (app_data->builder, "add_btn_main_id")), add_popover);
+    GtkWidget *add_popover =
+        GTK_WIDGET (gtk_builder_get_object (add_popover_builder, "add_pop_id"));
+    gtk_menu_button_set_popover (
+        GTK_MENU_BUTTON (gtk_builder_get_object (builder, "add_btn_main_id")),
+        add_popover);
 
     GActionGroup *add_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (add_actions), add_menu_entries, G_N_ELEMENTS (add_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP (add_actions),
+                                     add_menu_entries,
+                                     G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
 
     GActionGroup *import_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (import_actions), import_menu_entries, G_N_ELEMENTS (import_menu_entries), app_data);
+    g_action_map_add_action_entries (G_ACTION_MAP (import_actions),
+                                     import_menu_entries,
+                                     G_N_ELEMENTS (import_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "import_menu", import_actions);
 
-    gtk_popover_set_constrain_to (GTK_POPOVER (add_popover), GTK_POPOVER_CONSTRAINT_NONE);
+    gtk_popover_set_constrain_to (GTK_POPOVER (add_popover),      GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER (settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
 
-    GtkToggleButton *reorder_toggle_btn = GTK_TOGGLE_BUTTON (gtk_builder_get_object (app_data->builder, "reorder_toggle_btn_id"));
-    g_signal_connect (app_data->main_window, "toggle-reorder-button", G_CALLBACK (toggle_button_cb), reorder_toggle_btn);
+    /* ── Reorder toggle ────────────────────────────────────────────── */
+    GtkToggleButton *reorder_toggle_btn =
+        GTK_TOGGLE_BUTTON (gtk_builder_get_object (builder, "reorder_toggle_btn_id"));
     g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK (reorder_rows_cb), app_data);
-    g_signal_connect (app_data->main_window, "key_press_event", G_CALLBACK (key_pressed_cb), app_data);
-    g_signal_connect (app_data->main_window, "size-allocate", G_CALLBACK (get_window_size_cb), app_data);
 
-    return OTPCLIENT_WINDOW (app_data->main_window);
+    /* ── Window-level key handling (GtkEventControllerKey, GTK ≥ 3.24) */
+    GtkEventController *key_controller = gtk_event_controller_key_new (main_window);
+    g_signal_connect (key_controller, "key-pressed", G_CALLBACK (key_pressed_cb), app_data);
+    g_object_unref (key_controller);
+
+    /* ── Track window size via configure-event (fires only on resize) */
+    g_signal_connect (main_window, "configure-event",
+                      G_CALLBACK (configure_event_cb), app_data);
+
+    /* Hide search entry without triggering an extra layout pass on show_all */
+    GtkWidget *search_entry =
+        GTK_WIDGET (gtk_builder_get_object (builder, "search_entry_id"));
+    if (search_entry != NULL) {
+        gtk_widget_set_no_show_all (search_entry, TRUE);
+        gtk_widget_set_visible (search_entry, FALSE);
+    }
+
+    return win;
 }
 
+/* ── Builder accessors ──────────────────────────────────────────────────── */
+
+GtkBuilder *
+otpclient_window_get_builder (OtpclientWindow *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
+    return self->builder;
+}
+
+GtkBuilder *
+otpclient_window_get_add_popover_builder (OtpclientWindow *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
+    return self->add_popover_builder;
+}
+
+GtkBuilder *
+otpclient_window_get_settings_popover_builder (OtpclientWindow *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
+    return self->settings_popover_builder;
+}
+
+/* ── Signal callbacks ───────────────────────────────────────────────────── */
+
 static gboolean
-key_pressed_cb (GtkWidget   *window,
-                GdkEventKey *event_key,
-                gpointer     user_data)
+key_pressed_cb (GtkEventControllerKey *controller UNUSED,
+                guint                  keyval,
+                guint                  keycode    UNUSED,
+                GdkModifierType        state,
+                gpointer               user_data)
 {
     CAST_USER_DATA (AppData, app_data, user_data);
-    switch (event_key->keyval) {
+    switch (keyval) {
         case GDK_KEY_q:
-            if (event_key->state & GDK_CONTROL_MASK) {
-                gtk_window_close (GTK_WINDOW (window));
+            if (state & GDK_CONTROL_MASK) {
+                gtk_window_close (GTK_WINDOW (app_data->main_window));
             }
             break;
         case GDK_KEY_f:
-            if (event_key->state & GDK_CONTROL_MASK) {
+            if (state & GDK_CONTROL_MASK) {
                 GtkWidget *search_entry = app_data->search_entry;
                 if (search_entry != NULL) {
                     gboolean is_visible = gtk_widget_get_visible (search_entry);
@@ -210,13 +301,6 @@ key_pressed_cb (GtkWidget   *window,
 }
 
 static void
-toggle_button_cb (GtkWidget *main_window UNUSED,
-                  gpointer   user_data)
-{
-    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (user_data), !gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (user_data)));
-}
-
-static void
 reorder_rows_cb (GtkToggleButton *btn,
                  gpointer         user_data)
 {
@@ -224,22 +308,27 @@ reorder_rows_cb (GtkToggleButton *btn,
     gboolean is_btn_active = gtk_toggle_button_get_active (btn);
     gtk_tree_view_set_reorderable (GTK_TREE_VIEW (app_data->tree_view), is_btn_active);
     app_data->is_reorder_active = is_btn_active;
-    gtk_widget_set_sensitive (GTK_WIDGET (gtk_builder_get_object (app_data->builder, "add_btn_main_id")), !is_btn_active);
+    gtk_widget_set_sensitive (
+        GTK_WIDGET (gtk_builder_get_object (app_data->builder, "add_btn_main_id")),
+        !is_btn_active);
 
-    if (is_btn_active == FALSE) {
-        // reordering has been disabled, so now we have to reorder and update the database itself
+    if (!is_btn_active) {
         reorder_db (app_data);
     }
 }
 
-static void
-get_window_size_cb (GtkWidget     *window,
-                    GtkAllocation *allocation UNUSED,
-                    gpointer       user_data)
+static gboolean
+configure_event_cb (GtkWidget         *window,
+                    GdkEventConfigure *event UNUSED,
+                    gpointer           user_data)
 {
     CAST_USER_DATA (AppData, app_data, user_data);
-    gtk_window_get_size (GTK_WINDOW (window), &app_data->window_width, &app_data->window_height);
+    gtk_window_get_size (GTK_WINDOW (window),
+                         &app_data->window_width, &app_data->window_height);
+    return FALSE;
 }
+
+/* ── destroy_cb ─────────────────────────────────────────────────────────── */
 
 void
 destroy_cb (GtkWidget *window,
@@ -270,7 +359,8 @@ destroy_cb (GtkWidget *window,
     }
     if (app_data->connection != NULL) {
         for (gint i = 0; i < DBUS_SERVICES; i++) {
-            g_dbus_connection_signal_unsubscribe (app_data->connection, app_data->subscription_ids[i]);
+            g_dbus_connection_signal_unsubscribe (app_data->connection,
+                                                  app_data->subscription_ids[i]);
         }
         g_dbus_connection_close (app_data->connection, NULL, NULL, NULL);
     }
@@ -290,27 +380,16 @@ destroy_cb (GtkWidget *window,
     if (app_data->notification != NULL) {
         g_object_unref (app_data->notification);
     }
+
     gint w = app_data->window_width;
     gint h = app_data->window_height;
-    if ((w == 0 || h == 0) && window != NULL) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wbad-function-cast"
-        w = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "width"));
-        h = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (window), "height"));
-#pragma GCC diagnostic pop
-    }
     if (w > 0 && h > 0) {
         save_window_size (w, h);
     }
-    if (app_data->builder != NULL) {
-        g_object_unref (app_data->builder);
-    }
-    if (app_data->add_popover_builder != NULL) {
-        g_object_unref (app_data->add_popover_builder);
-    }
-    if (app_data->settings_popover_builder != NULL) {
-        g_object_unref (app_data->settings_popover_builder);
-    }
+
+    /* Builders are owned by the OtpclientWindow instance and will be released
+     * when the window itself is disposed — do NOT unref them here. */
+
     if (app_data->filter_model != NULL) {
         g_object_unref (app_data->filter_model);
     }
@@ -319,64 +398,4 @@ destroy_cb (GtkWidget *window,
     }
     g_free (app_data);
     gcry_control (GCRYCTL_TERM_SECMEM);
-}
-
-static void
-save_sort_order (GtkTreeView *tree_view)
-{
-    gint id;
-    GtkSortType order;
-    GtkTreeModel *model = gtk_tree_view_get_model (tree_view);
-    if (model == NULL) {
-        return;
-    }
-    if (GTK_IS_TREE_MODEL_FILTER (model)) {
-        model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER (model));
-    }
-    if (!GTK_IS_TREE_SORTABLE (model)) {
-        return;
-    }
-    gtk_tree_sortable_get_sort_column_id (GTK_TREE_SORTABLE (model), &id, &order);
-    // store data only if it was changed
-    if (id >= 0) {
-        store_data ("column_id", id, "sort_order", order);
-    }
-}
-
-static void
-save_window_size (gint width,
-                  gint height)
-{
-    store_data ("window_width", width, "window_height", height);
-}
-
-static void
-store_data (const gchar *param1_name,
-            gint         param1_value,
-            const gchar *param2_name,
-            gint         param2_value)
-{
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path;
-#ifndef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
-        } else {
-            g_key_file_set_integer (kf, "config", param1_name, param1_value);
-            g_key_file_set_integer (kf, "config", param2_name, param2_value);
-            if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-                g_printerr ("%s\n", err->message);
-                g_clear_error (&err);
-            }
-        }
-    }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
 }
