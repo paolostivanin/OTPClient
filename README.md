@@ -11,20 +11,19 @@
 Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
-| Name                                               | Min Version |
-|----------------------------------------------------|-------------|
-| GTK+                                               | 3.24        |
-| Glib                                               | 2.68.0      |
-| jansson                                            | 2.12        |
-| libgcrypt                                          | 1.10.1      |
-| libpng                                             | 1.6.30      |
-| [libcotp](https://github.com/paolostivanin/libcotp) | 3.0.0      |
-| zbar                                               | 0.20        |
-| protobuf-c                                         | 1.3.0       |
-| protobuf                                           | 3.6.0       |
-| uuid                                               | 2.34        |
-| libsecret                                          | 0.20        |
-| qrencode                                           | 4.0.2       |
+| Name                                                | Min Version |
+|-----------------------------------------------------|-------------|
+| GTK+                                                | 3.24        |
+| Glib                                                | 2.68.0      |
+| jansson                                             | 2.12        |
+| libgcrypt                                           | 1.10.1      |
+| libpng                                              | 1.6.30      |
+| [libcotp](https://github.com/paolostivanin/libcotp) | 3.0.0       |
+| zbar                                                | 0.20        |
+| protobuf-c                                          | 1.3.0       |
+| uuid                                                | 2.34        |
+| libsecret                                           | 0.20        |
+| qrencode                                            | 4.0.2       |
 
 :warning: Please note that the memlock value should be `>= 64 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
 See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
@@ -65,7 +64,7 @@ git clone https://github.com/paolostivanin/OTPClient.git
 cd OTPClient
 mkdir build && cd build
 cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make
+make -j$(nproc)
 sudo make install
 ```
 
