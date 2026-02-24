@@ -54,11 +54,11 @@ get_algo_int_from_str (const gchar *algo)
 {
     gint algo_int;
     if (g_strcmp0 (algo, "SHA1") == 0) {
-        algo_int = SHA1;
+        algo_int = COTP_SHA1;
     } else if (g_strcmp0 (algo, "SHA256") == 0) {
-        algo_int = SHA256;
+        algo_int = COTP_SHA256;
     } else {
-        algo_int = SHA512;
+        algo_int = COTP_SHA512;
     }
 
     return algo_int;

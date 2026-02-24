@@ -58,7 +58,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.10.1)
-pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=3.0.0)
+pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=4.0.0)
 pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng>=1.6.30)
 pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson>=2.12)
 pkg_check_modules(ZBAR REQUIRED IMPORTED_TARGET zbar>=0.20)
