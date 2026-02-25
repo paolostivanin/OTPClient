@@ -87,6 +87,7 @@ get_otps_from_plain_backup (const gchar  *path,
         }
 
         gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
+        json_decref (json);
         gchar *cleaned_db = remove_icons_from_db (dumped_json, FALSE);
         g_free (dumped_json);
 
@@ -299,7 +300,7 @@ export_aegis (const gchar   *export_path,
         uuid_generate_random (binuuid);
         gchar *uuid = g_malloc0 (37);
         uuid_unparse_lower (binuuid, uuid);
-        json_object_set (slot_1, "uuid", json_string (g_strdup (uuid)));
+        json_object_set (slot_1, "uuid", json_string (uuid));
         g_free (uuid);
 
         salt = g_malloc0 (AEGIS_SALT_SIZE);
@@ -315,7 +316,11 @@ export_aegis (const gchar   *export_path,
             gcry_free (derived_master_key);
             g_free (key_nonce);
             g_free (salt);
-            return NULL;
+            json_decref (slot_1);
+            json_decref (slots_arr);
+            json_decref (aegis_header_obj);
+            json_decref (root);
+            return g_strdup ("Error while deriving the Aegis encryption key.");
         }
 
         hd = open_cipher_and_set_data (derived_master_key, key_nonce, AEGIS_NONCE_SIZE);
@@ -323,7 +328,11 @@ export_aegis (const gchar   *export_path,
             gcry_free (derived_master_key);
             g_free (key_nonce);
             g_free (salt);
-            return NULL;
+            json_decref (slot_1);
+            json_decref (slots_arr);
+            json_decref (aegis_header_obj);
+            json_decref (root);
+            return g_strdup ("Error while opening the Aegis cipher handle.");
         }
 
         enc_master_key = gcry_malloc (AEGIS_KEY_SIZE);
@@ -334,28 +343,42 @@ export_aegis (const gchar   *export_path,
             g_free (key_nonce);
             g_free (salt);
             gcry_cipher_close (hd);
-            return NULL;
+            json_decref (slot_1);
+            json_decref (slots_arr);
+            json_decref (aegis_header_obj);
+            json_decref (root);
+            return g_strdup ("Error while encrypting the Aegis master key.");
         }
 
         key_tag = g_malloc0 (AEGIS_TAG_SIZE);
         gcry_cipher_gettag (hd, key_tag, AEGIS_TAG_SIZE);
-        json_object_set (slot_1, "key", json_string (bytes_to_hexstr (enc_master_key, AEGIS_KEY_SIZE)));
+        gchar *hex_tmp = bytes_to_hexstr (enc_master_key, AEGIS_KEY_SIZE);
+        json_object_set (slot_1, "key", json_string (hex_tmp));
+        g_free (hex_tmp);
         gcry_cipher_close (hd);
 
         json_t *kp = json_object();
-        json_object_set (kp, "nonce", json_string(bytes_to_hexstr (key_nonce, AEGIS_NONCE_SIZE)));
-        json_object_set (kp, "tag", json_string (bytes_to_hexstr (key_tag, AEGIS_TAG_SIZE)));
+        hex_tmp = bytes_to_hexstr (key_nonce, AEGIS_NONCE_SIZE);
+        json_object_set (kp, "nonce", json_string (hex_tmp));
+        g_free (hex_tmp);
+        hex_tmp = bytes_to_hexstr (key_tag, AEGIS_TAG_SIZE);
+        json_object_set (kp, "tag", json_string (hex_tmp));
+        g_free (hex_tmp);
         json_object_set (slot_1, "key_params", kp);
         json_object_set (slot_1, "n", json_integer (32768));
         json_object_set (slot_1, "r", json_integer (8));
         json_object_set (slot_1, "p", json_integer (1));
-        json_object_set (slot_1, "salt", json_string (bytes_to_hexstr (salt, AEGIS_SALT_SIZE)));
+        hex_tmp = bytes_to_hexstr (salt, AEGIS_SALT_SIZE);
+        json_object_set (slot_1, "salt", json_string (hex_tmp));
+        g_free (hex_tmp);
         json_object_set (aegis_header_obj, "slots", slots_arr);
 
         json_t *db_params_obj = json_object();
         db_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
         gcry_create_nonce (db_nonce, AEGIS_NONCE_SIZE);
-        json_object_set (db_params_obj, "nonce", json_string (bytes_to_hexstr (db_nonce, AEGIS_NONCE_SIZE)));
+        hex_tmp = bytes_to_hexstr (db_nonce, AEGIS_NONCE_SIZE);
+        json_object_set (db_params_obj, "nonce", json_string (hex_tmp));
+        g_free (hex_tmp);
 
         db_tag = g_malloc0 (AEGIS_TAG_SIZE);
         // tag is computed after encryption, so we just put a placeholder here
@@ -381,7 +404,9 @@ export_aegis (const gchar   *export_path,
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
             json_object_set (export_obj, "type", json_string ("steam"));
         } else {
-            json_object_set (export_obj, "type", json_string (g_utf8_strdown (json_string_value (otp_type), -1)));
+            gchar *type_lower = g_utf8_strdown (json_string_value (otp_type), -1);
+            json_object_set (export_obj, "type", json_string (type_lower));
+            g_free (type_lower);
         }
 
         json_object_set (export_obj, "name", json_object_get (db_obj, "label"));
@@ -397,7 +422,8 @@ export_aegis (const gchar   *export_path,
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (info_obj, "algo", json_object_get (db_obj, "algo"));
-        if (g_ascii_strcasecmp (json_string_value (otp_type), "TOTP") == 0) {
+        const gchar *type_str = json_string_value (otp_type);
+        if (type_str != NULL && g_ascii_strcasecmp (type_str, "TOTP") == 0) {
             json_object_set (info_obj, "period", json_object_get (db_obj, "period"));
         } else {
             json_object_set (info_obj, "counter", json_object_get (db_obj, "counter"));
@@ -430,11 +456,16 @@ export_aegis (const gchar   *export_path,
             g_free (salt);
             gcry_free (derived_master_key);
             gcry_free (enc_master_key);
-            return NULL;
+            json_decref (aegis_db_obj);
+            json_decref (aegis_header_obj);
+            json_decref (root);
+            return g_strdup ("Error while encrypting the Aegis database.");
         }
         gcry_cipher_gettag (hd, db_tag, AEGIS_TAG_SIZE);
         json_t *db_params = json_object_get (aegis_header_obj, "params");
-        json_object_set (db_params, "tag", json_string (bytes_to_hexstr (db_tag, AEGIS_TAG_SIZE)));
+        gchar *tag_hex = bytes_to_hexstr (db_tag, AEGIS_TAG_SIZE);
+        json_object_set (db_params, "tag", json_string (tag_hex));
+        g_free (tag_hex);
         g_free (dumped_db);
         gchar *b64enc_db = g_base64_encode (enc_db, db_size);
         json_object_set (root, "db", json_string (b64enc_db));
@@ -479,7 +510,9 @@ export_aegis (const gchar   *export_path,
     json_decref (aegis_db_obj);
     json_decref (aegis_header_obj);
     json_decref (root);
-    g_object_unref (out_stream);
+    if (out_stream != NULL) {
+        g_object_unref (out_stream);
+    }
     g_object_unref (out_gfile);
 
     return (err != NULL ? g_strdup (err->message) : NULL);
@@ -589,11 +622,11 @@ is_file_otpauth_txt (const gchar  *file_path,
     gsize expected_string_len = g_utf8_strlen (expected_string, -1);
     gchar buffer[expected_string_len + 1];
     gssize bytes_read = g_input_stream_read (G_INPUT_STREAM(input_stream), buffer, expected_string_len, NULL, err);
-    if ((err == NULL || *err == NULL) && bytes_read == expected_string_len) {
+    if ((err == NULL || *err == NULL) && bytes_read == (gssize)expected_string_len) {
         buffer[expected_string_len] = '\0';
         result = (g_strcmp0 (buffer, expected_string) == 0);
-        g_object_unref (input_stream);
     }
+    g_object_unref (input_stream);
     g_object_unref (file);
 
     return result;
@@ -609,7 +642,9 @@ remove_icons_from_db (const gchar *decrypted_db,
 
     // we remove the icon field (and the icon_mime while at it too) because it uses lots of secure memory for nothing
     GRegex *regex = g_regex_new (".*\"icon\":(\\s)*\".*\",\\n|.*\"icon_mime\":(\\s)*\".*\",\\n", G_REGEX_MULTILINE, 0, NULL);
-    gchar *cleaned_db = strdup_func (g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL));
+    gchar *regex_result = g_regex_replace (regex, decrypted_db, -1, 0, "", 0, NULL);
+    gchar *cleaned_db = strdup_func (regex_result);
+    g_free (regex_result);
     g_regex_unref (regex);
 
     return cleaned_db;

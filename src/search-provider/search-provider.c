@@ -181,7 +181,7 @@ static GPtrArray *load_entries (void) {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
         if (!label) continue;
         OtpSearchEntry *entry = g_new0 (OtpSearchEntry, 1);
-        entry->id = g_strdup_printf ("%" G_GUINT32_FORMAT, json_object_get_hash (obj));
+        entry->id = g_strdup_printf ("%" G_GSIZE_FORMAT, index);
         entry->label = g_strdup (label);
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         entry->issuer = g_strdup (issuer ? issuer : "");
@@ -213,8 +213,11 @@ static void send_notification (const gchar *label, const gchar *otp_value) {
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
     if (!conn) return;
     g_autofree gchar *body = g_strdup_printf ("Your code for %s is: %s", label ? label : "Account", otp_value);
+    GVariantBuilder actions, hints;
+    g_variant_builder_init (&actions, G_VARIANT_TYPE ("as"));
+    g_variant_builder_init (&hints, G_VARIANT_TYPE ("a{sv}"));
     g_dbus_connection_call (conn, "org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications", "Notify",
-                            g_variant_new ("(susssasa{sv}i)", "OTPClient", 0, "com.github.paolostivanin.OTPClient", "OTP Token", body, NULL, NULL, 5000),
+                            g_variant_new ("(susssasa{sv}i)", "OTPClient", (guint32)0, "com.github.paolostivanin.OTPClient", "OTP Token", body, &actions, &hints, (gint32)5000),
                             NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL, NULL);
     g_object_unref (conn);
 }
@@ -226,8 +229,13 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
     (void)conn; (void)sender; (void)path; (void)iface; (void)data;
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
         gchar **terms;
-        if (g_strcmp0 (method, "GetInitialResultSet") == 0) g_variant_get (params, "(^as)", &terms);
-        else g_variant_get (params, "(^as^as)", NULL, &terms);
+        if (g_strcmp0 (method, "GetInitialResultSet") == 0) {
+            g_variant_get (params, "(^as)", &terms);
+        } else {
+            gchar **prev_results = NULL;
+            g_variant_get (params, "(^as^as)", &prev_results, &terms);
+            g_strfreev (prev_results);
+        }
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
         GPtrArray *entries = load_entries ();
@@ -296,6 +304,7 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
             for (guint i = 0; i < entries->len; i++) {
                 OtpSearchEntry *e = g_ptr_array_index (entries, i);
                 if (!entry_matches_terms (e, terms, terms_len)) continue;
+                if (!e->otp_value) continue;
                 GVariantBuilder props;
                 g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
                 g_autofree gchar *sub = (e->issuer && *e->issuer) ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value) : g_strdup (e->otp_value);
@@ -345,11 +354,18 @@ static void on_gnome_bus_acquired (GDBusConnection *conn, const gchar *name G_GN
     if (node) g_dbus_connection_register_object (conn, GNOME_PATH, node->interfaces[0], &g_vtable, NULL, NULL, NULL);
 }
 
+static GMainLoop *main_loop = NULL;
+
+static void on_name_lost (GDBusConnection *conn G_GNUC_UNUSED, const gchar *name, gpointer data G_GNUC_UNUSED) {
+    g_printerr ("Lost (or failed to acquire) D-Bus name '%s'. Is another instance running?\n", name);
+    if (main_loop != NULL) g_main_loop_quit (main_loop);
+}
+
 int main (int argc, char **argv) {
     gboolean force_kde = FALSE, force_gnome = FALSE;
     for (int i = 1; i < argc; i++) {
         if (g_strcmp0 (argv[i], "--kde") == 0) force_kde = TRUE;
-        if (g_strcmp0 (argv[i], "--gnome") == 0) force_gnome = TRUE;
+        else if (g_strcmp0 (argv[i], "--gnome") == 0) force_gnome = TRUE;
     }
     if (!get_search_provider_enabled ()) return 0;
     if (!force_kde && !force_gnome) {
@@ -373,8 +389,10 @@ int main (int argc, char **argv) {
         return 1;
     }
 
-    if (force_kde) g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_krunner_bus_acquired, NULL, NULL, NULL, NULL);
-    if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_gnome_bus_acquired, NULL, NULL, NULL, NULL);
-    g_main_loop_run (g_main_loop_new (NULL, FALSE));
+    main_loop = g_main_loop_new (NULL, FALSE);
+    if (force_kde) g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_krunner_bus_acquired, NULL, on_name_lost, NULL, NULL);
+    if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
+    g_main_loop_run (main_loop);
+    g_main_loop_unref (main_loop);
     return 0;
 }

@@ -186,12 +186,14 @@ otpclient_window_new (GtkApplication *app,
                                      settings_menu_entries,
                                      G_N_ELEMENTS (settings_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
+    g_object_unref (settings_actions);
 
     GActionGroup *export_actions = (GActionGroup *) g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP (export_actions),
                                      export_menu_entries,
                                      G_N_ELEMENTS (export_menu_entries), app_data);
     gtk_widget_insert_action_group (settings_popover, "export_menu", export_actions);
+    g_object_unref (export_actions);
 
     GtkWidget *add_popover =
         GTK_WIDGET (gtk_builder_get_object (add_popover_builder, "add_pop_id"));
@@ -204,12 +206,14 @@ otpclient_window_new (GtkApplication *app,
                                      add_menu_entries,
                                      G_N_ELEMENTS (add_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
+    g_object_unref (add_actions);
 
     GActionGroup *import_actions = (GActionGroup *) g_simple_action_group_new ();
     g_action_map_add_action_entries (G_ACTION_MAP (import_actions),
                                      import_menu_entries,
                                      G_N_ELEMENTS (import_menu_entries), app_data);
     gtk_widget_insert_action_group (add_popover, "import_menu", import_actions);
+    g_object_unref (import_actions);
 
     gtk_popover_set_constrain_to (GTK_POPOVER (add_popover),      GTK_POPOVER_CONSTRAINT_NONE);
     gtk_popover_set_constrain_to (GTK_POPOVER (settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
@@ -369,6 +373,8 @@ destroy_cb (GtkWidget *window,
         g_free (app_data->db_data->db_path);
         g_slist_free_full (app_data->db_data->objects_hash, g_free);
         json_decref (app_data->db_data->in_memory_json_data);
+        g_clear_pointer (&app_data->db_data->last_hotp, g_free);
+        g_clear_pointer (&app_data->db_data->last_hotp_update, g_date_time_unref);
         g_free (app_data->db_data);
     }
     if (app_data->clipboard != NULL) {

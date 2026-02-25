@@ -138,9 +138,10 @@ otpclient_application_activate (GApplication *app)
     app_data->db_data->objects_hash  = NULL;
     app_data->db_data->data_to_add   = NULL;
     /* Subtract 3 s so "last_hotp" is valid from the very first run */
+    GDateTime *now = g_date_time_new_now_local ();
     app_data->db_data->last_hotp_update =
-        g_date_time_add_seconds (g_date_time_new_now_local (),
-                                 -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
+        g_date_time_add_seconds (now, -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
+    g_date_time_unref (now);
 
     if (!load_db_with_password (app, app_data, memlock_value)) {
         cleanup_app_data (app_data);
@@ -195,8 +196,10 @@ resolve_db_path (GApplication *app UNUSED,
     }
     return TRUE;
 #else
-    if (!g_file_test (g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL),
-                      G_FILE_TEST_EXISTS)) {
+    gchar *cfg_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+    gboolean cfg_exists = g_file_test (cfg_path, G_FILE_TEST_EXISTS);
+    g_free (cfg_path);
+    if (!cfg_exists) {
         app_data->diag_rcdb =
             GTK_WIDGET (gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
         GtkWidget *restore_btn =
@@ -603,6 +606,8 @@ cleanup_app_data (AppData *app_data)
     if (app_data->db_data != NULL) {
         g_clear_pointer (&app_data->db_data->db_path, g_free);
         g_clear_pointer (&app_data->db_data->key, gcry_free);
+        g_clear_pointer (&app_data->db_data->last_hotp, g_free);
+        g_clear_pointer (&app_data->db_data->last_hotp_update, g_date_time_unref);
         g_free (app_data->db_data);
     }
 
@@ -616,6 +621,9 @@ otpclient_application_shutdown (GApplication *app)
 
     if (self->app_data != NULL) {
         destroy_cb (NULL, self->app_data);
+        /* destroy_cb frees app_data; clear the pointer so finalize
+         * does not attempt to free it again via cleanup_app_data. */
+        self->app_data = NULL;
     }
 
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (app);

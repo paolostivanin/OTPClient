@@ -351,14 +351,21 @@ json_object_get_hash (json_t *obj)
 {
     const gchar *key;
     json_t *value;
-    gchar *tmp_string = gcry_calloc_secure (256, 1);
+    const gsize buf_size = 256;
+    gchar *tmp_string = gcry_calloc_secure (buf_size, 1);
     json_object_foreach (obj, key, value) {
         if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
-            g_snprintf (tmp_string + g_utf8_strlen (tmp_string, -1), 256, "%ld", (gint64) v);
+            gsize cur_len = strlen (tmp_string);
+            if (cur_len < buf_size - 1) {
+                g_snprintf (tmp_string + cur_len, buf_size - cur_len, "%" G_GINT64_FORMAT, (gint64) v);
+            }
         } else {
-            if (g_strlcat (tmp_string, json_string_value (value), 256) > 256) {
-                g_printerr ("%s\n", _("Truncation occurred."));
+            const gchar *str_val = json_string_value (value);
+            if (str_val != NULL) {
+                if (g_strlcat (tmp_string, str_val, buf_size) >= buf_size) {
+                    g_printerr ("%s\n", _("Truncation occurred."));
+                }
             }
         }
     }
@@ -427,9 +434,12 @@ get_json_root (const gchar *path)
     }
 
     gchar *dumped_json = json_dumps (json, 0);
+    json_decref (json);
+
     json_t *root = json_loads (dumped_json, JSON_DISABLE_EOF_CHECK, &jerr);
     if (root == NULL) {
         g_printerr ("Error while loading the json data: %s\n", jerr.text);
+        gcry_free (dumped_json);
         return NULL;
     }
     gcry_free (dumped_json);

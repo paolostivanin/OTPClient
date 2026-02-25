@@ -3,8 +3,12 @@
 #include <gcrypt.h>
 #include <termios.h>
 #include <libsecret/secret.h>
-#include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
+#include <glib/gstdio.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "main.h"
 #include "get-data.h"
 #include "../common/import-export.h"
@@ -69,7 +73,17 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     gboolean use_secret_service = get_use_secretservice ();
     int password_fd = STDIN_FILENO;
     if (cmdline_opts->password_file) {
-        password_fd = open(cmdline_opts->password_file, O_RDONLY);
+        if (g_file_test (cmdline_opts->password_file, G_FILE_TEST_IS_SYMLINK)) {
+            g_printerr ("Refusing to open password file '%s': it is a symbolic link.\n", cmdline_opts->password_file);
+            return FALSE;
+        }
+        GStatBuf st;
+        if (g_stat (cmdline_opts->password_file, &st) == 0 && (st.st_mode & 077) != 0) {
+            g_printerr ("Warning: password file '%s' has group/world permissions (mode %04o). "
+                         "Consider restricting to owner-only (chmod 600).\n",
+                         cmdline_opts->password_file, (unsigned)(st.st_mode & 0777));
+        }
+        password_fd = g_open (cmdline_opts->password_file, O_RDONLY, 0);
         if (password_fd < 0) {
             g_printerr ("Failed to open password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
             return FALSE;
@@ -324,7 +338,7 @@ get_pwd (const gchar *pwd_msg,
 
     struct termios old, new;
     gboolean term_fixed = FALSE;
-    if (tcgetattr (password_fd, &old) == 0) {
+    if (isatty (password_fd) && tcgetattr (password_fd, &old) == 0) {
         new = old;
         new.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
         if (tcsetattr (password_fd, TCSAFLUSH, &new) == 0) {
@@ -336,7 +350,11 @@ get_pwd (const gchar *pwd_msg,
     size_t len = 0;
     while (len < BUFFER_SIZE - 1) {
         ssize_t n = read (password_fd, &pwd[len], 1);
-        if (n <= 0 || pwd[len] == '\n') break;
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        if (n == 0 || pwd[len] == '\n') break;
         len++;
     }
     pwd[len] = '\0';
@@ -346,6 +364,10 @@ get_pwd (const gchar *pwd_msg,
     }
     if (isatty (password_fd)) {
         g_print ("\n");
+    }
+
+    if (len == BUFFER_SIZE - 1) {
+        g_printerr ("Warning: password was truncated at %zu bytes.\n", BUFFER_SIZE - 1);
     }
 
     if (len == 0) {

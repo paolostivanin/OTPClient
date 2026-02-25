@@ -249,10 +249,14 @@ get_otps_from_plain_backup (const gchar  *path,
     json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
         g_printerr ("Error loading json: %s\n", j_err.text);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Error while loading the Authenticator Pro backup: %s", j_err.text);
         return NULL;
     }
 
     gchar *dumped_json = json_dumps (json, 0);
+    json_decref (json);
+
     GSList *otps = parse_authpro_json_data (dumped_json, err);
     gcry_free (dumped_json);
 
