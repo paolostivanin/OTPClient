@@ -226,7 +226,6 @@ otpclient_window_new (GtkApplication *app,
     /* ── Window-level key handling (GtkEventControllerKey, GTK ≥ 3.24) */
     GtkEventController *key_controller = gtk_event_controller_key_new (main_window);
     g_signal_connect (key_controller, "key-pressed", G_CALLBACK (key_pressed_cb), app_data);
-    g_object_unref (key_controller);
 
     /* ── Track window size via configure-event (fires only on resize) */
     g_signal_connect (main_window, "configure-event",
@@ -348,7 +347,7 @@ destroy_cb (GtkWidget *window,
     }
     otpclient_application_clear_app_data (app);
 
-    if (app_data->tree_view != NULL) {
+    if (app_data->tree_view != NULL && GTK_IS_TREE_VIEW (app_data->tree_view)) {
         save_sort_order (app_data->tree_view);
         save_column_widths (app_data->tree_view);
     }

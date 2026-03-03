@@ -89,6 +89,32 @@
   </content_rating>
 
   <releases>
+    <release version="4.4.1" date="2026-03-03">
+      <description>
+        <p>OTPClient 4.4.1 includes the following fixes:</p>
+        <ul>
+          <li>FIXED: Ctrl+F search not working due to premature key controller destruction.</li>
+          <li>FIXED: GTK-CRITICAL assertions on close caused by accessing the tree view after widget destruction.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="4.4.0" date="2026-03-03">
+      <description>
+        <p>OTPClient 4.4.0 includes the following improvements and fixes:</p>
+        <ul>
+          <li>ADDED: cross-desktop search provider for GNOME Shell and KDE KRunner.</li>
+          <li>ADDED: --password-file option for CLI to read password from an external file.</li>
+          <li>IMPROVED: hardened password input by bypassing libc buffering.</li>
+          <li>IMPROVED: modernised application and window layer to GTK idioms.</li>
+          <li>IMPROVED: adapted to libcotp v4 API changes.</li>
+          <li>FIXED: HOTP counter initialisation off by 10^6x.</li>
+          <li>FIXED: is_steam flag leak, GError misuse, and multiple memory leaks.</li>
+          <li>FIXED: memory leaks, NULL dereferences, and security issues across the codebase.</li>
+          <li>FIXED: multiple bugs in search provider (memory leaks, missing gcrypt init).</li>
+          <li>FIXED: --password-file error handling and terminal detection.</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.3.1" date="2026-01-26">
       <description>
         <p>OTPClient 4.3.1 includes the following improvements and fixes:</p>
