@@ -496,13 +496,10 @@ export_aegis (const gchar   *export_path,
             goto cleanup_and_exit;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
             g_free (jbuf);
             goto cleanup_and_exit;
         }
         g_free (jbuf);
-    } else {
-        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
     }
 
     cleanup_and_exit:
@@ -515,7 +512,12 @@ export_aegis (const gchar   *export_path,
     }
     g_object_unref (out_gfile);
 
-    return (err != NULL ? g_strdup (err->message) : NULL);
+    if (err != NULL) {
+        gchar *msg = g_strdup (err->message);
+        g_clear_error (&err);
+        return msg;
+    }
+    return NULL;
 }
 
 

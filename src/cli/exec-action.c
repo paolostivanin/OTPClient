@@ -184,8 +184,10 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         update_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while updating the database: %s\n", err->message);
+            g_clear_error (&err);
             return FALSE;
         }
+        g_clear_error (&err);
         reload_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while reloading the database: %s\n", err->message);
@@ -392,10 +394,13 @@ get_use_secretservice (void)
         if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
             g_printerr ("%s\n", err->message);
             g_key_file_free (kf);
+            g_free (cfg_file_path);
             g_clear_error (&err);
             return FALSE;
         }
         use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
     }
+    g_key_file_free (kf);
+    g_free (cfg_file_path);
     return use_secret_service;
 }

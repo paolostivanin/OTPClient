@@ -82,8 +82,8 @@ export_authpro (const gchar *export_path,
 
     json_t *db_obj, *export_obj;
     gsize index;
-    gboolean is_steam = FALSE;
     json_array_foreach (json_db_data, index, db_obj) {
+        gboolean is_steam = FALSE;
         export_obj = json_object ();
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer != NULL) {
@@ -172,23 +172,18 @@ export_authpro (const gchar *export_path,
         gcry_cipher_close (hd);
 
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), header, 16, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write header to file.");
             goto enc_end;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), salt, AUTHPRO_SALT_TAG, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write salt to file.");
             goto enc_end;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), iv, AUTHPRO_IV, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write iv to file.");
             goto enc_end;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buf, json_data_size, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write payload to file.");
             goto enc_end;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, AUTHPRO_SALT_TAG, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write tag to file");
             goto enc_end;
         }
         enc_end:
@@ -198,9 +193,7 @@ export_authpro (const gchar *export_path,
         g_free (salt);
     } else {
         // write the plain json to disk
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
-        }
+        g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err);
     }
     g_object_unref (out_stream);
     g_object_unref (out_gfile);
@@ -210,7 +203,12 @@ export_authpro (const gchar *export_path,
     json_decref (auth_array);
     json_decref (root);
 
-    return (err != NULL ? g_strdup (err->message) : NULL);
+    if (err != NULL) {
+        gchar *msg = g_strdup (err->message);
+        g_clear_error (&err);
+        return msg;
+    }
+    return NULL;
 }
 
 
