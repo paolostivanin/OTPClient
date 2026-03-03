@@ -140,7 +140,7 @@ otpclient_application_activate (GApplication *app)
     /* Subtract 3 s so "last_hotp" is valid from the very first run */
     GDateTime *now = g_date_time_new_now_local ();
     app_data->db_data->last_hotp_update =
-        g_date_time_add_seconds (now, -(G_TIME_SPAN_SECOND * HOTP_RATE_LIMIT_IN_SEC));
+        g_date_time_add_seconds (now, -HOTP_RATE_LIMIT_IN_SEC);
     g_date_time_unref (now);
 
     if (!load_db_with_password (app, app_data, memlock_value)) {
