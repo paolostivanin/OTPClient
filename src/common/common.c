@@ -90,12 +90,11 @@ hexstr_to_bytes (const gchar *hexstr)
     // Hex strings should be ASCII; use strlen, not g_utf8_strlen
     size_t len = strlen (hexstr);
     if (len == 0 || (len % 2) != 0) {
-        // invalid length
         return NULL;
     }
 
     size_t out_len = len / 2;
-    guchar *bytes = (guchar *) g_malloc (out_len + 1); // +1 to NUL-terminate if needed by callers
+    guchar *bytes = (guchar *) g_malloc (out_len + 1);
     if (bytes == NULL) {
         return NULL;
     }
@@ -409,9 +408,10 @@ build_json_obj (const gchar *type,
     json_object_set (obj, "type", json_string (type));
     json_object_set (obj, "label", json_string (acc_label));
     json_object_set (obj, "issuer", json_string (acc_iss));
-    json_object_set (obj, "secret", json_string (acc_key));
     json_object_set (obj, "digits", json_integer (digits));
     json_object_set (obj, "algo", json_string (algo));
+
+    json_object_set (obj, "secret", json_string (acc_key));
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set (obj, "period", json_integer (period));

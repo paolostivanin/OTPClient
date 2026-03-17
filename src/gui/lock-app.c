@@ -1,116 +1,193 @@
-#include <glib.h>
-#include <gio/gio.h>
-#include <gtk/gtk.h>
-#include "data.h"
-#include "get-builder.h"
-#include "gui-misc.h"
-#include "message-dialogs.h"
-#include "otpclient.h"
+#include <glib/gi18n.h>
 #include "lock-app.h"
-#include "../common/macros.h"
+#include "otpclient-application.h"
+#include "otpclient-window.h"
+#include "dialogs/password-dialog.h"
+#include "db-common.h"
 
-
-void
-lock_app (GtkWidget *w UNUSED,
-          gpointer user_data)
+typedef struct
 {
-    CAST_USER_DATA(AppData, app_data, user_data);
+    OTPClientApplication *app;
+    guint screensaver_watcher_id;
+    guint inactivity_timer_id;
+    gint64 last_user_activity;
+} LockData;
 
-    app_data->app_locked = TRUE;
-
-    g_signal_emit_by_name (app_data->tree_view, "hide-all-otps");
-    gtk_widget_hide (GTK_WIDGET(app_data->tree_view));
-
-    GtkBuilder *builder = get_builder_from_partial_path (UI_PARTIAL_PATH);
-
-    GtkWidget *dialog = GTK_WIDGET(gtk_builder_get_object (builder, "unlock_pwd_diag_id"));
-    GtkWidget *pwd_entry = GTK_WIDGET(gtk_builder_get_object (builder, "unlock_entry_id"));
-
-    g_signal_connect (pwd_entry, "icon-press", G_CALLBACK (icon_press_cb), NULL);
-    g_signal_connect (pwd_entry, "activate", G_CALLBACK (send_ok_cb), NULL);
-
-    gtk_window_set_transient_for (GTK_WINDOW(dialog), GTK_WINDOW(app_data->main_window));
-
-    gtk_widget_show_all (dialog);
-
-    gint ret;
-    gboolean retry = FALSE;
-    do {
-        ret = gtk_dialog_run (GTK_DIALOG(dialog));
-        if (ret == GTK_RESPONSE_OK) {
-            if (g_strcmp0 (app_data->db_data->key, gtk_entry_get_text (GTK_ENTRY(pwd_entry))) != 0) {
-                show_message_dialog (dialog, "The password is wrong, please try again.", GTK_MESSAGE_ERROR);
-                gtk_entry_set_text (GTK_ENTRY(pwd_entry), "");
-                retry = TRUE;
-            } else {
-                retry = FALSE;
-                app_data->app_locked = FALSE;
-                app_data->last_user_activity = g_date_time_new_now_local ();
-                app_data->source_id_last_activity = g_timeout_add_seconds (1, check_inactivity, app_data);
-                gtk_widget_destroy (dialog);
-                gtk_widget_show (GTK_WIDGET(app_data->tree_view));
-                g_object_unref (builder);
-            }
-        } else {
-            gtk_widget_destroy (dialog);
-            g_object_unref (builder);
-            GtkApplication *app = gtk_window_get_application (GTK_WINDOW (app_data->main_window));
-            destroy_cb (app_data->main_window, app_data);
-            g_application_quit (G_APPLICATION(app));
-        }
-    } while (ret == GTK_RESPONSE_OK && retry == TRUE);
-}
-
+static LockData *lock_data = NULL;
 
 static void
-signal_triggered_cb (GDBusConnection *connection UNUSED,
-                     const gchar *sender_name UNUSED,
-                     const gchar *object_path UNUSED,
-                     const gchar *interface_name UNUSED,
-                     const gchar *signal_name UNUSED,
-                     GVariant *parameters,
-                     gpointer user_data)
+on_unlock_password (const gchar *password,
+                    gpointer     user_data)
 {
-    CAST_USER_DATA(AppData, app_data, user_data);
-    gboolean is_screen_locked;
-    g_variant_get (parameters, "(b)", &is_screen_locked);
-    if (is_screen_locked == TRUE && app_data->app_locked == FALSE && app_data->auto_lock == TRUE) {
-        lock_app (NULL, app_data);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+
+    if (password == NULL || db_data == NULL || db_data->key == NULL)
+        return;
+
+    if (g_strcmp0 (password, db_data->key) == 0)
+    {
+        lock_app_unlock (app);
+    }
+    else
+    {
+        /* Wrong password, show dialog again */
+        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                   on_unlock_password,
+                                                   app);
+        GtkWidget *win = GTK_WIDGET (gtk_application_get_active_window (GTK_APPLICATION (app)));
+        adw_dialog_present (ADW_DIALOG (dlg), win);
     }
 }
-
-
-gboolean
-check_inactivity (gpointer user_data)
-{
-    CAST_USER_DATA(AppData, app_data, user_data);
-    if (app_data->inactivity_timeout > 0 && app_data->app_locked == FALSE) {
-        GDateTime *now = g_date_time_new_now_local ();
-        GTimeSpan diff = g_date_time_difference (now, app_data->last_user_activity);
-        if (diff >= (G_USEC_PER_SEC * (GTimeSpan)app_data->inactivity_timeout)) {
-            g_signal_emit_by_name (app_data->main_window, "lock-app");
-            g_date_time_unref (now);
-            return FALSE;
-        }
-        g_date_time_unref (now);
-    }
-    return TRUE;
-}
-
 
 void
-setup_dbus_listener (AppData *app_data)
+lock_app_lock (OTPClientApplication *app)
 {
-    g_signal_connect (app_data->main_window, "lock-app", G_CALLBACK(lock_app), app_data);
+    if (otpclient_application_get_app_locked (app))
+        return;
 
-    const gchar *paths[] = { "/org/cinnamon/ScreenSaver", "/org/freedesktop/ScreenSaver", "/org/gnome/ScreenSaver", "/com/canonical/Unity/Session" };
-    const gchar *interfaces[] = { "org.cinnamon.ScreenSaver", "org.freedesktop.ScreenSaver", "org.gnome.ScreenSaver", "com.canonical.Unity.Session" };
-    const gchar *signal_names[] = { "ActiveChanged", "ActiveChanged", "ActiveChanged", "Locked" };
+    otpclient_application_set_app_locked (app, TRUE);
 
-    app_data->connection = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    if (win == NULL)
+        return;
 
-    for (guint i = 0; i < DBUS_SERVICES; i++) {
-        app_data->subscription_ids[i] = g_dbus_connection_signal_subscribe (app_data->connection, interfaces[i], interfaces[i], signal_names[i], paths[i],
-                                                                            NULL, G_DBUS_SIGNAL_FLAGS_NONE, signal_triggered_cb, app_data, NULL);
+    /* Show password dialog to unlock */
+    PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                               on_unlock_password,
+                                               app);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
+}
+
+void
+lock_app_unlock (OTPClientApplication *app)
+{
+    otpclient_application_set_app_locked (app, FALSE);
+
+    if (lock_data != NULL)
+        lock_data->last_user_activity = g_get_monotonic_time ();
+}
+
+void
+lock_app_reset_inactivity (OTPClientApplication *app)
+{
+    (void) app;
+    if (lock_data != NULL)
+        lock_data->last_user_activity = g_get_monotonic_time ();
+}
+
+static void
+on_screensaver_signal (GDBusConnection *connection,
+                       const gchar     *sender_name,
+                       const gchar     *object_path,
+                       const gchar     *interface_name,
+                       const gchar     *signal_name,
+                       GVariant        *parameters,
+                       gpointer         user_data)
+{
+    (void) connection;
+    (void) sender_name;
+    (void) object_path;
+    (void) interface_name;
+    (void) signal_name;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
+    gboolean active = FALSE;
+
+    g_variant_get (parameters, "(b)", &active);
+    if (active)
+        lock_app_lock (app);
+}
+
+static gboolean
+inactivity_check (gpointer user_data)
+{
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
+
+    if (!otpclient_application_get_auto_lock (app))
+        return G_SOURCE_CONTINUE;
+
+    if (otpclient_application_get_app_locked (app))
+        return G_SOURCE_CONTINUE;
+
+    gint timeout = otpclient_application_get_inactivity_timeout (app);
+    if (timeout <= 0)
+        return G_SOURCE_CONTINUE;
+
+    gint64 now = g_get_monotonic_time ();
+    gint64 elapsed = (now - lock_data->last_user_activity) / G_USEC_PER_SEC;
+
+    if (elapsed >= timeout)
+        lock_app_lock (app);
+
+    return G_SOURCE_CONTINUE;
+}
+
+void
+lock_app_init_dbus_watchers (OTPClientApplication *app)
+{
+    if (lock_data != NULL)
+        return;
+
+    lock_data = g_new0 (LockData, 1);
+    lock_data->app = app;
+    lock_data->last_user_activity = g_get_monotonic_time ();
+
+    GDBusConnection *bus = g_application_get_dbus_connection (G_APPLICATION (app));
+    if (bus != NULL)
+    {
+        /* Subscribe to screensaver signals from various desktop environments */
+        static const struct {
+            const gchar *name;
+            const gchar *path;
+            const gchar *iface;
+            const gchar *signal;
+        } watchers[] = {
+            { "org.gnome.ScreenSaver",       "/org/gnome/ScreenSaver",       "org.gnome.ScreenSaver",       "ActiveChanged" },
+            { "org.cinnamon.ScreenSaver",     "/org/cinnamon/ScreenSaver",    "org.cinnamon.ScreenSaver",    "ActiveChanged" },
+            { "org.freedesktop.ScreenSaver",  "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver", "ActiveChanged" },
+            { "com.canonical.Unity",          "/com/canonical/Unity/Session", "com.canonical.Unity.Session", "Locked"        },
+        };
+
+        for (guint i = 0; i < G_N_ELEMENTS (watchers); i++)
+        {
+            g_dbus_connection_signal_subscribe (bus,
+                                                watchers[i].name,
+                                                watchers[i].iface,
+                                                watchers[i].signal,
+                                                watchers[i].path,
+                                                NULL,
+                                                G_DBUS_SIGNAL_FLAGS_NONE,
+                                                on_screensaver_signal,
+                                                app,
+                                                NULL);
+        }
     }
+
+    lock_data->inactivity_timer_id = g_timeout_add_seconds (1, inactivity_check, app);
+}
+
+void
+lock_app_cleanup (OTPClientApplication *app)
+{
+    (void) app;
+
+    if (lock_data == NULL)
+        return;
+
+    if (lock_data->inactivity_timer_id != 0)
+    {
+        g_source_remove (lock_data->inactivity_timer_id);
+        lock_data->inactivity_timer_id = 0;
+    }
+
+    g_free (lock_data);
+    lock_data = NULL;
+}
+
+guint
+lock_app_get_dbus_watcher_id (OTPClientApplication *app)
+{
+    (void) app;
+    return lock_data ? lock_data->screensaver_watcher_id : 0;
 }

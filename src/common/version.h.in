@@ -4,3 +4,4 @@
 #define PROJECT_VER    "@PROJECT_VERSION@"
 #define INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@"
 #define LOCALE_DIR     "@SHARE_INSTALL_PREFIX@/locale"
+#define APPLICATION_ID "com.github.paolostivanin.OTPClient"

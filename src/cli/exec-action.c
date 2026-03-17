@@ -30,7 +30,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data)
 {
 #ifdef IS_FLATPAK
-    // Check if a path is already set in the config
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
     if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
@@ -38,10 +37,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             db_data->db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
         }
     }
-    // If no path is defined in config or the file doesn't exist, use default
     if (db_data->db_path == NULL) {
         db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-        // Create or update the config with the default path
         if (!g_key_file_has_group (kf, "config")) {
             g_key_file_set_string (kf, "config", "db_path", db_data->db_path);
             g_key_file_save_to_file (kf, cfg_file_path, NULL);
@@ -61,7 +58,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             gchar *msg = g_strdup_printf (_(
                 "Your system's secure memory limit (memlock: %d bytes) is not enough to securely load the database into memory.\n"
                 "You need to increase your system's memlock limit by following the instructions on our "
-                "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
+                "secure memory wiki page: https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\n"
                 "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
             ), db_data->max_file_size_from_memlock);
             g_printerr ("%s\n", msg);
@@ -95,7 +92,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             goto get_pwd;
         }
         db_data->key_stored = TRUE;
-        db_data->key= secure_strdup (pwd);
+        db_data->key = secure_strdup (pwd);
         secret_password_free (pwd);
     } else {
         get_pwd:
@@ -103,20 +100,18 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         if (db_data->key == NULL) {
             g_print ("Password was NULL, exiting...\n");
             if (password_fd != STDIN_FILENO) {
-                close(password_fd);
+                close (password_fd);
             }
             return FALSE;
         }
     }
     if (password_fd != STDIN_FILENO) {
-        close(password_fd);
+        close (password_fd);
     }
 
     GError *err = NULL;
-    // If we're creating a new database for import, skip loading
     if (cmdline_opts->import && !g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         g_print ("Database file does not exist. Creating a new database...\n");
-        // Save the empty database first
         update_db (db_data, &err);
         if (err != NULL) {
             g_printerr (_("Error while creating new database: %s\n"), err->message);
@@ -127,7 +122,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         g_print ("Database '%s' created successfully.\n", db_data->db_path);
         g_print ("\nATTENTION: if you want to use this database by default, you must update the config file accordingly.\n\n");
     } else {
-        // Load existing database
         load_db (db_data, &err);
         if (err != NULL) {
             gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
@@ -305,8 +299,6 @@ get_db_path (void)
         g_free (db_path);
         return NULL;
     } else {
-        // Remove the trailing newline (if present). This is UTF-8 safe because '\n' is a single-byte ASCII
-        // character and fgets appends it as a separate byte; no multibyte code point is modified.
         char *nl = strchr (db_path, '\n');
         if (nl) { *nl = '\0'; }
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
@@ -333,7 +325,7 @@ get_pwd (const gchar *pwd_msg,
     gchar *pwd = gcry_calloc_secure (BUFFER_SIZE, 1);
     if (!pwd) return NULL;
 
-    if (isatty(password_fd)) {
+    if (isatty (password_fd)) {
         g_print ("%s", pwd_msg);
         fflush (stdout);
     }
@@ -348,7 +340,6 @@ get_pwd (const gchar *pwd_msg,
         }
     }
 
-    // Use read() instead of fgets to bypass stdio buffering
     size_t len = 0;
     while (len < BUFFER_SIZE - 1) {
         ssize_t n = read (password_fd, &pwd[len], 1);
@@ -378,7 +369,6 @@ get_pwd (const gchar *pwd_msg,
         return NULL;
     }
 
-    // Skip realloc to keep the secret in its original locked memory page
     return pwd;
 }
 
@@ -386,7 +376,7 @@ get_pwd (const gchar *pwd_msg,
 static gboolean
 get_use_secretservice (void)
 {
-    gboolean use_secret_service = TRUE; // by default, we enable it
+    gboolean use_secret_service = TRUE;
     GError *err = NULL;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);

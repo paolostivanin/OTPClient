@@ -1,630 +1,801 @@
-#include <gtk/gtk.h>
-#include <gcrypt.h>
-#include <jansson.h>
-#include <libsecret/secret.h>
 #include <glib/gi18n.h>
+#include <adwaita.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
-#include "otpclient.h"
-#include "../common/gquarks.h"
+#include "otp-entry.h"
 #include "gui-misc.h"
-#include "../common/import-export.h"
-#include "message-dialogs.h"
-#include "password-cb.h"
-#include "liststore-misc.h"
+#include "dialogs/password-dialog.h"
 #include "lock-app.h"
-#include "change-db-cb.h"
-#include "new-db-cb.h"
-#include "../common/secret-schema.h"
-#include "../common/macros.h"
-#include "change-pwd-cb.h"
-#include "settings-cb.h"
-#include "setup-signals-shortcuts.h"
-#include "shortcuts-cb.h"
-#include "webcam-add-cb.h"
-#include "manual-add-cb.h"
-#include "dbinfo-cb.h"
-#include "change-file-cb.h"
-#include "change-db-sec.h"
-#include "../common/file-size.h"
-#include "../common/common.h"
+#include "dialogs/db-info-dialog.h"
+#include "dialogs/kdf-dialog.h"
+#include "common.h"
+#include "db-common.h"
+#include "gquarks.h"
+#include "secret-schema.h"
+#include "version.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
 #endif
 
-#ifndef IS_FLATPAK
-static gchar   *get_db_path            (AppData            *app_data);
-#endif
+struct _OTPClientApplication
+{
+    AdwApplication application;
+    OTPClientWindow *window;
 
-static void     set_config_data        (gint               *width,
-                                        gint               *height,
-                                        AppData            *app_data);
+    DatabaseData *db_data;
 
-static void     set_open_db_action     (GtkWidget          *btn,
-                                        gpointer            user_data);
+    GSettings *settings;
 
-static void     init_app_defaults      (AppData            *app_data);
-
-static void     init_db_defaults       (AppData            *app_data);
-
-static void     cleanup_app_data       (AppData            *app_data);
-
-static void     otpclient_application_shutdown (GApplication *app);
-
-static void     load_validity_colors   (GKeyFile           *kf,
-                                        AppData            *app_data);
-
-/* Activation helpers */
-static gboolean resolve_db_path        (GApplication       *app,
-                                        AppData            *app_data);
-
-static gboolean load_db_with_password  (GApplication       *app,
-                                        AppData            *app_data,
-                                        gint32              memlock_value);
-
-static void     setup_ui_and_timers    (GApplication       *app,
-                                        AppData            *app_data);
-
-struct _OtpclientApplication {
-    GtkApplication  parent_instance;
-    AppData        *app_data;
+    /* config stuff */
+    gboolean show_next_otp;
+    gboolean disable_notifications;
+    gboolean auto_lock;
+    gint inactivity_timeout;
+    gboolean app_locked;
+    gboolean use_dark_theme;
+    gboolean is_reorder_active;
+    gboolean use_secret_service;
+    gboolean search_provider_enabled;
+    gboolean show_validity_seconds;
+    gchar *validity_color;
+    gchar *validity_warning_color;
+    gboolean minimize_to_tray;
 };
 
-G_DEFINE_TYPE (OtpclientApplication, otpclient_application, GTK_TYPE_APPLICATION)
+G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
 
-/* ── activate ──────────────────────────────────────────────────────────── */
+static void otpclient_application_show_about      (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-static void
-otpclient_application_activate (GApplication *app)
-{
-    OtpclientApplication *self = OTPCLIENT_APPLICATION (app);
-    if (self->app_data != NULL) {
-        gtk_window_present (GTK_WINDOW (self->app_data->main_window));
-        return;
-    }
+static void otpclient_application_quit            (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    gint32 memlock_value    = 0;
-    gint32 memlock_ret_value = set_memlock_value (&memlock_value);
+static void otpclient_application_lock            (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    AppData *app_data = g_new0 (AppData, 1);
-    init_app_defaults (app_data);
+static void otpclient_application_shortcuts      (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    g_type_ensure (OTPCLIENT_TYPE_WINDOW);
+static void otpclient_application_change_pwd     (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    app_data->db_data = g_new0 (DatabaseData, 1);
-    init_db_defaults (app_data);
+static void otpclient_application_db_info        (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    gint width = 0, height = 0;
-    set_config_data (&width, &height, app_data);
+static void otpclient_application_kdf_settings   (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
 
-    OtpclientWindow *window = otpclient_window_new (GTK_APPLICATION (app),
-                                                     width, height, app_data);
-    if (window == NULL) {
-        g_printerr ("%s\n", _("Couldn't locate the ui file, exiting..."));
-        cleanup_app_data (app_data);
-        g_application_quit (app);
-        return;
-    }
+static const GActionEntry otpclient_application_entries[] = {
+        { .name = "about", .activate = otpclient_application_show_about },
+        { .name = "quit", .activate = otpclient_application_quit },
+        { .name = "lock", .activate = otpclient_application_lock },
+        { .name = "shortcuts", .activate = otpclient_application_shortcuts },
+        { .name = "change-password", .activate = otpclient_application_change_pwd },
+        { .name = "db-info", .activate = otpclient_application_db_info },
+        { .name = "kdf-settings", .activate = otpclient_application_kdf_settings },
+};
 
-    if (memlock_ret_value == MEMLOCK_ERR) {
-        gchar *msg = g_strdup_printf (_(
-            "Couldn't get the memlock value, therefore secure memory cannot be allocated. "
-            "Please have a look at the "
-            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">"
-            "secure memory</a> wiki page before re-running OTPClient."));
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-        g_free (msg);
-        cleanup_app_data (app_data);
-        g_application_quit (app);
-        return;
-    }
-
-    gchar *init_msg = init_libs (memlock_value);
-    if (init_msg != NULL) {
-        show_message_dialog (app_data->main_window, init_msg, GTK_MESSAGE_ERROR);
-        g_free (init_msg);
-        cleanup_app_data (app_data);
-        g_application_quit (app);
-        return;
-    }
-
-    if (!resolve_db_path (app, app_data)) {
-        cleanup_app_data (app_data);
-        g_application_quit (app);
-        return;
-    }
-
-    app_data->db_data->max_file_size_from_memlock = memlock_value;
-    app_data->db_data->objects_hash  = NULL;
-    app_data->db_data->data_to_add   = NULL;
-    /* Subtract 3 s so "last_hotp" is valid from the very first run */
-    GDateTime *now = g_date_time_new_now_local ();
-    app_data->db_data->last_hotp_update =
-        g_date_time_add_seconds (now, -HOTP_RATE_LIMIT_IN_SEC);
-    g_date_time_unref (now);
-
-    if (!load_db_with_password (app, app_data, memlock_value)) {
-        cleanup_app_data (app_data);
-        g_application_quit (app);
-        return;
-    }
-
-    setup_ui_and_timers (app, app_data);
-
-    self->app_data = app_data;
-
-    gtk_widget_show_all (app_data->main_window);
-    /* search_entry has no_show_all set; it stays hidden until Ctrl+F */
-}
-
-/* ── resolve_db_path ───────────────────────────────────────────────────── */
-
-static gboolean
-resolve_db_path (GApplication *app UNUSED,
-                 AppData      *app_data)
-{
-#ifdef IS_FLATPAK
-    GKeyFile *kf = get_kf_ptr ();
-    if (kf != NULL) {
-        gchar *db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        if (db_path != NULL) {
-            app_data->db_data->db_path = db_path;
-        } else {
-            app_data->db_data->db_path =
-                g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-            gchar *cfg_file_path =
-                g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-            if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-                g_key_file_set_string (kf, "config", "db_path", app_data->db_data->db_path);
-                g_key_file_save_to_file (kf, cfg_file_path, NULL);
-            }
-            g_free (cfg_file_path);
-        }
-        g_key_file_free (kf);
-    } else {
-        app_data->db_data->db_path =
-            g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-        gchar *cfg_file_path =
-            g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-        if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-            GKeyFile *new_kf = g_key_file_new ();
-            g_key_file_set_string (new_kf, "config", "db_path", app_data->db_data->db_path);
-            g_key_file_save_to_file (new_kf, cfg_file_path, NULL);
-            g_key_file_free (new_kf);
-        }
-        g_free (cfg_file_path);
-    }
-    return TRUE;
-#else
-    gchar *cfg_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    gboolean cfg_exists = g_file_test (cfg_path, G_FILE_TEST_EXISTS);
-    g_free (cfg_path);
-    if (!cfg_exists) {
-        app_data->diag_rcdb =
-            GTK_WIDGET (gtk_builder_get_object (app_data->builder, "dialog_rcdb_id"));
-        GtkWidget *restore_btn =
-            GTK_WIDGET (gtk_builder_get_object (app_data->builder, "diag_rc_restoredb_btn_id"));
-        GtkWidget *create_btn =
-            GTK_WIDGET (gtk_builder_get_object (app_data->builder, "diag_rc_createdb_btn_id"));
-        g_signal_connect (restore_btn, "clicked", G_CALLBACK (set_open_db_action), app_data);
-        g_signal_connect (create_btn,  "clicked", G_CALLBACK (set_open_db_action), app_data);
-
-        gint response = gtk_dialog_run (GTK_DIALOG (app_data->diag_rcdb));
-        switch (response) {
-            case GTK_RESPONSE_CANCEL:
-            default:
-                gtk_widget_destroy (app_data->diag_rcdb);
-                return FALSE;
-            case GTK_RESPONSE_OK:
-                gtk_widget_destroy (app_data->diag_rcdb);
-        }
-    }
-
-    app_data->db_data->db_path = get_db_path (app_data);
-    return app_data->db_data->db_path != NULL;
-#endif
-}
-
-/* ── load_db_with_password ─────────────────────────────────────────────── */
-
-static gboolean
-load_db_with_password (GApplication *app UNUSED,
-                       AppData      *app_data,
-                       gint32        memlock_value)
-{
-    if (get_file_size (app_data->db_data->db_path) >
-            (goffset) (app_data->db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
-        gchar *msg = g_strdup_printf (_(
-            "Your system's secure memory limit (memlock: %d bytes) is not enough to securely "
-            "load the database into memory.\n"
-            "You need to increase your system's memlock limit by following the instructions on our "
-            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">"
-            "secure memory wiki page</a>.\n"
-            "This requires administrator privileges and is a system-wide setting that OTPClient "
-            "cannot change automatically."),
-            memlock_value);
-        g_printerr ("%s\n", msg);
-        g_free (msg);
-        return FALSE;
-    }
-
-    if (app_data->use_secret_service) {
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
-                                                   "string", "main_pwd", NULL);
-        if (pwd != NULL) {
-            app_data->db_data->key_stored = TRUE;
-            app_data->db_data->key = secure_strdup (pwd);
-            secret_password_free (pwd);
-        } else {
-            g_printerr ("%s\n", _("Couldn't find the password in the secret service."));
-            /* Fall through to manual password prompt */
-            app_data->use_secret_service = FALSE;
-        }
-    }
-
-    GError *err = NULL;
-
-    if (!app_data->use_secret_service) {
-        /* Prompt until the user provides a valid password or opts to change file */
-        do {
-            g_clear_pointer (&app_data->db_data->key, gcry_free);
-            app_data->db_data->key = prompt_for_password (app_data, NULL, NULL, FALSE);
-
-            if (app_data->db_data->key == NULL) {
-                /* User cancelled — let them switch to a different database file */
-                gint change_res;
-                do {
-                    change_res = change_file (app_data);
-                } while (change_res != QUIT_APP && change_res != CHANGE_OK);
-
-                if (change_res == QUIT_APP) {
-                    return FALSE;
-                }
-                /* New file selected; loop back and prompt for its password */
-                continue;
-            }
-
-            g_clear_error (&err);
-            load_db (app_data->db_data, &err);
-
-            if (err == NULL ||
-                g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-                break;
-            }
-
-            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            g_clear_pointer (&app_data->db_data->key, gcry_free);
-
-            if (g_error_matches (err, memlock_error_gquark (), MEMLOCK_ERRCODE)) {
-                g_clear_error (&err);
-                return FALSE;
-            }
-            g_clear_error (&err);
-            /* Wrong password or other recoverable error — prompt again */
-        } while (TRUE);
-    } else {
-        load_db (app_data->db_data, &err);
-        if (err != NULL &&
-            !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            g_clear_error (&err);
-            return FALSE;
-        }
-    }
-
-    if (app_data->use_secret_service && !app_data->db_data->key_stored) {
-        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT,
-                               "main_pwd", app_data->db_data->key,
-                               NULL, on_password_stored, NULL,
-                               "string", "main_pwd", NULL);
-    }
-
-    if (g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-        const gchar *msg = _(
-            "This is the first time you run OTPClient, so you need to <b>add</b> or "
-            "<b>import</b> some tokens.\n"
-            "- to <b>add</b> tokens, please click the + button on the <b>top left</b>.\n"
-            "- to <b>import</b> existing tokens, please click the menu button "
-            "<b>on the top right</b>.\n"
-            "\nIf you need more info, please visit the "
-            "<a href=\"https://github.com/paolostivanin/OTPClient/wiki\">project's wiki</a>");
-        show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_INFO);
-        GError *tmp_err = NULL;
-        update_db (app_data->db_data, &tmp_err);
-        reload_db (app_data->db_data, &tmp_err);
-        g_clear_error (&tmp_err);
-    }
-
-    g_clear_error (&err);
-    return TRUE;
-}
-
-/* ── setup_ui_and_timers ───────────────────────────────────────────────── */
-
-static void
-setup_ui_and_timers (GApplication *app,
-                     AppData      *app_data)
-{
-    app_data->clipboard = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
-
-    create_treeview (app_data);
-    setup_kb_shortcuts (app_data);
-
-    app_data->notification = g_notification_new ("OTPClient");
-    g_notification_set_priority (app_data->notification, G_NOTIFICATION_PRIORITY_NORMAL);
-    GIcon *icon = g_themed_icon_new ("com.github.paolostivanin.OTPClient");
-    g_notification_set_icon (app_data->notification, icon);
-    g_notification_set_body (app_data->notification,
-                              _("OTP value has been copied to the clipboard"));
-    g_object_unref (icon);
-
-    app_data->source_id =
-        g_timeout_add_full (G_PRIORITY_DEFAULT, 1000, traverse_liststore, app_data, NULL);
-
-    setup_dbus_listener (app_data);
-
-    app_data->last_user_activity = g_date_time_new_now_local ();
-    app_data->source_id_last_activity =
-        g_timeout_add_seconds (1, check_inactivity, app_data);
-
-    (void) app;
-}
-
-/* ── finalize / class / init ───────────────────────────────────────────── */
-
-static void
-otpclient_application_finalize (GObject *object)
-{
-    OtpclientApplication *self = OTPCLIENT_APPLICATION (object);
-
-    if (self->app_data != NULL) {
-        cleanup_app_data (self->app_data);
-        self->app_data = NULL;
-    }
-
-    G_OBJECT_CLASS (otpclient_application_parent_class)->finalize (object);
-}
-
-static void
-otpclient_application_class_init (OtpclientApplicationClass *klass)
-{
-    GObjectClass     *object_class = G_OBJECT_CLASS (klass);
-    GApplicationClass *app_class   = G_APPLICATION_CLASS (klass);
-
-    object_class->finalize = otpclient_application_finalize;
-    app_class->activate    = otpclient_application_activate;
-    app_class->shutdown    = otpclient_application_shutdown;
-}
-
-static void
-otpclient_application_init (OtpclientApplication *self)
-{
-    self->app_data = NULL;
-}
-
-OtpclientApplication *
+OTPClientApplication *
 otpclient_application_new (void)
 {
-    GApplicationFlags flags;
-#if GLIB_CHECK_VERSION(2, 74, 0)
-    flags = G_APPLICATION_DEFAULT_FLAGS;
-#else
-    flags = G_APPLICATION_FLAGS_NONE;
-#endif
     return g_object_new (OTPCLIENT_TYPE_APPLICATION,
                          "application-id", "com.github.paolostivanin.OTPClient",
-                         "flags", flags,
+                         "flags", G_APPLICATION_DEFAULT_FLAGS,
+                         "resource-base-path", "/com/github/paolostivanin/OTPClient",
                          NULL);
 }
 
-void
-otpclient_application_clear_app_data (OtpclientApplication *app)
+static void
+set_accel_for_action (OTPClientApplication  *self,
+                      const gchar           *detailed_action_name,
+                      const gchar           *accel)
 {
-    if (app == NULL) {
-        return;
-    }
-    app->app_data = NULL;
+    const char *accels[] = { accel, NULL };
+    gtk_application_set_accels_for_action (GTK_APPLICATION(self), detailed_action_name, accels);
 }
-
-/* ── Private helpers ───────────────────────────────────────────────────── */
 
 static void
-set_config_data (gint    *width,
-                 gint    *height,
-                 AppData *app_data)
+otpclient_application_show_about (GSimpleAction *simple,
+                                  GVariant      *parameter,
+                                  gpointer       user_data)
 {
-    GKeyFile *kf = get_kf_ptr ();
-    if (kf != NULL) {
-        *width  = g_key_file_get_integer (kf, "config", "window_width",  NULL);
-        *height = g_key_file_get_integer (kf, "config", "window_height", NULL);
-        app_data->show_next_otp         = g_key_file_get_boolean (kf, "config", "show_next_otp",      NULL);
-        app_data->disable_notifications = g_key_file_get_boolean (kf, "config", "notifications",      NULL);
-        app_data->show_validity_seconds = g_key_file_get_boolean (kf, "config", "show_validity_seconds", NULL);
-        app_data->auto_lock             = g_key_file_get_boolean (kf, "config", "auto_lock",           NULL);
-        app_data->inactivity_timeout    = g_key_file_get_integer (kf, "config", "inactivity_timeout",  NULL);
-        app_data->use_dark_theme        = g_key_file_get_boolean (kf, "config", "dark_theme",          NULL);
-        app_data->use_tray              = g_key_file_get_boolean (kf, "config", "use_tray",            NULL);
-        app_data->use_secret_service    = g_key_file_get_boolean (kf, "config", "use_secret_service",  NULL);
-        if (g_key_file_has_key (kf, "config", "search_provider_enabled", NULL)) {
-            app_data->search_provider_enabled =
-                g_key_file_get_boolean (kf, "config", "search_provider_enabled", NULL);
-        } else {
-            app_data->search_provider_enabled = TRUE;
-        }
-        load_validity_colors (kf, app_data);
-        g_object_set (gtk_settings_get_default (),
-                      "gtk-application-prefer-dark-theme", app_data->use_dark_theme, NULL);
-        g_key_file_free (kf);
+    (void) simple;
+    (void) parameter;
+
+    static const gchar *developers[] = {
+            "Paolo Stivanin <info@paolostivanin.com>",
+            NULL
+    };
+
+    static const gchar *designers[] = {
+            "Tobias Bernard (bertob) https://tobiasbernard.com",
+            NULL
+    };
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
+
+    AdwDialog *dialog = adw_about_dialog_new ();
+    g_object_set (dialog,
+                  "application-name", "OTPClient",
+                  "application-icon", APPLICATION_ID,
+                  "version", PROJECT_VER,
+                  "copyright", "Copyright \xC2\xA9 2023 Paolo Stivanin",
+                  "issue-url", "https://github.com/paolostivanin/OTPClient/issues",
+                  "support-url", "https://github.com/paolostivanin/OTPClient/issues",
+                  "website", "https://github.com/paolostivanin/OTPClient",
+                  "license-type", GTK_LICENSE_GPL_3_0,
+                  "developers", developers,
+                  "designers", designers,
+                  NULL);
+    adw_dialog_present (dialog, GTK_WIDGET (self->window));
+}
+
+static void
+otpclient_application_quit (GSimpleAction *simple,
+                            GVariant      *parameter,
+                            gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
+    if (self->window != NULL)
+    {
+        gtk_window_destroy (GTK_WINDOW(self->window));
+        self->window = NULL;
     }
 }
 
-#ifndef IS_FLATPAK
-static gchar *
-get_db_path (AppData *app_data)
+static void
+otpclient_application_lock (GSimpleAction *simple,
+                            GVariant      *parameter,
+                            gpointer       user_data)
 {
-    gchar *db_path = NULL;
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    lock_app_lock (self);
+}
+
+static void
+otpclient_application_shortcuts (GSimpleAction *simple,
+                                  GVariant      *parameter,
+                                  gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    GtkBuilder *builder = gtk_builder_new_from_resource ("/com/github/paolostivanin/OTPClient/ui/shortcuts-window.ui");
+    AdwDialog *dialog = ADW_DIALOG (gtk_builder_get_object (builder, "shortcuts_dialog"));
+    adw_dialog_present (dialog, GTK_WIDGET (self->window));
+    g_object_unref (builder);
+}
+
+static void
+on_change_password_received (const gchar *password,
+                              gpointer     user_data)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+
+    if (password == NULL || self->db_data == NULL)
+        return;
+
+    /* Update the key */
+    if (self->db_data->key != NULL)
+        gcry_free (self->db_data->key);
+
+    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (self->db_data->key, password, strlen (password) + 1);
+
+    /* Re-encrypt the database with the new key */
     GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            show_message_dialog (app_data->main_window, err->message, GTK_MESSAGE_ERROR);
-            g_key_file_free (kf);
-            g_clear_error (&err);
-            g_free (cfg_file_path);
-            return NULL;
-        }
-        db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        if (db_path != NULL) {
-            if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-                gchar *msg = g_strconcat ("Database file/location:\n<b>", db_path,
-                                          "</b>\ndoes not exist. A new database will be created.",
-                                          NULL);
-                show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_ERROR);
-                g_free (msg);
-                g_free (db_path);
-                db_path = NULL;
-            } else {
-                g_free (cfg_file_path);
-                g_key_file_free (kf);
-                return db_path;
-            }
-        }
+    update_db (self->db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to update database with new password: %s", err->message);
+        g_clear_error (&err);
+        return;
     }
 
-    GtkFileChooserNative *dialog =
-        gtk_file_chooser_native_new (_("Select database location"),
-                                     GTK_WINDOW (app_data->main_window),
-                                     app_data->open_db_file_action,
-                                     "OK", "Cancel");
-    GtkFileChooser *chooser = GTK_FILE_CHOOSER (dialog);
-    gtk_file_chooser_set_do_overwrite_confirmation (chooser, TRUE);
-    gtk_file_chooser_set_select_multiple (chooser, FALSE);
-    if (app_data->open_db_file_action == GTK_FILE_CHOOSER_ACTION_SAVE) {
-        gtk_file_chooser_set_current_name (chooser, "NewDatabase.enc");
+    /* Update secret service */
+    if (self->use_secret_service)
+    {
+        secret_password_store (OTPCLIENT_SCHEMA,
+                               SECRET_COLLECTION_DEFAULT,
+                               "OTPClient database password",
+                               self->db_data->key,
+                               NULL,
+                               on_password_stored,
+                               NULL,
+                               "string", self->db_data->db_path,
+                               NULL);
     }
-
-    if (gtk_native_dialog_run (GTK_NATIVE_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT) {
-        db_path = gtk_file_chooser_get_filename (chooser);
-        g_key_file_set_string (kf, "config", "db_path", db_path);
-        if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_clear_error (&err);
-        }
-    }
-
-    /* Clear any stored password so it is not used with the newly selected DB */
-    secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL,
-                           "string", "main_pwd", NULL);
-
-    g_object_unref (dialog);
-    g_free (cfg_file_path);
-    g_key_file_free (kf);
-
-    return db_path;
 }
+
+static void
+otpclient_application_change_pwd (GSimpleAction *simple,
+                                   GVariant      *parameter,
+                                   gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    if (self->db_data == NULL)
+        return;
+
+    PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_CHANGE,
+                                               on_change_password_received,
+                                               self);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+}
+
+static void
+otpclient_application_db_info (GSimpleAction *simple,
+                                GVariant      *parameter,
+                                gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    if (self->db_data == NULL)
+        return;
+
+    DbInfoDialog *dlg = db_info_dialog_new (self->db_data);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+}
+
+static void
+otpclient_application_kdf_settings (GSimpleAction *simple,
+                                     GVariant      *parameter,
+                                     gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    if (self->db_data == NULL)
+        return;
+
+    KdfDialog *dlg = kdf_dialog_new (self->db_data);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+}
+
+static void
+populate_window_from_db (OTPClientApplication *self)
+{
+    if (self->db_data == NULL || self->db_data->in_memory_json_data == NULL)
+        return;
+
+    GListStore *store = otpclient_window_get_otp_store (self->window);
+    if (store == NULL)
+        return;
+
+    g_list_store_remove_all (store);
+
+    json_t *json_db = self->db_data->in_memory_json_data;
+    gsize index;
+    json_t *obj;
+
+    json_array_foreach (json_db, index, obj)
+    {
+        const gchar *type = json_string_value (json_object_get (obj, "type"));
+        const gchar *label = json_string_value (json_object_get (obj, "label"));
+        const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+        const gchar *secret = json_string_value (json_object_get (obj, "secret"));
+        const gchar *algo = json_string_value (json_object_get (obj, "algo"));
+        guint32 digits = (guint32) json_integer_value (json_object_get (obj, "digits"));
+        guint32 period = 30;
+        guint64 counter = 0;
+
+        if (digits < 4) digits = 6;
+
+        if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0)
+            counter = (guint64) json_integer_value (json_object_get (obj, "counter"));
+        else
+            period = (guint32) json_integer_value (json_object_get (obj, "period"));
+
+        if (period < 1) period = 30;
+
+        OTPEntry *entry = otp_entry_new (label, issuer, NULL,
+                                          type ? type : "TOTP",
+                                          period, counter,
+                                          algo ? algo : "SHA1",
+                                          digits, secret);
+
+        otp_entry_update_otp (entry);
+
+        g_list_store_append (store, entry);
+        g_object_unref (entry);
+    }
+}
+
+static void
+otpclient_application_activate (GApplication *application)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION(application);
+    gtk_window_present (GTK_WINDOW(self->window));
+}
+
+static void
+on_password_received (const gchar *password,
+                      gpointer     user_data)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+
+    if (password == NULL || self->db_data == NULL)
+        return;
+
+    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (self->db_data->key, password, strlen (password) + 1);
+
+    GError *err = NULL;
+    load_db (self->db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to load database: %s", err->message);
+
+        /* Show password dialog again on wrong password */
+        if (err->code == BAD_TAG_ERRCODE)
+        {
+            gcry_free (self->db_data->key);
+            self->db_data->key = NULL;
+            g_clear_error (&err);
+
+            PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                       on_password_received,
+                                                       self);
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+            return;
+        }
+        g_clear_error (&err);
+        return;
+    }
+
+    /* Store password in secret service if enabled */
+    if (self->use_secret_service)
+    {
+        secret_password_store (OTPCLIENT_SCHEMA,
+                               SECRET_COLLECTION_DEFAULT,
+                               "OTPClient database password",
+                               self->db_data->key,
+                               NULL,
+                               on_password_stored,
+                               NULL,
+                               "string", self->db_data->db_path,
+                               NULL);
+    }
+
+    populate_window_from_db (self);
+    otpclient_window_start_otp_timer (self->window);
+}
+
+static void
+on_secret_lookup_done (GObject      *source,
+                       GAsyncResult *result,
+                       gpointer      user_data)
+{
+    (void) source;
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+
+    GError *err = NULL;
+    gchar *password = secret_password_lookup_finish (result, &err);
+
+    if (password != NULL)
+    {
+        on_password_received (password, self);
+        secret_password_free (password);
+    }
+    else
+    {
+        /* No stored password — show the password dialog */
+        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                   on_password_received,
+                                                   self);
+        adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+    }
+
+    g_clear_error (&err);
+}
+
+static void
+init_database (OTPClientApplication *self)
+{
+    gint32 memlock_value = 0;
+    gint32 memlock_status = set_memlock_value (&memlock_value);
+
+    if (memlock_status == MEMLOCK_ERR)
+    {
+        g_warning ("Could not retrieve memlock value");
+        memlock_value = DEFAULT_MEMLOCK_VALUE;
+    }
+
+    gchar *init_err = init_libs (memlock_value);
+    if (init_err != NULL)
+    {
+        g_warning ("Failed to initialize crypto libraries: %s", init_err);
+        g_free (init_err);
+        return;
+    }
+
+    gchar *db_path = gui_misc_get_db_path_from_cfg ();
+    if (db_path == NULL)
+    {
+        g_info ("No database path configured yet");
+        return;
+    }
+
+    self->db_data = g_new0 (DatabaseData, 1);
+    self->db_data->db_path = db_path;
+    self->db_data->max_file_size_from_memlock = memlock_value;
+
+    /* Extract a display name from the file path */
+    g_autofree gchar *basename = g_path_get_basename (db_path);
+    otpclient_window_add_database (self->window, basename, db_path);
+
+    if (self->use_secret_service)
+    {
+        secret_password_lookup (OTPCLIENT_SCHEMA, NULL,
+                                on_secret_lookup_done, self,
+                                "string", db_path,
+                                NULL);
+    }
+    else
+    {
+        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                   on_password_received,
+                                                   self);
+        adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+    }
+}
+
+static void
+otpclient_application_startup (GApplication *application)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION(application);
+
+    g_action_map_add_action_entries (G_ACTION_MAP(self),
+                                     otpclient_application_entries,
+                                     G_N_ELEMENTS(otpclient_application_entries),
+                                     self);
+
+    set_accel_for_action (self, "app.about", "<Control>b");
+    set_accel_for_action (self, "app.lock", "<Control>l");
+    set_accel_for_action (self, "app.shortcuts", "<Control>question");
+
+    /* Load settings from GSettings if schema is available */
+    self->app_locked = FALSE;
+    self->is_reorder_active = FALSE;
+
+    GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
+    g_autoptr (GSettingsSchema) schema = NULL;
+    if (schema_source != NULL)
+        schema = g_settings_schema_source_lookup (schema_source,
+                    "com.github.paolostivanin.OTPClient", TRUE);
+
+    if (schema != NULL) {
+        self->settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+        self->show_next_otp = g_settings_get_boolean (self->settings, "show-next-otp");
+        self->disable_notifications = !g_settings_get_boolean (self->settings, "notification-enabled");
+        self->auto_lock = g_settings_get_boolean (self->settings, "auto-lock");
+        self->inactivity_timeout = (gint)g_settings_get_uint (self->settings, "auto-lock-timeout");
+        self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
+        self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
+        self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
+        self->show_validity_seconds = g_settings_get_boolean (self->settings, "show-validity-seconds");
+        self->validity_color = g_settings_get_string (self->settings, "validity-color");
+        self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
+        self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+    } else {
+        self->settings = NULL;
+        self->show_next_otp = FALSE;
+        self->disable_notifications = FALSE;
+        self->auto_lock = FALSE;
+        self->inactivity_timeout = 0;
+        self->use_dark_theme = FALSE;
+        self->use_secret_service = TRUE;
+        self->search_provider_enabled = TRUE;
+        self->show_validity_seconds = FALSE;
+        self->validity_color = g_strdup ("green");
+        self->validity_warning_color = g_strdup ("orange");
+        self->minimize_to_tray = FALSE;
+    }
+
+    /* Apply dark theme preference */
+    if (self->use_dark_theme)
+        adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
+                                            ADW_COLOR_SCHEME_FORCE_DARK);
+
+    G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
+
+    gtk_window_set_default_icon_name (APPLICATION_ID);
+    self->window = OTPCLIENT_WINDOW(otpclient_window_new (self));
+
+    lock_app_init_dbus_watchers (self);
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    otpclient_tray_init (self);
 #endif
 
-static void
-set_open_db_action (GtkWidget *btn,
-                    gpointer   user_data)
-{
-    CAST_USER_DATA (AppData, app_data, user_data);
-    app_data->open_db_file_action =
-        g_strcmp0 (gtk_widget_get_name (btn), "diag_rc_restoredb_btn") == 0
-        ? GTK_FILE_CHOOSER_ACTION_OPEN
-        : GTK_FILE_CHOOSER_ACTION_SAVE;
-    gtk_dialog_response (GTK_DIALOG (app_data->diag_rcdb), GTK_RESPONSE_OK);
+    init_database (self);
 }
 
 static void
-init_app_defaults (AppData *app_data)
+otpclient_application_dispose (GObject *object)
 {
-    app_data->app_locked             = FALSE;
-    app_data->show_next_otp          = FALSE;
-    app_data->disable_notifications  = FALSE;
-    app_data->show_validity_seconds  = FALSE;
-    gdk_rgba_parse (&app_data->validity_color,         "#33A659");
-    gdk_rgba_parse (&app_data->validity_warning_color, "#D95940");
-    app_data->auto_lock              = FALSE;
-    app_data->inactivity_timeout     = 0;
-    app_data->use_dark_theme         = FALSE;
-    app_data->use_secret_service     = TRUE;
-    app_data->is_reorder_active      = FALSE;
-    app_data->use_tray               = FALSE;
-    app_data->search_provider_enabled = TRUE;
-    app_data->open_db_file_action    = GTK_FILE_CHOOSER_ACTION_SAVE;
-    app_data->window_width           = 0;
-    app_data->window_height          = 0;
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (object);
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    otpclient_tray_cleanup (self);
+#endif
+
+    lock_app_cleanup (self);
+
+    g_clear_object (&self->settings);
+    g_clear_pointer (&self->validity_color, g_free);
+    g_clear_pointer (&self->validity_warning_color, g_free);
+
+    if (self->db_data != NULL)
+    {
+        if (self->db_data->in_memory_json_data != NULL)
+            json_decref (self->db_data->in_memory_json_data);
+        if (self->db_data->key != NULL)
+            gcry_free (self->db_data->key);
+        g_free (self->db_data->db_path);
+        g_slist_free_full (self->db_data->objects_hash, g_free);
+        g_free (self->db_data->last_hotp);
+        if (self->db_data->last_hotp_update != NULL)
+            g_date_time_unref (self->db_data->last_hotp_update);
+        g_free (self->db_data);
+        self->db_data = NULL;
+    }
+
+    G_OBJECT_CLASS (otpclient_application_parent_class)->dispose (object);
 }
 
 static void
-load_validity_colors (GKeyFile *kf,
-                      AppData  *app_data)
+otpclient_application_class_init (OTPClientApplicationClass *klass)
 {
-    if (kf == NULL || app_data == NULL) {
-        return;
-    }
+    GApplicationClass *application_class = G_APPLICATION_CLASS(klass);
+    GObjectClass *object_class = G_OBJECT_CLASS(klass);
 
-    gchar *validity_color = g_key_file_get_string (kf, "config", "validity_color", NULL);
-    if (validity_color != NULL) {
-        gdk_rgba_parse (&app_data->validity_color, validity_color);
-    }
-    g_free (validity_color);
-
-    gchar *warning_color = g_key_file_get_string (kf, "config", "validity_warning_color", NULL);
-    if (warning_color != NULL) {
-        gdk_rgba_parse (&app_data->validity_warning_color, warning_color);
-    }
-    g_free (warning_color);
+    application_class->activate = otpclient_application_activate;
+    application_class->startup = otpclient_application_startup;
+    object_class->dispose = otpclient_application_dispose;
 }
 
 static void
-init_db_defaults (AppData *app_data)
+otpclient_application_init (OTPClientApplication *self)
 {
-    app_data->db_data->key_stored                = FALSE;
-    app_data->db_data->max_file_size_from_memlock = 0;
-    app_data->db_data->objects_hash              = NULL;
-    app_data->db_data->data_to_add               = NULL;
+    self->db_data = NULL;
+    self->settings = NULL;
+    self->validity_color = NULL;
+    self->validity_warning_color = NULL;
 }
 
-static void
-cleanup_app_data (AppData *app_data)
+DatabaseData *
+otpclient_application_get_db_data (OTPClientApplication *self)
 {
-    if (app_data == NULL) {
-        return;
-    }
-
-    if (app_data->main_window != NULL) {
-        /* Destroying the window also triggers OtpclientWindow::dispose,
-         * which releases the three GtkBuilder instances. */
-        gtk_widget_destroy (app_data->main_window);
-    }
-
-    /* Builders are owned by the window; do NOT unref them here. */
-
-    if (app_data->db_data != NULL) {
-        g_clear_pointer (&app_data->db_data->db_path, g_free);
-        g_clear_pointer (&app_data->db_data->key, gcry_free);
-        g_clear_pointer (&app_data->db_data->last_hotp, g_free);
-        g_clear_pointer (&app_data->db_data->last_hotp_update, g_date_time_unref);
-        g_free (app_data->db_data);
-    }
-
-    g_free (app_data);
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), NULL);
+    return self->db_data;
 }
 
-static void
-otpclient_application_shutdown (GApplication *app)
+void
+otpclient_application_set_db_data (OTPClientApplication *self,
+                                    DatabaseData         *db_data)
 {
-    OtpclientApplication *self = OTPCLIENT_APPLICATION (app);
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
 
-    if (self->app_data != NULL) {
-        destroy_cb (NULL, self->app_data);
-        /* destroy_cb frees app_data; clear the pointer so finalize
-         * does not attempt to free it again via cleanup_app_data. */
-        self->app_data = NULL;
+    if (self->db_data != NULL)
+    {
+        if (self->db_data->in_memory_json_data != NULL)
+            json_decref (self->db_data->in_memory_json_data);
+        if (self->db_data->key != NULL)
+            gcry_free (self->db_data->key);
+        g_free (self->db_data->db_path);
+        g_slist_free_full (self->db_data->objects_hash, g_free);
+        g_free (self->db_data->last_hotp);
+        if (self->db_data->last_hotp_update != NULL)
+            g_date_time_unref (self->db_data->last_hotp_update);
+        g_free (self->db_data);
     }
 
-    G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (app);
+    self->db_data = db_data;
+}
+
+gboolean otpclient_application_get_show_next_otp (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->show_next_otp;
+}
+
+void otpclient_application_set_show_next_otp (OTPClientApplication *self, gboolean show)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->show_next_otp = show;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "show-next-otp", show);
+}
+
+gboolean otpclient_application_get_disable_notifications (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->disable_notifications;
+}
+
+void otpclient_application_set_disable_notifications (OTPClientApplication *self, gboolean disable)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->disable_notifications = disable;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "notification-enabled", !disable);
+}
+
+gboolean otpclient_application_get_auto_lock (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->auto_lock;
+}
+
+void otpclient_application_set_auto_lock (OTPClientApplication *self, gboolean auto_lock)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->auto_lock = auto_lock;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "auto-lock", auto_lock);
+}
+
+gint otpclient_application_get_inactivity_timeout (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), 0);
+    return self->inactivity_timeout;
+}
+
+void otpclient_application_set_inactivity_timeout (OTPClientApplication *self, gint timeout)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->inactivity_timeout = timeout;
+    if (self->settings != NULL)
+        g_settings_set_uint (self->settings, "auto-lock-timeout", (guint)timeout);
+}
+
+gboolean otpclient_application_get_app_locked (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->app_locked;
+}
+
+void otpclient_application_set_app_locked (OTPClientApplication *self, gboolean locked)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->app_locked = locked;
+}
+
+gboolean otpclient_application_get_use_dark_theme (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->use_dark_theme;
+}
+
+void otpclient_application_set_use_dark_theme (OTPClientApplication *self, gboolean use_dark)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->use_dark_theme = use_dark;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "dark-theme", use_dark);
+}
+
+gboolean otpclient_application_get_use_secret_service (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->use_secret_service;
+}
+
+void otpclient_application_set_use_secret_service (OTPClientApplication *self, gboolean use_ss)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->use_secret_service = use_ss;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "secret-service", use_ss);
+}
+
+gboolean otpclient_application_get_is_reorder_active (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->is_reorder_active;
+}
+
+void otpclient_application_set_is_reorder_active (OTPClientApplication *self, gboolean active)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->is_reorder_active = active;
+}
+
+gboolean otpclient_application_get_search_provider_enabled (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), TRUE);
+    return self->search_provider_enabled;
+}
+
+void otpclient_application_set_search_provider_enabled (OTPClientApplication *self, gboolean enabled)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->search_provider_enabled = enabled;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "search-provider-enabled", enabled);
+}
+
+gboolean otpclient_application_get_show_validity_seconds (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->show_validity_seconds;
+}
+
+void otpclient_application_set_show_validity_seconds (OTPClientApplication *self, gboolean show)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->show_validity_seconds = show;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "show-validity-seconds", show);
+}
+
+const gchar *otpclient_application_get_validity_color (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), "green");
+    return self->validity_color;
+}
+
+void otpclient_application_set_validity_color (OTPClientApplication *self, const gchar *color)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_free (self->validity_color);
+    self->validity_color = g_strdup (color);
+    if (self->settings != NULL)
+        g_settings_set_string (self->settings, "validity-color", color);
+}
+
+const gchar *otpclient_application_get_validity_warning_color (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), "orange");
+    return self->validity_warning_color;
+}
+
+void otpclient_application_set_validity_warning_color (OTPClientApplication *self, const gchar *color)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_free (self->validity_warning_color);
+    self->validity_warning_color = g_strdup (color);
+    if (self->settings != NULL)
+        g_settings_set_string (self->settings, "validity-warning-color", color);
+}
+
+gboolean otpclient_application_get_minimize_to_tray (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->minimize_to_tray;
+}
+
+void otpclient_application_set_minimize_to_tray (OTPClientApplication *self, gboolean minimize)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->minimize_to_tray = minimize;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "minimize-to-tray", minimize);
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    if (minimize)
+        otpclient_tray_enable (self);
+    else
+        otpclient_tray_disable (self);
+#endif
 }

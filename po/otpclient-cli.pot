@@ -1,14 +1,14 @@
 # SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
+# This file is distributed under the same license as the OTPClient package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: OTPClient 4.99.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-03-12 14:55+0100\n"
+"POT-Creation-Date: 2026-03-16 10:16+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,68 +17,77 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/cli/exec-action.c:52
+#: src/cli/exec-action.c:59
+#, c-format
+msgid ""
+"Your system's secure memory limit (memlock: %d bytes) is not enough to "
+"securely load the database into memory.\n"
+"You need to increase your system's memlock limit by following the "
+"instructions on our secure memory wiki page: https://github.com/"
+"paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\n"
+"This requires administrator privileges and is a system-wide setting that "
+"OTPClient cannot change automatically."
+msgstr ""
+
+#: src/cli/exec-action.c:99
 msgid "Type the DB decryption password: "
 msgstr ""
 
-#: src/cli/exec-action.c:63
+#: src/cli/exec-action.c:117
+#, c-format
+msgid "Error while creating new database: %s\n"
+msgstr ""
+
+#: src/cli/exec-action.c:127
 msgid "Error while loading the database: "
 msgstr ""
 
-#: src/cli/exec-action.c:84
+#: src/cli/exec-action.c:148
 #, c-format
 msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#: src/cli/exec-action.c:88
+#: src/cli/exec-action.c:152
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: src/cli/exec-action.c:134
+#: src/cli/exec-action.c:200
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: src/cli/exec-action.c:142 src/cli/exec-action.c:160
-#: src/cli/exec-action.c:173 src/cli/exec-action.c:186
+#: src/cli/exec-action.c:213 src/cli/exec-action.c:225
+#: src/cli/exec-action.c:237
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: src/cli/exec-action.c:198
+#: src/cli/exec-action.c:248
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: src/cli/exec-action.c:202
+#: src/cli/exec-action.c:252
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: src/cli/exec-action.c:244
+#: src/cli/exec-action.c:294
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: src/cli/exec-action.c:247
+#: src/cli/exec-action.c:297
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: src/cli/exec-action.c:255
+#: src/cli/exec-action.c:305
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: src/cli/exec-action.c:278
-msgid "Couldn't get termios info"
-msgstr ""
-
-#: src/cli/exec-action.c:285
-msgid "Couldn't turn echoing off"
-msgstr ""
-
-#: src/cli/exec-action.c:290
-msgid "Couldn't read password from stdin"
+#: src/cli/exec-action.c:367
+msgid "Empty password not allowed"
 msgstr ""
 
 #: src/cli/get-data.c:57
@@ -87,13 +96,11 @@ msgid ""
 "database."
 msgstr ""
 
-#. Translators: please do not translate 'account'
 #: src/cli/get-data.c:60
 #, c-format
 msgid "Given account: %s"
 msgstr ""
 
-#. Translators: please do not translate 'issuer'
 #: src/cli/get-data.c:66
 #, c-format
 msgid "Given issuer: %s"
@@ -107,4 +114,11 @@ msgstr ""
 #: src/cli/get-data.c:130
 #, c-format
 msgid "Current HOTP: %s\n"
+msgstr ""
+
+#: src/cli/main.c:153
+msgid ""
+"Couldn't get the memlock value, therefore secure memory cannot be allocated. "
+"Please have a look at the following page before re-running OTPClient:https://"
+"github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"
 msgstr ""

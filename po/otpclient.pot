@@ -1,14 +1,14 @@
 # SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
+# This file is distributed under the same license as the OTPClient package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: OTPClient 4.99.1\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-03-12 14:59+0100\n"
+"POT-Creation-Date: 2026-03-16 10:22+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,415 +17,378 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/gui/ui/otpclient.ui:8
-msgid "Change database"
+#: src/gui/dialogs/db-info-dialog.c:37
+msgid "Database Info"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:22 src/gui/ui/otpclient.ui:140
-#: src/gui/ui/otpclient.ui:449 src/gui/ui/otpclient.ui:692
-#: src/gui/ui/otpclient.ui:753 src/gui/ui/otpclient.ui:811
-#: src/gui/ui/otpclient.ui:920 src/gui/ui/otpclient.ui:1213
-#: src/gui/ui/otpclient.ui:1521 src/gui/ui/otpclient.ui:1623
-#: src/gui/ui/otpclient.ui:1795
-msgid "Cancel"
+#: src/gui/dialogs/db-info-dialog.c:58
+msgid "Path"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:35 src/gui/ui/otpclient.ui:153
-#: src/gui/ui/otpclient.ui:462 src/gui/ui/otpclient.ui:933
-#: src/gui/ui/otpclient.ui:1226 src/gui/ui/otpclient.ui:1534
-#: src/gui/ui/otpclient.ui:1636 src/gui/ui/otpclient.ui:1742
-#: src/gui/ui/otpclient.ui:1808 src/gui/ui/otpclient.ui:2323
-msgid "OK"
+#: src/gui/dialogs/db-info-dialog.c:59
+msgid "Unknown"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:63
-msgid ""
-"Use the rightmost icon on the second entry to select a different OTPClient "
-"database."
+#: src/gui/dialogs/db-info-dialog.c:64
+msgid "Database Version"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:79 src/gui/ui/otpclient.ui:95
-#: src/gui/ui/otpclient.ui:197 src/gui/ui/otpclient.ui:215
-#: src/gui/ui/otpclient.ui:233 src/gui/ui/otpclient.ui:500
-#: src/gui/ui/otpclient.ui:1578 src/gui/ui/otpclient.ui:1680
-#: src/gui/ui/otpclient.ui:1698 src/gui/ui/otpclient.ui:2264
-msgid "Max 255 chars"
+#: src/gui/dialogs/db-info-dialog.c:72
+msgid "Number of Tokens"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:82 src/gui/ui/otpclient.ui:201
-#: src/gui/ui/otpclient.ui:219 src/gui/ui/otpclient.ui:237
-#: src/gui/ui/otpclient.ui:504 src/gui/ui/otpclient.ui:1684
-#: src/gui/ui/otpclient.ui:1702 src/gui/ui/otpclient.ui:2268
-msgid "Show password"
+#: src/gui/dialogs/db-info-dialog.c:76
+msgid "KDF Parameters (Argon2id)"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:99 src/gui/ui/otpclient.ui:1582
-msgid "Open database file"
+#: src/gui/dialogs/db-info-dialog.c:80 src/gui/dialogs/kdf-dialog.c:106
+#: src/gui/dialogs/kdf-dialog.c:127
+msgid "Iterations"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:100
-msgid "Absolute path of the existing database..."
+#: src/gui/dialogs/db-info-dialog.c:84 src/gui/dialogs/kdf-dialog.c:111
+msgid "Memory Cost"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:125
-msgid "Change password"
+#: src/gui/dialogs/db-info-dialog.c:88 src/gui/dialogs/kdf-dialog.c:116
+#: src/gui/dialogs/kdf-dialog.c:137
+msgid "Parallelism"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:181
-msgid ""
-"Please type the current password, the new one, and again the new one to "
-"verify its correctness.\n"
-"                  Please note that <b>there is no way to recover a forgotten "
-"password.</b>"
+#: src/gui/dialogs/edit-token-dialog.c:92
+msgid "Edit Token"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:202
-msgid "Type current password..."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:220
-msgid "Type new password..."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:238
-msgid "Retype new password..."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:264
-msgid "Database info"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:279
-msgid "Close"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:309 src/gui/ui/otpclient.ui:796
-msgid "Database location"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:320
-msgid "Config file location"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:331
-msgid "Entries in the database"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:342
-msgid "Encryption algo"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:353
-msgid "KDF iterations"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:398
-msgid "AES256-GCM"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:409
-msgid "100'000"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:432 src/gui/ui/otpclient.ui:1608
-#: src/gui/ui/otpclient.ui:2192
-msgid "Password"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:505 src/gui/ui/otpclient.ui:1685
-#: src/gui/ui/otpclient.ui:2269
-msgid "Type password..."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:536
-msgid "No"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:549
-msgid "Yes"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:573
-msgid "Are you sure you want to <b>permanently delete</b> the selected item?"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:606 src/gui/ui/otpclient.ui:2207
-msgid "Quit"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:619
-msgid "Select another DB"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:632
-msgid "Create new DB"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:675 src/gui/ui/otpclient.ui:737
-msgid "Scan using webcam"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:714
-msgid ""
-"Select the file with the QR code and copy it (CTRL-C).\n"
-"\n"
-"              If you are using <b>KDE</b>, then you must copy the file "
-"<b>before</b> selecting this option, otherwise the content won't be parsed.\n"
-"\n"
-"              This dialog will close automatically as soon as a valid qrcode "
-"has been found or after 30 seconds if nothing has been detected."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:775
-msgid ""
-"Please place the qrcode <b>in front of the webcam</b>.\n"
-"This dialog will automatically close as soon as a valid qrcode\n"
-"has been found or after 30 seconds if nothing has been detected."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:841
-msgid ""
-"This seems to be the first time you run OTPClient on this device.\n"
-"                  Please select whether you want to restore an existing "
-"database or create a new one."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:858
-msgid "Do NOT use to import third party databases (e.g. andOTP)"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:863
-msgid "Restore existing <b>OTPClient</b> database"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:876
-msgid "Create new database"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:905
-msgid "Edit data"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:956
-msgid ""
-"Please note that:\n"
-"- \"account\" is <b>mandatory</b>\n"
-"- \"issuer\", while optional, is <b>highly recommended</b>\n"
-"- when changing the \"secret\", be aware that <b>only the secret</b> itself "
-"can be changed,\n"
-"but not the number of digits and/or the period/counter."
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1000
-msgid "Check if you want to edit the \"Account\""
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1030 src/gui/ui/otpclient.ui:1316
-#: src/gui/ui/otpclient.ui:1886
-msgid "Account"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1064
-msgid "Check if you want to edit the \"Issuer\""
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1094 src/gui/ui/otpclient.ui:1329
-#: src/gui/ui/otpclient.ui:1330 src/gui/ui/otpclient.ui:1887
-msgid "Issuer"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1128
-msgid "Check if you want to edit the \"Secret\""
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1160 src/gui/ui/otpclient.ui:1346
-msgid "Secret"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1197
-msgid "Add Token"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1262
-msgid "TOTP"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1263
-msgid "HOTP"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1278
-msgid "SHA1"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1279
-msgid "SHA256"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1280
-msgid "SHA512"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1291
-msgid "This is a Steam code"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1315
+#: src/gui/dialogs/edit-token-dialog.c:121
+#: src/gui/dialogs/manual-add-dialog.c:190
 msgid "Label"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1345
-msgid "Must be an uppercase base32 string. It may contain spaces. "
+#: src/gui/dialogs/edit-token-dialog.c:129
+#: src/gui/dialogs/manual-add-dialog.c:195 src/gui/otpclient-window.c:427
+msgid "Issuer"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1371
+#: src/gui/dialogs/edit-token-dialog.c:139
+msgid "Token Info"
+msgstr ""
+
+#: src/gui/dialogs/edit-token-dialog.c:146
+#: src/gui/dialogs/manual-add-dialog.c:213
+msgid "Type"
+msgstr ""
+
+#: src/gui/dialogs/edit-token-dialog.c:151
+#: src/gui/dialogs/manual-add-dialog.c:222
+msgid "Algorithm"
+msgstr ""
+
+#: src/gui/dialogs/edit-token-dialog.c:157
+#: src/gui/dialogs/manual-add-dialog.c:229
 msgid "Digits"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1383
-msgid "Between 4 and 10"
+#: src/gui/dialogs/edit-token-dialog.c:170
+msgid "Save"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1386
-msgid "6"
+#: src/gui/dialogs/export-dialog.c:115
+msgid "Export tokens"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1412
-msgid "Period"
+#: src/gui/dialogs/export-dialog.c:139
+msgid "Export Tokens"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1424
-msgid "In seconds between 10 and 120"
+#: src/gui/dialogs/export-dialog.c:176 src/gui/dialogs/import-dialog.c:201
+msgid "Format"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1427
-msgid "30"
+#: src/gui/dialogs/export-dialog.c:183
+msgid "Encryption Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1453
+#: src/gui/dialogs/export-dialog.c:190
+msgid "Exporting unencrypted reveals all secrets!"
+msgstr ""
+
+#: src/gui/dialogs/export-dialog.c:201
+msgid "Export"
+msgstr ""
+
+#: src/gui/dialogs/import-dialog.c:131
+msgid "Select file to import"
+msgstr ""
+
+#: src/gui/dialogs/import-dialog.c:167
+msgid "Import Tokens"
+msgstr ""
+
+#: src/gui/dialogs/import-dialog.c:214
+msgid "Select File & Import"
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:71
+msgid "KDF Parameters"
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:92
+msgid ""
+"Changing KDF parameters re-encrypts the database. Use higher values for "
+"stronger security (slower unlock)."
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:99
+msgid "Current Values"
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:124
+msgid "New Values"
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:132
+msgid "Memory Cost (KiB)"
+msgstr ""
+
+#: src/gui/dialogs/kdf-dialog.c:144
+msgid "Apply"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:101
+msgid "This token already exists"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:162
+#: src/gui/dialogs/manual-add-dialog.c:256
+msgid "Add Token"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:187
+msgid "Account Details"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:199
+msgid "Secret (Base32)"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:207
+msgid "Token Settings"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:235
+msgid "Period (seconds)"
+msgstr ""
+
+#: src/gui/dialogs/manual-add-dialog.c:242
 msgid "Counter"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1465
-msgid "Value decided by the server (HOTP only)"
+#: src/gui/dialogs/password-dialog.c:67
+msgid "Passwords do not match"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1507
-msgid "New empty database"
+#: src/gui/dialogs/password-dialog.c:158
+msgid "Unlock Database"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1562
-msgid ""
-"This will create and load a new empty database.\n"
-"                  The current database will <b>neither</b> be overwritten "
-"<b>nor</b> deleted."
+#: src/gui/dialogs/password-dialog.c:160
+msgid "Enter the password to decrypt your database"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1583
-msgid "Absolute path of the new database..."
+#: src/gui/dialogs/password-dialog.c:163
+msgid "New Database"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1664
-msgid ""
-"Choose an encryption password for the database.\n"
-"                  Please note that <b>there is no way to recover a forgotten "
-"password.</b>"
+#: src/gui/dialogs/password-dialog.c:165
+msgid "Choose a password for your new database"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1703
-msgid "Retype password..."
+#: src/gui/dialogs/password-dialog.c:168 src/gui/dialogs/password-dialog.c:218
+msgid "Change Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1780 src/gui/ui/otpclient.ui:2154
-msgid "Settings"
+#: src/gui/dialogs/password-dialog.c:170
+msgid "Enter your current and new password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1838
-msgid "Show next OTP"
+#: src/gui/dialogs/password-dialog.c:181
+msgid "Current Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1849
-msgid "Disable notifications"
+#: src/gui/dialogs/password-dialog.c:188
+msgid "Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1860
-msgid "Search by"
+#: src/gui/dialogs/password-dialog.c:190
+msgid "New Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1911
-msgid "Auto lock on system lock"
+#: src/gui/dialogs/password-dialog.c:197
+msgid "Confirm Password"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:1934
-msgid "Auto lock when inactive for"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1948
-msgid "Never"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1949
-msgid "30s"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1950
-msgid "1m"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1951
-msgid "5m"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1952
-msgid "15m"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1953
-msgid "30m"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1965
-msgid "Dark theme enabled"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:1988
-msgid "Enable secret service"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:2088
-msgid "OTPClient"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:2100
-msgid "Add token"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:2121
-msgid "Toggle delete rows"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:2135
-msgid "Enable/disable rows reordering"
-msgstr ""
-
-#: src/gui/ui/otpclient.ui:2220
+#: src/gui/dialogs/password-dialog.c:217
 msgid "Unlock"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:2248
-msgid ""
-"The application is <b>locked</b>.\n"
-"                  Please type your password to unlock it"
+#: src/gui/dialogs/password-dialog.c:218
+msgid "Create"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:2294
-msgid "Warning: memlock value too low"
+#: src/gui/dialogs/qr-display-dialog.c:73
+msgid "QR Code"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:2310
-msgid "Exit"
+#: src/gui/dialogs/qr-display-dialog.c:100
+msgid "Failed to generate QR code"
 msgstr ""
 
-#: src/gui/ui/otpclient.ui:2363
-msgid "Do not show this warning again"
+#: src/gui/dialogs/settings-dialog.c:132
+msgid "Display"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:135
+msgid "Show Next OTP"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:144
+msgid "Show Validity Seconds"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:152
+msgid "Dark Theme"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:161
+msgid "Notifications"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:165
+msgid "Disable Notifications"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:174
+msgid "Security"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:177
+msgid "Auto-Lock"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:191
+msgid "Inactivity Timeout"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:201
+msgid "Use Secret Service"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:210
+msgid "Integration"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:214
+msgid "Search Provider"
+msgstr ""
+
+#: src/gui/dialogs/settings-dialog.c:223
+msgid "Settings"
+msgstr ""
+
+#: src/gui/otpclient-window.c:322
+msgid "Validity"
+msgstr ""
+
+#: src/gui/otpclient-window.c:426
+msgid "Account"
+msgstr ""
+
+#: src/gui/otpclient-window.c:428
+msgid "OTP Value"
+msgstr ""
+
+#: src/gui/otpclient-window.c:587
+#, c-format
+msgid "OTP for %s copied to clipboard"
+msgstr ""
+
+#: src/gui/otpclient-window.c:935
+msgid "Select QR Code Image"
+msgstr ""
+
+#: src/gui/otpclient-window.c:938
+msgid "Image Files"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1141
+msgid "Delete Token?"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1142
+msgid "This action cannot be undone."
+msgstr ""
+
+#: src/gui/otpclient-window.c:1145 src/gui/otpclient-window.c:1364
+msgid "Cancel"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1146
+msgid "Delete"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1342 src/gui/otpclient-window.c:1363
+msgid "Move Token"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1343
+msgid "No other databases available. Open or create another database first."
+msgstr ""
+
+#: src/gui/otpclient-window.c:1344
+msgid "OK"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1359
+#, c-format
+msgid "Select the database to move \"%s\" to:"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1360
+msgid "token"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1550
+msgid "Create New Database"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1659
+msgid "Open Database"
+msgstr ""
+
+#: src/gui/otpclient-window.c:1662
+msgid "OTPClient Database (*.enc)"
+msgstr ""
+
+#: src/gui/otp-entry.c:391
+msgid "Error"
+msgstr ""
+
+#: src/gui/webcam-scanner.c:13
+msgid "Failed to create zbar processor"
+msgstr ""
+
+#: src/gui/webcam-scanner.c:19
+msgid "Failed to initialize zbar video device"
+msgstr ""
+
+#: src/gui/webcam-scanner.c:31
+msgid "Webcam scanning failed or timed out"
+msgstr ""
+
+#: src/gui/webcam-scanner.c:39
+msgid "No QR code detected"
+msgstr ""
+
+#: src/gui/webcam-scanner.c:62
+msgid "No QR code found in webcam scan"
 msgstr ""

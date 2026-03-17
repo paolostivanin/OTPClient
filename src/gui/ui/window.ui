@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <template class="OTPClientWindow" parent="AdwApplicationWindow">
+    <property name="default-width">400</property>
+    <property name="default-height">600</property>
+    <property name="content">
+      <object class="AdwToolbarView">
+        <property name="top-bar-style">ADW_TOOLBAR_RAISED</property>
+        <child type="top">
+          <object class="AdwHeaderBar">
+            <property name="show-start-title-buttons">False</property>
+            <property name="show-end-title-buttons">True</property>
+            <child type="title">
+              <object class="AdwWindowTitle" id="title">
+                <property name="title">OTPClient</property>
+              </object>
+            </child>
+            <child type="start">
+              <object class="GtkButton" id="back_button">
+                <property name="icon-name">go-previous-symbolic</property>
+                <property name="visible">False</property>
+                <property name="tooltip-text" translatable="yes">Back</property>
+              </object>
+            </child>
+            <child type="start">
+              <object class="GtkBox" id="titlebar_start_buttons_box">
+                <child>
+                  <object class="GtkMenuButton" id="add_button">
+                    <property name="icon-name">list-add-symbolic</property>
+                    <property name="menu-model">add_menu</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkToggleButton" id="reorder_button">
+                    <property name="icon-name">view-sort-ascending-symbolic</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="linked"/>
+                </style>
+              </object>
+            </child>
+            <child type="end">
+              <object class="GtkBox" id="titlebar_end_buttons_box">
+                <child>
+                  <object class="GtkButton" id="lock_button">
+                    <property name="icon-name">system-lock-screen-symbolic</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkMenuButton" id="settings_button">
+                    <property name="icon-name">open-menu-symbolic</property>
+                    <property name="menu-model">settings_menu</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="linked"/>
+                </style>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <child>
+              <object class="GtkSearchBar" id="search_bar">
+                <child>
+                  <object class="GtkSearchEntry" id="search_entry">
+                    <property name="placeholder-text" translatable="yes">Find token</property>
+                    <signal name="search-changed" handler="search_text_changed"/>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="AdwNavigationSplitView" id="split_view">
+                <property name="vexpand">True</property>
+                <property name="sidebar-width-fraction">0.3</property>
+                <property name="min-sidebar-width">180</property>
+                <property name="max-sidebar-width">320</property>
+                <child type="sidebar">
+                  <object class="AdwNavigationPage">
+                    <property name="vexpand">True</property>
+                    <property name="title" translatable="yes">Databases</property>
+                    <property name="child">
+                      <object class="GtkBox">
+                        <property name="orientation">vertical</property>
+                        <child>
+                          <object class="GtkScrolledWindow">
+                            <property name="hscrollbar-policy">never</property>
+                            <property name="vexpand">True</property>
+                            <child>
+                              <object class="GtkListBox" id="database_list">
+                                <property name="selection-mode">single</property>
+                                <style>
+                                  <class name="navigation-sidebar"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkBox">
+                            <property name="orientation">horizontal</property>
+                            <property name="homogeneous">True</property>
+                            <property name="margin-start">6</property>
+                            <property name="margin-end">6</property>
+                            <property name="margin-top">6</property>
+                            <property name="margin-bottom">6</property>
+                            <property name="spacing">6</property>
+                            <child>
+                              <object class="GtkButton" id="new_db_button">
+                                <property name="label" translatable="yes">New</property>
+                                <property name="icon-name">document-new-symbolic</property>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkButton" id="open_db_button">
+                                <property name="label" translatable="yes">Open</property>
+                                <property name="icon-name">document-open-symbolic</property>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+                <child type="content">
+                  <object class="AdwNavigationPage">
+                    <property name="vexpand">True</property>
+                    <property name="title" translatable="yes">Tokens</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="vexpand">True</property>
+                        <property name="hscrollbar-policy">never</property>
+                        <child>
+                          <object class="GtkColumnView" id="otp_list">
+                            <property name="vexpand">True</property>
+                          </object>
+                        </child>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </property>
+  </template>
+  <menu id="add_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Add Manually</attribute>
+        <attribute name="action">win.add-manual</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Scan QR from File</attribute>
+        <attribute name="action">win.add-qr-file</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Scan QR from Webcam</attribute>
+        <attribute name="action">win.add-qr-webcam</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Import</attribute>
+        <attribute name="action">win.import</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Export</attribute>
+        <attribute name="action">win.export</attribute>
+      </item>
+    </section>
+  </menu>
+  <menu id="settings_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Settings</attribute>
+        <attribute name="action">win.settings</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Change Password</attribute>
+        <attribute name="action">app.change-password</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Database Info</attribute>
+        <attribute name="action">app.db-info</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">KDF Parameters</attribute>
+        <attribute name="action">app.kdf-settings</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Keyboard Shortcuts</attribute>
+        <attribute name="action">app.shortcuts</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">About</attribute>
+        <attribute name="action">app.about</attribute>
+      </item>
+    </section>
+  </menu>
+  <menu id="token_context_menu">
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Edit</attribute>
+        <attribute name="action">win.edit-token</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Show QR Code</attribute>
+        <attribute name="action">win.show-qr</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Move to...</attribute>
+        <attribute name="action">win.move-token</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="label" translatable="yes">Delete</attribute>
+        <attribute name="action">win.delete-token</attribute>
+      </item>
+    </section>
+  </menu>
+</interface>

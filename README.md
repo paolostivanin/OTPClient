@@ -1,29 +1,21 @@
 # OTPClient
-<a href="https://circleci.com/gh/paolostivanin/OTPClient">
-  <img alt="CircleCI" src="https://circleci.com/gh/paolostivanin/OTPClient.svg?style=svg"/>
-</a>
-<a href="https://scan.coverity.com/projects/paolostivanin-otpclient">
-  <img alt="Coverity Scan Build Status"
-       src="https://scan.coverity.com/projects/12749/badge.svg"/>
-</a>
-
-
-Highly secure and easy to use GTK+ software for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
+Highly secure and easy to use GTK4/libadwaita application for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
 
 ## Requirements
 | Name                                                | Min Version |
 |-----------------------------------------------------|-------------|
-| GTK+                                                | 3.24        |
-| Glib                                                | 2.68.0      |
-| jansson                                             | 2.12        |
-| libgcrypt                                           | 1.10.1      |
+| GTK                                                 | 4.18.0      |
+| libadwaita                                          | 1.5.0       |
+| Glib                                                | 2.82.0      |
+| jansson                                             | 2.14        |
+| libgcrypt                                           | 1.11.0      |
 | libpng                                              | 1.6.30      |
 | [libcotp](https://github.com/paolostivanin/libcotp) | 4.0.0       |
 | zbar                                                | 0.20        |
-| protobuf-c                                          | 1.3.0       |
+| protobuf-c                                          | 1.4.0       |
 | uuid                                                | 2.34        |
 | libsecret                                           | 0.20        |
-| qrencode                                            | 4.0.2       |
+| qrencode                                            | 4.1.0       |
 
 :warning: Please note that the memlock value should be `>= 64 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
 See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
@@ -41,13 +33,8 @@ See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-M
 - import and export encrypted/plain [2FAS](https://github.com/twofas) backup
 - import of Google's migration QR codes
 - local database is encrypted using AES256-GCM
-  - key is derived using Argon2id with the following default parameters: 4 iterations, 128 MiB memory cost, 4 parallelism, 32 taglen. The first three parameters can be changed by the user.
+  - key is derived using PBKDF2 with SHA512 and 100k iterations
   - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
-- GNOME Shell search provider and KDE KRunner integration (requires secret service-enabled key storage)
-
-## Testing
-* Before each release, I run PVS Studio and Coverity in order to catch even more bugs.
-* With every commit to master, OTPClient is compiled in CircleCI against different distros
 
 ## Protobuf
 The protobuf files needed to decode Google's otpauth-migration qr codes have been generated with `protoc --c_out=src/ proto/google-migration.proto` 
@@ -64,17 +51,9 @@ git clone https://github.com/paolostivanin/OTPClient.git
 cd OTPClient
 mkdir build && cd build
 cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make -j$(nproc)
+make
 sudo make install
 ```
 
 ## License
 This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
-
-## IDE
-Developed using JetBrains CLion 
-<a href="https://www.jetbrains.com" style="display: inline-block; vertical-align: middle;">
-  <img alt="CLion logo"
-       src="https://resources.jetbrains.com/storage/products/company/brand/logos/CLion_icon.svg"
-       style="width: 25px; height: 25px; margin-left: 10px;" />
-</a>

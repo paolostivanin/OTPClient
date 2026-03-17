@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.16)
-project(OTPClient VERSION "4.4.1" LANGUAGES "C")
+cmake_minimum_required(VERSION 3.25)
+project(OTPClient VERSION "4.99.1" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -10,13 +10,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-option(BUILD_GUI "Build the GTK UI" ON)
-option(BUILD_CLI "Build the CLI" ON)
-option(BUILD_SEARCH_PROVIDER "Build the search provider integration (GNOME Shell / KDE KRunner)" ON)
-option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" OFF)
 option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
+option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" OFF)
+option(BUILD_GUI "Build the GUI" ON)
+option(BUILD_CLI "Build the CLI" ON)
+option(BUILD_SEARCH_PROVIDER "Build the D-Bus search provider" ON)
 
 set(COMMON_C_OPTIONS
         -Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
@@ -29,7 +27,6 @@ set(COMMON_C_OPTIONS
 
 set(COMMON_COMPILE_DEFINITIONS
         GETTEXT_PACKAGE=\"${GETTEXT_PACKAGE}\"
-        DESTINATION=\"${CMAKE_INSTALL_PREFIX}\"
 )
 
 set(COMMON_LINK_OPTIONS)
@@ -57,25 +54,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 endif()
 
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.10.1)
-pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=4.0.0)
-pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson>=2.12)
-pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0>=2.68.0)
-pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0>=2.68.0)
+pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.11.0)
+pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=3.1.0)
+pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson>=2.14)
+pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0>=2.82.0)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0>=2.82.0)
+pkg_check_modules(UUID REQUIRED IMPORTED_TARGET uuid>=2.34.0)
 pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1>=0.20.0)
 
-if(BUILD_GUI OR BUILD_SEARCH_PROVIDER)
-    pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0>=3.24.0)
-endif()
-pkg_check_modules(UUID REQUIRED IMPORTED_TARGET uuid>=2.34.0)
 if(BUILD_GUI)
+    pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.18.0)
+    pkg_check_modules(ADWAITA REQUIRED IMPORTED_TARGET libadwaita-1>=1.5.0)
     pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng>=1.6.30)
     pkg_check_modules(ZBAR REQUIRED IMPORTED_TARGET zbar>=0.20)
     pkg_check_modules(PROTOC REQUIRED IMPORTED_TARGET libprotobuf-c>=1.3.0)
-    pkg_check_modules(LIBQRENCODE REQUIRED IMPORTED_TARGET libqrencode>=4.0.2)
-endif()
-if(ENABLE_MINIMIZE_TO_TRAY)
-    pkg_check_modules(APPINDICATOR REQUIRED IMPORTED_TARGET ayatana-appindicator3-0.1)
+    pkg_check_modules(LIBQRENCODE REQUIRED IMPORTED_TARGET libqrencode>=4.1.0)
 endif()
 
 set(COMMON_LIBS
@@ -100,11 +93,9 @@ endfunction()
 if(BUILD_GUI)
     add_subdirectory(src/gui)
     otpclient_apply_target_settings(${PROJECT_NAME})
-    if(ENABLE_MINIMIZE_TO_TRAY)
-        target_link_libraries(${PROJECT_NAME} PkgConfig::APPINDICATOR)
-    endif()
     target_link_libraries(${PROJECT_NAME}
-            PkgConfig::GTK3
+            PkgConfig::GTK4
+            PkgConfig::ADWAITA
             PkgConfig::PNG
             PkgConfig::ZBAR
             PkgConfig::PROTOC
@@ -115,14 +106,10 @@ if(BUILD_GUI)
 
     install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-    install(FILES man/otpclient.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    install(FILES man/otpclient.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
     set(GUI_UI_FILES
-            src/gui/ui/otpclient.ui
-            src/gui/ui/add_popover.ui
-            src/gui/ui/settings_popover.ui
-            src/gui/ui/security_settings.ui
-            src/gui/ui/shortcuts.ui
+            src/gui/ui/window.ui
     )
     install(FILES ${GUI_UI_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/otpclient)
 
@@ -142,20 +129,24 @@ if(BUILD_CLI)
     set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
 
     install(TARGETS ${PROJECT_NAME}-cli DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES man/otpclient-cli.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    install(FILES man/otpclient-cli.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 endif()
 
 if(BUILD_SEARCH_PROVIDER)
     add_subdirectory(src/search-provider)
     otpclient_apply_target_settings(${PROJECT_NAME}-search-provider)
     target_link_libraries(${PROJECT_NAME}-search-provider
+            PkgConfig::GIO
+            PkgConfig::GLIB2
             ${COMMON_LIBS}
     )
-    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
+
     # GNOME Search Provider metadata
     install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION ${CMAKE_INSTALL_DATADIR}/gnome-shell/search-providers)
 
-    # D-Bus Service activation files (allows KRunner/GNOME to launch the binary on demand)
+    # D-Bus Service activation files
     install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.SearchProvider.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
     install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.KRunner.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 
@@ -164,3 +155,4 @@ if(BUILD_SEARCH_PROVIDER)
 endif()
 
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+install(FILES data/com.github.paolostivanin.OTPClient.gschema.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="AdwDialog" id="shortcuts_dialog">
+    <property name="title" translatable="yes">Keyboard Shortcuts</property>
+    <property name="content-width">360</property>
+    <property name="content-height">260</property>
+    <property name="child">
+      <object class="AdwToolbarView">
+        <child type="top">
+          <object class="AdwHeaderBar"/>
+        </child>
+        <property name="content">
+          <object class="AdwPreferencesPage">
+            <child>
+              <object class="AdwPreferencesGroup">
+                <property name="title" translatable="yes">General</property>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Quit</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;q</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Search</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;f</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Lock</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;l</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Keyboard Shortcuts</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;question</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </property>
+      </object>
+    </property>
+  </object>
+</interface>
