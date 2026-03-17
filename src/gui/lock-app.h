@@ -1,14 +1,18 @@
 #pragma once
 
-#include "data.h"
+#include <adwaita.h>
+#include "otpclient-types.h"
 
 G_BEGIN_DECLS
 
-void        lock_app            (GtkWidget  *w,
-                                 gpointer    user_data);
+void lock_app_init_dbus_watchers   (OTPClientApplication *app);
+void lock_app_cleanup              (OTPClientApplication *app);
 
-void        setup_dbus_listener (AppData    *app_data);
+void lock_app_lock                 (OTPClientApplication *app);
+void lock_app_unlock               (OTPClientApplication *app);
 
-gboolean    check_inactivity    (gpointer    user_data);
+void lock_app_reset_inactivity     (OTPClientApplication *app);
+
+guint lock_app_get_dbus_watcher_id (OTPClientApplication *app);
 
 G_END_DECLS

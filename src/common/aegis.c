@@ -314,13 +314,7 @@ export_aegis (const gchar   *export_path,
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);
-            g_free (key_nonce);
-            g_free (salt);
-            json_decref (slot_1);
-            json_decref (slots_arr);
-            json_decref (aegis_header_obj);
-            json_decref (root);
-            return g_strdup ("Error while deriving the Aegis encryption key.");
+            return NULL;
         }
 
         hd = open_cipher_and_set_data (derived_master_key, key_nonce, AEGIS_NONCE_SIZE);
@@ -328,11 +322,7 @@ export_aegis (const gchar   *export_path,
             gcry_free (derived_master_key);
             g_free (key_nonce);
             g_free (salt);
-            json_decref (slot_1);
-            json_decref (slots_arr);
-            json_decref (aegis_header_obj);
-            json_decref (root);
-            return g_strdup ("Error while opening the Aegis cipher handle.");
+            return NULL;
         }
 
         enc_master_key = gcry_malloc (AEGIS_KEY_SIZE);
@@ -343,11 +333,7 @@ export_aegis (const gchar   *export_path,
             g_free (key_nonce);
             g_free (salt);
             gcry_cipher_close (hd);
-            json_decref (slot_1);
-            json_decref (slots_arr);
-            json_decref (aegis_header_obj);
-            json_decref (root);
-            return g_strdup ("Error while encrypting the Aegis master key.");
+            return NULL;
         }
 
         key_tag = g_malloc0 (AEGIS_TAG_SIZE);
@@ -422,8 +408,7 @@ export_aegis (const gchar   *export_path,
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (info_obj, "algo", json_object_get (db_obj, "algo"));
-        const gchar *type_str = json_string_value (otp_type);
-        if (type_str != NULL && g_ascii_strcasecmp (type_str, "TOTP") == 0) {
+        if (g_ascii_strcasecmp (json_string_value (otp_type), "TOTP") == 0) {
             json_object_set (info_obj, "period", json_object_get (db_obj, "period"));
         } else {
             json_object_set (info_obj, "counter", json_object_get (db_obj, "counter"));
@@ -459,7 +444,7 @@ export_aegis (const gchar   *export_path,
             json_decref (aegis_db_obj);
             json_decref (aegis_header_obj);
             json_decref (root);
-            return g_strdup ("Error while encrypting the Aegis database.");
+            return NULL;
         }
         gcry_cipher_gettag (hd, db_tag, AEGIS_TAG_SIZE);
         json_t *db_params = json_object_get (aegis_header_obj, "params");
@@ -496,10 +481,13 @@ export_aegis (const gchar   *export_path,
             goto cleanup_and_exit;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
             g_free (jbuf);
             goto cleanup_and_exit;
         }
         g_free (jbuf);
+    } else {
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
     }
 
     cleanup_and_exit:
@@ -512,12 +500,7 @@ export_aegis (const gchar   *export_path,
     }
     g_object_unref (out_gfile);
 
-    if (err != NULL) {
-        gchar *msg = g_strdup (err->message);
-        g_clear_error (&err);
-        return msg;
-    }
-    return NULL;
+    return (err != NULL ? g_strdup (err->message) : NULL);
 }
 
 

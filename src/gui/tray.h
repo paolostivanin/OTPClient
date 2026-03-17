@@ -1,11 +1,16 @@
 #pragma once
 
-#include <gtk/gtk.h>
-#include "data.h"
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+
+#include "otpclient-application.h"
 
 G_BEGIN_DECLS
 
-void init_tray_icon            (AppData *app_data);
-void switch_tray_use           (AppData *app_data);
+void otpclient_tray_init    (OTPClientApplication *app);
+void otpclient_tray_enable  (OTPClientApplication *app);
+void otpclient_tray_disable (OTPClientApplication *app);
+void otpclient_tray_cleanup (OTPClientApplication *app);
 
 G_END_DECLS
+
+#endif

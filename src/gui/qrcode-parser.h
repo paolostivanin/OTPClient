@@ -4,7 +4,7 @@
 
 G_BEGIN_DECLS
 
-gchar *parse_qrcode (const gchar   *png_path,
-                     gchar        **otpauth_uri);
+gchar *qrcode_parse_image_file (const gchar  *filepath,
+                                 GError      **error);
 
 G_END_DECLS

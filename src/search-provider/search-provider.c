@@ -6,7 +6,6 @@
 #include <cotp.h>
 #include <time.h>
 
-/* Project-specific headers */
 #include "../common/common.h"
 #include "../common/db-common.h"
 #include "../common/file-size.h"
@@ -26,7 +25,6 @@ typedef struct otp_search_entry_t {
     gchar *otp_value;
 } OtpSearchEntry;
 
-/* Forward Declarations */
 static void otp_search_entry_free (OtpSearchEntry *entry);
 static GPtrArray *load_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
@@ -36,7 +34,6 @@ static gchar *get_db_path (void);
 static gboolean get_use_secret_service (void);
 static gboolean get_search_provider_enabled (void);
 
-/* --- Introspection XML --- */
 static const gchar *krunner_introspection_xml =
 "<node>"
 "  <interface name='org.kde.krunner1'>"
@@ -57,9 +54,10 @@ static const gchar *gnome_introspection_xml =
 "  </interface>"
 "</node>";
 
-/* --- Helpers Implementation --- */
 
-static gchar *get_db_path (void) {
+static gchar *
+get_db_path (void)
+{
     gchar *db_path = NULL;
     gchar *cfg_file_path = NULL;
     GKeyFile *kf = g_key_file_new ();
@@ -78,7 +76,10 @@ static gchar *get_db_path (void) {
     return db_path;
 }
 
-static gboolean get_use_secret_service (void) {
+
+static gboolean
+get_use_secret_service (void)
+{
     gboolean use_secret_service = TRUE;
     GKeyFile *kf = g_key_file_new ();
     gchar *cfg_file_path = NULL;
@@ -97,7 +98,10 @@ static gboolean get_use_secret_service (void) {
     return use_secret_service;
 }
 
-static gboolean get_search_provider_enabled (void) {
+
+static gboolean
+get_search_provider_enabled (void)
+{
     gboolean enabled = TRUE;
     gchar *cfg_file_path = NULL;
     GKeyFile *kf = g_key_file_new ();
@@ -110,7 +114,7 @@ static gboolean get_search_provider_enabled (void) {
         if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
             GError *err = NULL;
             enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", &err);
-            if (err) { enabled = TRUE; g_error_free(err); }
+            if (err) { enabled = TRUE; g_error_free (err); }
         }
     }
     g_key_file_free (kf);
@@ -118,21 +122,32 @@ static gboolean get_search_provider_enabled (void) {
     return enabled;
 }
 
-static void otp_search_entry_free (OtpSearchEntry *entry) {
+
+static void
+otp_search_entry_free (OtpSearchEntry *entry)
+{
     if (!entry) return;
-    g_free (entry->id); g_free (entry->label); g_free (entry->issuer); g_free (entry->otp_value);
+    g_free (entry->id);
+    g_free (entry->label);
+    g_free (entry->issuer);
+    g_free (entry->otp_value);
     g_free (entry);
 }
 
-static gchar *get_entry_otp_value (json_t *obj) {
+
+static gchar *
+get_entry_otp_value (json_t *obj)
+{
     const gchar *secret = json_string_value (json_object_get (obj, "secret"));
     const gchar *type = json_string_value (json_object_get (obj, "type"));
     if (!secret || !type) return NULL;
+
     cotp_error_t cotp_err;
     const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
     gint digits = (gint)json_integer_value (json_object_get (obj, "digits"));
     gint algo = get_algo_int_from_str (json_string_value (json_object_get (obj, "algo")));
     gchar *token = NULL;
+
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         gint period = (gint)json_integer_value (json_object_get (obj, "period"));
         glong current_ts = time (NULL);
@@ -145,38 +160,50 @@ static gchar *get_entry_otp_value (json_t *obj) {
         gint64 counter = json_integer_value (json_object_get (obj, "counter"));
         token = get_hotp (secret, counter, digits, algo, &cotp_err);
     }
+
     if (token == NULL) return NULL;
     gchar *result = g_strdup (token);
     g_free (token);
     return result;
 }
 
-static GPtrArray *load_entries (void) {
+
+static GPtrArray *
+load_entries (void)
+{
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify)otp_search_entry_free);
+
     gchar *db_path = get_db_path ();
     if (!db_path) return entries;
+
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->db_path = db_path;
     db_data->max_file_size_from_memlock = global_max_file_size;
+
     if (get_use_secret_service ()) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (!pwd) { g_free (db_data->db_path); g_free (db_data); return entries; }
         db_data->key = secure_strdup (pwd);
         secret_password_free (pwd);
-    } else { g_free (db_data->db_path); g_free (db_data); return entries; }
+    } else {
+        g_free (db_data->db_path);
+        g_free (db_data);
+        return entries;
+    }
+
     GError *err = NULL;
     load_db (db_data, &err);
     if (err || !db_data->in_memory_json_data) {
-        if (err) {
-            g_clear_error (&err);
-        }
+        if (err) g_clear_error (&err);
         gcry_free (db_data->key);
         g_slist_free_full (db_data->objects_hash, g_free);
         g_free (db_data->db_path);
         g_free (db_data);
         return entries;
     }
-    gsize index; json_t *obj;
+
+    gsize index;
+    json_t *obj;
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
         if (!label) continue;
@@ -188,45 +215,75 @@ static GPtrArray *load_entries (void) {
         entry->otp_value = get_entry_otp_value (obj);
         g_ptr_array_add (entries, entry);
     }
+
     gcry_free (db_data->key);
     json_decref (db_data->in_memory_json_data);
     g_slist_free_full (db_data->objects_hash, g_free);
     g_free (db_data->db_path);
     g_free (db_data);
+
     return entries;
 }
 
-static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len) {
+
+static gboolean
+entry_matches_terms (const OtpSearchEntry *entry,
+                     gchar               **terms,
+                     gsize                 terms_len)
+{
     if (terms_len == 0 || !entry->label) return FALSE;
     g_autofree gchar *l_fold = g_utf8_casefold (entry->label, -1);
     g_autofree gchar *i_fold = g_utf8_casefold (entry->issuer ? entry->issuer : "", -1);
     for (gsize i = 0; i < terms_len; i++) {
         if (!terms[i]) continue;
         g_autofree gchar *t_fold = g_utf8_casefold (terms[i], -1);
-        if (!g_strstr_len (l_fold, -1, t_fold) && !g_strstr_len (i_fold, -1, t_fold)) return FALSE;
+        if (!g_strstr_len (l_fold, -1, t_fold) && !g_strstr_len (i_fold, -1, t_fold))
+            return FALSE;
     }
     return TRUE;
 }
 
-static void send_notification (const gchar *label, const gchar *otp_value) {
+
+static void
+send_notification (const gchar *label,
+                   const gchar *otp_value)
+{
     if (!otp_value) return;
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
     if (!conn) return;
-    g_autofree gchar *body = g_strdup_printf ("Your code for %s is: %s", label ? label : "Account", otp_value);
+
+    g_autofree gchar *body = g_strdup_printf ("Your code for %s is: %s",
+                                               label ? label : "Account", otp_value);
     GVariantBuilder actions, hints;
     g_variant_builder_init (&actions, G_VARIANT_TYPE ("as"));
     g_variant_builder_init (&hints, G_VARIANT_TYPE ("a{sv}"));
-    g_dbus_connection_call (conn, "org.freedesktop.Notifications", "/org/freedesktop/Notifications", "org.freedesktop.Notifications", "Notify",
-                            g_variant_new ("(susssasa{sv}i)", "OTPClient", (guint32)0, "com.github.paolostivanin.OTPClient", "OTP Token", body, &actions, &hints, (gint32)5000),
+    g_dbus_connection_call (conn,
+                            "org.freedesktop.Notifications",
+                            "/org/freedesktop/Notifications",
+                            "org.freedesktop.Notifications",
+                            "Notify",
+                            g_variant_new ("(susssasa{sv}i)",
+                                           "OTPClient", (guint32)0,
+                                           "com.github.paolostivanin.OTPClient",
+                                           "OTP Token", body,
+                                           &actions, &hints, (gint32)5000),
                             NULL, G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL, NULL);
     g_object_unref (conn);
 }
 
-/* --- Handlers --- */
 
-static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const gchar *path, const gchar *iface,
-                               const gchar *method, GVariant *params, GDBusMethodInvocation *inv, gpointer data) {
+static void
+handle_gnome_call (GDBusConnection       *conn,
+                   const gchar           *sender,
+                   const gchar           *path,
+                   const gchar           *iface,
+                   const gchar           *method,
+                   GVariant              *params,
+                   GDBusMethodInvocation *inv,
+                   gpointer               data)
+{
     (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
         gchar **terms;
         if (g_strcmp0 (method, "GetInitialResultSet") == 0) {
@@ -241,7 +298,8 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
         GPtrArray *entries = load_entries ();
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
-            if (entry_matches_terms (e, terms, g_strv_length(terms))) g_variant_builder_add (&builder, "s", e->id);
+            if (entry_matches_terms (e, terms, g_strv_length (terms)))
+                g_variant_builder_add (&builder, "s", e->id);
         }
         g_ptr_array_free (entries, TRUE);
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
@@ -286,12 +344,24 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
         g_ptr_array_free (entries, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
-    } else { g_dbus_method_invocation_return_value (inv, NULL); }
+    } else {
+        g_dbus_method_invocation_return_value (inv, NULL);
+    }
 }
 
-static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, const gchar *path, const gchar *iface,
-                                const gchar *method, GVariant *params, GDBusMethodInvocation *inv, gpointer data) {
+
+static void
+handle_krunner_call (GDBusConnection       *conn,
+                     const gchar           *sender,
+                     const gchar           *path,
+                     const gchar           *iface,
+                     const gchar           *method,
+                     GVariant              *params,
+                     GDBusMethodInvocation *inv,
+                     gpointer               data)
+{
     (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+
     if (g_strcmp0 (method, "Match") == 0) {
         const gchar *query;
         g_variant_get (params, "(&s)", &query);
@@ -307,10 +377,15 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
                 if (!e->otp_value) continue;
                 GVariantBuilder props;
                 g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-                g_autofree gchar *sub = (e->issuer && *e->issuer) ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value) : g_strdup (e->otp_value);
+                g_autofree gchar *sub = (e->issuer && *e->issuer)
+                    ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value)
+                    : g_strdup (e->otp_value);
                 g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
                 g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
-                g_variant_builder_add (&builder, "(sssida{sv})", e->id, e->label, "com.github.paolostivanin.OTPClient", (gint32)0, (gdouble)1.0, &props);
+                g_variant_builder_add (&builder, "(sssida{sv})",
+                                       e->id, e->label,
+                                       "com.github.paolostivanin.OTPClient",
+                                       (gint32)0, (gdouble)1.0, &props);
             }
             g_ptr_array_free (entries, TRUE);
         }
@@ -339,44 +414,74 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
     }
 }
 
+
 static const GDBusInterfaceVTable k_vtable = { handle_krunner_call, NULL, NULL, {0} };
 static const GDBusInterfaceVTable g_vtable = { handle_gnome_call, NULL, NULL, {0} };
 
-static void on_krunner_bus_acquired (GDBusConnection *conn, const gchar *name G_GNUC_UNUSED, gpointer data G_GNUC_UNUSED) {
+
+static void
+on_krunner_bus_acquired (GDBusConnection *conn,
+                         const gchar     *name G_GNUC_UNUSED,
+                         gpointer         data G_GNUC_UNUSED)
+{
     g_autoptr(GError) error = NULL;
     g_autoptr(GDBusNodeInfo) node = g_dbus_node_info_new_for_xml (krunner_introspection_xml, &error);
-    if (node) g_dbus_connection_register_object (conn, KRUNNER_PATH, node->interfaces[0], &k_vtable, NULL, NULL, NULL);
+    if (node)
+        g_dbus_connection_register_object (conn, KRUNNER_PATH, node->interfaces[0], &k_vtable, NULL, NULL, NULL);
 }
 
-static void on_gnome_bus_acquired (GDBusConnection *conn, const gchar *name G_GNUC_UNUSED, gpointer data G_GNUC_UNUSED) {
+
+static void
+on_gnome_bus_acquired (GDBusConnection *conn,
+                       const gchar     *name G_GNUC_UNUSED,
+                       gpointer         data G_GNUC_UNUSED)
+{
     g_autoptr(GError) error = NULL;
     g_autoptr(GDBusNodeInfo) node = g_dbus_node_info_new_for_xml (gnome_introspection_xml, &error);
-    if (node) g_dbus_connection_register_object (conn, GNOME_PATH, node->interfaces[0], &g_vtable, NULL, NULL, NULL);
+    if (node)
+        g_dbus_connection_register_object (conn, GNOME_PATH, node->interfaces[0], &g_vtable, NULL, NULL, NULL);
 }
+
 
 static GMainLoop *main_loop = NULL;
 
-static void on_name_lost (GDBusConnection *conn G_GNUC_UNUSED, const gchar *name, gpointer data G_GNUC_UNUSED) {
+
+static void
+on_name_lost (GDBusConnection *conn G_GNUC_UNUSED,
+              const gchar     *name,
+              gpointer         data G_GNUC_UNUSED)
+{
     g_printerr ("Lost (or failed to acquire) D-Bus name '%s'. Is another instance running?\n", name);
-    if (main_loop != NULL) g_main_loop_quit (main_loop);
+    if (main_loop != NULL)
+        g_main_loop_quit (main_loop);
 }
 
-int main (int argc, char **argv) {
+
+int
+main (int    argc,
+      char **argv)
+{
     gboolean force_kde = FALSE, force_gnome = FALSE;
     for (int i = 1; i < argc; i++) {
         if (g_strcmp0 (argv[i], "--kde") == 0) force_kde = TRUE;
         else if (g_strcmp0 (argv[i], "--gnome") == 0) force_gnome = TRUE;
     }
-    if (!get_search_provider_enabled ()) return 0;
+
+    if (!get_search_provider_enabled ())
+        return 0;
+
     if (!force_kde && !force_gnome) {
         const gchar *desktop = g_getenv ("XDG_CURRENT_DESKTOP");
         if (desktop) {
             g_autofree gchar *dl = g_ascii_strdown (desktop, -1);
-            if (g_strstr_len (dl, -1, "kde") || g_strstr_len (dl, -1, "plasma")) force_kde = TRUE;
-            else if (g_strstr_len (dl, -1, "gnome")) force_gnome = TRUE;
+            if (g_strstr_len (dl, -1, "kde") || g_strstr_len (dl, -1, "plasma"))
+                force_kde = TRUE;
+            else if (g_strstr_len (dl, -1, "gnome"))
+                force_gnome = TRUE;
         }
     }
-    if (!force_kde && !force_gnome) return 0;
+    if (!force_kde && !force_gnome)
+        return 0;
 
     if (set_memlock_value (&global_max_file_size) == MEMLOCK_ERR) {
         g_printerr ("Couldn't get the memlock value.\n");
@@ -390,8 +495,12 @@ int main (int argc, char **argv) {
     }
 
     main_loop = g_main_loop_new (NULL, FALSE);
-    if (force_kde) g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_krunner_bus_acquired, NULL, on_name_lost, NULL, NULL);
-    if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
+    if (force_kde)
+        g_bus_own_name (G_BUS_TYPE_SESSION, KRUNNER_BUS, G_BUS_NAME_OWNER_FLAGS_NONE,
+                        on_krunner_bus_acquired, NULL, on_name_lost, NULL, NULL);
+    if (force_gnome)
+        g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE,
+                        on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
     g_main_loop_run (main_loop);
     g_main_loop_unref (main_loop);
     return 0;

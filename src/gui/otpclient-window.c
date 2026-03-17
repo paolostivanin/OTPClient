@@ -1,406 +1,1818 @@
-#include <gtk/gtk.h>
-#include <gcrypt.h>
-#include <jansson.h>
-#include "otpclient-window.h"
+#include <glib/gi18n.h>
+#include <adwaita.h>
 #include "otpclient-application.h"
-#include "otpclient.h"
-#include "../common/macros.h"
-#include "../common/import-export.h"
+#include "otpclient-window.h"
+#include "otp-entry.h"
+#include "database-sidebar.h"
+#include "db-common.h"
+#include "qrcode-parser.h"
+#include "webcam-scanner.h"
+#include "parse-uri.h"
+#include "dialogs/manual-add-dialog.h"
+#include "dialogs/import-dialog.h"
+#include "dialogs/export-dialog.h"
+#include "dialogs/edit-token-dialog.h"
+#include "dialogs/qr-display-dialog.h"
+#include "dialogs/settings-dialog.h"
+#include "dialogs/password-dialog.h"
 #include "gui-misc.h"
 #include "lock-app.h"
-#include "change-db-cb.h"
-#include "new-db-cb.h"
-#include "change-pwd-cb.h"
-#include "settings-cb.h"
-#include "shortcuts-cb.h"
-#include "webcam-add-cb.h"
-#include "manual-add-cb.h"
-#include "dbinfo-cb.h"
-#include "change-db-sec.h"
-#include "config-misc.h"
-#include "treeview.h"
-#include "get-builder.h"
-#ifdef ENABLE_MINIMIZE_TO_TRAY
-#include "tray.h"
-#endif
 
-static gboolean   key_pressed_cb        (GtkEventControllerKey *controller,
-                                          guint                  keyval,
-                                          guint                  keycode,
-                                          GdkModifierType        state,
-                                          gpointer               user_data);
+struct _OTPClientWindow
+{
+    AdwApplicationWindow parent;
 
-static void       reorder_rows_cb       (GtkToggleButton       *btn,
-                                          gpointer               user_data);
+    GSettings *settings;
+    GtkWidget *split_view;
+    GtkWidget *back_button;
+    GtkWidget *add_button;
+    GtkWidget *reorder_button;
+    GtkWidget *search_bar;
+    GtkWidget *search_entry;
+    GtkWidget *lock_button;
+    GtkWidget *settings_button;
+    GtkWidget *database_list;
+    GtkWidget *new_db_button;
+    GtkWidget *open_db_button;
+    GtkWidget *otp_list;
+    GListStore *otp_store;
+    GtkFilterListModel *filter_model;
+    GtkCustomFilter *search_filter;
+    GtkSingleSelection *otp_selection;
 
-static gboolean   configure_event_cb    (GtkWidget             *window,
-                                          GdkEventConfigure     *event,
-                                          gpointer               user_data);
+    GListStore *db_store;
 
-struct _OtpclientWindow {
-    GtkApplicationWindow  parent_instance;
-
-    /* All three builders are owned here; app_data holds non-owning references */
-    GtkBuilder *builder;
-    GtkBuilder *add_popover_builder;
-    GtkBuilder *settings_popover_builder;
+    guint otp_refresh_timer_id;
 };
 
-G_DEFINE_TYPE (OtpclientWindow, otpclient_window, GTK_TYPE_APPLICATION_WINDOW)
+G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
+
+typedef enum
+{
+    OTP_COLUMN_ACCOUNT,
+    OTP_COLUMN_ISSUER,
+    OTP_COLUMN_VALUE
+} OTPColumn;
+
+typedef struct
+{
+    GtkWidget *label;
+    guint timeout_id;
+    guint remaining;
+} ValidityWidgets;
+
+static void
+validity_widgets_free (ValidityWidgets *widgets)
+{
+    if (widgets->timeout_id != 0)
+        g_source_remove (widgets->timeout_id);
+
+    g_free (widgets);
+}
+
+static void
+validity_update_label (ValidityWidgets *widgets)
+{
+    gchar label_text[8];
+
+    if (widgets == NULL || widgets->label == NULL || !GTK_IS_LABEL (widgets->label))
+        return;
+
+    g_snprintf (label_text, sizeof label_text, "%us", widgets->remaining);
+    gtk_label_set_text (GTK_LABEL (widgets->label), label_text);
+}
+
+static gboolean
+validity_tick (gpointer data)
+{
+    GtkListItem *list_item = GTK_LIST_ITEM (data);
+    ValidityWidgets *widgets;
+
+    if (!GTK_IS_LIST_ITEM (list_item))
+        return G_SOURCE_REMOVE;
+
+    GtkWidget *child = gtk_list_item_get_child (list_item);
+    if (child == NULL || !GTK_IS_WIDGET (child))
+        return G_SOURCE_REMOVE;
+
+    widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
+
+    if (widgets == NULL)
+        return G_SOURCE_REMOVE;
+
+    if (!gtk_list_item_get_selected (list_item))
+    {
+        widgets->timeout_id = 0;
+        return G_SOURCE_REMOVE;
+    }
+
+    if (widgets->remaining == 0)
+    {
+        widgets->timeout_id = 0;
+        return G_SOURCE_REMOVE;
+    }
+
+    widgets->remaining--;
+    validity_update_label (widgets);
+
+    if (widgets->remaining == 0)
+    {
+        widgets->timeout_id = 0;
+        return G_SOURCE_REMOVE;
+    }
+
+    return G_SOURCE_CONTINUE;
+}
+
+static void
+validity_selected_changed (GtkListItem *list_item,
+                           GParamSpec  *pspec,
+                           gpointer     user_data)
+{
+    (void) pspec;
+    (void) user_data;
+
+    ValidityWidgets *widgets;
+    gboolean selected;
+
+    if (!GTK_IS_LIST_ITEM (list_item))
+        return;
+
+    widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
+
+    if (widgets == NULL)
+        return;
+
+    selected = gtk_list_item_get_selected (list_item);
+
+    if (widgets->timeout_id != 0)
+    {
+        g_source_remove (widgets->timeout_id);
+        widgets->timeout_id = 0;
+    }
+
+    if (selected)
+    {
+        OTPEntry *entry = gtk_list_item_get_item (list_item);
+        guint32 period = 30;
+        if (entry != NULL)
+            period = otp_entry_get_period (entry);
+
+        gint64 now = g_get_real_time () / G_USEC_PER_SEC;
+        widgets->remaining = period - (guint32)(now % period);
+        validity_update_label (widgets);
+        gtk_widget_set_visible (widgets->label, TRUE);
+        widgets->timeout_id = g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
+                                                          1,
+                                                          validity_tick,
+                                                          g_object_ref (list_item),
+                                                          g_object_unref);
+    }
+    else
+    {
+        gtk_widget_set_visible (widgets->label, FALSE);
+    }
+}
+
+static void
+validity_list_item_unbind (GtkSignalListItemFactory *factory,
+                           GtkListItem              *list_item,
+                           gpointer                  user_data)
+{
+    (void) factory;
+    (void) user_data;
+
+    ValidityWidgets *widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
+
+    if (widgets == NULL)
+        return;
+
+    if (widgets->timeout_id != 0)
+    {
+        g_source_remove (widgets->timeout_id);
+        widgets->timeout_id = 0;
+    }
+
+    gtk_widget_set_visible (widgets->label, FALSE);
+}
+
+static void
+otp_text_column_setup (GtkSignalListItemFactory *factory,
+                       GtkListItem              *list_item,
+                       gpointer                  user_data)
+{
+    (void) factory;
+    (void) user_data;
+
+    GtkWidget *label = gtk_label_new (NULL);
+
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_widget_set_hexpand (label, TRUE);
+    gtk_list_item_set_child (list_item, label);
+}
+
+static void
+otp_text_column_bind (GtkSignalListItemFactory *factory,
+                      GtkListItem              *list_item,
+                      gpointer                  user_data)
+{
+    (void) factory;
+
+    OTPEntry *entry = gtk_list_item_get_item (list_item);
+    GtkWidget *label = gtk_list_item_get_child (list_item);
+    OTPColumn column = GPOINTER_TO_INT (user_data);
+    const gchar *text = "";
+
+    if (entry == NULL || label == NULL)
+        return;
+
+    switch (column)
+    {
+        case OTP_COLUMN_ACCOUNT:
+            text = otp_entry_get_account (entry);
+            break;
+        case OTP_COLUMN_ISSUER:
+            text = otp_entry_get_issuer (entry);
+            break;
+        case OTP_COLUMN_VALUE:
+            text = otp_entry_get_otp_value (entry);
+            break;
+        default:
+            break;
+    }
+
+    if (column == OTP_COLUMN_VALUE)
+    {
+        GtkWidget *toplevel = GTK_WIDGET (gtk_widget_get_root (label));
+        if (toplevel != NULL && OTPCLIENT_IS_WINDOW (toplevel))
+        {
+            OTPClientApplication *app = OTPCLIENT_APPLICATION (
+                gtk_window_get_application (GTK_WINDOW (toplevel)));
+            if (app != NULL && otpclient_application_get_show_next_otp (app))
+            {
+                g_autofree gchar *next_otp = otp_entry_get_next_otp (entry);
+                if (next_otp != NULL)
+                {
+                    g_autofree gchar *combined = g_strdup_printf ("%s  [%s]",
+                                                                   text ? text : "", next_otp);
+                    gtk_label_set_text (GTK_LABEL (label), combined);
+                    return;
+                }
+            }
+        }
+    }
+
+    gtk_label_set_text (GTK_LABEL (label), text ? text : "");
+}
+
+static void
+otp_validity_column_setup (GtkSignalListItemFactory *factory,
+                           GtkListItem              *list_item,
+                           gpointer                  user_data)
+{
+    (void) factory;
+    (void) user_data;
+
+    GtkWidget *label = gtk_label_new (NULL);
+    ValidityWidgets *widgets = g_new0 (ValidityWidgets, 1);
+
+    gtk_widget_set_visible (label, FALSE);
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_list_item_set_child (list_item, label);
+
+    widgets->label = label;
+    widgets->remaining = 30;
+    g_object_set_data_full (G_OBJECT (list_item), "validity-widgets", widgets, (GDestroyNotify) validity_widgets_free);
+
+    g_signal_connect (list_item, "notify::selected", G_CALLBACK (validity_selected_changed), NULL);
+}
+
+static void
+otp_validity_column_bind (GtkSignalListItemFactory *factory,
+                          GtkListItem              *list_item,
+                          gpointer                  user_data)
+{
+    (void) factory;
+    (void) user_data;
+
+    validity_selected_changed (list_item, NULL, NULL);
+}
+
+static void
+add_text_column (GtkColumnView *view,
+                 const gchar   *title,
+                 OTPColumn      column)
+{
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
+    GtkColumnViewColumn *view_column = gtk_column_view_column_new (title, factory);
+
+    g_signal_connect (factory, "setup", G_CALLBACK (otp_text_column_setup), NULL);
+    g_signal_connect (factory, "bind", G_CALLBACK (otp_text_column_bind), GINT_TO_POINTER (column));
+
+    gtk_column_view_column_set_expand (view_column, TRUE);
+    gtk_column_view_column_set_resizable (view_column, TRUE);
+
+    gtk_column_view_append_column (view, view_column);
+}
+
+static void
+add_validity_column (GtkColumnView *view)
+{
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
+    GtkColumnViewColumn *view_column = gtk_column_view_column_new (_("Validity"), factory);
+
+    g_signal_connect (factory, "setup", G_CALLBACK (otp_validity_column_setup), NULL);
+    g_signal_connect (factory, "bind", G_CALLBACK (otp_validity_column_bind), NULL);
+    g_signal_connect (factory, "unbind", G_CALLBACK (validity_list_item_unbind), NULL);
+
+    gtk_column_view_column_set_fixed_width (view_column, 80);
+    gtk_column_view_column_set_resizable (view_column, FALSE);
+
+    gtk_column_view_append_column (view, view_column);
+}
+
+static gboolean
+otp_refresh_tick (gpointer user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    if (self->otp_store == NULL)
+        return G_SOURCE_REMOVE;
+
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+        if (entry == NULL)
+            continue;
+
+        const gchar *type = otp_entry_get_otp_type (entry);
+        if (type != NULL && g_ascii_strcasecmp (type, "TOTP") == 0)
+        {
+            guint32 period = otp_entry_get_period (entry);
+            if (period > 0)
+            {
+                gint64 now = g_get_real_time () / G_USEC_PER_SEC;
+                guint32 remaining = period - (guint32)(now % period);
+                /* Recompute OTP when validity just reset */
+                if (remaining == period)
+                    otp_entry_update_otp (entry);
+            }
+        }
+    }
+
+    return G_SOURCE_CONTINUE;
+}
+
+void
+otpclient_window_start_otp_timer (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    if (self->otp_refresh_timer_id != 0)
+        return;
+
+    self->otp_refresh_timer_id = g_timeout_add_seconds (1, otp_refresh_tick, self);
+}
+
+void
+otpclient_window_stop_otp_timer (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    if (self->otp_refresh_timer_id != 0)
+    {
+        g_source_remove (self->otp_refresh_timer_id);
+        self->otp_refresh_timer_id = 0;
+    }
+}
+
+static gboolean
+search_filter_func (gpointer item,
+                    gpointer user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    OTPEntry *entry = OTP_ENTRY (item);
+
+    const gchar *search_text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
+    if (search_text == NULL || search_text[0] == '\0')
+        return TRUE;
+
+    const gchar *account = otp_entry_get_account (entry);
+    const gchar *issuer = otp_entry_get_issuer (entry);
+
+    g_autofree gchar *search_lower = g_utf8_strdown (search_text, -1);
+    g_autofree gchar *account_lower = account ? g_utf8_strdown (account, -1) : g_strdup ("");
+    g_autofree gchar *issuer_lower = issuer ? g_utf8_strdown (issuer, -1) : g_strdup ("");
+
+    return (g_strstr_len (account_lower, -1, search_lower) != NULL ||
+            g_strstr_len (issuer_lower, -1, search_lower) != NULL);
+}
+
+static void
+setup_otp_view (OTPClientWindow *self)
+{
+    self->otp_store = G_LIST_STORE (g_object_ref_sink (g_list_store_new (OTP_TYPE_ENTRY)));
+
+    self->search_filter = gtk_custom_filter_new (search_filter_func, self, NULL);
+    self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),
+                                                     GTK_FILTER (self->search_filter));
+
+    self->otp_selection = gtk_single_selection_new (G_LIST_MODEL (self->filter_model));
+
+    gtk_single_selection_set_autoselect (self->otp_selection, FALSE);
+    gtk_single_selection_set_can_unselect (self->otp_selection, TRUE);
+
+    add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Account"), OTP_COLUMN_ACCOUNT);
+    add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Issuer"), OTP_COLUMN_ISSUER);
+    add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("OTP Value"), OTP_COLUMN_VALUE);
+    add_validity_column (GTK_COLUMN_VIEW (self->otp_list));
+
+    gtk_column_view_set_model (GTK_COLUMN_VIEW (self->otp_list), GTK_SELECTION_MODEL (self->otp_selection));
+}
+
+static void
+search_func (OTPClientWindow *self,
+             const gchar     *action_name,
+             GVariant        *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    gboolean search_enabled = gtk_search_bar_get_search_mode (GTK_SEARCH_BAR(self->search_bar));
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR(self->search_bar), !search_enabled);
+    if (!search_enabled)
+        gtk_widget_grab_focus (self->search_entry);
+}
+
+static void
+search_text_changed (GtkEntry        *entry,
+                     OTPClientWindow *win)
+{
+    (void) entry;
+
+    gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+}
+
+static void
+database_row_selected (GtkListBox      *box,
+                       GtkListBoxRow   *row,
+                       OTPClientWindow *self)
+{
+    (void) box;
+
+    if (row == NULL)
+        return;
+
+    /* The application handles DB switching via the selected row's DatabaseEntry */
+    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), TRUE);
+}
+
+static GtkWidget *
+create_database_row (gpointer item,
+                     gpointer user_data)
+{
+    (void) user_data;
+    DatabaseEntry *entry = DATABASE_ENTRY (item);
+
+    AdwActionRow *row = ADW_ACTION_ROW (adw_action_row_new ());
+    g_object_set (row, "title", database_entry_get_name (entry), NULL);
+
+    const gchar *path = database_entry_get_path (entry);
+    if (path != NULL)
+        g_object_set (row, "subtitle", path, NULL);
+
+    return GTK_WIDGET (row);
+}
+
+static void
+setup_database_list (OTPClientWindow *self)
+{
+    self->db_store = g_list_store_new (DATABASE_TYPE_ENTRY);
+
+    gtk_list_box_bind_model (GTK_LIST_BOX (self->database_list),
+                             G_LIST_MODEL (self->db_store),
+                             create_database_row,
+                             NULL, NULL);
+
+    g_signal_connect (self->database_list, "row-selected", G_CALLBACK (database_row_selected), self);
+}
+
+void
+otpclient_window_add_database (OTPClientWindow *self,
+                               const gchar     *name,
+                               const gchar     *path)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    DatabaseEntry *entry = database_entry_new (name, path);
+    g_list_store_append (self->db_store, entry);
+    g_object_unref (entry);
+}
+
+GListStore *
+otpclient_window_get_db_store (OTPClientWindow *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
+    return self->db_store;
+}
+
+gint
+otpclient_window_get_selected_db_index (OTPClientWindow *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), -1);
+
+    GtkListBoxRow *row = gtk_list_box_get_selected_row (GTK_LIST_BOX (self->database_list));
+    if (row == NULL)
+        return -1;
+
+    return gtk_list_box_row_get_index (row);
+}
+
+static void
+on_otp_selection_changed (GtkSingleSelection *selection,
+                          GParamSpec         *pspec,
+                          OTPClientWindow    *self)
+{
+    (void) pspec;
+
+    guint pos = gtk_single_selection_get_selected (selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (selection));
+    if (entry == NULL)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+
+    /* For HOTP tokens, increment counter and regenerate OTP on each selection */
+    const gchar *type = otp_entry_get_otp_type (entry);
+    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0 && app != NULL)
+    {
+        DatabaseData *db_data = otpclient_application_get_db_data (app);
+        if (db_data != NULL && db_data->in_memory_json_data != NULL)
+        {
+            guint64 new_counter = otp_entry_get_counter (entry) + 1;
+            otp_entry_set_counter (entry, new_counter);
+            otp_entry_update_otp (entry);
+
+            json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+            if (token_obj != NULL)
+            {
+                json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
+                GError *err = NULL;
+                update_db (db_data, &err);
+                if (err != NULL)
+                {
+                    g_warning ("Failed to persist HOTP counter: %s", err->message);
+                    g_clear_error (&err);
+                }
+            }
+        }
+    }
+
+    const gchar *otp_value = otp_entry_get_otp_value (entry);
+    if (otp_value == NULL || otp_value[0] == '\0')
+        return;
+
+    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    gdk_clipboard_set_text (clipboard, otp_value);
+
+    /* Send notification unless disabled */
+    if (app != NULL && !otpclient_application_get_disable_notifications (app))
+    {
+        const gchar *issuer = otp_entry_get_issuer (entry);
+        g_autofree gchar *body = g_strdup_printf (_("OTP for %s copied to clipboard"),
+                                                   issuer ? issuer : otp_entry_get_account (entry));
+        g_autoptr (GNotification) notification = g_notification_new ("OTPClient");
+        g_notification_set_body (notification, body);
+        g_application_send_notification (G_APPLICATION (app), NULL, notification);
+    }
+}
+
+static GdkContentProvider *
+on_drag_prepare (GtkDragSource *source,
+                 double         x,
+                 double         y,
+                 gpointer       user_data)
+{
+    (void) source;
+    (void) x;
+    (void) y;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return NULL;
+
+    GValue value = G_VALUE_INIT;
+    g_value_init (&value, G_TYPE_UINT);
+    g_value_set_uint (&value, pos);
+
+    return gdk_content_provider_new_for_value (&value);
+}
+
+static gboolean
+on_drop (GtkDropTarget *target,
+         const GValue  *value,
+         double         x,
+         double         y,
+         gpointer       user_data)
+{
+    (void) target;
+    (void) x;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    if (!G_VALUE_HOLDS_UINT (value))
+        return FALSE;
+
+    guint source_pos = g_value_get_uint (value);
+
+    /* Determine target position from y coordinate */
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    if (n_items == 0)
+        return FALSE;
+
+    /* Approximate row height */
+    gint height = gtk_widget_get_height (self->otp_list);
+    gdouble row_height = (gdouble) height / (gdouble) n_items;
+    guint target_pos = (guint)(y / row_height);
+
+    if (target_pos >= n_items)
+        target_pos = n_items - 1;
+
+    if (source_pos == target_pos)
+        return FALSE;
+
+    /* Reorder in GListStore */
+    g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), source_pos);
+    g_list_store_remove (self->otp_store, source_pos);
+    g_list_store_insert (self->otp_store, target_pos, entry);
+
+    /* Reorder in the JSON database */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+    {
+        DatabaseData *db_data = otpclient_application_get_db_data (app);
+        if (db_data != NULL && db_data->in_memory_json_data != NULL)
+        {
+            json_t *arr = db_data->in_memory_json_data;
+            json_t *item = json_array_get (arr, source_pos);
+            json_incref (item);
+            json_array_remove (arr, source_pos);
+            json_array_insert (arr, target_pos, item);
+            json_decref (item);
+
+            GError *err = NULL;
+            update_db (db_data, &err);
+            if (err != NULL)
+            {
+                g_warning ("Failed to update db after reorder: %s", err->message);
+                g_clear_error (&err);
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+static void
+on_reorder_toggled (GtkToggleButton *button,
+                    OTPClientWindow *self)
+{
+    gboolean active = gtk_toggle_button_get_active (button);
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+        otpclient_application_set_is_reorder_active (app, active);
+
+    /* DnD is always set up; the toggle is just visual feedback */
+}
+
+static void
+setup_dnd (OTPClientWindow *self)
+{
+    GtkDragSource *drag_source = gtk_drag_source_new ();
+    gtk_drag_source_set_actions (drag_source, GDK_ACTION_MOVE);
+    g_signal_connect (drag_source, "prepare", G_CALLBACK (on_drag_prepare), self);
+    gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (drag_source));
+
+    GtkDropTarget *drop_target = gtk_drop_target_new (G_TYPE_UINT, GDK_ACTION_MOVE);
+    g_signal_connect (drop_target, "drop", G_CALLBACK (on_drop), self);
+    gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (drop_target));
+}
+
+static void
+back_button_clicked (GtkButton       *button,
+                     OTPClientWindow *self)
+{
+    (void) button;
+
+    gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
+    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), FALSE);
+}
+
+static void
+update_back_button (OTPClientWindow *self)
+{
+    gboolean collapsed = adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view));
+    gboolean show_content = adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view));
+
+    gtk_widget_set_visible (self->back_button, collapsed && show_content);
+}
+
+static void
+split_view_state_changed (AdwNavigationSplitView *view,
+                          GParamSpec             *pspec,
+                          OTPClientWindow        *self)
+{
+    (void) view;
+    (void) pspec;
+
+    if (!adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)))
+        gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
+
+    if (!adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)))
+        adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), TRUE);
+
+    update_back_button (self);
+}
 
 static void
 otpclient_window_dispose (GObject *object)
 {
-    OtpclientWindow *self = OTPCLIENT_WINDOW (object);
+    OTPClientWindow *win = OTPCLIENT_WINDOW(object);
 
-    g_clear_object (&self->builder);
-    g_clear_object (&self->add_popover_builder);
-    g_clear_object (&self->settings_popover_builder);
+    /* Save window size to GSettings */
+    if (win->settings != NULL)
+    {
+        gint width = gtk_widget_get_width (GTK_WIDGET (win));
+        gint height = gtk_widget_get_height (GTK_WIDGET (win));
+        if (width > 0 && height > 0)
+        {
+            g_settings_set_int (win->settings, "window-width", width);
+            g_settings_set_int (win->settings, "window-height", height);
+        }
+    }
 
+    if (win->otp_refresh_timer_id != 0)
+    {
+        g_source_remove (win->otp_refresh_timer_id);
+        win->otp_refresh_timer_id = 0;
+    }
+
+    if (win->otp_list && GTK_IS_COLUMN_VIEW (win->otp_list))
+        gtk_column_view_set_model (GTK_COLUMN_VIEW (win->otp_list), NULL);
+
+    if (win->otp_selection)
+        gtk_single_selection_set_model (win->otp_selection, NULL);
+
+    g_clear_object (&win->otp_selection);
+    g_clear_object (&win->filter_model);
+    g_clear_object (&win->otp_store);
+    g_clear_object (&win->db_store);
+    g_clear_object (&win->settings);
+
+    gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
 }
 
-static void
-otpclient_window_class_init (OtpclientWindowClass *klass)
-{
-    G_OBJECT_CLASS (klass)->dispose = otpclient_window_dispose;
-}
-
-static void
-otpclient_window_init (OtpclientWindow *self)
-{
-    (void) self;
-}
-
-OtpclientWindow *
-otpclient_window_new (GtkApplication *app,
-                      gint            width,
-                      gint            height,
-                      AppData        *app_data)
-{
-    /* Load all three UI files; the builder instantiates OtpclientWindow from the
-     * XML template ("appwindow_id"), so we do NOT call g_object_new() separately. */
-    GtkBuilder *builder              = get_builder_from_partial_path (UI_PARTIAL_PATH);
-    GtkBuilder *add_popover_builder  = get_builder_from_partial_path (AP_PARTIAL_PATH);
-    GtkBuilder *settings_popover_builder = get_builder_from_partial_path (SP_PARTIAL_PATH);
-
-    GtkWidget *main_window = GTK_WIDGET (gtk_builder_get_object (builder, "appwindow_id"));
-    if (main_window == NULL) {
-        g_object_unref (builder);
-        g_object_unref (add_popover_builder);
-        g_object_unref (settings_popover_builder);
-        return NULL;
-    }
-
-    /* Transfer builder ownership to the window instance */
-    OtpclientWindow *win = OTPCLIENT_WINDOW (main_window);
-    win->builder                   = builder;
-    win->add_popover_builder       = add_popover_builder;
-    win->settings_popover_builder  = settings_popover_builder;
-
-    /* Publish non-owning references so the rest of the code can reach them */
-    app_data->builder                   = builder;
-    app_data->add_popover_builder       = add_popover_builder;
-    app_data->settings_popover_builder  = settings_popover_builder;
-    app_data->main_window               = main_window;
-
-    gtk_window_set_application (GTK_WINDOW (main_window), app);
-    gtk_window_set_icon_name (GTK_WINDOW (main_window), "otpclient");
-    gtk_window_set_default_size (GTK_WINDOW (main_window),
-                                 (width  >= 150) ? width  : 500,
-                                 (height >= 150) ? height : 300);
-
-    /* Lock button */
-    GtkWidget *lock_btn = GTK_WIDGET (gtk_builder_get_object (builder, "lock_btn_id"));
-    if (app_data->use_secret_service) {
-        /* Secret service stores the key, so manual locking is not available */
-        gtk_widget_set_sensitive (lock_btn, FALSE);
-    } else {
-        g_signal_connect (lock_btn, "clicked", G_CALLBACK (lock_app), app_data);
-    }
-
-#ifdef ENABLE_MINIMIZE_TO_TRAY
-    if (app_data->use_tray) {
-        init_tray_icon (app_data);
-    }
-#endif
-
-    /* Empty-state "add" shortcut button */
-    GtkWidget *empty_state_add_btn =
-        GTK_WIDGET (gtk_builder_get_object (builder, "empty_state_add_btn_id"));
-    if (empty_state_add_btn != NULL) {
-        g_signal_connect (empty_state_add_btn, "clicked",
-                          G_CALLBACK (manual_add_cb_shortcut), app_data);
-    }
-
-    /* ── Action groups ─────────────────────────────────────────────── */
-
-    static GActionEntry import_menu_entries[] = {
-        { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = import_data_cb },
-        { .name = AEGIS_PLAIN_ACTION_NAME,       .activate = import_data_cb },
-        { .name = AEGIS_ENC_ACTION_NAME,         .activate = import_data_cb },
-        { .name = AUTHPRO_PLAIN_ACTION_NAME,     .activate = import_data_cb },
-        { .name = AUTHPRO_ENC_ACTION_NAME,       .activate = import_data_cb },
-        { .name = TWOFAS_PLAIN_ACTION_NAME,      .activate = import_data_cb },
-        { .name = TWOFAS_ENC_ACTION_NAME,        .activate = import_data_cb },
-        { .name = GOOGLE_FILE_ACTION_NAME,       .activate = add_qr_from_file },
-        { .name = GOOGLE_WEBCAM_ACTION_NAME,     .activate = webcam_add_cb },
-    };
-
-    static GActionEntry export_menu_entries[] = {
-        { .name = FREEOTPPLUS_PLAIN_ACTION_NAME, .activate = export_data_cb },
-        { .name = AEGIS_PLAIN_ACTION_NAME,       .activate = export_data_cb },
-        { .name = AEGIS_ENC_ACTION_NAME,         .activate = export_data_cb },
-        { .name = AUTHPRO_PLAIN_ACTION_NAME,     .activate = export_data_cb },
-        { .name = AUTHPRO_ENC_ACTION_NAME,       .activate = export_data_cb },
-        { .name = TWOFAS_PLAIN_ACTION_NAME,      .activate = export_data_cb },
-        { .name = TWOFAS_ENC_ACTION_NAME,        .activate = export_data_cb },
-    };
-
-    static GActionEntry settings_menu_entries[] = {
-        { .name = "create_newdb",  .activate = new_db_cb },
-        { .name = "change_db",     .activate = change_db_cb },
-        { .name = "change_pwd",    .activate = change_password_cb },
-        { .name = "change_db_sec", .activate = change_db_sec_cb },
-        { .name = "settings",      .activate = settings_dialog_cb },
-        { .name = "shortcuts",     .activate = shortcuts_window_cb },
-        { .name = "dbinfo",        .activate = dbinfo_cb },
-        { .name = "about",         .activate = about_diag_cb },
-    };
-
-    static GActionEntry add_menu_entries[] = {
-        { .name = "webcam",              .activate = webcam_add_cb },
-        { .name = "import_qr_file",      .activate = add_qr_from_file },
-        { .name = "import_qr_clipboard", .activate = add_qr_from_clipboard },
-        { .name = "manual",              .activate = manual_add_cb },
-    };
-
-    GtkWidget *settings_popover =
-        GTK_WIDGET (gtk_builder_get_object (settings_popover_builder, "settings_pop_id"));
-    gtk_menu_button_set_popover (
-        GTK_MENU_BUTTON (gtk_builder_get_object (builder, "settings_btn_id")),
-        settings_popover);
-
-    GActionGroup *settings_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (settings_actions),
-                                     settings_menu_entries,
-                                     G_N_ELEMENTS (settings_menu_entries), app_data);
-    gtk_widget_insert_action_group (settings_popover, "settings_menu", settings_actions);
-    g_object_unref (settings_actions);
-
-    GActionGroup *export_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (export_actions),
-                                     export_menu_entries,
-                                     G_N_ELEMENTS (export_menu_entries), app_data);
-    gtk_widget_insert_action_group (settings_popover, "export_menu", export_actions);
-    g_object_unref (export_actions);
-
-    GtkWidget *add_popover =
-        GTK_WIDGET (gtk_builder_get_object (add_popover_builder, "add_pop_id"));
-    gtk_menu_button_set_popover (
-        GTK_MENU_BUTTON (gtk_builder_get_object (builder, "add_btn_main_id")),
-        add_popover);
-
-    GActionGroup *add_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (add_actions),
-                                     add_menu_entries,
-                                     G_N_ELEMENTS (add_menu_entries), app_data);
-    gtk_widget_insert_action_group (add_popover, "add_menu", add_actions);
-    g_object_unref (add_actions);
-
-    GActionGroup *import_actions = (GActionGroup *) g_simple_action_group_new ();
-    g_action_map_add_action_entries (G_ACTION_MAP (import_actions),
-                                     import_menu_entries,
-                                     G_N_ELEMENTS (import_menu_entries), app_data);
-    gtk_widget_insert_action_group (add_popover, "import_menu", import_actions);
-    g_object_unref (import_actions);
-
-    gtk_popover_set_constrain_to (GTK_POPOVER (add_popover),      GTK_POPOVER_CONSTRAINT_NONE);
-    gtk_popover_set_constrain_to (GTK_POPOVER (settings_popover), GTK_POPOVER_CONSTRAINT_NONE);
-
-    /* ── Reorder toggle ────────────────────────────────────────────── */
-    GtkToggleButton *reorder_toggle_btn =
-        GTK_TOGGLE_BUTTON (gtk_builder_get_object (builder, "reorder_toggle_btn_id"));
-    g_signal_connect (reorder_toggle_btn, "toggled", G_CALLBACK (reorder_rows_cb), app_data);
-
-    /* ── Window-level key handling (GtkEventControllerKey, GTK ≥ 3.24) */
-    GtkEventController *key_controller = gtk_event_controller_key_new (main_window);
-    g_signal_connect (key_controller, "key-pressed", G_CALLBACK (key_pressed_cb), app_data);
-
-    /* ── Track window size via configure-event (fires only on resize) */
-    g_signal_connect (main_window, "configure-event",
-                      G_CALLBACK (configure_event_cb), app_data);
-
-    /* Hide search entry without triggering an extra layout pass on show_all */
-    GtkWidget *search_entry =
-        GTK_WIDGET (gtk_builder_get_object (builder, "search_entry_id"));
-    if (search_entry != NULL) {
-        gtk_widget_set_no_show_all (search_entry, TRUE);
-        gtk_widget_set_visible (search_entry, FALSE);
-    }
-
-    return win;
-}
-
-/* ── Builder accessors ──────────────────────────────────────────────────── */
-
-GtkBuilder *
-otpclient_window_get_builder (OtpclientWindow *self)
+GListStore *
+otpclient_window_get_otp_store (OTPClientWindow *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
-    return self->builder;
+    return self->otp_store;
 }
 
-GtkBuilder *
-otpclient_window_get_add_popover_builder (OtpclientWindow *self)
+GtkSingleSelection *
+otpclient_window_get_otp_selection (OTPClientWindow *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
-    return self->add_popover_builder;
-}
-
-GtkBuilder *
-otpclient_window_get_settings_popover_builder (OtpclientWindow *self)
-{
-    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
-    return self->settings_popover_builder;
-}
-
-/* ── Signal callbacks ───────────────────────────────────────────────────── */
-
-static gboolean
-key_pressed_cb (GtkEventControllerKey *controller UNUSED,
-                guint                  keyval,
-                guint                  keycode    UNUSED,
-                GdkModifierType        state,
-                gpointer               user_data)
-{
-    CAST_USER_DATA (AppData, app_data, user_data);
-    switch (keyval) {
-        case GDK_KEY_q:
-            if (state & GDK_CONTROL_MASK) {
-                gtk_window_close (GTK_WINDOW (app_data->main_window));
-            }
-            break;
-        case GDK_KEY_f:
-            if (state & GDK_CONTROL_MASK) {
-                GtkWidget *search_entry = app_data->search_entry;
-                if (search_entry != NULL) {
-                    gboolean is_visible = gtk_widget_get_visible (search_entry);
-                    gtk_widget_set_visible (search_entry, !is_visible);
-                    if (!is_visible) {
-                        gtk_widget_grab_focus (search_entry);
-                    } else {
-                        gtk_entry_set_text (GTK_ENTRY (search_entry), "");
-                        if (app_data->tree_view != NULL) {
-                            gtk_widget_grab_focus (GTK_WIDGET (app_data->tree_view));
-                        }
-                    }
-                }
-                return TRUE;
-            }
-            break;
-    }
-    return FALSE;
+    return self->otp_selection;
 }
 
 static void
-reorder_rows_cb (GtkToggleButton *btn,
-                 gpointer         user_data)
+on_db_modified (gpointer user_data)
 {
-    CAST_USER_DATA (AppData, app_data, user_data);
-    gboolean is_btn_active = gtk_toggle_button_get_active (btn);
-    gtk_tree_view_set_reorderable (GTK_TREE_VIEW (app_data->tree_view), is_btn_active);
-    app_data->is_reorder_active = is_btn_active;
-    gtk_widget_set_sensitive (
-        GTK_WIDGET (gtk_builder_get_object (app_data->builder, "add_btn_main_id")),
-        !is_btn_active);
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
 
-    if (!is_btn_active) {
-        reorder_db (app_data);
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    GListStore *store = self->otp_store;
+    g_list_store_remove_all (store);
+
+    gsize index;
+    json_t *obj;
+    json_array_foreach (db_data->in_memory_json_data, index, obj)
+    {
+        const gchar *type = json_string_value (json_object_get (obj, "type"));
+        const gchar *label = json_string_value (json_object_get (obj, "label"));
+        const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+        const gchar *secret = json_string_value (json_object_get (obj, "secret"));
+        const gchar *algo = json_string_value (json_object_get (obj, "algo"));
+        guint32 digits = (guint32) json_integer_value (json_object_get (obj, "digits"));
+        guint32 period = 30;
+        guint64 counter = 0;
+
+        if (digits < 4) digits = 6;
+
+        if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0)
+            counter = (guint64) json_integer_value (json_object_get (obj, "counter"));
+        else
+            period = (guint32) json_integer_value (json_object_get (obj, "period"));
+
+        if (period < 1) period = 30;
+
+        OTPEntry *entry = otp_entry_new (label, issuer, NULL,
+                                          type ? type : "TOTP",
+                                          period, counter,
+                                          algo ? algo : "SHA1",
+                                          digits, secret);
+        otp_entry_update_otp (entry);
+        g_list_store_append (store, entry);
+        g_object_unref (entry);
     }
 }
 
-static gboolean
-configure_event_cb (GtkWidget         *window,
-                    GdkEventConfigure *event UNUSED,
-                    gpointer           user_data)
+static void
+action_add_manual (GtkWidget  *widget,
+                   const char *action_name,
+                   GVariant   *parameter)
 {
-    CAST_USER_DATA (AppData, app_data, user_data);
-    gtk_window_get_size (GTK_WINDOW (window),
-                         &app_data->window_width, &app_data->window_height);
-    return FALSE;
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL)
+        return;
+
+    ManualAddDialog *dlg = manual_add_dialog_new (db_data, on_db_modified, self);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
-/* ── destroy_cb ─────────────────────────────────────────────────────────── */
-
-void
-destroy_cb (GtkWidget *window,
-            gpointer   user_data)
+static void
+on_qr_file_selected (GObject      *source,
+                     GAsyncResult *result,
+                     gpointer      user_data)
 {
-    CAST_USER_DATA (AppData, app_data, user_data);
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, NULL);
+    if (file == NULL)
+        return;
 
-    OtpclientApplication *app = NULL;
-    if (window != NULL) {
-        app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (window)));
-    } else {
-        app = OTPCLIENT_APPLICATION (g_application_get_default ());
-    }
-    otpclient_application_clear_app_data (app);
+    g_autofree gchar *path = g_file_get_path (file);
+    if (path == NULL)
+        return;
 
-    if (app_data->tree_view != NULL && GTK_IS_TREE_VIEW (app_data->tree_view)) {
-        save_sort_order (app_data->tree_view);
-        save_column_widths (app_data->tree_view);
+    GError *err = NULL;
+    gchar *otpauth_uri = qrcode_parse_image_file (path, &err);
+    if (otpauth_uri == NULL) {
+        g_warning ("QR parse failed: %s", err ? err->message : "unknown");
+        g_clear_error (&err);
+        return;
     }
-    if (app_data->source_id != 0) {
-        g_source_remove (app_data->source_id);
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL) {
+        g_free (otpauth_uri);
+        return;
     }
-    if (app_data->source_id_last_activity != 0) {
-        g_source_remove (app_data->source_id_last_activity);
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL) {
+        g_free (otpauth_uri);
+        return;
     }
-    if (app_data->last_user_activity != NULL) {
-        g_date_time_unref (app_data->last_user_activity);
-    }
-    if (app_data->connection != NULL) {
-        for (gint i = 0; i < DBUS_SERVICES; i++) {
-            g_dbus_connection_signal_unsubscribe (app_data->connection,
-                                                  app_data->subscription_ids[i]);
+
+    GSList *otps = NULL;
+    set_otps_from_uris (otpauth_uri, &otps);
+    g_free (otpauth_uri);
+
+    if (otps != NULL) {
+        add_otps_to_db (otps, db_data);
+        free_otps_gslist (otps, g_slist_length (otps));
+        update_db (db_data, &err);
+        if (err != NULL) {
+            g_warning ("Failed to update DB: %s", err->message);
+            g_clear_error (&err);
+        } else {
+            reload_db (db_data, &err);
+            g_clear_error (&err);
         }
-        g_dbus_connection_close (app_data->connection, NULL, NULL, NULL);
+        on_db_modified (self);
     }
-    if (app_data->db_data != NULL) {
-        gcry_free (app_data->db_data->key);
-        g_free (app_data->db_data->db_path);
-        g_slist_free_full (app_data->db_data->objects_hash, g_free);
-        json_decref (app_data->db_data->in_memory_json_data);
-        g_clear_pointer (&app_data->db_data->last_hotp, g_free);
-        g_clear_pointer (&app_data->db_data->last_hotp_update, g_date_time_unref);
-        g_free (app_data->db_data);
-    }
-    if (app_data->clipboard != NULL) {
-        gtk_clipboard_clear (app_data->clipboard);
-    }
-    if (app != NULL) {
-        g_application_withdraw_notification (G_APPLICATION (app), NOTIFICATION_ID);
-    }
-    if (app_data->notification != NULL) {
-        g_object_unref (app_data->notification);
+}
+
+static void
+action_add_qr_file (GtkWidget  *widget,
+                    const char *action_name,
+                    GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Select QR Code Image"));
+
+    GtkFileFilter *filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (filter, _("Image Files"));
+    gtk_file_filter_add_mime_type (filter, "image/png");
+    gtk_file_filter_add_mime_type (filter, "image/jpeg");
+    GListStore *filters = g_list_store_new (GTK_TYPE_FILE_FILTER);
+    g_list_store_append (filters, filter);
+    gtk_file_dialog_set_filters (dialog, G_LIST_MODEL (filters));
+    g_object_unref (filter);
+    g_object_unref (filters);
+
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
+                          on_qr_file_selected, self);
+}
+
+static void
+action_add_qr_webcam (GtkWidget  *widget,
+                      const char *action_name,
+                      GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL)
+        return;
+
+    GError *err = NULL;
+    gchar *otpauth_uri = webcam_scan_qrcode (&err);
+    if (otpauth_uri == NULL) {
+        g_warning ("Webcam scan failed: %s", err ? err->message : "unknown");
+        g_clear_error (&err);
+        return;
     }
 
-    gint w = app_data->window_width;
-    gint h = app_data->window_height;
-    if (w > 0 && h > 0) {
-        save_window_size (w, h);
+    GSList *otps = NULL;
+    set_otps_from_uris (otpauth_uri, &otps);
+    g_free (otpauth_uri);
+
+    if (otps != NULL) {
+        add_otps_to_db (otps, db_data);
+        free_otps_gslist (otps, g_slist_length (otps));
+        update_db (db_data, &err);
+        if (err != NULL) {
+            g_warning ("Failed to update DB: %s", err->message);
+            g_clear_error (&err);
+        } else {
+            reload_db (db_data, &err);
+            g_clear_error (&err);
+        }
+        on_db_modified (self);
+    }
+}
+
+static void
+action_import (GtkWidget  *widget,
+               const char *action_name,
+               GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL)
+        return;
+
+    ImportDialog *dlg = import_dialog_new (db_data, GTK_WIDGET (self),
+                                            on_db_modified, self);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
+}
+
+static void
+action_export (GtkWidget  *widget,
+               const char *action_name,
+               GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL)
+        return;
+
+    ExportDialog *dlg = export_dialog_new (db_data, GTK_WIDGET (self));
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
+}
+
+static void
+action_settings (GtkWidget  *widget,
+                 const char *action_name,
+                 GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    SettingsDialog *dlg = settings_dialog_new (app);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
+}
+
+static void
+action_edit_token (GtkWidget  *widget,
+                   const char *action_name,
+                   GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+    if (token_obj == NULL)
+        return;
+
+    EditTokenDialog *dlg = edit_token_dialog_new (token_obj, pos, db_data,
+                                                   on_db_modified, self);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
+}
+
+static void
+on_delete_response (AdwAlertDialog *dialog,
+                    GAsyncResult   *result,
+                    gpointer        user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+
+    if (g_strcmp0 (response, "delete") != 0)
+        return;
+
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_array_remove (db_data->in_memory_json_data, pos);
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL) {
+        g_warning ("Failed to update DB after delete: %s", err->message);
+        g_clear_error (&err);
+        return;
     }
 
-    /* Builders are owned by the OtpclientWindow instance and will be released
-     * when the window itself is disposed — do NOT unref them here. */
+    on_db_modified (self);
+}
 
-    if (app_data->filter_model != NULL) {
-        g_object_unref (app_data->filter_model);
+static void
+action_delete_token (GtkWidget  *widget,
+                     const char *action_name,
+                     GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Delete Token?"),
+                              _("This action cannot be undone.")));
+
+    adw_alert_dialog_add_responses (dialog,
+                                    "cancel", _("Cancel"),
+                                    "delete", _("Delete"),
+                                    NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "delete", ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_delete_response, self);
+}
+
+static void
+action_show_qr (GtkWidget  *widget,
+                const char *action_name,
+                GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+    if (token_obj == NULL)
+        return;
+
+    gchar *otpauth_uri = get_otpauth_uri (token_obj);
+    if (otpauth_uri == NULL)
+        return;
+
+    const gchar *label = json_string_value (json_object_get (token_obj, "label"));
+    QrDisplayDialog *dlg = qr_display_dialog_new (otpauth_uri, label ? label : "Token");
+    g_free (otpauth_uri);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
+}
+
+/* ---- Move token to another database ---- */
+
+typedef struct {
+    OTPClientWindow *self;
+    guint            token_pos;
+    json_t          *token_json;   /* deep copy, owned */
+    gchar           *target_db_path;
+} MoveTokenContext;
+
+static void
+move_token_context_free (MoveTokenContext *ctx)
+{
+    if (ctx->token_json != NULL)
+        json_decref (ctx->token_json);
+    g_free (ctx->target_db_path);
+    g_free (ctx);
+}
+
+static void
+on_move_target_password (const gchar *password,
+                         gpointer     user_data)
+{
+    MoveTokenContext *ctx = (MoveTokenContext *) user_data;
+    OTPClientWindow *self = ctx->self;
+
+    if (password == NULL)
+    {
+        move_token_context_free (ctx);
+        return;
     }
-    if (app_data->list_store != NULL) {
-        g_object_unref (app_data->list_store);
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+    {
+        move_token_context_free (ctx);
+        return;
     }
-    g_free (app_data);
-    gcry_control (GCRYCTL_TERM_SECMEM);
+
+    /* Open and decrypt the target database */
+    DatabaseData *target = g_new0 (DatabaseData, 1);
+    target->db_path = g_strdup (ctx->target_db_path);
+    target->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (target->key, password, strlen (password) + 1);
+
+    gint32 memlock = 0;
+    set_memlock_value (&memlock);
+    target->max_file_size_from_memlock = memlock;
+
+    GError *err = NULL;
+    load_db (target, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to open target database: %s", err->message);
+        g_clear_error (&err);
+        gcry_free (target->key);
+        g_free (target->db_path);
+        g_free (target);
+        move_token_context_free (ctx);
+        return;
+    }
+
+    /* Append the token to the target database */
+    if (target->in_memory_json_data == NULL)
+        target->in_memory_json_data = json_array ();
+
+    json_array_append (target->in_memory_json_data, ctx->token_json);
+
+    update_db (target, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to save token to target database: %s", err->message);
+        g_clear_error (&err);
+    }
+    else
+    {
+        /* Remove the token from the current (source) database */
+        DatabaseData *src = otpclient_application_get_db_data (app);
+        if (src != NULL && src->in_memory_json_data != NULL)
+        {
+            json_array_remove (src->in_memory_json_data, ctx->token_pos);
+            update_db (src, &err);
+            if (err != NULL)
+            {
+                g_warning ("Failed to update source database: %s", err->message);
+                g_clear_error (&err);
+            }
+            on_db_modified (self);
+        }
+    }
+
+    /* Clean up target */
+    json_decref (target->in_memory_json_data);
+    gcry_free (target->key);
+    g_free (target->db_path);
+    g_slist_free_full (target->objects_hash, g_free);
+    g_free (target);
+
+    move_token_context_free (ctx);
+}
+
+static void
+on_move_db_selected (AdwAlertDialog *dialog,
+                     GAsyncResult   *result,
+                     gpointer        user_data)
+{
+    MoveTokenContext *ctx = (MoveTokenContext *) user_data;
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+
+    if (g_strcmp0 (response, "cancel") == 0 || response == NULL)
+    {
+        move_token_context_free (ctx);
+        return;
+    }
+
+    /* The response ID is the db_path */
+    ctx->target_db_path = g_strdup (response);
+
+    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                    on_move_target_password,
+                                                    ctx);
+    adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (ctx->self));
+}
+
+static void
+action_move_token (GtkWidget  *widget,
+                   const char *action_name,
+                   GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    /* Build list of other databases */
+    guint n_dbs = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+    if (n_dbs < 2)
+    {
+        AdwAlertDialog *dlg = ADW_ALERT_DIALOG (
+            adw_alert_dialog_new (_("Move Token"),
+                                  _("No other databases available. Open or create another database first.")));
+        adw_alert_dialog_add_response (dlg, "ok", _("OK"));
+        adw_alert_dialog_choose (dlg, GTK_WIDGET (self), NULL, NULL, NULL);
+        return;
+    }
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+    if (token_obj == NULL)
+        return;
+
+    MoveTokenContext *ctx = g_new0 (MoveTokenContext, 1);
+    ctx->self = self;
+    ctx->token_pos = pos;
+    ctx->token_json = json_deep_copy (token_obj);
+
+    const gchar *account = json_string_value (json_object_get (token_obj, "label"));
+    g_autofree gchar *body = g_strdup_printf (_("Select the database to move \"%s\" to:"),
+                                               account ? account : _("token"));
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Move Token"), body));
+    adw_alert_dialog_add_response (dialog, "cancel", _("Cancel"));
+
+    for (guint i = 0; i < n_dbs; i++)
+    {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->db_store), i);
+        const gchar *path = database_entry_get_path (entry);
+
+        /* Skip the currently active database */
+        if (g_strcmp0 (path, db_data->db_path) == 0)
+            continue;
+
+        const gchar *name = database_entry_get_name (entry);
+        adw_alert_dialog_add_response (dialog, path, name);
+    }
+
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_move_db_selected, ctx);
+}
+
+static void
+lock_button_clicked (GtkButton       *button,
+                     OTPClientWindow *self)
+{
+    (void) button;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+        g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
+}
+
+static void
+on_token_right_click (GtkGestureClick *gesture,
+                      gint             n_press,
+                      gdouble          x,
+                      gdouble          y,
+                      OTPClientWindow *self)
+{
+    (void) gesture;
+    (void) n_press;
+
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    GtkBuilder *builder = gtk_builder_new_from_resource (
+        "/com/github/paolostivanin/OTPClient/ui/window.ui");
+    GMenuModel *menu_model = G_MENU_MODEL (gtk_builder_get_object (builder, "token_context_menu"));
+
+    GtkWidget *popover = gtk_popover_menu_new_from_model (menu_model);
+    gtk_widget_set_parent (popover, self->otp_list);
+    GdkRectangle rect = { (int)x, (int)y, 1, 1 };
+    gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
+    gtk_popover_popup (GTK_POPOVER (popover));
+
+    g_object_unref (builder);
+}
+
+static void
+on_new_db_password_received (const gchar *password,
+                              gpointer     user_data);
+
+typedef struct {
+    OTPClientWindow *self;
+    gchar *db_path;
+} NewDbContext;
+
+static void
+on_new_db_file_selected (GObject      *source,
+                          GAsyncResult *result,
+                          gpointer      user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    g_autoptr (GFile) file = gtk_file_dialog_save_finish (dialog, result, NULL);
+    if (file == NULL)
+        return;
+
+    g_autofree gchar *path = g_file_get_path (file);
+    if (path == NULL)
+        return;
+
+    /* Ensure .enc extension */
+    gchar *db_path;
+    if (!g_str_has_suffix (path, ".enc"))
+        db_path = g_strconcat (path, ".enc", NULL);
+    else
+        db_path = g_strdup (path);
+
+    NewDbContext *ctx = g_new0 (NewDbContext, 1);
+    ctx->self = self;
+    ctx->db_path = db_path;
+
+    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_NEW,
+                                                    on_new_db_password_received,
+                                                    ctx);
+    adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
+}
+
+static void
+on_new_db_password_received (const gchar *password,
+                              gpointer     user_data)
+{
+    NewDbContext *ctx = (NewDbContext *) user_data;
+    OTPClientWindow *self = ctx->self;
+    gchar *db_path = ctx->db_path;
+    g_free (ctx);
+
+    if (password == NULL)
+    {
+        g_free (db_path);
+        return;
+    }
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+    {
+        g_free (db_path);
+        return;
+    }
+
+    /* Free old db_data if present */
+    DatabaseData *old_db = otpclient_application_get_db_data (app);
+    if (old_db != NULL)
+    {
+        otpclient_window_stop_otp_timer (self);
+        g_list_store_remove_all (self->otp_store);
+    }
+
+    /* Create new DatabaseData */
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->db_path = db_path;
+    db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (db_data->key, password, strlen (password) + 1);
+    db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
+    db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
+    db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
+    db_data->current_db_version = DB_VERSION;
+
+    gint32 memlock = 0;
+    set_memlock_value (&memlock);
+    db_data->max_file_size_from_memlock = memlock;
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to create new database: %s", err->message);
+        g_clear_error (&err);
+        gcry_free (db_data->key);
+        g_free (db_data->db_path);
+        g_free (db_data);
+        return;
+    }
+
+    /* Reload to populate in_memory_json_data */
+    load_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to load new database: %s", err->message);
+        g_clear_error (&err);
+    }
+
+    otpclient_application_set_db_data (app, db_data);
+
+    /* Save path to config */
+    gui_misc_save_db_path_to_cfg (db_path);
+
+    /* Add to sidebar */
+    g_autofree gchar *basename = g_path_get_basename (db_path);
+    otpclient_window_add_database (self, basename, db_path);
+
+    on_db_modified (self);
+    otpclient_window_start_otp_timer (self);
+}
+
+static void
+new_db_button_clicked (GtkButton       *button,
+                       OTPClientWindow *self)
+{
+    (void) button;
+
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Create New Database"));
+    gtk_file_dialog_set_initial_name (dialog, "otpclient-db.enc");
+
+    gtk_file_dialog_save (dialog, GTK_WINDOW (self), NULL,
+                          on_new_db_file_selected, self);
+}
+
+static void
+on_open_db_file_selected (GObject      *source,
+                           GAsyncResult *result,
+                           gpointer      user_data);
+
+static void
+on_open_db_password_received (const gchar *password,
+                               gpointer     user_data);
+
+static void
+on_open_db_file_selected (GObject      *source,
+                           GAsyncResult *result,
+                           gpointer      user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, NULL);
+    if (file == NULL)
+        return;
+
+    g_autofree gchar *path = g_file_get_path (file);
+    if (path == NULL)
+        return;
+
+    NewDbContext *ctx = g_new0 (NewDbContext, 1);
+    ctx->self = self;
+    ctx->db_path = g_strdup (path);
+
+    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                    on_open_db_password_received,
+                                                    ctx);
+    adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
+}
+
+static void
+on_open_db_password_received (const gchar *password,
+                               gpointer     user_data)
+{
+    NewDbContext *ctx = (NewDbContext *) user_data;
+    OTPClientWindow *self = ctx->self;
+    gchar *db_path = ctx->db_path;
+    g_free (ctx);
+
+    if (password == NULL)
+    {
+        g_free (db_path);
+        return;
+    }
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+    {
+        g_free (db_path);
+        return;
+    }
+
+    /* Stop current DB */
+    otpclient_window_stop_otp_timer (self);
+    g_list_store_remove_all (self->otp_store);
+
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->db_path = db_path;
+    db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (db_data->key, password, strlen (password) + 1);
+
+    gint32 memlock = 0;
+    set_memlock_value (&memlock);
+    db_data->max_file_size_from_memlock = memlock;
+
+    GError *err = NULL;
+    load_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to load database: %s", err->message);
+        g_clear_error (&err);
+        gcry_free (db_data->key);
+        g_free (db_data->db_path);
+        g_free (db_data);
+        return;
+    }
+
+    otpclient_application_set_db_data (app, db_data);
+
+    /* Save path to config */
+    gui_misc_save_db_path_to_cfg (db_path);
+
+    /* Add to sidebar */
+    g_autofree gchar *basename = g_path_get_basename (db_path);
+    otpclient_window_add_database (self, basename, db_path);
+
+    on_db_modified (self);
+    otpclient_window_start_otp_timer (self);
+}
+
+static void
+open_db_button_clicked (GtkButton       *button,
+                        OTPClientWindow *self)
+{
+    (void) button;
+
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Open Database"));
+
+    GtkFileFilter *filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (filter, _("OTPClient Database (*.enc)"));
+    gtk_file_filter_add_pattern (filter, "*.enc");
+    GListStore *filters = g_list_store_new (GTK_TYPE_FILE_FILTER);
+    g_list_store_append (filters, filter);
+    gtk_file_dialog_set_filters (dialog, G_LIST_MODEL (filters));
+    g_object_unref (filter);
+    g_object_unref (filters);
+
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
+                          on_open_db_file_selected, self);
+}
+
+static gboolean
+on_key_pressed_inactivity (GtkEventControllerKey *controller,
+                            guint                  keyval,
+                            guint                  keycode,
+                            GdkModifierType        state,
+                            OTPClientWindow       *self)
+{
+    (void) controller;
+    (void) keyval;
+    (void) keycode;
+    (void) state;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+        lock_app_reset_inactivity (app);
+
+    return FALSE;
+}
+
+static void
+on_click_inactivity (GtkGestureClick *gesture,
+                      gint             n_press,
+                      gdouble          x,
+                      gdouble          y,
+                      OTPClientWindow *self)
+{
+    (void) gesture;
+    (void) n_press;
+    (void) x;
+    (void) y;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+        lock_app_reset_inactivity (app);
+}
+
+static void
+otpclient_window_init (OTPClientWindow *self)
+{
+    GSettingsSchemaSource *schema_source = NULL;
+    g_autoptr (GSettingsSchema) schema = NULL;
+
+    gtk_widget_init_template (GTK_WIDGET(self));
+
+    schema_source = g_settings_schema_source_get_default ();
+    if (schema_source != NULL)
+        schema = g_settings_schema_source_lookup (schema_source, "com.github.paolostivanin.OTPClient", TRUE);
+
+    if (schema != NULL)
+    {
+        self->settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+
+        /* Restore saved window size */
+        gint width = g_settings_get_int (self->settings, "window-width");
+        gint height = g_settings_get_int (self->settings, "window-height");
+        if (width > 0 && height > 0)
+            gtk_window_set_default_size (GTK_WINDOW (self), width, height);
+    }
+    else
+    {
+        g_warning ("Settings schema 'com.github.paolostivanin.OTPClient' is not installed.");
+    }
+
+    setup_otp_view (self);
+    setup_database_list (self);
+    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view),
+                                                !adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)));
+    update_back_button (self);
+
+    g_signal_connect (self->split_view, "notify::collapsed", G_CALLBACK (split_view_state_changed), self);
+    g_signal_connect (self->split_view, "notify::show-content", G_CALLBACK (split_view_state_changed), self);
+    g_signal_connect (self->back_button, "clicked", G_CALLBACK (back_button_clicked), self);
+    g_signal_connect (self->otp_selection, "notify::selected", G_CALLBACK (on_otp_selection_changed), self);
+    g_signal_connect (self->reorder_button, "toggled", G_CALLBACK (on_reorder_toggled), self);
+    g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
+    g_signal_connect (self->new_db_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
+    g_signal_connect (self->open_db_button, "clicked", G_CALLBACK (open_db_button_clicked), self);
+
+    setup_dnd (self);
+
+    /* Right-click context menu on token list */
+    GtkGesture *right_click = gtk_gesture_click_new ();
+    gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (right_click), GDK_BUTTON_SECONDARY);
+    g_signal_connect (right_click, "pressed", G_CALLBACK (on_token_right_click), self);
+    gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (right_click));
+
+    /* Inactivity reset: any key press or mouse click resets the auto-lock timer */
+    GtkEventController *key_ctrl = gtk_event_controller_key_new ();
+    gtk_event_controller_set_propagation_phase (key_ctrl, GTK_PHASE_CAPTURE);
+    g_signal_connect (key_ctrl, "key-pressed", G_CALLBACK (on_key_pressed_inactivity), self);
+    gtk_widget_add_controller (GTK_WIDGET (self), key_ctrl);
+
+    GtkGesture *click_inactivity = gtk_gesture_click_new ();
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (click_inactivity), GTK_PHASE_CAPTURE);
+    g_signal_connect (click_inactivity, "pressed", G_CALLBACK (on_click_inactivity), self);
+    gtk_widget_add_controller (GTK_WIDGET (self), GTK_EVENT_CONTROLLER (click_inactivity));
+}
+
+static void
+otpclient_window_class_init (OTPClientWindowClass *klass)
+{
+    G_OBJECT_CLASS(klass)->dispose = otpclient_window_dispose;
+
+    GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
+    gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, add_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, reorder_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, settings_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, back_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, split_view);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, database_list);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, new_db_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
+
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);
+
+    gtk_widget_class_install_action (widget_class, "window.search", NULL, (GtkWidgetActionActivateFunc)search_func);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_f, GDK_CONTROL_MASK, "window.search", NULL);
+
+    /* Token actions */
+    gtk_widget_class_install_action (widget_class, "win.add-manual", NULL, action_add_manual);
+    gtk_widget_class_install_action (widget_class, "win.add-qr-file", NULL, action_add_qr_file);
+    gtk_widget_class_install_action (widget_class, "win.add-qr-webcam", NULL, action_add_qr_webcam);
+    gtk_widget_class_install_action (widget_class, "win.import", NULL, action_import);
+    gtk_widget_class_install_action (widget_class, "win.export", NULL, action_export);
+    gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
+    gtk_widget_class_install_action (widget_class, "win.edit-token", NULL, action_edit_token);
+    gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);
+    gtk_widget_class_install_action (widget_class, "win.show-qr", NULL, action_show_qr);
+    gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);
+
+    gtk_widget_class_bind_template_callback (klass, search_text_changed);
+}
+
+GtkWidget *
+otpclient_window_new (OTPClientApplication *application)
+{
+    return g_object_new (OTPCLIENT_TYPE_WINDOW, "application", application, NULL);
 }

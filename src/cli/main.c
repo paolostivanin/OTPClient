@@ -285,6 +285,7 @@ is_valid_type (const gchar *type)
     return FALSE;
 }
 
+
 static gchar *
 format_supported_types (void)
 {
@@ -295,8 +296,8 @@ format_supported_types (void)
 static void
 print_supported_types (GApplicationCommandLine *cmdline)
 {
-    g_autofree gchar *supported_types_str = format_supported_types ();
-    g_application_command_line_print (cmdline, "Supported types: %s\n", supported_types_str);
+    g_autofree gchar *types_str = format_supported_types ();
+    g_application_command_line_print (cmdline, "Supported types: %s\n", types_str);
 }
 
 
