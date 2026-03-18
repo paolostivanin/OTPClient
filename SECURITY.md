@@ -6,7 +6,6 @@ The following list describes whether a version is eligible or not for security u
 
 | Version | Supported          | EOL         |
 |---------|--------------------|-------------|
-|---------|--------------------|-------------|
 | 5.0.x   | :white_check_mark: | -           |
 | 4.4.x   | :white_check_mark: | -           |
 
