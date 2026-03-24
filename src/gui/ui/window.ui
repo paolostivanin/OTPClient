@@ -27,11 +27,7 @@
                   <object class="GtkMenuButton" id="add_button">
                     <property name="icon-name">list-add-symbolic</property>
                     <property name="menu-model">add_menu</property>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkToggleButton" id="reorder_button">
-                    <property name="icon-name">view-sort-ascending-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Add token</property>
                   </object>
                 </child>
                 <style>
@@ -44,6 +40,7 @@
                 <child>
                   <object class="GtkButton" id="lock_button">
                     <property name="icon-name">system-lock-screen-symbolic</property>
+                    <property name="tooltip-text" translatable="yes">Lock database</property>
                   </object>
                 </child>
                 <child>

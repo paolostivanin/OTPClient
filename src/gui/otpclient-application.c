@@ -35,8 +35,7 @@ struct _OTPClientApplication
     gint inactivity_timeout;
     gboolean app_locked;
     gboolean use_dark_theme;
-    gboolean is_reorder_active;
-    gboolean use_secret_service;
+gboolean use_secret_service;
     gboolean search_provider_enabled;
     gboolean show_validity_seconds;
     gchar *validity_color;
@@ -511,9 +510,7 @@ otpclient_application_startup (GApplication *application)
 
     /* Load settings from GSettings if schema is available */
     self->app_locked = FALSE;
-    self->is_reorder_active = FALSE;
-
-    GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
+GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
     g_autoptr (GSettingsSchema) schema = NULL;
     if (schema_source != NULL)
         schema = g_settings_schema_source_lookup (schema_source,
@@ -749,18 +746,6 @@ void otpclient_application_set_use_secret_service (OTPClientApplication *self, g
     self->use_secret_service = use_ss;
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "secret-service", use_ss);
-}
-
-gboolean otpclient_application_get_is_reorder_active (OTPClientApplication *self)
-{
-    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
-    return self->is_reorder_active;
-}
-
-void otpclient_application_set_is_reorder_active (OTPClientApplication *self, gboolean active)
-{
-    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
-    self->is_reorder_active = active;
 }
 
 gboolean otpclient_application_get_search_provider_enabled (OTPClientApplication *self)

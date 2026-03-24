@@ -26,7 +26,6 @@ struct _OTPClientWindow
     GtkWidget *split_view;
     GtkWidget *sidebar_toggle_button;
     GtkWidget *add_button;
-    GtkWidget *reorder_button;
     GtkWidget *search_bar;
     GtkWidget *search_entry;
     GtkWidget *lock_button;
@@ -703,20 +702,6 @@ on_drop (GtkDropTarget *target,
     }
 
     return TRUE;
-}
-
-static void
-on_reorder_toggled (GtkToggleButton *button,
-                    OTPClientWindow *self)
-{
-    gboolean active = gtk_toggle_button_get_active (button);
-
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    if (app != NULL)
-        otpclient_application_set_is_reorder_active (app, active);
-
-    /* DnD is always set up; the toggle is just visual feedback */
 }
 
 static void
@@ -1980,8 +1965,7 @@ otpclient_window_init (OTPClientWindow *self)
     g_signal_connect (self->split_view, "notify::show-sidebar", G_CALLBACK (split_view_sidebar_changed), self);
     g_signal_connect (self->sidebar_toggle_button, "clicked", G_CALLBACK (sidebar_toggle_clicked), self);
     g_signal_connect (self->otp_selection, "notify::selected", G_CALLBACK (on_otp_selection_changed), self);
-    g_signal_connect (self->reorder_button, "toggled", G_CALLBACK (on_reorder_toggled), self);
-    g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
+g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
     g_signal_connect (self->new_db_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
     g_signal_connect (self->open_db_button, "clicked", G_CALLBACK (open_db_button_clicked), self);
 
@@ -2019,8 +2003,7 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
     gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, add_button);
-    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, reorder_button);
-    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar);
+gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, settings_button);

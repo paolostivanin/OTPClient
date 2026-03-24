@@ -45,10 +45,6 @@ gboolean              otpclient_application_get_use_secret_service (OTPClientApp
 void                  otpclient_application_set_use_secret_service (OTPClientApplication *self,
                                                                     gboolean              use_ss);
 
-gboolean              otpclient_application_get_is_reorder_active (OTPClientApplication *self);
-void                  otpclient_application_set_is_reorder_active (OTPClientApplication *self,
-                                                                   gboolean              active);
-
 gboolean              otpclient_application_get_search_provider_enabled (OTPClientApplication *self);
 void                  otpclient_application_set_search_provider_enabled (OTPClientApplication *self,
                                                                          gboolean              enabled);
