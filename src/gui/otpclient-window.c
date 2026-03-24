@@ -418,7 +418,7 @@ setup_otp_view (OTPClientWindow *self)
     self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),
                                                      GTK_FILTER (self->search_filter));
 
-    self->otp_selection = gtk_single_selection_new (G_LIST_MODEL (self->filter_model));
+    self->otp_selection = gtk_single_selection_new (g_object_ref (G_LIST_MODEL (self->filter_model)));
 
     gtk_single_selection_set_autoselect (self->otp_selection, FALSE);
     gtk_single_selection_set_can_unselect (self->otp_selection, TRUE);
