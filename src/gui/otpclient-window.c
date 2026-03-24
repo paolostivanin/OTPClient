@@ -768,22 +768,29 @@ split_view_state_changed (AdwNavigationSplitView *view,
     update_back_button (self);
 }
 
+static gboolean
+on_close_request (GtkWindow       *window,
+                  OTPClientWindow *self)
+{
+    if (self->settings != NULL)
+    {
+        gint width = gtk_widget_get_width (GTK_WIDGET (window));
+        gint height = gtk_widget_get_height (GTK_WIDGET (window));
+        if (width > 0 && height > 0)
+        {
+            g_settings_set_int (self->settings, "window-width", width);
+            g_settings_set_int (self->settings, "window-height", height);
+        }
+    }
+    return FALSE;
+}
+
 static void
 otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
 
-    /* Save window size to GSettings */
-    if (win->settings != NULL)
-    {
-        gint width = gtk_widget_get_width (GTK_WIDGET (win));
-        gint height = gtk_widget_get_height (GTK_WIDGET (win));
-        if (width > 0 && height > 0)
-        {
-            g_settings_set_int (win->settings, "window-width", width);
-            g_settings_set_int (win->settings, "window-height", height);
-        }
-    }
+
 
     if (win->otp_refresh_timer_id != 0)
     {
@@ -1981,6 +1988,7 @@ otpclient_window_init (OTPClientWindow *self)
                                                 !adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)));
     update_back_button (self);
 
+    g_signal_connect (self, "close-request", G_CALLBACK (on_close_request), self);
     g_signal_connect (self->split_view, "notify::collapsed", G_CALLBACK (split_view_state_changed), self);
     g_signal_connect (self->split_view, "notify::show-content", G_CALLBACK (split_view_state_changed), self);
     g_signal_connect (self->back_button, "clicked", G_CALLBACK (back_button_clicked), self);
