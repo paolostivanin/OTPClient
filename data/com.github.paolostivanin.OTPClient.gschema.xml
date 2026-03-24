@@ -76,6 +76,11 @@
       <summary>Validity warning color</summary>
       <description>Color used for the token validity countdown when time is running low</description>
     </key>
+    <key name="show-sidebar" type="b">
+      <default>true</default>
+      <summary>Show sidebar</summary>
+      <description>Whether the database sidebar is visible</description>
+    </key>
     <key name="minimize-to-tray" type="b">
       <default>false</default>
       <summary>Minimize to Tray</summary>

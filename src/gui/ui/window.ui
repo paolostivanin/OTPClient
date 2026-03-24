@@ -16,10 +16,9 @@
               </object>
             </child>
             <child type="start">
-              <object class="GtkButton" id="back_button">
-                <property name="icon-name">go-previous-symbolic</property>
-                <property name="visible">False</property>
-                <property name="tooltip-text" translatable="yes">Back</property>
+              <object class="GtkToggleButton" id="sidebar_toggle_button">
+                <property name="icon-name">sidebar-show-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Toggle sidebar</property>
               </object>
             </child>
             <child type="start">
@@ -74,78 +73,67 @@
               </object>
             </child>
             <child>
-              <object class="AdwNavigationSplitView" id="split_view">
+              <object class="AdwOverlaySplitView" id="split_view">
                 <property name="vexpand">True</property>
                 <property name="sidebar-width-fraction">0.3</property>
                 <property name="min-sidebar-width">180</property>
                 <property name="max-sidebar-width">320</property>
-                <child type="sidebar">
-                  <object class="AdwNavigationPage">
-                    <property name="vexpand">True</property>
-                    <property name="title" translatable="yes">Databases</property>
-                    <property name="child">
-                      <object class="GtkBox">
-                        <property name="orientation">vertical</property>
-                        <child>
-                          <object class="GtkScrolledWindow">
-                            <property name="hscrollbar-policy">never</property>
-                            <property name="vexpand">True</property>
-                            <child>
-                              <object class="GtkListBox" id="database_list">
-                                <property name="selection-mode">single</property>
-                                <style>
-                                  <class name="navigation-sidebar"/>
-                                </style>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                        <child>
-                          <object class="GtkBox">
-                            <property name="orientation">horizontal</property>
-                            <property name="homogeneous">True</property>
-                            <property name="margin-start">6</property>
-                            <property name="margin-end">6</property>
-                            <property name="margin-top">6</property>
-                            <property name="margin-bottom">6</property>
-                            <property name="spacing">6</property>
-                            <child>
-                              <object class="GtkButton" id="new_db_button">
-                                <property name="label" translatable="yes">New</property>
-                                <property name="icon-name">document-new-symbolic</property>
-                                <property name="tooltip-text" translatable="yes">Create a new database</property>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkButton" id="open_db_button">
-                                <property name="label" translatable="yes">Open</property>
-                                <property name="icon-name">document-open-symbolic</property>
-                                <property name="tooltip-text" translatable="yes">Open an existing database</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                    </property>
-                  </object>
-                </child>
-                <child type="content">
-                  <object class="AdwNavigationPage">
-                    <property name="vexpand">True</property>
-                    <property name="title" translatable="yes">Tokens</property>
-                    <property name="child">
+                <property name="show-sidebar">True</property>
+                <property name="sidebar">
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <child>
                       <object class="GtkScrolledWindow">
-                        <property name="vexpand">True</property>
                         <property name="hscrollbar-policy">never</property>
+                        <property name="vexpand">True</property>
                         <child>
-                          <object class="GtkColumnView" id="otp_list">
-                            <property name="vexpand">True</property>
+                          <object class="GtkListBox" id="database_list">
+                            <property name="selection-mode">single</property>
+                            <style>
+                              <class name="navigation-sidebar"/>
+                            </style>
                           </object>
                         </child>
                       </object>
-                    </property>
+                    </child>
+                    <child>
+                      <object class="GtkBox">
+                        <property name="orientation">horizontal</property>
+                        <property name="homogeneous">True</property>
+                        <property name="margin-start">6</property>
+                        <property name="margin-end">6</property>
+                        <property name="margin-top">6</property>
+                        <property name="margin-bottom">6</property>
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkButton" id="new_db_button">
+                            <property name="label" translatable="yes">New</property>
+                            <property name="icon-name">document-new-symbolic</property>
+                            <property name="tooltip-text" translatable="yes">Create a new database</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="open_db_button">
+                            <property name="label" translatable="yes">Open</property>
+                            <property name="icon-name">document-open-symbolic</property>
+                            <property name="tooltip-text" translatable="yes">Open an existing database</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
-                </child>
+                </property>
+                <property name="content">
+                  <object class="GtkScrolledWindow">
+                    <property name="vexpand">True</property>
+                    <property name="hscrollbar-policy">never</property>
+                    <child>
+                      <object class="GtkColumnView" id="otp_list">
+                        <property name="vexpand">True</property>
+                      </object>
+                    </child>
+                  </object>
+                </property>
               </object>
             </child>
           </object>

@@ -24,7 +24,7 @@ struct _OTPClientWindow
 
     GSettings *settings;
     GtkWidget *split_view;
-    GtkWidget *back_button;
+    GtkWidget *sidebar_toggle_button;
     GtkWidget *add_button;
     GtkWidget *reorder_button;
     GtkWidget *search_bar;
@@ -465,7 +465,7 @@ database_row_selected (GtkListBox      *box,
         return;
 
     /* The application handles DB switching via the selected row's DatabaseEntry */
-    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), TRUE);
+    adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), TRUE);
 }
 
 static void on_db_entry_name_changed (DatabaseEntry *entry,
@@ -733,39 +733,23 @@ setup_dnd (OTPClientWindow *self)
 }
 
 static void
-back_button_clicked (GtkButton       *button,
-                     OTPClientWindow *self)
+sidebar_toggle_clicked (GtkToggleButton *button,
+                        OTPClientWindow *self)
 {
-    (void) button;
-
-    gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
-    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), FALSE);
+    gboolean active = gtk_toggle_button_get_active (button);
+    adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), active);
 }
 
 static void
-update_back_button (OTPClientWindow *self)
-{
-    gboolean collapsed = adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view));
-    gboolean show_content = adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view));
-
-    gtk_widget_set_visible (self->back_button, collapsed && show_content);
-}
-
-static void
-split_view_state_changed (AdwNavigationSplitView *view,
-                          GParamSpec             *pspec,
-                          OTPClientWindow        *self)
+split_view_sidebar_changed (AdwOverlaySplitView *view,
+                            GParamSpec          *pspec,
+                            OTPClientWindow     *self)
 {
     (void) view;
     (void) pspec;
 
-    if (!adw_navigation_split_view_get_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)))
-        gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
-
-    if (!adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)))
-        adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), TRUE);
-
-    update_back_button (self);
+    gboolean show = adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view));
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->sidebar_toggle_button), show);
 }
 
 static gboolean
@@ -781,6 +765,8 @@ on_close_request (GtkWindow       *window,
             g_settings_set_int (self->settings, "window-width", width);
             g_settings_set_int (self->settings, "window-height", height);
         }
+        g_settings_set_boolean (self->settings, "show-sidebar",
+                                adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view)));
     }
     return FALSE;
 }
@@ -1976,6 +1962,9 @@ otpclient_window_init (OTPClientWindow *self)
         gint height = g_settings_get_int (self->settings, "window-height");
         if (width > 0 && height > 0)
             gtk_window_set_default_size (GTK_WINDOW (self), width, height);
+
+        gboolean show_sidebar = g_settings_get_boolean (self->settings, "show-sidebar");
+        adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), show_sidebar);
     }
     else
     {
@@ -1984,14 +1973,12 @@ otpclient_window_init (OTPClientWindow *self)
 
     setup_otp_view (self);
     setup_database_list (self);
-    adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view),
-                                                !adw_navigation_split_view_get_collapsed (ADW_NAVIGATION_SPLIT_VIEW (self->split_view)));
-    update_back_button (self);
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->sidebar_toggle_button),
+                                  adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view)));
 
     g_signal_connect (self, "close-request", G_CALLBACK (on_close_request), self);
-    g_signal_connect (self->split_view, "notify::collapsed", G_CALLBACK (split_view_state_changed), self);
-    g_signal_connect (self->split_view, "notify::show-content", G_CALLBACK (split_view_state_changed), self);
-    g_signal_connect (self->back_button, "clicked", G_CALLBACK (back_button_clicked), self);
+    g_signal_connect (self->split_view, "notify::show-sidebar", G_CALLBACK (split_view_sidebar_changed), self);
+    g_signal_connect (self->sidebar_toggle_button, "clicked", G_CALLBACK (sidebar_toggle_clicked), self);
     g_signal_connect (self->otp_selection, "notify::selected", G_CALLBACK (on_otp_selection_changed), self);
     g_signal_connect (self->reorder_button, "toggled", G_CALLBACK (on_reorder_toggled), self);
     g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
@@ -2037,7 +2024,7 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, settings_button);
-    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, back_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, sidebar_toggle_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, split_view);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, database_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, new_db_button);
