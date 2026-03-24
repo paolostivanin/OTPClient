@@ -113,12 +113,14 @@
                               <object class="GtkButton" id="new_db_button">
                                 <property name="label" translatable="yes">New</property>
                                 <property name="icon-name">document-new-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Create a new database</property>
                               </object>
                             </child>
                             <child>
                               <object class="GtkButton" id="open_db_button">
                                 <property name="label" translatable="yes">Open</property>
                                 <property name="icon-name">document-open-symbolic</property>
+                                <property name="tooltip-text" translatable="yes">Open an existing database</property>
                               </object>
                             </child>
                           </object>
