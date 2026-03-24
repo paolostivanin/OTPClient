@@ -11,6 +11,8 @@ struct _SettingsDialog
 
     GtkWidget *show_next_otp_switch;
     GtkWidget *show_validity_seconds_switch;
+    GtkWidget *validity_color_row;
+    GtkWidget *validity_warning_color_row;
     GtkWidget *dark_theme_switch;
     GtkWidget *disable_notifications_switch;
     GtkWidget *auto_lock_switch;
@@ -122,6 +124,36 @@ on_show_validity_seconds_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_show_validity_seconds (self->app, active);
+    gtk_widget_set_visible (self->validity_color_row, !active);
+    gtk_widget_set_visible (self->validity_warning_color_row, !active);
+}
+
+static void
+on_validity_color_changed (GtkColorDialogButton *button,
+                           GParamSpec           *pspec,
+                           SettingsDialog       *self)
+{
+    (void) pspec;
+    const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (button);
+    g_autofree gchar *hex = g_strdup_printf ("#%02x%02x%02x",
+                                              (guint)(rgba->red * 255),
+                                              (guint)(rgba->green * 255),
+                                              (guint)(rgba->blue * 255));
+    otpclient_application_set_validity_color (self->app, hex);
+}
+
+static void
+on_validity_warning_color_changed (GtkColorDialogButton *button,
+                                   GParamSpec           *pspec,
+                                   SettingsDialog       *self)
+{
+    (void) pspec;
+    const GdkRGBA *rgba = gtk_color_dialog_button_get_rgba (button);
+    g_autofree gchar *hex = g_strdup_printf ("#%02x%02x%02x",
+                                              (guint)(rgba->red * 255),
+                                              (guint)(rgba->green * 255),
+                                              (guint)(rgba->blue * 255));
+    otpclient_application_set_validity_warning_color (self->app, hex);
 }
 
 static void
@@ -156,12 +188,43 @@ settings_dialog_new (OTPClientApplication *app)
 
     self->show_validity_seconds_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->show_validity_seconds_switch),
-                                    _("Show Validity Seconds"));
+                                    _("Show Validity in seconds"));
+    gboolean validity_seconds_active = otpclient_application_get_show_validity_seconds (app);
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->show_validity_seconds_switch),
-                               otpclient_application_get_show_validity_seconds (app));
+                               validity_seconds_active);
     g_signal_connect (self->show_validity_seconds_switch, "notify::active",
                       G_CALLBACK (on_show_validity_seconds_toggled), self);
     adw_preferences_group_add (display_group, self->show_validity_seconds_switch);
+
+    /* Countdown color picker */
+    GdkRGBA validity_rgba;
+    gdk_rgba_parse (&validity_rgba, otpclient_application_get_validity_color (app));
+    GtkColorDialog *color_dialog = gtk_color_dialog_new ();
+    GtkWidget *color_button = gtk_color_dialog_button_new (color_dialog);
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (color_button), &validity_rgba);
+    g_signal_connect (color_button, "notify::rgba",
+                      G_CALLBACK (on_validity_color_changed), self);
+    self->validity_color_row = adw_action_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->validity_color_row),
+                                    _("Countdown Color"));
+    adw_action_row_add_suffix (ADW_ACTION_ROW (self->validity_color_row), color_button);
+    gtk_widget_set_visible (self->validity_color_row, !validity_seconds_active);
+    adw_preferences_group_add (display_group, self->validity_color_row);
+
+    /* Countdown warning color picker */
+    GdkRGBA warning_rgba;
+    gdk_rgba_parse (&warning_rgba, otpclient_application_get_validity_warning_color (app));
+    GtkColorDialog *warning_color_dialog = gtk_color_dialog_new ();
+    GtkWidget *warning_color_button = gtk_color_dialog_button_new (warning_color_dialog);
+    gtk_color_dialog_button_set_rgba (GTK_COLOR_DIALOG_BUTTON (warning_color_button), &warning_rgba);
+    g_signal_connect (warning_color_button, "notify::rgba",
+                      G_CALLBACK (on_validity_warning_color_changed), self);
+    self->validity_warning_color_row = adw_action_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->validity_warning_color_row),
+                                    _("Countdown Warning Color"));
+    adw_action_row_add_suffix (ADW_ACTION_ROW (self->validity_warning_color_row), warning_color_button);
+    gtk_widget_set_visible (self->validity_warning_color_row, !validity_seconds_active);
+    adw_preferences_group_add (display_group, self->validity_warning_color_row);
 
     self->dark_theme_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->dark_theme_switch), _("Dark Theme"));

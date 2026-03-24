@@ -67,12 +67,12 @@
       <description>Show the remaining seconds of validity for each TOTP token</description>
     </key>
     <key name="validity-color" type="s">
-      <default>"green"</default>
+      <default>"#008000"</default>
       <summary>Validity color</summary>
       <description>Color used for the token validity countdown</description>
     </key>
     <key name="validity-warning-color" type="s">
-      <default>"orange"</default>
+      <default>"#ffa500"</default>
       <summary>Validity warning color</summary>
       <description>Color used for the token validity countdown when time is running low</description>
     </key>

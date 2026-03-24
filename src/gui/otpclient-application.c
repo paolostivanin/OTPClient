@@ -542,8 +542,8 @@ otpclient_application_startup (GApplication *application)
         self->use_secret_service = TRUE;
         self->search_provider_enabled = TRUE;
         self->show_validity_seconds = FALSE;
-        self->validity_color = g_strdup ("green");
-        self->validity_warning_color = g_strdup ("orange");
+        self->validity_color = g_strdup ("#008000");
+        self->validity_warning_color = g_strdup ("#ffa500");
         self->minimize_to_tray = FALSE;
     }
 
