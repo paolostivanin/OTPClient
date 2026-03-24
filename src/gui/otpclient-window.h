@@ -23,5 +23,7 @@ void                otpclient_window_add_database    (OTPClientWindow *self,
                                                       const gchar     *path);
 GListStore         *otpclient_window_get_db_store    (OTPClientWindow *self);
 gint                otpclient_window_get_selected_db_index (OTPClientWindow *self);
+void                otpclient_window_select_database (OTPClientWindow *self,
+                                                      gint             index);
 
 G_END_DECLS

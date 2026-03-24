@@ -468,6 +468,10 @@ database_row_selected (GtkListBox      *box,
     adw_navigation_split_view_set_show_content (ADW_NAVIGATION_SPLIT_VIEW (self->split_view), TRUE);
 }
 
+static void on_db_entry_name_changed (DatabaseEntry *entry,
+                                      GParamSpec    *pspec,
+                                      AdwActionRow  *row);
+
 static GtkWidget *
 create_database_row (gpointer item,
                      gpointer user_data)
@@ -481,6 +485,9 @@ create_database_row (gpointer item,
     const gchar *path = database_entry_get_path (entry);
     if (path != NULL)
         g_object_set (row, "subtitle", path, NULL);
+
+    g_signal_connect_object (entry, "notify::name",
+                             G_CALLBACK (on_db_entry_name_changed), row, 0);
 
     return GTK_WIDGET (row);
 }
@@ -505,9 +512,12 @@ otpclient_window_add_database (OTPClientWindow *self,
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
 
-    DatabaseEntry *entry = database_entry_new (name, path);
-    g_list_store_append (self->db_store, entry);
-    g_object_unref (entry);
+    if (!gui_misc_add_db_to_list (self->db_store, name, path))
+        return;
+
+    /* If this is the first database, set it as primary */
+    if (g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) == 1)
+        gui_misc_save_db_path_to_cfg (path);
 }
 
 GListStore *
@@ -527,6 +537,21 @@ otpclient_window_get_selected_db_index (OTPClientWindow *self)
         return -1;
 
     return gtk_list_box_row_get_index (row);
+}
+
+void
+otpclient_window_select_database (OTPClientWindow *self,
+                                  gint             index)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    if (index < 0)
+        return;
+
+    GtkListBoxRow *row = gtk_list_box_get_row_at_index (
+        GTK_LIST_BOX (self->database_list), index);
+    if (row != NULL)
+        gtk_list_box_select_row (GTK_LIST_BOX (self->database_list), row);
 }
 
 static void
@@ -1533,8 +1558,8 @@ on_new_db_password_received (const gchar *password,
     gui_misc_save_db_path_to_cfg (db_path);
 
     /* Add to sidebar */
-    g_autofree gchar *basename = g_path_get_basename (db_path);
-    otpclient_window_add_database (self, basename, db_path);
+    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
+    otpclient_window_add_database (self, display_name, db_path);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -1642,8 +1667,8 @@ on_open_db_password_received (const gchar *password,
     gui_misc_save_db_path_to_cfg (db_path);
 
     /* Add to sidebar */
-    g_autofree gchar *basename = g_path_get_basename (db_path);
-    otpclient_window_add_database (self, basename, db_path);
+    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
+    otpclient_window_add_database (self, display_name, db_path);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -1710,6 +1735,220 @@ on_click_inactivity (GtkGestureClick *gesture,
 }
 
 static void
+on_db_popover_closed (GtkPopover *popover,
+                      gpointer    user_data)
+{
+    (void) user_data;
+    gtk_widget_unparent (GTK_WIDGET (popover));
+}
+
+static void
+on_db_right_click (GtkGestureClick *gesture,
+                   gint             n_press,
+                   gdouble          x,
+                   gdouble          y,
+                   OTPClientWindow *self)
+{
+    (void) gesture;
+    (void) n_press;
+
+    GtkListBoxRow *row = gtk_list_box_get_row_at_y (
+        GTK_LIST_BOX (self->database_list), (gint)y);
+    if (row == NULL)
+        return;
+
+    gtk_list_box_select_row (GTK_LIST_BOX (self->database_list), row);
+
+    GtkBuilder *builder = gtk_builder_new_from_resource (
+        "/com/github/paolostivanin/OTPClient/ui/window.ui");
+    GMenuModel *menu_model = G_MENU_MODEL (
+        gtk_builder_get_object (builder, "db_context_menu"));
+
+    GtkWidget *popover = gtk_popover_menu_new_from_model (menu_model);
+    gtk_widget_set_parent (popover, self->database_list);
+    GdkRectangle rect = { (int)x, (int)y, 1, 1 };
+    gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
+    g_signal_connect (popover, "closed", G_CALLBACK (on_db_popover_closed), NULL);
+    gtk_popover_popup (GTK_POPOVER (popover));
+
+    g_object_unref (builder);
+}
+
+static void
+on_rename_dialog_response (AdwAlertDialog  *dialog,
+                           const gchar     *response,
+                           OTPClientWindow *self)
+{
+    if (g_strcmp0 (response, "rename") != 0)
+        return;
+
+    gint index = otpclient_window_get_selected_db_index (self);
+    if (index < 0)
+        return;
+
+    GtkWidget *entry = g_object_get_data (G_OBJECT (dialog), "name-entry");
+    const gchar *new_name = gtk_editable_get_text (GTK_EDITABLE (entry));
+    if (new_name != NULL && new_name[0] != '\0')
+        gui_misc_rename_db_in_list (self->db_store, (guint)index, new_name);
+}
+
+static void
+action_rename_db (GtkWidget  *widget,
+                  const char *action_name,
+                  GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    gint index = otpclient_window_get_selected_db_index (self);
+    if (index < 0)
+        return;
+
+    g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+        G_LIST_MODEL (self->db_store), (guint)index);
+    if (entry == NULL)
+        return;
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (adw_alert_dialog_new (
+        _("Rename Database"), NULL));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "rename", _("Rename"), NULL);
+    adw_alert_dialog_set_default_response (dialog, "rename");
+    adw_alert_dialog_set_close_response (dialog, "cancel");
+    adw_alert_dialog_set_response_appearance (dialog, "rename",
+                                              ADW_RESPONSE_SUGGESTED);
+
+    GtkWidget *name_entry = gtk_entry_new ();
+    gtk_editable_set_text (GTK_EDITABLE (name_entry),
+                           database_entry_get_name (entry));
+    adw_alert_dialog_set_extra_child (dialog, name_entry);
+    g_object_set_data (G_OBJECT (dialog), "name-entry", name_entry);
+
+    g_signal_connect (dialog, "response",
+                      G_CALLBACK (on_rename_dialog_response), self);
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (self));
+}
+
+static void
+action_set_primary_db (GtkWidget  *widget,
+                       const char *action_name,
+                       GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    gint index = otpclient_window_get_selected_db_index (self);
+    if (index < 0)
+        return;
+
+    g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+        G_LIST_MODEL (self->db_store), (guint)index);
+    if (entry == NULL)
+        return;
+
+    gui_misc_save_db_path_to_cfg (database_entry_get_path (entry));
+}
+
+static void
+on_remove_dialog_response (AdwAlertDialog  *dialog,
+                           const gchar     *response,
+                           OTPClientWindow *self)
+{
+    (void) dialog;
+
+    if (g_strcmp0 (response, "remove") != 0)
+        return;
+
+    gint index = otpclient_window_get_selected_db_index (self);
+    if (index < 0)
+        return;
+
+    g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+        G_LIST_MODEL (self->db_store), (guint)index);
+    if (entry == NULL)
+        return;
+
+    /* Check if this was the primary database */
+    g_autofree gchar *primary_path = gui_misc_get_db_path_from_cfg ();
+    gboolean was_primary = (g_strcmp0 (database_entry_get_path (entry),
+                                      primary_path) == 0);
+
+    gui_misc_remove_db_from_list (self->db_store, (guint)index);
+
+    /* If it was primary, set the first remaining entry as primary */
+    if (was_primary) {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+        if (n > 0) {
+            g_autoptr (DatabaseEntry) first = g_list_model_get_item (
+                G_LIST_MODEL (self->db_store), 0);
+            gui_misc_save_db_path_to_cfg (database_entry_get_path (first));
+        } else {
+            gui_misc_save_db_path_to_cfg ("");
+        }
+    }
+
+    /* If the removed DB was the currently active one, check via the app */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL) {
+        DatabaseData *db_data = otpclient_application_get_db_data (app);
+        if (db_data != NULL &&
+            g_strcmp0 (db_data->db_path, database_entry_get_path (entry)) == 0) {
+            otpclient_window_stop_otp_timer (self);
+            g_list_store_remove_all (self->otp_store);
+        }
+    }
+}
+
+static void
+action_remove_db (GtkWidget  *widget,
+                  const char *action_name,
+                  GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    gint index = otpclient_window_get_selected_db_index (self);
+    if (index < 0)
+        return;
+
+    g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+        G_LIST_MODEL (self->db_store), (guint)index);
+    if (entry == NULL)
+        return;
+
+    g_autofree gchar *body = g_strdup_printf (
+        _("Remove \"%s\" from the database list?\nThe database file will not be deleted."),
+        database_entry_get_name (entry));
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (adw_alert_dialog_new (
+        _("Remove Database"), body));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "remove", _("Remove"), NULL);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+    adw_alert_dialog_set_close_response (dialog, "cancel");
+    adw_alert_dialog_set_response_appearance (dialog, "remove",
+                                              ADW_RESPONSE_DESTRUCTIVE);
+
+    g_signal_connect (dialog, "response",
+                      G_CALLBACK (on_remove_dialog_response), self);
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (self));
+}
+
+static void
+on_db_entry_name_changed (DatabaseEntry *entry,
+                          GParamSpec    *pspec,
+                          AdwActionRow  *row)
+{
+    (void) pspec;
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (row),
+                                   database_entry_get_name (entry));
+}
+
+static void
 otpclient_window_init (OTPClientWindow *self)
 {
     GSettingsSchemaSource *schema_source = NULL;
@@ -1759,6 +1998,12 @@ otpclient_window_init (OTPClientWindow *self)
     g_signal_connect (right_click, "pressed", G_CALLBACK (on_token_right_click), self);
     gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (right_click));
 
+    /* Right-click context menu on database sidebar */
+    GtkGesture *db_right_click = gtk_gesture_click_new ();
+    gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (db_right_click), GDK_BUTTON_SECONDARY);
+    g_signal_connect (db_right_click, "pressed", G_CALLBACK (on_db_right_click), self);
+    gtk_widget_add_controller (self->database_list, GTK_EVENT_CONTROLLER (db_right_click));
+
     /* Inactivity reset: any key press or mouse click resets the auto-lock timer */
     GtkEventController *key_ctrl = gtk_event_controller_key_new ();
     gtk_event_controller_set_propagation_phase (key_ctrl, GTK_PHASE_CAPTURE);
@@ -1807,6 +2052,9 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
     gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);
     gtk_widget_class_install_action (widget_class, "win.show-qr", NULL, action_show_qr);
     gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);
+    gtk_widget_class_install_action (widget_class, "win.rename-db", NULL, action_rename_db);
+    gtk_widget_class_install_action (widget_class, "win.set-primary-db", NULL, action_set_primary_db);
+    gtk_widget_class_install_action (widget_class, "win.remove-db", NULL, action_remove_db);
 
     gtk_widget_class_bind_template_callback (klass, search_text_changed);
 }

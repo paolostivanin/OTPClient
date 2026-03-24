@@ -3,6 +3,7 @@
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otp-entry.h"
+#include "database-sidebar.h"
 #include "gui-misc.h"
 #include "dialogs/password-dialog.h"
 #include "lock-app.h"
@@ -428,20 +429,44 @@ init_database (OTPClientApplication *self)
         return;
     }
 
-    gchar *db_path = gui_misc_get_db_path_from_cfg ();
-    if (db_path == NULL)
+    /* Load the full database list (handles v4 migration) */
+    g_autoptr (GPtrArray) db_list = gui_misc_get_db_list ();
+    if (db_list == NULL || db_list->len == 0)
     {
-        g_info ("No database path configured yet");
+        g_info ("No databases configured yet");
         return;
     }
 
-    self->db_data = g_new0 (DatabaseData, 1);
-    self->db_data->db_path = db_path;
-    self->db_data->max_file_size_from_memlock = memlock_value;
+    /* Populate sidebar with all known databases */
+    for (guint i = 0; i < db_list->len; i++)
+    {
+        DatabaseEntry *entry = g_ptr_array_index (db_list, i);
+        otpclient_window_add_database (self->window,
+                                       database_entry_get_name (entry),
+                                       database_entry_get_path (entry));
+    }
 
-    /* Extract a display name from the file path */
-    g_autofree gchar *basename = g_path_get_basename (db_path);
-    otpclient_window_add_database (self->window, basename, db_path);
+    /* Find and select the primary database */
+    g_autofree gchar *primary_path = gui_misc_get_db_path_from_cfg ();
+    gint primary_index = 0;
+    if (primary_path != NULL) {
+        for (guint i = 0; i < db_list->len; i++) {
+            DatabaseEntry *entry = g_ptr_array_index (db_list, i);
+            if (g_strcmp0 (database_entry_get_path (entry), primary_path) == 0) {
+                primary_index = (gint)i;
+                break;
+            }
+        }
+    }
+    otpclient_window_select_database (self->window, primary_index);
+
+    /* Set up the primary database for decryption */
+    DatabaseEntry *primary_entry = g_ptr_array_index (db_list, primary_index);
+    const gchar *db_path = database_entry_get_path (primary_entry);
+
+    self->db_data = g_new0 (DatabaseData, 1);
+    self->db_data->db_path = g_strdup (db_path);
+    self->db_data->max_file_size_from_memlock = memlock_value;
 
     if (self->use_secret_service)
     {

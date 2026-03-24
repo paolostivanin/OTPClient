@@ -6,6 +6,11 @@
       <summary>Database path</summary>
       <description>Absolute path to the last used database</description>
     </key>
+    <key name="db-list" type="a(ss)">
+      <default>[]</default>
+      <summary>Database list</summary>
+      <description>List of known databases as (display_name, absolute_path) tuples</description>
+    </key>
     <key name="show-next-otp" type="b">
       <default>false</default>
       <summary>Show Next OTP</summary>
