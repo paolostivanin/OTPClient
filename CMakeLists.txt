@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(OTPClient VERSION "4.99.1" LANGUAGES "C")
+project(OTPClient VERSION "4.99.2" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -55,7 +55,7 @@ endif()
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.11.0)
-pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=3.1.0)
+pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=4.0.0)
 pkg_check_modules(JANSSON REQUIRED IMPORTED_TARGET jansson>=2.14)
 pkg_check_modules(GLIB2 REQUIRED IMPORTED_TARGET glib-2.0>=2.82.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0>=2.82.0)
