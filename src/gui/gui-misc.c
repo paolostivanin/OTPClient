@@ -83,7 +83,8 @@ gui_misc_derive_db_display_name (const gchar *path)
     g_autofree gchar *basename = g_path_get_basename (path);
     if (g_str_has_suffix (basename, ".enc")) {
         gsize len = strlen (basename);
-        return g_strndup (basename, len - 4);
+        if (len > 4)
+            return g_strndup (basename, len - 4);
     }
     return g_strdup (basename);
 }
@@ -178,6 +179,9 @@ void
 gui_misc_remove_db_from_list (GListStore *db_store,
                               guint       index)
 {
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (db_store));
+    g_return_if_fail (index < n);
+
     g_list_store_remove (db_store, index);
     gui_misc_save_db_list (db_store);
 }
@@ -187,9 +191,10 @@ gui_misc_rename_db_in_list (GListStore  *db_store,
                             guint        index,
                             const gchar *new_name)
 {
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (db_store));
+    g_return_if_fail (index < n);
+
     g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (db_store), index);
-    if (entry == NULL)
-        return;
 
     database_entry_set_name (entry, new_name);
     gui_misc_save_db_list (db_store);

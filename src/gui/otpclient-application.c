@@ -472,7 +472,7 @@ init_database (OTPClientApplication *self)
     {
         secret_password_lookup (OTPCLIENT_SCHEMA, NULL,
                                 on_secret_lookup_done, self,
-                                "string", db_path,
+                                "string", self->db_data->db_path,
                                 NULL);
     }
     else
