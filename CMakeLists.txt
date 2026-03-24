@@ -156,3 +156,7 @@ endif()
 
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 install(FILES data/com.github.paolostivanin.OTPClient.gschema.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)
+
+if(NOT IS_FLATPAK)
+    install(CODE "execute_process(COMMAND glib-compile-schemas \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)")
+endif()

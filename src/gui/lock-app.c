@@ -8,7 +8,8 @@
 typedef struct
 {
     OTPClientApplication *app;
-    guint screensaver_watcher_id;
+    guint dbus_sub_ids[4];
+    guint num_dbus_subs;
     guint inactivity_timer_id;
     gint64 last_user_activity;
 } LockData;
@@ -151,16 +152,17 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
 
         for (guint i = 0; i < G_N_ELEMENTS (watchers); i++)
         {
-            g_dbus_connection_signal_subscribe (bus,
-                                                watchers[i].name,
-                                                watchers[i].iface,
-                                                watchers[i].signal,
-                                                watchers[i].path,
-                                                NULL,
-                                                G_DBUS_SIGNAL_FLAGS_NONE,
-                                                on_screensaver_signal,
-                                                app,
-                                                NULL);
+            lock_data->dbus_sub_ids[lock_data->num_dbus_subs++] =
+                g_dbus_connection_signal_subscribe (bus,
+                                                    watchers[i].name,
+                                                    watchers[i].iface,
+                                                    watchers[i].signal,
+                                                    watchers[i].path,
+                                                    NULL,
+                                                    G_DBUS_SIGNAL_FLAGS_NONE,
+                                                    on_screensaver_signal,
+                                                    app,
+                                                    NULL);
         }
     }
 
@@ -170,10 +172,15 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
 void
 lock_app_cleanup (OTPClientApplication *app)
 {
-    (void) app;
-
     if (lock_data == NULL)
         return;
+
+    GDBusConnection *bus = g_application_get_dbus_connection (G_APPLICATION (app));
+    if (bus != NULL)
+    {
+        for (guint i = 0; i < lock_data->num_dbus_subs; i++)
+            g_dbus_connection_signal_unsubscribe (bus, lock_data->dbus_sub_ids[i]);
+    }
 
     if (lock_data->inactivity_timer_id != 0)
     {
@@ -185,9 +192,3 @@ lock_app_cleanup (OTPClientApplication *app)
     lock_data = NULL;
 }
 
-guint
-lock_app_get_dbus_watcher_id (OTPClientApplication *app)
-{
-    (void) app;
-    return lock_data ? lock_data->screensaver_watcher_id : 0;
-}

@@ -25,6 +25,7 @@ struct _OTPClientApplication
 
     DatabaseData *db_data;
 
+    GCancellable *cancellable;
     GSettings *settings;
 
     /* config stuff */
@@ -353,10 +354,13 @@ on_password_received (const gchar *password,
             self->db_data->key = NULL;
             g_clear_error (&err);
 
-            PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                       on_password_received,
-                                                       self);
-            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+            if (self->window != NULL)
+            {
+                PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                           on_password_received,
+                                                           self);
+                adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+            }
             return;
         }
         g_clear_error (&err);
@@ -378,7 +382,8 @@ on_password_received (const gchar *password,
     }
 
     populate_window_from_db (self);
-    otpclient_window_start_otp_timer (self->window);
+    if (self->window != NULL)
+        otpclient_window_start_otp_timer (self->window);
 }
 
 static void
@@ -392,12 +397,18 @@ on_secret_lookup_done (GObject      *source,
     GError *err = NULL;
     gchar *password = secret_password_lookup_finish (result, &err);
 
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+    {
+        g_clear_error (&err);
+        return;
+    }
+
     if (password != NULL)
     {
         on_password_received (password, self);
         secret_password_free (password);
     }
-    else
+    else if (self->window != NULL)
     {
         /* No stored password — show the password dialog */
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
@@ -470,7 +481,7 @@ init_database (OTPClientApplication *self)
 
     if (self->use_secret_service)
     {
-        secret_password_lookup (OTPCLIENT_SCHEMA, NULL,
+        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
                                 on_secret_lookup_done, self,
                                 "string", self->db_data->db_path,
                                 NULL);
@@ -560,11 +571,16 @@ otpclient_application_dispose (GObject *object)
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION (object);
 
+    g_cancellable_cancel (self->cancellable);
+    g_clear_object (&self->cancellable);
+
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     otpclient_tray_cleanup (self);
 #endif
 
     lock_app_cleanup (self);
+
+    self->window = NULL;
 
     g_clear_object (&self->settings);
     g_clear_pointer (&self->validity_color, g_free);
@@ -603,6 +619,7 @@ static void
 otpclient_application_init (OTPClientApplication *self)
 {
     self->db_data = NULL;
+    self->cancellable = g_cancellable_new ();
     self->settings = NULL;
     self->validity_color = NULL;
     self->validity_warning_color = NULL;

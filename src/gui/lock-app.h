@@ -13,6 +13,4 @@ void lock_app_unlock               (OTPClientApplication *app);
 
 void lock_app_reset_inactivity     (OTPClientApplication *app);
 
-guint lock_app_get_dbus_watcher_id (OTPClientApplication *app);
-
 G_END_DECLS
