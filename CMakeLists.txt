@@ -159,4 +159,5 @@ install(FILES data/com.github.paolostivanin.OTPClient.gschema.xml DESTINATION ${
 
 if(NOT IS_FLATPAK)
     install(CODE "execute_process(COMMAND glib-compile-schemas \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)")
+    install(CODE "execute_process(COMMAND gtk4-update-icon-cache -t -f \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/icons/hicolor)")
 endif()

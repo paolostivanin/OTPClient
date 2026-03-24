@@ -8,6 +8,7 @@
 typedef struct
 {
     OTPClientApplication *app;
+    GDBusConnection *bus;
     guint dbus_sub_ids[4];
     guint num_dbus_subs;
     guint inactivity_timer_id;
@@ -134,8 +135,8 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
     lock_data->app = app;
     lock_data->last_user_activity = g_get_monotonic_time ();
 
-    GDBusConnection *bus = g_application_get_dbus_connection (G_APPLICATION (app));
-    if (bus != NULL)
+    lock_data->bus = g_application_get_dbus_connection (G_APPLICATION (app));
+    if (lock_data->bus != NULL)
     {
         /* Subscribe to screensaver signals from various desktop environments */
         static const struct {
@@ -153,7 +154,7 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
         for (guint i = 0; i < G_N_ELEMENTS (watchers); i++)
         {
             lock_data->dbus_sub_ids[lock_data->num_dbus_subs++] =
-                g_dbus_connection_signal_subscribe (bus,
+                g_dbus_connection_signal_subscribe (lock_data->bus,
                                                     watchers[i].name,
                                                     watchers[i].iface,
                                                     watchers[i].signal,
@@ -172,14 +173,15 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
 void
 lock_app_cleanup (OTPClientApplication *app)
 {
+    (void) app;
+
     if (lock_data == NULL)
         return;
 
-    GDBusConnection *bus = g_application_get_dbus_connection (G_APPLICATION (app));
-    if (bus != NULL)
+    if (lock_data->bus != NULL)
     {
         for (guint i = 0; i < lock_data->num_dbus_subs; i++)
-            g_dbus_connection_signal_unsubscribe (bus, lock_data->dbus_sub_ids[i]);
+            g_dbus_connection_signal_unsubscribe (lock_data->bus, lock_data->dbus_sub_ids[i]);
     }
 
     if (lock_data->inactivity_timer_id != 0)
