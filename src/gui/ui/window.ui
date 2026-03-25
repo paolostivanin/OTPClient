@@ -194,44 +194,4 @@
       </item>
     </section>
   </menu>
-  <menu id="token_context_menu">
-    <section>
-      <item>
-        <attribute name="label" translatable="yes">Edit</attribute>
-        <attribute name="action">win.edit-token</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Show QR Code</attribute>
-        <attribute name="action">win.show-qr</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Move to...</attribute>
-        <attribute name="action">win.move-token</attribute>
-      </item>
-    </section>
-    <section>
-      <item>
-        <attribute name="label" translatable="yes">Delete</attribute>
-        <attribute name="action">win.delete-token</attribute>
-      </item>
-    </section>
-  </menu>
-  <menu id="db_context_menu">
-    <section>
-      <item>
-        <attribute name="label" translatable="yes">Rename</attribute>
-        <attribute name="action">win.rename-db</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Set as Primary</attribute>
-        <attribute name="action">win.set-primary-db</attribute>
-      </item>
-    </section>
-    <section>
-      <item>
-        <attribute name="label" translatable="yes">Remove from List</attribute>
-        <attribute name="action">win.remove-db</attribute>
-      </item>
-    </section>
-  </menu>
 </interface>

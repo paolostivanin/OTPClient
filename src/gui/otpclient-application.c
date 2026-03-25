@@ -176,8 +176,9 @@ otpclient_application_shortcuts (GSimpleAction *simple,
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
     GtkBuilder *builder = gtk_builder_new_from_resource ("/com/github/paolostivanin/OTPClient/ui/shortcuts-window.ui");
-    AdwDialog *dialog = ADW_DIALOG (gtk_builder_get_object (builder, "shortcuts_dialog"));
-    adw_dialog_present (dialog, GTK_WIDGET (self->window));
+    GtkWindow *dialog = GTK_WINDOW (gtk_builder_get_object (builder, "shortcuts_dialog"));
+    gtk_window_set_transient_for (dialog, GTK_WINDOW (self->window));
+    gtk_window_present (dialog);
     g_object_unref (builder);
 }
 

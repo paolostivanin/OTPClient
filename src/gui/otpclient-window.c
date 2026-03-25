@@ -431,6 +431,29 @@ setup_otp_view (OTPClientWindow *self)
 }
 
 static void
+action_hide_and_unselect (GtkWidget  *widget,
+                          const char *action_name,
+                          GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+
+    /* Clear all displayed OTP values */
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+        if (entry != NULL)
+            otp_entry_set_otp_value (entry, "");
+    }
+
+    /* Unselect all rows */
+    gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
+}
+
+static void
 search_func (OTPClientWindow *self,
              const gchar     *action_name,
              GVariant        *parameter)
@@ -1412,7 +1435,7 @@ on_token_right_click (GtkGestureClick *gesture,
         return;
 
     GtkBuilder *builder = gtk_builder_new_from_resource (
-        "/com/github/paolostivanin/OTPClient/ui/window.ui");
+        "/com/github/paolostivanin/OTPClient/ui/context-menus.ui");
     GMenuModel *menu_model = G_MENU_MODEL (gtk_builder_get_object (builder, "token_context_menu"));
 
     GtkWidget *popover = gtk_popover_menu_new_from_model (menu_model);
@@ -1738,7 +1761,7 @@ on_db_right_click (GtkGestureClick *gesture,
     gtk_list_box_select_row (GTK_LIST_BOX (self->database_list), row);
 
     GtkBuilder *builder = gtk_builder_new_from_resource (
-        "/com/github/paolostivanin/OTPClient/ui/window.ui");
+        "/com/github/paolostivanin/OTPClient/ui/context-menus.ui");
     GMenuModel *menu_model = G_MENU_MODEL (
         gtk_builder_get_object (builder, "db_context_menu"));
 
@@ -2019,14 +2042,22 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "window.search", NULL, (GtkWidgetActionActivateFunc)search_func);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_f, GDK_CONTROL_MASK, "window.search", NULL);
 
+    gtk_widget_class_install_action (widget_class, "win.hide-and-unselect", NULL, action_hide_and_unselect);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_h, GDK_ALT_MASK, "win.hide-and-unselect", NULL);
+
     /* Token actions */
     gtk_widget_class_install_action (widget_class, "win.add-manual", NULL, action_add_manual);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_n, GDK_CONTROL_MASK, "win.add-manual", NULL);
     gtk_widget_class_install_action (widget_class, "win.add-qr-file", NULL, action_add_qr_file);
     gtk_widget_class_install_action (widget_class, "win.add-qr-webcam", NULL, action_add_qr_webcam);
     gtk_widget_class_install_action (widget_class, "win.import", NULL, action_import);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_i, GDK_CONTROL_MASK, "win.import", NULL);
     gtk_widget_class_install_action (widget_class, "win.export", NULL, action_export);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_e, GDK_CONTROL_MASK, "win.export", NULL);
     gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_comma, GDK_CONTROL_MASK, "win.settings", NULL);
     gtk_widget_class_install_action (widget_class, "win.edit-token", NULL, action_edit_token);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_F2, 0, "win.edit-token", NULL);
     gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);
     gtk_widget_class_install_action (widget_class, "win.show-qr", NULL, action_show_qr);
     gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);

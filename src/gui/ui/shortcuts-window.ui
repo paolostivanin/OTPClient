@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
-  <object class="AdwDialog" id="shortcuts_dialog">
+  <object class="GtkWindow" id="shortcuts_dialog">
     <property name="title" translatable="yes">Keyboard Shortcuts</property>
-    <property name="content-width">360</property>
-    <property name="content-height">260</property>
-    <property name="child">
+    <property name="default-width">360</property>
+    <property name="default-height">520</property>
+    <property name="resizable">True</property>
+    <property name="modal">True</property>
+    <child>
       <object class="AdwToolbarView">
         <child type="top">
           <object class="AdwHeaderBar"/>
@@ -49,6 +51,72 @@
                 </child>
                 <child>
                   <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Add Manually</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;n</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Import</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;i</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Export</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;e</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Settings</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;comma</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Edit Token</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">F2</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Hide OTPs &amp; Unselect</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Alt&gt;h</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
                     <property name="title" translatable="yes">Keyboard Shortcuts</property>
                     <child type="suffix">
                       <object class="GtkShortcutLabel">
@@ -63,6 +131,6 @@
           </object>
         </property>
       </object>
-    </property>
+    </child>
   </object>
 </interface>
