@@ -543,6 +543,21 @@ search_text_changed (GtkEntry        *entry,
     (void) entry;
 
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+
+    /* Auto-select when search narrows to a single result */
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (win->filter_model));
+    if (n == 1)
+        gtk_single_selection_set_selected (win->otp_selection, 0);
+}
+
+static void
+search_entry_activate (GtkEntry        *entry,
+                       OTPClientWindow *self)
+{
+    (void) entry;
+
+    /* Enter in search bar: close search */
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (self->search_bar), FALSE);
 }
 
 static void
@@ -2091,6 +2106,7 @@ otpclient_window_init (OTPClientWindow *self)
     g_signal_connect (self->split_view, "notify::show-sidebar", G_CALLBACK (split_view_sidebar_changed), self);
     g_signal_connect (self->sidebar_toggle_button, "clicked", G_CALLBACK (sidebar_toggle_clicked), self);
     g_signal_connect (self->otp_selection, "notify::selected", G_CALLBACK (on_otp_selection_changed), self);
+    g_signal_connect (self->search_entry, "activate", G_CALLBACK (search_entry_activate), self);
 g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
     g_signal_connect (self->new_db_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
     g_signal_connect (self->open_db_button, "clicked", G_CALLBACK (open_db_button_clicked), self);
