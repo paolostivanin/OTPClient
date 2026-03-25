@@ -56,8 +56,11 @@ typedef enum
 typedef struct
 {
     GtkWidget *label;
+    GtkWidget *level_bar;
+    GtkWidget *box;
     guint timeout_id;
     guint remaining;
+    guint period;
 } ValidityWidgets;
 
 static void
@@ -70,15 +73,65 @@ validity_widgets_free (ValidityWidgets *widgets)
 }
 
 static void
-validity_update_label (ValidityWidgets *widgets)
+validity_update_display (ValidityWidgets *widgets)
 {
-    gchar label_text[8];
-
-    if (widgets == NULL || widgets->label == NULL || !GTK_IS_LABEL (widgets->label))
+    if (widgets == NULL)
         return;
 
-    g_snprintf (label_text, sizeof label_text, "%us", widgets->remaining);
-    gtk_label_set_text (GTK_LABEL (widgets->label), label_text);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        g_application_get_default ());
+    gboolean show_seconds = app != NULL &&
+        otpclient_application_get_show_validity_seconds (app);
+
+    if (show_seconds)
+    {
+        if (widgets->label != NULL && GTK_IS_LABEL (widgets->label))
+        {
+            gchar label_text[8];
+            g_snprintf (label_text, sizeof label_text, "%us", widgets->remaining);
+            gtk_label_set_text (GTK_LABEL (widgets->label), label_text);
+            gtk_widget_set_visible (widgets->label, TRUE);
+        }
+        if (widgets->level_bar != NULL)
+            gtk_widget_set_visible (widgets->level_bar, FALSE);
+    }
+    else
+    {
+        if (widgets->label != NULL)
+            gtk_widget_set_visible (widgets->label, FALSE);
+        if (widgets->level_bar != NULL && GTK_IS_LEVEL_BAR (widgets->level_bar))
+        {
+            gdouble fraction = (widgets->period > 0)
+                ? (gdouble) widgets->remaining / widgets->period
+                : 0.0;
+            gtk_level_bar_set_value (GTK_LEVEL_BAR (widgets->level_bar), fraction);
+
+            /* Apply color based on remaining time */
+            const gchar *color;
+            if (widgets->remaining <= widgets->period / 4)
+                color = otpclient_application_get_validity_warning_color (app);
+            else
+                color = otpclient_application_get_validity_color (app);
+
+            GtkCssProvider *provider = g_object_get_data (G_OBJECT (widgets->level_bar), "css-provider");
+            if (provider == NULL)
+            {
+                provider = gtk_css_provider_new ();
+                g_object_set_data_full (G_OBJECT (widgets->level_bar), "css-provider",
+                                        provider, g_object_unref);
+                gtk_widget_add_css_class (widgets->level_bar, "otp-validity");
+                gtk_style_context_add_provider_for_display (
+                    gtk_widget_get_display (widgets->level_bar),
+                    GTK_STYLE_PROVIDER (provider),
+                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+            }
+            g_autofree gchar *css = g_strdup_printf (
+                "levelbar.otp-validity trough block.filled { background-color: %s; }", color);
+            gtk_css_provider_load_from_string (provider, css);
+
+            gtk_widget_set_visible (widgets->level_bar, TRUE);
+        }
+    }
 }
 
 static gboolean
@@ -112,7 +165,7 @@ validity_tick (gpointer data)
     }
 
     widgets->remaining--;
-    validity_update_label (widgets);
+    validity_update_display (widgets);
 
     if (widgets->remaining == 0)
     {
@@ -158,9 +211,10 @@ validity_selected_changed (GtkListItem *list_item,
             period = otp_entry_get_period (entry);
 
         gint64 now = g_get_real_time () / G_USEC_PER_SEC;
+        widgets->period = period;
         widgets->remaining = period - (guint32)(now % period);
-        validity_update_label (widgets);
-        gtk_widget_set_visible (widgets->label, TRUE);
+        validity_update_display (widgets);
+        gtk_widget_set_visible (widgets->box, TRUE);
         widgets->timeout_id = g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
                                                           1,
                                                           validity_tick,
@@ -169,7 +223,7 @@ validity_selected_changed (GtkListItem *list_item,
     }
     else
     {
-        gtk_widget_set_visible (widgets->label, FALSE);
+        gtk_widget_set_visible (widgets->box, FALSE);
     }
 }
 
@@ -272,15 +326,30 @@ otp_validity_column_setup (GtkSignalListItemFactory *factory,
     (void) factory;
     (void) user_data;
 
-    GtkWidget *label = gtk_label_new (NULL);
     ValidityWidgets *widgets = g_new0 (ValidityWidgets, 1);
 
-    gtk_widget_set_visible (label, FALSE);
-    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
-    gtk_list_item_set_child (list_item, label);
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_visible (box, FALSE);
+    gtk_widget_set_valign (box, GTK_ALIGN_CENTER);
 
+    GtkWidget *label = gtk_label_new (NULL);
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_widget_set_visible (label, FALSE);
+    gtk_box_append (GTK_BOX (box), label);
+
+    GtkWidget *level_bar = gtk_level_bar_new_for_interval (0.0, 1.0);
+    gtk_level_bar_set_mode (GTK_LEVEL_BAR (level_bar), GTK_LEVEL_BAR_MODE_CONTINUOUS);
+    gtk_widget_set_visible (level_bar, FALSE);
+    gtk_widget_set_size_request (level_bar, 60, 8);
+    gtk_box_append (GTK_BOX (box), level_bar);
+
+    gtk_list_item_set_child (list_item, box);
+
+    widgets->box = box;
     widgets->label = label;
+    widgets->level_bar = level_bar;
     widgets->remaining = 30;
+    widgets->period = 30;
     g_object_set_data_full (G_OBJECT (list_item), "validity-widgets", widgets, (GDestroyNotify) validity_widgets_free);
 
     g_signal_connect (list_item, "notify::selected", G_CALLBACK (validity_selected_changed), NULL);
