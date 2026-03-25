@@ -106,7 +106,8 @@
                 </child>
                 <child>
                   <object class="AdwActionRow">
-                    <property name="title" translatable="yes">Hide OTPs &amp; Unselect</property>
+                    <property name="title" translatable="yes">Hide OTPs and Unselect</property>
+                    <property name="use-markup">False</property>
                     <child type="suffix">
                       <object class="GtkShortcutLabel">
                         <property name="accelerator">&lt;Alt&gt;h</property>
