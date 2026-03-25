@@ -494,6 +494,15 @@ static void on_db_entry_name_changed (DatabaseEntry *entry,
                                       GParamSpec    *pspec,
                                       AdwActionRow  *row);
 
+static void
+on_db_entry_primary_changed (DatabaseEntry *entry,
+                             GParamSpec    *pspec,
+                             GtkWidget     *icon)
+{
+    (void) pspec;
+    gtk_widget_set_visible (icon, database_entry_get_primary (entry));
+}
+
 static GtkWidget *
 create_database_row (gpointer item,
                      gpointer user_data)
@@ -507,6 +516,14 @@ create_database_row (gpointer item,
     const gchar *path = database_entry_get_path (entry);
     if (path != NULL)
         g_object_set (row, "subtitle", path, NULL);
+
+    GtkWidget *check_icon = gtk_image_new_from_icon_name ("object-select-symbolic");
+    gtk_widget_set_valign (check_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_visible (check_icon, database_entry_get_primary (entry));
+    adw_action_row_add_suffix (row, check_icon);
+
+    g_signal_connect_object (entry, "notify::primary",
+                             G_CALLBACK (on_db_entry_primary_changed), check_icon, 0);
 
     g_signal_connect_object (entry, "notify::name",
                              G_CALLBACK (on_db_entry_name_changed), row, 0);
@@ -527,6 +544,19 @@ setup_database_list (OTPClientWindow *self)
     g_signal_connect (self->database_list, "row-selected", G_CALLBACK (database_row_selected), self);
 }
 
+static void
+sync_primary_flags (OTPClientWindow *self)
+{
+    g_autofree gchar *primary_path = gui_misc_get_db_path_from_cfg ();
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->db_store), i);
+        gboolean is_primary = g_strcmp0 (database_entry_get_path (entry), primary_path) == 0;
+        database_entry_set_primary (entry, is_primary);
+    }
+}
+
 void
 otpclient_window_add_database (OTPClientWindow *self,
                                const gchar     *name,
@@ -540,6 +570,8 @@ otpclient_window_add_database (OTPClientWindow *self,
     /* If this is the first database, set it as primary */
     if (g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) == 1)
         gui_misc_save_db_path_to_cfg (path);
+
+    sync_primary_flags (self);
 }
 
 GListStore *
@@ -1850,6 +1882,7 @@ action_set_primary_db (GtkWidget  *widget,
         return;
 
     gui_misc_save_db_path_to_cfg (database_entry_get_path (entry));
+    sync_primary_flags (self);
 }
 
 static void
@@ -1888,6 +1921,7 @@ on_remove_dialog_response (AdwAlertDialog  *dialog,
         } else {
             gui_misc_save_db_path_to_cfg ("");
         }
+        sync_primary_flags (self);
     }
 
     /* If the removed DB was the currently active one, check via the app */
