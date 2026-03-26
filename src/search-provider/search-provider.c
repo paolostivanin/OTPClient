@@ -10,6 +10,7 @@
 #include "../common/db-common.h"
 #include "../common/file-size.h"
 #include "../common/secret-schema.h"
+#include "../common/gsettings-common.h"
 
 #define KRUNNER_BUS "com.github.paolostivanin.OTPClient.KRunner"
 #define KRUNNER_PATH "/com/github/paolostivanin/OTPClient/KRunner"
@@ -30,9 +31,6 @@ static GPtrArray *load_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
 static void send_notification (const gchar *label, const gchar *otp_value);
-static gchar *get_db_path (void);
-static gboolean get_use_secret_service (void);
-static gboolean get_search_provider_enabled (void);
 
 static const gchar *krunner_introspection_xml =
 "<node>"
@@ -55,72 +53,6 @@ static const gchar *gnome_introspection_xml =
 "</node>";
 
 
-static gchar *
-get_db_path (void)
-{
-    gchar *db_path = NULL;
-    gchar *cfg_file_path = NULL;
-    GKeyFile *kf = g_key_file_new ();
-#ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        }
-    }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
-    return db_path;
-}
-
-
-static gboolean
-get_use_secret_service (void)
-{
-    gboolean use_secret_service = TRUE;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = NULL;
-#ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
-        }
-    }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
-    return use_secret_service;
-}
-
-
-static gboolean
-get_search_provider_enabled (void)
-{
-    gboolean enabled = TRUE;
-    gchar *cfg_file_path = NULL;
-    GKeyFile *kf = g_key_file_new ();
-#ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            GError *err = NULL;
-            enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", &err);
-            if (err) { enabled = TRUE; g_error_free (err); }
-        }
-    }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
-    return enabled;
-}
 
 
 static void
@@ -173,14 +105,14 @@ load_entries (void)
 {
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify)otp_search_entry_free);
 
-    gchar *db_path = get_db_path ();
+    gchar *db_path = gsettings_common_get_db_path ();
     if (!db_path) return entries;
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
     db_data->db_path = db_path;
     db_data->max_file_size_from_memlock = global_max_file_size;
 
-    if (get_use_secret_service ()) {
+    if (gsettings_common_get_use_secret_service ()) {
         gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
         if (!pwd) { g_free (db_data->db_path); g_free (db_data); return entries; }
         db_data->key = secure_strdup (pwd);
@@ -467,7 +399,7 @@ main (int    argc,
         else if (g_strcmp0 (argv[i], "--gnome") == 0) force_gnome = TRUE;
     }
 
-    if (!get_search_provider_enabled ())
+    if (!gsettings_common_get_search_provider_enabled ())
         return 0;
 
     if (!force_kde && !force_gnome) {

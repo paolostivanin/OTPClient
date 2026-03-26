@@ -5,6 +5,7 @@ set(SEARCH_PROVIDER_SOURCE_FILES
         ../common/file-size.c
         ../common/gquarks.c
         ../common/secret-schema.c
+        ../common/gsettings-common.c
 )
 
 set(SEARCH_PROVIDER_HEADER_FILES
@@ -13,6 +14,7 @@ set(SEARCH_PROVIDER_HEADER_FILES
         ../common/file-size.h
         ../common/gquarks.h
         ../common/secret-schema.h
+        ../common/gsettings-common.h
 )
 
 add_executable(${PROJECT_NAME}-search-provider ${SEARCH_PROVIDER_SOURCE_FILES} ${SEARCH_PROVIDER_HEADER_FILES})

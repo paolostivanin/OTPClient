@@ -55,7 +55,8 @@ db_info_dialog_new (DatabaseData *db_data)
     GtkWidget *group = adw_preferences_group_new ();
 
     /* Path */
-    gtk_box_append (GTK_BOX (box), make_info_row (_("Path"),
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (group),
+                               make_info_row (_("Path"),
         db_data->db_path ? db_data->db_path : _("Unknown")));
 
     /* Version */

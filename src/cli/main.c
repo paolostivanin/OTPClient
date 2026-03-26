@@ -44,13 +44,14 @@ main (gint    argc,
 
     GOptionEntry entries[] =
             {
-                    { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) path to the database. Default value is taken from otpclient.cfg", NULL },
+                    { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) path to the database or name from --list-databases. Default value is taken from GSettings/otpclient.cfg", NULL },
                     { "show", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show a token for a given account.", NULL },
                     { "account", 'a', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Account name (to be used with --show, mandatory)", NULL},
                     { "issuer", 'i', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Issuer (to be used with --show, optional)", NULL},
                     { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Match exactly the provided account/issuer (to be used with --show, optional)", NULL},
                     { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
                     { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
+                    { "list-databases", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all known databases from the configuration.", NULL },
                     { "list-types", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List supported import/export types.", NULL },
                     { "import", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import a database.", NULL },
                     { "export", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
@@ -123,6 +124,7 @@ command_line (GApplication                *application __attribute__((unused)),
     cmdline_opts->match_exact = FALSE;
     cmdline_opts->show_next = FALSE;
     cmdline_opts->list = FALSE;
+    cmdline_opts->list_databases = FALSE;
     cmdline_opts->list_types = FALSE;
     cmdline_opts->import = FALSE;
     cmdline_opts->import_type = NULL;
@@ -139,6 +141,16 @@ command_line (GApplication                *application __attribute__((unused)),
 
     if (cmdline_opts->list_types) {
         print_supported_types (cmdline);
+        g_free_cmdline_opts (cmdline_opts);
+        return 0;
+    }
+
+    if (cmdline_opts->list_databases) {
+        /* list-databases doesn't need a DB loaded, just config access */
+        if (!exec_action (cmdline_opts, NULL)) {
+            g_free_cmdline_opts (cmdline_opts);
+            return -1;
+        }
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }
@@ -191,16 +203,18 @@ parse_options (GApplicationCommandLine *cmdline,
 
     g_variant_dict_lookup (options, "show", "b", &cmdline_opts->show);
     g_variant_dict_lookup (options, "list", "b", &cmdline_opts->list);
+    g_variant_dict_lookup (options, "list-databases", "b", &cmdline_opts->list_databases);
     g_variant_dict_lookup (options, "import", "b", &cmdline_opts->import);
     g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export);
 
-    if (cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->import + cmdline_opts->export == 0) {
-        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --import, --export, or --list-types).\n");
+    guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export;
+    if (action_count == 0) {
+        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --list-databases, --import, --export, or --list-types).\n");
         return FALSE;
     }
 
-    if (cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->import + cmdline_opts->export > 1) {
-        g_application_command_line_print (cmdline, "Please provide only one action at a time (--show, --list, --import, --export, or --list-types).\n");
+    if (action_count > 1) {
+        g_application_command_line_print (cmdline, "Please provide only one action at a time (--show, --list, --list-databases, --import, --export, or --list-types).\n");
         return FALSE;
     }
 

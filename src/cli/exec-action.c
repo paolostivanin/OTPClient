@@ -15,43 +15,35 @@
 #include "../common/file-size.h"
 #include "../common/secret-schema.h"
 #include "../common/gquarks.h"
+#include "../common/gsettings-common.h"
 
-#ifndef IS_FLATPAK
-static gchar    *get_db_path           (void);
-#endif
+static gchar    *resolve_db_path       (const gchar *database_arg);
 
 static gchar    *get_pwd               (const gchar *pwd_msg,
                                         int password_fd);
-
-static gboolean  get_use_secretservice (void);
 
 
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data)
 {
-#ifdef IS_FLATPAK
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            db_data->db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
+    if (cmdline_opts->list_databases) {
+        g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
+        if (db_list == NULL || db_list->len == 0) {
+            g_print ("No databases found in the configuration.\n");
+            return TRUE;
         }
-    }
-    if (db_data->db_path == NULL) {
-        db_data->db_path = g_build_filename (g_get_user_data_dir (), "otpclient-db.enc", NULL);
-        if (!g_key_file_has_group (kf, "config")) {
-            g_key_file_set_string (kf, "config", "db_path", db_data->db_path);
-            g_key_file_save_to_file (kf, cfg_file_path, NULL);
+        g_print ("Known databases:\n");
+        for (guint i = 0; i < db_list->len; i++) {
+            DbListEntry *entry = g_ptr_array_index (db_list, i);
+            g_print ("  %s  →  %s\n", entry->name, entry->path);
         }
+        return TRUE;
     }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
-#else
-    db_data->db_path = (cmdline_opts->database != NULL) ? g_strdup (cmdline_opts->database) : get_db_path ();
+
+    db_data->db_path = resolve_db_path (cmdline_opts->database);
     if (db_data->db_path == NULL) {
         return FALSE;
     }
-#endif
 
     if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         if (get_file_size (db_data->db_path) > (goffset)(db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
@@ -67,7 +59,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
     }
 
-    gboolean use_secret_service = get_use_secretservice ();
+    gboolean use_secret_service = gsettings_common_get_use_secret_service ();
     int password_fd = STDIN_FILENO;
     if (cmdline_opts->password_file) {
         if (g_file_test (cmdline_opts->password_file, G_FILE_TEST_IS_SYMLINK)) {
@@ -263,58 +255,58 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     return TRUE;
 }
 
-#ifndef IS_FLATPAK
 static gchar *
-get_db_path (void)
+resolve_db_path (const gchar *database_arg)
 {
-    gchar *db_path = NULL;
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
-            g_clear_error (&err);
-            return NULL;
+    /* If an explicit path or name was given on the command line */
+    if (database_arg != NULL) {
+        /* If it looks like a path (contains a separator), use it directly */
+        if (g_path_is_absolute (database_arg) || strchr (database_arg, G_DIR_SEPARATOR) != NULL) {
+            return g_strdup (database_arg);
         }
-        db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        if (db_path == NULL) {
-            goto type_db_path;
+        /* Otherwise treat it as a database name and look it up */
+        g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
+        if (db_list != NULL) {
+            for (guint i = 0; i < db_list->len; i++) {
+                DbListEntry *entry = g_ptr_array_index (db_list, i);
+                if (g_strcmp0 (entry->name, database_arg) == 0) {
+                    return g_strdup (entry->path);
+                }
+            }
         }
-        if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            gchar *msg = g_strconcat ("Database file/location (", db_path, ") does not exist.\n", NULL);
-            g_printerr ("%s\n", msg);
-            g_free (msg);
-            goto type_db_path;
-        }
-        goto end;
-    }
-    type_db_path: ; // empty statement workaround
-    g_print ("%s", _("Type the absolute path to the database: "));
-    db_path = g_malloc0 (MAX_ABS_PATH_LEN);
-    if (fgets (db_path, MAX_ABS_PATH_LEN, stdin) == NULL) {
-        g_printerr ("%s\n", _("Couldn't get db path from stdin"));
-        g_free (cfg_file_path);
-        g_free (db_path);
+        g_printerr (_("Database '%s' not found in the known database list.\n"), database_arg);
         return NULL;
-    } else {
-        char *nl = strchr (db_path, '\n');
-        if (nl) { *nl = '\0'; }
+    }
+
+    /* No argument given — try GSettings / GKeyFile */
+    gchar *db_path = gsettings_common_get_db_path ();
+    if (db_path != NULL && db_path[0] != '\0') {
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            g_printerr (_("File '%s' does not exist\n"), db_path);
-            g_free (cfg_file_path);
+            g_printerr ("Database file/location (%s) does not exist.\n", db_path);
             g_free (db_path);
             return NULL;
         }
+        return db_path;
     }
+    g_free (db_path);
 
-    end:
-    g_free (cfg_file_path);
-
-    return db_path;
+    /* Last resort: ask interactively */
+    g_print ("%s", _("Type the absolute path to the database: "));
+    gchar *typed = g_malloc0 (MAX_ABS_PATH_LEN);
+    if (fgets (typed, MAX_ABS_PATH_LEN, stdin) == NULL) {
+        g_printerr ("%s\n", _("Couldn't get db path from stdin"));
+        g_free (typed);
+        return NULL;
+    }
+    char *nl = strchr (typed, '\n');
+    if (nl) { *nl = '\0'; }
+    if (!g_file_test (typed, G_FILE_TEST_EXISTS)) {
+        g_printerr (_("File '%s' does not exist\n"), typed);
+        g_free (typed);
+        return NULL;
+    }
+    return typed;
 }
-#endif
 
 
 static gchar *
@@ -373,24 +365,3 @@ get_pwd (const gchar *pwd_msg,
 }
 
 
-static gboolean
-get_use_secretservice (void)
-{
-    gboolean use_secret_service = TRUE;
-    GError *err = NULL;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, &err)) {
-            g_printerr ("%s\n", err->message);
-            g_key_file_free (kf);
-            g_free (cfg_file_path);
-            g_clear_error (&err);
-            return FALSE;
-        }
-        use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
-    }
-    g_key_file_free (kf);
-    g_free (cfg_file_path);
-    return use_secret_service;
-}

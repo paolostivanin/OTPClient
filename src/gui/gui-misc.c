@@ -2,26 +2,12 @@
 #include "gui-misc.h"
 #include "database-sidebar.h"
 #include "common.h"
-
-static GSettings *
-get_gsettings (void)
-{
-    GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
-    if (source == NULL)
-        return NULL;
-
-    g_autoptr (GSettingsSchema) schema = g_settings_schema_source_lookup (
-        source, "com.github.paolostivanin.OTPClient", TRUE);
-    if (schema == NULL)
-        return NULL;
-
-    return g_settings_new ("com.github.paolostivanin.OTPClient");
-}
+#include "gsettings-common.h"
 
 gchar *
 gui_misc_get_db_path_from_cfg (void)
 {
-    g_autoptr (GSettings) settings = get_gsettings ();
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
     if (settings != NULL) {
         gchar *db_path = g_settings_get_string (settings, "db-path");
         if (db_path != NULL && db_path[0] != '\0')
@@ -39,7 +25,7 @@ gui_misc_get_db_path_from_cfg (void)
 
     /* Migrate to GSettings if we found a path */
     if (db_path != NULL && db_path[0] != '\0') {
-        g_autoptr (GSettings) s = get_gsettings ();
+        g_autoptr (GSettings) s = gsettings_common_get_settings ();
         if (s != NULL)
             g_settings_set_string (s, "db-path", db_path);
     }
@@ -50,7 +36,7 @@ gui_misc_get_db_path_from_cfg (void)
 void
 gui_misc_save_db_path_to_cfg (const gchar *db_path)
 {
-    g_autoptr (GSettings) settings = get_gsettings ();
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
     if (settings != NULL)
         g_settings_set_string (settings, "db-path", db_path);
 
@@ -92,7 +78,7 @@ gui_misc_derive_db_display_name (const gchar *path)
 GPtrArray *
 gui_misc_get_db_list (void)
 {
-    g_autoptr (GSettings) settings = get_gsettings ();
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
     if (settings == NULL)
         return NULL;
 
@@ -137,7 +123,7 @@ gui_misc_get_db_list (void)
 void
 gui_misc_save_db_list (GListStore *db_store)
 {
-    g_autoptr (GSettings) settings = get_gsettings ();
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
     if (settings == NULL)
         return;
 
