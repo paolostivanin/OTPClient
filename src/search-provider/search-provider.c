@@ -113,7 +113,7 @@ load_entries (void)
     db_data->max_file_size_from_memlock = global_max_file_size;
 
     if (gsettings_common_get_use_secret_service ()) {
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", "main_pwd", NULL);
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", db_path, NULL);
         if (!pwd) { g_free (db_data->db_path); g_free (db_data); return entries; }
         db_data->key = secure_strdup (pwd);
         secret_password_free (pwd);
