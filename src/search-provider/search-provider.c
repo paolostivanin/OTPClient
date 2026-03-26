@@ -19,6 +19,11 @@
 
 static gint32 global_max_file_size = 0;
 
+#define CACHE_TTL_SECONDS 5
+
+static GPtrArray *cached_entries = NULL;
+static gint64     cached_at = 0;
+
 typedef struct otp_search_entry_t {
     gchar *id;
     gchar *label;
@@ -27,7 +32,8 @@ typedef struct otp_search_entry_t {
 } OtpSearchEntry;
 
 static void otp_search_entry_free (OtpSearchEntry *entry);
-static GPtrArray *load_entries (void);
+static GPtrArray *load_entries_uncached (void);
+static GPtrArray *get_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
 static void send_notification (const gchar *label, const gchar *otp_value);
@@ -101,7 +107,7 @@ get_entry_otp_value (json_t *obj)
 
 
 static GPtrArray *
-load_entries (void)
+load_entries_uncached (void)
 {
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify)otp_search_entry_free);
 
@@ -155,6 +161,22 @@ load_entries (void)
     g_free (db_data);
 
     return entries;
+}
+
+
+static GPtrArray *
+get_entries (void)
+{
+    gint64 now = time (NULL);
+    if (cached_entries != NULL && (now - cached_at) < CACHE_TTL_SECONDS)
+        return cached_entries;
+
+    if (cached_entries != NULL)
+        g_ptr_array_free (cached_entries, TRUE);
+
+    cached_entries = load_entries_uncached ();
+    cached_at = now;
+    return cached_entries;
 }
 
 
@@ -227,13 +249,12 @@ handle_gnome_call (GDBusConnection       *conn,
         }
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
-        GPtrArray *entries = load_entries ();
+        GPtrArray *entries = get_entries ();
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
             if (entry_matches_terms (e, terms, g_strv_length (terms)))
                 g_variant_builder_add (&builder, "s", e->id);
         }
-        g_ptr_array_free (entries, TRUE);
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
         g_strfreev (terms);
     } else if (g_strcmp0 (method, "GetResultMetas") == 0) {
@@ -241,7 +262,7 @@ handle_gnome_call (GDBusConnection       *conn,
         g_variant_get (params, "(^as)", &ids);
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("aa{sv}"));
-        GPtrArray *entries = load_entries ();
+        GPtrArray *entries = get_entries ();
         for (gsize j = 0; ids[j]; j++) {
             for (guint i = 0; i < entries->len; i++) {
                 OtpSearchEntry *e = g_ptr_array_index (entries, i);
@@ -256,7 +277,6 @@ handle_gnome_call (GDBusConnection       *conn,
                 }
             }
         }
-        g_ptr_array_free (entries, TRUE);
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(aa{sv})", &builder));
         g_strfreev (ids);
     } else if (g_strcmp0 (method, "ActivateResult") == 0) {
@@ -264,7 +284,7 @@ handle_gnome_call (GDBusConnection       *conn,
         g_variant_get (params, "(&s^as u)", &id, NULL, NULL);
         g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = load_entries ();
+        GPtrArray *entries = get_entries ();
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
             if (g_strcmp0 (e->id, id) == 0) {
@@ -273,7 +293,6 @@ handle_gnome_call (GDBusConnection       *conn,
                 break;
             }
         }
-        g_ptr_array_free (entries, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else {
@@ -302,7 +321,7 @@ handle_krunner_call (GDBusConnection       *conn,
         if (query && *query) {
             g_auto(GStrv) terms = g_strsplit_set (query, " \t", -1);
             gsize terms_len = g_strv_length (terms);
-            GPtrArray *entries = load_entries ();
+            GPtrArray *entries = get_entries ();
             for (guint i = 0; i < entries->len; i++) {
                 OtpSearchEntry *e = g_ptr_array_index (entries, i);
                 if (!entry_matches_terms (e, terms, terms_len)) continue;
@@ -319,7 +338,6 @@ handle_krunner_call (GDBusConnection       *conn,
                                        "com.github.paolostivanin.OTPClient",
                                        (gint32)0, (gdouble)1.0, &props);
             }
-            g_ptr_array_free (entries, TRUE);
         }
         GVariant *res = g_variant_builder_end (&builder);
         g_dbus_method_invocation_return_value (inv, g_variant_new_tuple (&res, 1));
@@ -328,7 +346,7 @@ handle_krunner_call (GDBusConnection       *conn,
         g_variant_get (params, "(&s&s)", &id, NULL);
         g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = load_entries ();
+        GPtrArray *entries = get_entries ();
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
             if (g_strcmp0 (e->id, id) == 0) {
@@ -337,7 +355,6 @@ handle_krunner_call (GDBusConnection       *conn,
                 break;
             }
         }
-        g_ptr_array_free (entries, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else if (g_strcmp0 (method, "Actions") == 0) {

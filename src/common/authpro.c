@@ -139,7 +139,7 @@ export_authpro (const gchar *export_path,
         guchar *salt = g_malloc0 (AUTHPRO_SALT_TAG);
         gcry_create_nonce (salt, AUTHPRO_SALT_TAG);
         guchar *iv = g_malloc0 (AUTHPRO_IV);
-        gcry_create_nonce (iv, AUTHPRO_SALT_TAG);
+        gcry_create_nonce (iv, AUTHPRO_IV);
         guchar *derived_key = get_authpro_derived_key (password, salt);
         if (derived_key == NULL) {
             g_free (salt);

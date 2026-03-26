@@ -124,10 +124,17 @@ validity_update_display (ValidityWidgets *widgets)
                     gtk_widget_get_display (widgets->level_bar),
                     GTK_STYLE_PROVIDER (provider),
                     GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+                g_object_set_data (G_OBJECT (widgets->level_bar), "last-color", NULL);
             }
-            g_autofree gchar *css = g_strdup_printf (
-                "levelbar.otp-validity trough block.filled { background-color: %s; }", color);
-            gtk_css_provider_load_from_string (provider, css);
+            const gchar *last_color = g_object_get_data (G_OBJECT (widgets->level_bar), "last-color");
+            if (last_color == NULL || g_strcmp0 (last_color, color) != 0)
+            {
+                g_autofree gchar *css = g_strdup_printf (
+                    "levelbar.otp-validity trough block.filled { background-color: %s; }", color);
+                gtk_css_provider_load_from_string (provider, css);
+                g_object_set_data_full (G_OBJECT (widgets->level_bar), "last-color",
+                                        g_strdup (color), g_free);
+            }
 
             gtk_widget_set_visible (widgets->level_bar, TRUE);
         }
@@ -469,7 +476,21 @@ search_filter_func (gpointer item,
     const gchar *account = otp_entry_get_account (entry);
     const gchar *issuer = otp_entry_get_issuer (entry);
 
-    g_autofree gchar *search_lower = g_utf8_strdown (search_text, -1);
+    const gchar *cached = g_object_get_data (G_OBJECT (self->search_entry), "search-lower-cache");
+    const gchar *cached_src = g_object_get_data (G_OBJECT (self->search_entry), "search-lower-src");
+    g_autofree gchar *search_lower = NULL;
+    if (cached != NULL && cached_src != NULL && g_strcmp0 (cached_src, search_text) == 0)
+    {
+        search_lower = g_strdup (cached);
+    }
+    else
+    {
+        search_lower = g_utf8_strdown (search_text, -1);
+        g_object_set_data_full (G_OBJECT (self->search_entry), "search-lower-cache",
+                                g_strdup (search_lower), g_free);
+        g_object_set_data_full (G_OBJECT (self->search_entry), "search-lower-src",
+                                g_strdup (search_text), g_free);
+    }
     g_autofree gchar *account_lower = account ? g_utf8_strdown (account, -1) : g_strdup ("");
     g_autofree gchar *issuer_lower = issuer ? g_utf8_strdown (issuer, -1) : g_strdup ("");
 

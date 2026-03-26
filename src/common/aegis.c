@@ -88,6 +88,11 @@ get_otps_from_plain_backup (const gchar  *path,
 
         gchar *dumped_json = json_dumps (json_object_get (json, "db"), 0);
         json_decref (json);
+        if (dumped_json == NULL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "The Aegis backup does not contain a valid 'db' field.");
+            json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+            return NULL;
+        }
         gchar *cleaned_db = remove_icons_from_db (dumped_json, FALSE);
         g_free (dumped_json);
 
@@ -121,10 +126,16 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
     json_t *arr = json_object_get (json_object_get(json, "header"), "slots");
     gint index = 0;
-    for (; index < json_array_size(arr); index++) {
+    for (; index < (gint)json_array_size(arr); index++) {
         json_t *j_type = json_object_get (json_array_get(arr, index), "type");
         json_int_t int_type = json_integer_value (j_type);
         if (int_type == 1) break;
+    }
+    if (index >= (gint)json_array_size(arr)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "No password slot found in the Aegis backup.");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
     }
     json_t *wanted_obj = json_array_get (arr, index);
     gint n = (gint)json_integer_value (json_object_get (wanted_obj, "n"));

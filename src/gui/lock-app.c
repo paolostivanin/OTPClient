@@ -27,7 +27,13 @@ on_unlock_password (const gchar *password,
     if (password == NULL || db_data == NULL || db_data->key == NULL)
         return;
 
-    if (g_strcmp0 (password, db_data->key) == 0)
+    gsize pwd_len = strlen (password);
+    gsize key_len = strlen (db_data->key);
+    volatile guchar result = (pwd_len != key_len);
+    gsize cmp_len = (pwd_len < key_len) ? pwd_len : key_len;
+    for (gsize i = 0; i < cmp_len; i++)
+        result |= ((const volatile guchar *)password)[i] ^ ((const volatile guchar *)db_data->key)[i];
+    if (result == 0)
     {
         lock_app_unlock (app);
     }

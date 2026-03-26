@@ -31,7 +31,7 @@
       <li>import and export encrypted/plain Aegis backup</li>
       <li>import and export plain FreeOTPPlus backup (key URI format only)</li>
       <li>import of Google's migration QR codes</li>
-      <li>local database is encrypted using AES256-GCM (PBKDF2 with SHA512 and 100k iterations) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
+      <li>local database is encrypted using AES256-GCM (Argon2id key derivation) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
     </ul>
   </description>
 

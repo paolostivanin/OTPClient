@@ -323,6 +323,11 @@ decrypt_data (const gchar **b64_data,
     twofas_data->salt = g_base64_decode (b64_data[1], &salt_out_len);
     twofas_data->iv = g_base64_decode (b64_data[2], &iv_out_len);
 
+    if (enc_data_with_tag_size <= TWOFAS_TAG) {
+        g_printerr ("Encrypted data is too small.\n");
+        g_free (enc_data_with_tag);
+        return;
+    }
     guchar tag[TWOFAS_TAG];
     gsize enc_buf_size = enc_data_with_tag_size - TWOFAS_TAG;
     guchar *enc_data = g_malloc0 (enc_buf_size);
@@ -351,6 +356,8 @@ decrypt_data (const gchar **b64_data,
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
         g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        gcry_free (twofas_data->json_data);
+        twofas_data->json_data = NULL;
         gcry_free (derived_key);
         g_free (enc_data);
         gcry_cipher_close (hd);
@@ -360,6 +367,8 @@ decrypt_data (const gchar **b64_data,
     gpg_err = gcry_cipher_checktag (hd, tag, TWOFAS_TAG);
     if (gpg_err) {
         g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        gcry_free (twofas_data->json_data);
+        twofas_data->json_data = NULL;
     }
 
     gcry_cipher_close (hd);
@@ -400,6 +409,7 @@ get_reference_data (guchar *derived_key,
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, TWOFAS_IV);
     if (hd == NULL) {
         g_printerr ("Failed to open the cipher to encrypt the reference data.\n");
+        g_free (iv);
         return NULL;
     }
     gsize buf_size = strlen (reference);

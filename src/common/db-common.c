@@ -407,7 +407,7 @@ encrypt_db (DatabaseData *db_data,
     header_data->argon2id_parallelism = db_data->argon2id_parallelism;
 
     GFile *out_file = g_file_new_for_path (db_data->db_path);
-    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION, NULL, NULL);
+    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, NULL);
     if (out_stream == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to replace existing file");
         g_object_unref (out_file);
@@ -430,6 +430,13 @@ encrypt_db (DatabaseData *db_data,
     }
 
     gchar *in_memory_dumped_data = json_dumps (db_data->in_memory_json_data, JSON_COMPACT);
+    if (in_memory_dumped_data == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
+        cleanup_db_gfile (out_file, out_stream, NULL);
+        gcry_free (derived_key);
+        g_free (header_data);
+        return;
+    }
     gsize input_data_len = strlen (in_memory_dumped_data) + 1;
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
