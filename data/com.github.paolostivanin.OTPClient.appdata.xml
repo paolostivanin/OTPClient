@@ -89,6 +89,32 @@
   </content_rating>
 
   <releases>
+    <release version="4.99.2" date="2026-03-26">
+      <description>
+        <p>OTPClient 5.0.0-alpha2 - Multi-database support, UI improvements, and bug fixes</p>
+        <ul>
+          <li>NEW: persistent multi-database support with sidebar management</li>
+          <li>NEW: sidebar uses AdwOverlaySplitView with toggle button</li>
+          <li>NEW: checkmark indicator for primary database in sidebar</li>
+          <li>NEW: auto-select and copy OTP when search narrows to one result</li>
+          <li>NEW: countdown color pickers in settings</li>
+          <li>NEW: keyboard shortcuts dialog</li>
+          <li>NEW: CLI and search provider migrated to GSettings</li>
+          <li>NEW: CLI --list-databases option</li>
+          <li>NEW: show level bar instead of seconds when show-validity-seconds is disabled</li>
+          <li>NEW: tooltips for sidebar and toolbar buttons</li>
+          <li>FIX: window size not persisted across sessions</li>
+          <li>FIX: context menu crash</li>
+          <li>FIX: use-after-free in async secret lookup</li>
+          <li>FIX: double-free of filter_model in window dispose</li>
+          <li>FIX: DBus assertion on exit</li>
+          <li>FIX: schema not compiled on install</li>
+          <li>FIX: secret service key mismatch</li>
+          <li>FIX: search provider install path</li>
+          <li>FIX: markup parsing warning for shortcuts dialog entry</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.99.1" date="2026-03-17">
       <description>
         <p>OTPClient 5.0.0-alpha1 brings a new UI</p>
