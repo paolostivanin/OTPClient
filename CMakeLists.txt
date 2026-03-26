@@ -141,7 +141,7 @@ if(BUILD_SEARCH_PROVIDER)
             ${COMMON_LIBS}
     )
 
-    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
+    install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_BINDIR})
 
     # GNOME Search Provider metadata
     install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION ${CMAKE_INSTALL_DATADIR}/gnome-shell/search-providers)
