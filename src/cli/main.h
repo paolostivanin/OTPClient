@@ -24,6 +24,8 @@ typedef struct cmdline_opts_t {
     gchar *export_type;
     gchar *export_dir;
     gchar *password_file;
+    gboolean export_settings;
+    gboolean import_settings;
 } CmdlineOpts;
 
 gboolean exec_action (CmdlineOpts  *cmdline_opts,

@@ -827,3 +827,29 @@ void otpclient_application_set_minimize_to_tray (OTPClientApplication *self, gbo
         otpclient_tray_disable (self);
 #endif
 }
+
+void otpclient_application_reload_settings (OTPClientApplication *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (self->settings == NULL)
+        return;
+
+    self->show_next_otp = g_settings_get_boolean (self->settings, "show-next-otp");
+    self->disable_notifications = !g_settings_get_boolean (self->settings, "notification-enabled");
+    self->auto_lock = g_settings_get_boolean (self->settings, "auto-lock");
+    self->inactivity_timeout = (gint) g_settings_get_uint (self->settings, "auto-lock-timeout");
+    self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
+    self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
+    self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
+    self->show_validity_seconds = g_settings_get_boolean (self->settings, "show-validity-seconds");
+    g_free (self->validity_color);
+    self->validity_color = g_settings_get_string (self->settings, "validity-color");
+    g_free (self->validity_warning_color);
+    self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
+    self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+
+    /* Apply dark theme */
+    adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
+                                        self->use_dark_theme ? ADW_COLOR_SCHEME_FORCE_DARK
+                                                             : ADW_COLOR_SCHEME_DEFAULT);
+}

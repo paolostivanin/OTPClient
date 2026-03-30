@@ -2,6 +2,7 @@
 #include "settings-dialog.h"
 #include "gui-misc.h"
 #include "common.h"
+#include "settings-import-export.h"
 
 struct _SettingsDialog
 {
@@ -157,6 +158,119 @@ on_validity_warning_color_changed (GtkColorDialogButton *button,
 }
 
 static void
+on_export_file_save_complete (GObject      *source,
+                              GAsyncResult *result,
+                              gpointer      user_data)
+{
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    SettingsDialog *self = SETTINGS_DIALOG (user_data);
+    GError *err = NULL;
+
+    GFile *file = gtk_file_dialog_save_finish (dialog, result, &err);
+    if (file == NULL) {
+        if (!g_error_matches (err, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED))
+            g_printerr ("Export settings error: %s\n", err->message);
+        g_clear_error (&err);
+        return;
+    }
+
+    g_autofree gchar *path = g_file_get_path (file);
+    g_object_unref (file);
+
+    gchar *json = export_settings_to_json (&err);
+    if (json == NULL) {
+        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Export Failed"), err->message));
+        adw_alert_dialog_add_response (alert, "ok", _("OK"));
+        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        g_clear_error (&err);
+        return;
+    }
+
+    if (!g_file_set_contents (path, json, -1, &err)) {
+        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Export Failed"), err->message));
+        adw_alert_dialog_add_response (alert, "ok", _("OK"));
+        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        g_clear_error (&err);
+    }
+
+    free (json);
+}
+
+static void
+on_export_settings_clicked (GtkWidget      *button __attribute__((unused)),
+                            SettingsDialog *self)
+{
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Export Settings"));
+    gtk_file_dialog_set_initial_name (dialog, "otpclient-settings.json");
+    gtk_file_dialog_save (dialog,
+                          GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (self))),
+                          NULL,
+                          on_export_file_save_complete,
+                          self);
+    g_object_unref (dialog);
+}
+
+static void
+on_import_file_open_complete (GObject      *source,
+                              GAsyncResult *result,
+                              gpointer      user_data)
+{
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    SettingsDialog *self = SETTINGS_DIALOG (user_data);
+    GError *err = NULL;
+
+    GFile *file = gtk_file_dialog_open_finish (dialog, result, &err);
+    if (file == NULL) {
+        if (!g_error_matches (err, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED))
+            g_printerr ("Import settings error: %s\n", err->message);
+        g_clear_error (&err);
+        return;
+    }
+
+    g_autofree gchar *path = g_file_get_path (file);
+    g_object_unref (file);
+
+    gchar *contents = NULL;
+    if (!g_file_get_contents (path, &contents, NULL, &err)) {
+        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Import Failed"), err->message));
+        adw_alert_dialog_add_response (alert, "ok", _("OK"));
+        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        g_clear_error (&err);
+        return;
+    }
+
+    if (!import_settings_from_json (contents, &err)) {
+        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Import Failed"), err->message));
+        adw_alert_dialog_add_response (alert, "ok", _("OK"));
+        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        g_clear_error (&err);
+        g_free (contents);
+        return;
+    }
+    g_free (contents);
+
+    /* Sync in-memory app state from GSettings and close the dialog so
+     * the user sees fresh values when they reopen it. */
+    otpclient_application_reload_settings (self->app);
+    adw_dialog_close (ADW_DIALOG (self));
+}
+
+static void
+on_import_settings_clicked (GtkWidget      *button __attribute__((unused)),
+                            SettingsDialog *self)
+{
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Import Settings"));
+    gtk_file_dialog_open (dialog,
+                          GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (self))),
+                          NULL,
+                          on_import_file_open_complete,
+                          self);
+    g_object_unref (dialog);
+}
+
+static void
 settings_dialog_init (SettingsDialog *self)
 {
     (void) self;
@@ -309,6 +423,22 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
 #endif
 
+    /* Backup group */
+    AdwPreferencesGroup *backup_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
+    adw_preferences_group_set_title (backup_group, _("Backup"));
+
+    GtkWidget *export_row = adw_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (export_row), _("Export Settings"));
+    g_signal_connect (export_row, "activated",
+                      G_CALLBACK (on_export_settings_clicked), self);
+    adw_preferences_group_add (backup_group, export_row);
+
+    GtkWidget *import_row = adw_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (import_row), _("Import Settings"));
+    g_signal_connect (import_row, "activated",
+                      G_CALLBACK (on_import_settings_clicked), self);
+    adw_preferences_group_add (backup_group, import_row);
+
     /* Add page */
     AdwPreferencesPage *page = ADW_PREFERENCES_PAGE (adw_preferences_page_new ());
     adw_preferences_page_set_title (page, _("Settings"));
@@ -317,6 +447,7 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_page_add (page, notif_group);
     adw_preferences_page_add (page, security_group);
     adw_preferences_page_add (page, integration_group);
+    adw_preferences_page_add (page, backup_group);
 
     adw_preferences_dialog_add (ADW_PREFERENCES_DIALOG (self), page);
 

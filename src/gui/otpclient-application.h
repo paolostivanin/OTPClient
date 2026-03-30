@@ -65,4 +65,6 @@ gboolean              otpclient_application_get_minimize_to_tray (OTPClientAppli
 void                  otpclient_application_set_minimize_to_tray (OTPClientApplication *self,
                                                                    gboolean              minimize);
 
+void                  otpclient_application_reload_settings (OTPClientApplication *self);
+
 G_END_DECLS

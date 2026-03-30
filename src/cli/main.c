@@ -5,6 +5,7 @@
 #include "../common/file-size.h"
 #include "version.h"
 #include "../common/import-export.h"
+#include "../common/settings-import-export.h"
 #include "main.h"
 
 static gint      handle_local_options  (GApplication            *application,
@@ -61,6 +62,8 @@ main (gint    argc,
                     { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
 #endif
                     { "password-file", 'p', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) Read database password from a file instead of stdin.", NULL },
+                    { "export-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export application settings as JSON.", NULL },
+                    { "import-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import application settings from a JSON file (requires --file).", NULL },
                     { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
                     { NULL }
             };
@@ -133,6 +136,8 @@ command_line (GApplication                *application __attribute__((unused)),
     cmdline_opts->export_type = NULL;
     cmdline_opts->export_dir = NULL;
     cmdline_opts->password_file = NULL;
+    cmdline_opts->export_settings = FALSE;
+    cmdline_opts->import_settings = FALSE;
 
     if (!parse_options (cmdline, cmdline_opts)) {
         g_free_cmdline_opts (cmdline_opts);
@@ -151,6 +156,54 @@ command_line (GApplication                *application __attribute__((unused)),
             g_free_cmdline_opts (cmdline_opts);
             return -1;
         }
+        g_free_cmdline_opts (cmdline_opts);
+        return 0;
+    }
+
+    if (cmdline_opts->export_settings) {
+        GError *err = NULL;
+        gchar *json = export_settings_to_json (&err);
+        if (json == NULL) {
+            g_application_command_line_printerr (cmdline, "Error: %s\n", err->message);
+            g_clear_error (&err);
+            g_free_cmdline_opts (cmdline_opts);
+            return -1;
+        }
+        if (cmdline_opts->import_file != NULL) {
+            if (!g_file_set_contents (cmdline_opts->import_file, json, -1, &err)) {
+                g_application_command_line_printerr (cmdline, "Error writing file: %s\n", err->message);
+                g_clear_error (&err);
+                free (json);
+                g_free_cmdline_opts (cmdline_opts);
+                return -1;
+            }
+            g_application_command_line_print (cmdline, "Settings exported to: %s\n", cmdline_opts->import_file);
+        } else {
+            g_application_command_line_print (cmdline, "%s\n", json);
+        }
+        free (json);
+        g_free_cmdline_opts (cmdline_opts);
+        return 0;
+    }
+
+    if (cmdline_opts->import_settings) {
+        GError *err = NULL;
+        gchar *contents = NULL;
+        if (!g_file_get_contents (cmdline_opts->import_file, &contents, NULL, &err)) {
+            g_application_command_line_printerr (cmdline, "Error reading file: %s\n", err->message);
+            g_clear_error (&err);
+            g_free_cmdline_opts (cmdline_opts);
+            return -1;
+        }
+        if (!import_settings_from_json (contents, &err)) {
+            g_application_command_line_printerr (cmdline, "Error: %s\n", err->message);
+            g_clear_error (&err);
+            g_free (contents);
+            g_free_cmdline_opts (cmdline_opts);
+            return -1;
+        }
+        g_free (contents);
+        g_application_command_line_print (cmdline, "Settings imported successfully.\n");
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }
@@ -206,15 +259,17 @@ parse_options (GApplicationCommandLine *cmdline,
     g_variant_dict_lookup (options, "list-databases", "b", &cmdline_opts->list_databases);
     g_variant_dict_lookup (options, "import", "b", &cmdline_opts->import);
     g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export);
+    g_variant_dict_lookup (options, "export-settings", "b", &cmdline_opts->export_settings);
+    g_variant_dict_lookup (options, "import-settings", "b", &cmdline_opts->import_settings);
 
-    guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export;
+    guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export + cmdline_opts->export_settings + cmdline_opts->import_settings;
     if (action_count == 0) {
-        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --list-databases, --import, --export, or --list-types).\n");
+        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --list-databases, --import, --export, --export-settings, --import-settings, or --list-types).\n");
         return FALSE;
     }
 
     if (action_count > 1) {
-        g_application_command_line_print (cmdline, "Please provide only one action at a time (--show, --list, --list-databases, --import, --export, or --list-types).\n");
+        g_application_command_line_print (cmdline, "Please provide only one action at a time.\n");
         return FALSE;
     }
 
@@ -235,6 +290,18 @@ parse_options (GApplicationCommandLine *cmdline,
             g_application_command_line_print (cmdline, "The account/issuer filters and matching options can only be used with --show.\n");
             return FALSE;
         }
+    }
+
+    if (cmdline_opts->import_settings) {
+        if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
+            g_application_command_line_print (cmdline, "Please provide a file to import settings from (--file).\n");
+            return FALSE;
+        }
+    }
+
+    if (cmdline_opts->export_settings) {
+        /* --file is optional for export-settings; if given, write to file instead of stdout */
+        g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file);
     }
 
     if (cmdline_opts->import) {
@@ -273,8 +340,9 @@ parse_options (GApplicationCommandLine *cmdline,
             g_free (unused_type);
             return FALSE;
         }
-        if (g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "The --file option can only be used with --import.\n");
+        if (!cmdline_opts->import_settings && !cmdline_opts->export_settings &&
+            g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
+            g_application_command_line_print (cmdline, "The --file option can only be used with --import, --import-settings, or --export-settings.\n");
             return FALSE;
         }
 #ifndef IS_FLATPAK
