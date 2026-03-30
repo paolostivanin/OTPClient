@@ -86,6 +86,11 @@
       <summary>Minimize to Tray</summary>
       <description>Minimize window to system tray instead of closing</description>
     </key>
+    <key name="last-seen-version" type="s">
+      <default>""</default>
+      <summary>Last seen application version</summary>
+      <description>Tracks the last version the user has seen, used to show What's New dialogs on upgrade</description>
+    </key>
   </schema>
 </schemalist>
 

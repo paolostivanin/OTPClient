@@ -9,6 +9,7 @@
 #include "lock-app.h"
 #include "dialogs/db-info-dialog.h"
 #include "dialogs/kdf-dialog.h"
+#include "dialogs/whats-new-dialog.h"
 #include "common.h"
 #include "db-common.h"
 #include "gquarks.h"
@@ -73,6 +74,10 @@ static void otpclient_application_kdf_settings   (GSimpleAction *simple,
                                                    GVariant      *parameter,
                                                    gpointer       user_data);
 
+static void otpclient_application_whats_new      (GSimpleAction *simple,
+                                                   GVariant      *parameter,
+                                                   gpointer       user_data);
+
 static const GActionEntry otpclient_application_entries[] = {
         { .name = "about", .activate = otpclient_application_show_about },
         { .name = "quit", .activate = otpclient_application_quit },
@@ -81,6 +86,7 @@ static const GActionEntry otpclient_application_entries[] = {
         { .name = "change-password", .activate = otpclient_application_change_pwd },
         { .name = "db-info", .activate = otpclient_application_db_info },
         { .name = "kdf-settings", .activate = otpclient_application_kdf_settings },
+        { .name = "whats-new", .activate = otpclient_application_whats_new },
 };
 
 OTPClientApplication *
@@ -270,6 +276,29 @@ otpclient_application_kdf_settings (GSimpleAction *simple,
         return;
 
     KdfDialog *dlg = kdf_dialog_new (self->db_data);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+}
+
+static gboolean
+version_xy_less_than (const gchar *a,
+                      const gchar *b)
+{
+    gint ax = 0, ay = 0, bx = 0, by = 0;
+    sscanf (a, "%d.%d", &ax, &ay);
+    sscanf (b, "%d.%d", &bx, &by);
+    return (ax < bx) || (ax == bx && ay < by);
+}
+
+static void
+otpclient_application_whats_new (GSimpleAction *simple,
+                                  GVariant      *parameter,
+                                  gpointer       user_data)
+{
+    (void) simple;
+    (void) parameter;
+
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    WhatsNewDialog *dlg = whats_new_dialog_new (FALSE);
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
 }
 
@@ -560,6 +589,19 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     otpclient_tray_init (self);
 #endif
+
+    /* Show welcome or what's-new dialog on version change */
+    if (self->settings != NULL) {
+        g_autofree gchar *last_seen = g_settings_get_string (self->settings, "last-seen-version");
+        if (last_seen == NULL || last_seen[0] == '\0') {
+            WhatsNewDialog *dlg = whats_new_dialog_new (TRUE);
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+        } else if (version_xy_less_than (last_seen, PROJECT_VER)) {
+            WhatsNewDialog *dlg = whats_new_dialog_new (FALSE);
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+        }
+        g_settings_set_string (self->settings, "last-seen-version", PROJECT_VER);
+    }
 
     init_database (self);
 }
