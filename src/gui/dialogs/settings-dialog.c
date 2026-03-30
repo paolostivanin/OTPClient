@@ -277,6 +277,8 @@ settings_dialog_new (OTPClientApplication *app)
     self->secret_service_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->secret_service_switch),
                                     _("Use Secret Service"));
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->secret_service_switch),
+                                  _("Store the database password in the system keyring so the app unlocks automatically after login"));
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->secret_service_switch),
                                otpclient_application_get_use_secret_service (app));
     g_signal_connect (self->secret_service_switch, "notify::active",

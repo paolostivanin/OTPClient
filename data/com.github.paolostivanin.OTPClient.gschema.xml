@@ -52,9 +52,9 @@
       <description>Lock the application on idle after the specified amount of minutes</description>
     </key>
     <key name="secret-service" type="b">
-      <default>true</default>
+      <default>false</default>
       <summary>Secret Service Integration</summary>
-      <description>Whether to use the secret service to handle the password</description>
+      <description>Whether to store the database password in the system keyring so the app unlocks automatically after login</description>
     </key>
     <key name="search-provider-enabled" type="b">
       <default>true</default>

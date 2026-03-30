@@ -69,10 +69,10 @@ gsettings_common_get_use_secret_service (void)
         return g_settings_get_boolean (settings, "secret-service");
 
     /* Fallback to GKeyFile */
-    gboolean use_secret_service = TRUE;
+    gboolean use_secret_service = FALSE;
     GKeyFile *kf = get_kf_ptr ();
     if (kf == NULL)
-        return TRUE;
+        return FALSE;
 
     use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
     g_key_file_free (kf);
