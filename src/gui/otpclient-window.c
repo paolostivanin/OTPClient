@@ -587,12 +587,12 @@ database_row_selected (GtkListBox      *box,
                        OTPClientWindow *self)
 {
     (void) box;
+    (void) self;
 
     if (row == NULL)
         return;
 
     /* The application handles DB switching via the selected row's DatabaseEntry */
-    adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), TRUE);
 }
 
 static void on_db_entry_name_changed (DatabaseEntry *entry,

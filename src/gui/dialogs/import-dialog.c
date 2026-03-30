@@ -15,6 +15,7 @@ struct _ImportDialog
     gpointer callback_data;
 
     GtkWidget *format_combo;
+    GtkWidget *password_row;
     GtkWidget *import_button;
     GtkWidget *error_label;
 
@@ -42,11 +43,28 @@ static const struct {
 #define N_IMPORT_FORMATS G_N_ELEMENTS (import_formats)
 
 static void
+on_format_changed (AdwComboRow  *combo_row,
+                   GParamSpec   *pspec,
+                   ImportDialog *self)
+{
+    (void) pspec;
+    guint selected = adw_combo_row_get_selected (combo_row);
+    gboolean needs_password = (selected < N_IMPORT_FORMATS &&
+                                import_formats[selected].needs_password);
+    gtk_widget_set_visible (self->password_row, needs_password);
+}
+
+static void
 do_import (ImportDialog *self)
 {
     guint fmt_idx = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
     if (fmt_idx >= N_IMPORT_FORMATS)
         return;
+
+    g_free (self->import_password);
+    self->import_password = NULL;
+    if (gtk_widget_get_visible (self->password_row))
+        self->import_password = g_strdup (gtk_editable_get_text (GTK_EDITABLE (self->password_row)));
 
     goffset file_size = get_file_size (self->selected_file);
 
@@ -200,7 +218,14 @@ import_dialog_new (DatabaseData   *db_data,
     self->format_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->format_combo), _("Format"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->format_combo), G_LIST_MODEL (format_model));
+    g_signal_connect (self->format_combo, "notify::selected", G_CALLBACK (on_format_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->format_combo);
+
+    /* Password for encrypted formats */
+    self->password_row = adw_password_entry_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->password_row), _("Encryption Password"));
+    gtk_widget_set_visible (self->password_row, FALSE);
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->password_row);
 
     gtk_box_append (GTK_BOX (box), group);
 

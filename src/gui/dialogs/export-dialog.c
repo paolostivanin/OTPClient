@@ -11,6 +11,7 @@ struct _ExportDialog
 
     GtkWidget *format_combo;
     GtkWidget *password_row;
+    GtkWidget *password_confirm_row;
     GtkWidget *export_button;
     GtkWidget *error_label;
 };
@@ -40,6 +41,7 @@ on_format_changed (AdwComboRow  *combo_row,
                                 selected == EXPORT_FMT_AUTHPRO_ENC ||
                                 selected == EXPORT_FMT_TWOFAS_ENC);
     gtk_widget_set_visible (self->password_row, needs_password);
+    gtk_widget_set_visible (self->password_confirm_row, needs_password);
 }
 
 static void
@@ -64,7 +66,16 @@ on_file_dialog_save_complete (GObject      *source,
     guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
     const gchar *password = NULL;
     if (gtk_widget_get_visible (self->password_row))
+    {
         password = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
+        const gchar *confirm = gtk_editable_get_text (GTK_EDITABLE (self->password_confirm_row));
+        if (g_strcmp0 (password, confirm) != 0)
+        {
+            gtk_label_set_text (GTK_LABEL (self->error_label), _("Passwords do not match"));
+            gtk_widget_set_visible (self->error_label, TRUE);
+            return;
+        }
+    }
 
     gchar *error_msg = NULL;
     switch (fmt)
@@ -183,6 +194,11 @@ export_dialog_new (DatabaseData *db_data,
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->password_row), _("Encryption Password"));
     gtk_widget_set_visible (self->password_row, FALSE);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->password_row);
+
+    self->password_confirm_row = adw_password_entry_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->password_confirm_row), _("Confirm Password"));
+    gtk_widget_set_visible (self->password_confirm_row, FALSE);
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->password_confirm_row);
 
     gtk_box_append (GTK_BOX (box), group);
 
