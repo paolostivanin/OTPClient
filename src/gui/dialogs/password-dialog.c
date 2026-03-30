@@ -100,6 +100,17 @@ on_password_activate (AdwEntryRow    *row,
 }
 
 static void
+on_dialog_map (GtkWidget      *widget,
+               PasswordDialog *self)
+{
+    (void) widget;
+    GtkWidget *focus_target = (self->mode == PASSWORD_MODE_CHANGE)
+        ? self->current_password_row
+        : self->password_row;
+    gtk_widget_grab_focus (focus_target);
+}
+
+static void
 password_dialog_dispose (GObject *object)
 {
     G_OBJECT_CLASS (password_dialog_parent_class)->dispose (object);
@@ -225,6 +236,8 @@ password_dialog_new (PasswordDialogMode     mode,
 
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), clamp);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
+
+    g_signal_connect (self, "map", G_CALLBACK (on_dialog_map), self);
 
     return self;
 }
