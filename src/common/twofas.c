@@ -355,7 +355,7 @@ decrypt_data (const gchar **b64_data,
     twofas_data->json_data = gcry_calloc_secure (enc_buf_size, 1);
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
-        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
         gcry_free (twofas_data->json_data);
         twofas_data->json_data = NULL;
         gcry_free (derived_key);
@@ -366,7 +366,7 @@ decrypt_data (const gchar **b64_data,
 
     gpg_err = gcry_cipher_checktag (hd, tag, TWOFAS_TAG);
     if (gpg_err) {
-        g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
         gcry_free (twofas_data->json_data);
         twofas_data->json_data = NULL;
     }
@@ -458,13 +458,21 @@ parse_twofas_json_data (const gchar *data,
         otp->secret = secure_strdup (json_string_value (json_object_get (obj, "secret")));
 
         json_t *otp_obj = json_object_get (obj, "otp");
+        if (otp_obj == NULL) {
+            g_printerr ("Skipping malformed 2FAS entry (missing 'otp' object)\n");
+            g_free (otp);
+            continue;
+        }
         otp->issuer = g_strdup (json_string_value (json_object_get (otp_obj, "issuer")));
         otp->account_name = g_strdup (json_string_value (json_object_get (otp_obj, "account")));
         otp->digits = (guint32) json_integer_value (json_object_get (otp_obj, "digits"));
 
         gboolean skip = FALSE;
         const gchar *type = json_string_value (json_object_get (otp_obj, "tokenType"));
-        if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        if (type == NULL) {
+            g_printerr ("Skipping token due to missing type field\n");
+            skip = TRUE;
+        } else if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup ("TOTP");
             otp->period = (guint32)json_integer_value (json_object_get (otp_obj, "period"));
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {

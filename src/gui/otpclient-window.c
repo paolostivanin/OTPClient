@@ -846,10 +846,12 @@ on_drop (GtkDropTarget *target,
         {
             json_t *arr = db_data->in_memory_json_data;
             json_t *item = json_array_get (arr, source_pos);
-            json_incref (item);
-            json_array_remove (arr, source_pos);
-            json_array_insert (arr, target_pos, item);
-            json_decref (item);
+            if (item != NULL) {
+                json_incref (item);
+                json_array_remove (arr, source_pos);
+                json_array_insert (arr, target_pos, item);
+                json_decref (item);
+            }
 
             GError *err = NULL;
             update_db (db_data, &err);

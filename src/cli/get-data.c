@@ -107,11 +107,17 @@ get_token (json_t       *obj,
     const gchar *secret = json_string_value (json_object_get (obj, "secret"));
     gint digits = (gint)json_integer_value (json_object_get (obj, "digits"));
     gint algo = get_algo_int_from_str (json_string_value (json_object_get (obj, "algo")));
+    const gchar *type = json_string_value (json_object_get (obj, "type"));
+    if (type == NULL) {
+        g_printerr ("[ERROR] Token has no type field, skipping.\n");
+        return;
+    }
     gint period;
     gint64 counter;
-    if (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         period = (gint)json_integer_value (json_object_get (obj, "period"));
-        gint remaining_seconds = (period > 59 ? 119 : 59) - g_date_time_get_second (g_date_time_new_now_local());
+        g_autoptr(GDateTime) now = g_date_time_new_now_local ();
+        gint remaining_seconds = (period > 59 ? 119 : 59) - g_date_time_get_second (now);
         gint token_validity = remaining_seconds % period;
         glong current_ts = time(NULL);
         gchar *current_totp = NULL;

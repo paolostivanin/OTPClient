@@ -118,12 +118,17 @@ get_otpauth_data (const gchar  *path,
         return NULL;
     }
 
-    gchar *sec_buf = gcry_calloc_secure (fs, 1);
-    if (!g_file_get_contents (path, &sec_buf, NULL, err)) {
+    gchar *file_buf = NULL;
+    if (!g_file_get_contents (path, &file_buf, NULL, err)) {
         g_set_error (err, generic_error_gquark(), GENERIC_ERRCODE, "Couldn't load the file content into memory.");
-        gcry_free (sec_buf);
+        g_free (file_buf);
         return NULL;
     }
+
+    gchar *sec_buf = gcry_calloc_secure (fs, 1);
+    memcpy (sec_buf, file_buf, fs);
+    memset (file_buf, 0, fs);
+    g_free (file_buf);
 
     set_otps_from_uris (sec_buf, &otps);
 

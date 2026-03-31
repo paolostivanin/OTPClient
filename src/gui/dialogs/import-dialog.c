@@ -61,10 +61,17 @@ do_import (ImportDialog *self)
     if (fmt_idx >= N_IMPORT_FORMATS)
         return;
 
-    g_free (self->import_password);
-    self->import_password = NULL;
-    if (gtk_widget_get_visible (self->password_row))
-        self->import_password = g_strdup (gtk_editable_get_text (GTK_EDITABLE (self->password_row)));
+    if (self->import_password != NULL) {
+        memset (self->import_password, 0, strlen (self->import_password));
+        gcry_free (self->import_password);
+        self->import_password = NULL;
+    }
+    if (gtk_widget_get_visible (self->password_row)) {
+        const gchar *text = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
+        gsize len = strlen (text);
+        self->import_password = gcry_calloc_secure (len + 1, 1);
+        memcpy (self->import_password, text, len);
+    }
 
     goffset file_size = get_file_size (self->selected_file);
 
@@ -158,7 +165,10 @@ import_dialog_finalize (GObject *object)
 {
     ImportDialog *self = IMPORT_DIALOG (object);
     g_free (self->selected_file);
-    g_free (self->import_password);
+    if (self->import_password != NULL) {
+        memset (self->import_password, 0, strlen (self->import_password));
+        gcry_free (self->import_password);
+    }
     G_OBJECT_CLASS (import_dialog_parent_class)->finalize (object);
 }
 

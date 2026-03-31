@@ -143,8 +143,18 @@ get_otps_from_encrypted_backup (const gchar          *path,
     guchar *salt = hexstr_to_bytes (json_string_value (json_object_get (wanted_obj, "salt")));
     guchar *enc_key = hexstr_to_bytes(json_string_value (json_object_get (wanted_obj, "key")));
     json_t *kp = json_object_get (wanted_obj, "key_params");
-    guchar *key_nonce = hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce")));
-    guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
+    guchar *key_nonce = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce"))) : NULL;
+    guchar *key_tag = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "tag"))) : NULL;
+    if (salt == NULL || enc_key == NULL || key_nonce == NULL || key_tag == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid hex fields in key slot.");
+        g_free (salt);
+        g_free (enc_key);
+        g_free (key_nonce);
+        g_free (key_tag);
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
     guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
     if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
@@ -212,6 +222,15 @@ get_otps_from_encrypted_backup (const gchar          *path,
 
     guchar *nonce = hexstr_to_bytes (json_string_value (json_object_get (dbp, "nonce")));
     guchar *tag = hexstr_to_bytes (json_string_value (json_object_get (dbp, "tag")));
+    if (nonce == NULL || tag == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid nonce/tag in database params.");
+        g_free (nonce);
+        g_free (tag);
+        gcry_free (master_key);
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
 
     hd = open_cipher_and_set_data (master_key, nonce, 12);
     if (hd == NULL) {
@@ -436,6 +455,9 @@ export_aegis (const gchar   *export_path,
             goto clean_and_return;
         }
         db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
+        if (db_size == 0) {
+            goto clean_and_return;
+        }
         guchar *enc_db = g_malloc0 (db_size);
         gchar *dumped_db = g_malloc0 (db_size);
         json_dumpb (aegis_db_obj, dumped_db, db_size, 0);
@@ -542,6 +564,11 @@ parse_aegis_json_data (const gchar *data,
         otp->account_name = g_strdup (json_string_value (json_object_get (obj, "name")));
 
         json_t *info_obj = json_object_get (obj, "info");
+        if (info_obj == NULL) {
+            g_printerr ("Skipping malformed Aegis entry (missing 'info' object)\n");
+            g_free (otp);
+            continue;
+        }
         otp->secret = secure_strdup (json_string_value (json_object_get (info_obj, "secret")));
         otp->digits = (guint32) json_integer_value (json_object_get(info_obj, "digits"));
 

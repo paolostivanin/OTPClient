@@ -43,8 +43,9 @@ on_unlock_password (const gchar *password,
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                    on_unlock_password,
                                                    app);
-        GtkWidget *win = GTK_WIDGET (gtk_application_get_active_window (GTK_APPLICATION (app)));
-        adw_dialog_present (ADW_DIALOG (dlg), win);
+        GtkWindow *active_win = gtk_application_get_active_window (GTK_APPLICATION (app));
+        if (active_win != NULL)
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (active_win));
     }
 }
 

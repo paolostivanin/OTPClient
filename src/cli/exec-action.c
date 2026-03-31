@@ -66,16 +66,28 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             g_printerr ("Refusing to open password file '%s': it is a symbolic link.\n", cmdline_opts->password_file);
             return FALSE;
         }
-        GStatBuf st;
-        if (g_stat (cmdline_opts->password_file, &st) == 0 && (st.st_mode & 077) != 0) {
-            g_printerr ("Warning: password file '%s' has group/world permissions (mode %04o). "
-                         "Consider restricting to owner-only (chmod 600).\n",
-                         cmdline_opts->password_file, (unsigned)(st.st_mode & 0777));
+        GStatBuf st_before;
+        if (g_stat (cmdline_opts->password_file, &st_before) != 0) {
+            g_printerr ("Failed to stat password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
+            return FALSE;
         }
         password_fd = g_open (cmdline_opts->password_file, O_RDONLY, 0);
         if (password_fd < 0) {
             g_printerr ("Failed to open password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
             return FALSE;
+        }
+        GStatBuf st_after;
+        if (fstat (password_fd, &st_after) == 0) {
+            if (st_before.st_ino != st_after.st_ino || st_before.st_dev != st_after.st_dev) {
+                g_printerr ("Refusing to open password file '%s': file changed between check and open.\n", cmdline_opts->password_file);
+                close (password_fd);
+                return FALSE;
+            }
+            if ((st_after.st_mode & 077) != 0) {
+                g_printerr ("Warning: password file '%s' has group/world permissions (mode %04o). "
+                             "Consider restricting to owner-only (chmod 600).\n",
+                             cmdline_opts->password_file, (unsigned)(st_after.st_mode & 0777));
+            }
         }
     }
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
@@ -177,8 +189,10 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         reload_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr ("Error while reloading the database: %s\n", err->message);
+            g_clear_error (&err);
             return FALSE;
         }
+        g_clear_error (&err);
         g_print ("Data successfully imported.\n");
     }
 

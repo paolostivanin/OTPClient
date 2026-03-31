@@ -57,11 +57,11 @@ export_freeotpplus (const gchar *export_path,
             }
             g_free (uri);
         }
+        g_object_unref (out_stream);
     } else {
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
     }
 
-    g_object_unref (out_stream);
     g_object_unref (out_gfile);
 
     return (err != NULL ? g_strdup (err->message) : NULL);
