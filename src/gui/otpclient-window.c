@@ -46,10 +46,6 @@ struct _OTPClientWindow
 
     guint otp_refresh_timer_id;
 
-    /* Drag-and-drop state */
-    GtkWidget *dnd_highlight_widget;
-    GtkCssProvider *dnd_css_provider;
-
     /* Cross-database search */
     GListStore *cross_db_store;
     GtkFlattenListModel *flatten_model;
@@ -299,9 +295,6 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
     if (entry == NULL || label == NULL)
         return;
 
-    /* Tag widget so DnD can find which entry is under the cursor */
-    g_object_set_data (G_OBJECT (label), "otp-entry", entry);
-
     switch (column)
     {
         case OTP_COLUMN_ACCOUNT:
@@ -400,11 +393,6 @@ otp_validity_column_bind (GtkSignalListItemFactory *factory,
 {
     (void) factory;
     (void) user_data;
-
-    OTPEntry *entry = gtk_list_item_get_item (list_item);
-    GtkWidget *child = gtk_list_item_get_child (list_item);
-    if (entry != NULL && child != NULL)
-        g_object_set_data (G_OBJECT (child), "otp-entry", entry);
 
     validity_selected_changed (list_item, NULL, NULL);
 }
@@ -1044,89 +1032,6 @@ on_otp_selection_changed (GtkSingleSelection *selection,
     }
 }
 
-/* ── Drag-and-drop helpers ─────────────────────────────────────────── */
-
-static guint
-find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
-{
-    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
-    for (guint i = 0; i < n; i++)
-    {
-        g_autoptr (OTPEntry) e = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
-        if (e == entry)
-            return i;
-    }
-    return GTK_INVALID_LIST_POSITION;
-}
-
-/*
- * Walk up from the widget at (x, y) looking for one tagged with "otp-entry".
- * Returns the OTPEntry* or NULL.  If row_widget_out is non-NULL the deepest
- * ancestor whose *parent* still has the tag is written there (useful for
- * applying CSS highlight classes to the row-level widget).
- */
-static OTPEntry *
-pick_entry_at (OTPClientWindow *self, double x, double y, GtkWidget **row_widget_out)
-{
-    GtkWidget *w = gtk_widget_pick (GTK_WIDGET (self->otp_list), x, y, GTK_PICK_NON_TARGETABLE);
-    GtkWidget *last_tagged = NULL;
-
-    while (w != NULL && w != self->otp_list)
-    {
-        OTPEntry *entry = g_object_get_data (G_OBJECT (w), "otp-entry");
-        if (entry != NULL)
-            last_tagged = w;
-        w = gtk_widget_get_parent (w);
-    }
-
-    if (last_tagged == NULL)
-    {
-        if (row_widget_out)
-            *row_widget_out = NULL;
-        return NULL;
-    }
-
-    OTPEntry *entry = g_object_get_data (G_OBJECT (last_tagged), "otp-entry");
-
-    /*
-     * Walk up from the tagged widget to find the nearest row-level container
-     * that we can apply CSS classes to.  We look for the widget whose grandparent
-     * is the GtkColumnView itself.
-     */
-    if (row_widget_out)
-    {
-        GtkWidget *rw = last_tagged;
-        while (rw != NULL && rw != self->otp_list)
-        {
-            GtkWidget *parent = gtk_widget_get_parent (rw);
-            if (parent != NULL)
-            {
-                GtkWidget *grandparent = gtk_widget_get_parent (parent);
-                if (grandparent != NULL && GTK_IS_COLUMN_VIEW (grandparent))
-                {
-                    *row_widget_out = parent;
-                    return entry;
-                }
-            }
-            rw = gtk_widget_get_parent (rw);
-        }
-        *row_widget_out = last_tagged;
-    }
-
-    return entry;
-}
-
-static void
-dnd_clear_highlight (OTPClientWindow *self)
-{
-    if (self->dnd_highlight_widget != NULL)
-    {
-        gtk_widget_remove_css_class (self->dnd_highlight_widget, "drop-above");
-        gtk_widget_remove_css_class (self->dnd_highlight_widget, "drop-below");
-        self->dnd_highlight_widget = NULL;
-    }
-}
-
 static GdkContentProvider *
 on_drag_prepare (GtkDragSource *source,
                  double         x,
@@ -1155,52 +1060,6 @@ on_drag_prepare (GtkDragSource *source,
     return gdk_content_provider_new_for_value (&value);
 }
 
-static GdkDragAction
-on_dnd_motion (GtkDropTarget *target,
-               double         x,
-               double         y,
-               gpointer       user_data)
-{
-    (void) target;
-
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-
-    dnd_clear_highlight (self);
-
-    GtkWidget *row_widget = NULL;
-    OTPEntry *entry = pick_entry_at (self, x, y, &row_widget);
-    if (entry == NULL || row_widget == NULL)
-        return 0;
-
-    /* Determine above/below by comparing y to the midpoint of the row */
-    graphene_point_t row_pt;
-    if (!gtk_widget_compute_point (row_widget, GTK_WIDGET (self->otp_list),
-                                   &GRAPHENE_POINT_INIT (0, 0), &row_pt))
-        return 0;
-
-    gdouble row_top = row_pt.y;
-    gdouble row_height = gtk_widget_get_height (row_widget);
-    gdouble midpoint = row_top + row_height / 2.0;
-
-    if (y < midpoint)
-        gtk_widget_add_css_class (row_widget, "drop-above");
-    else
-        gtk_widget_add_css_class (row_widget, "drop-below");
-
-    self->dnd_highlight_widget = row_widget;
-
-    return GDK_ACTION_MOVE;
-}
-
-static void
-on_dnd_leave (GtkDropTarget *target,
-              gpointer       user_data)
-{
-    (void) target;
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    dnd_clear_highlight (self);
-}
-
 static gboolean
 on_drop (GtkDropTarget *target,
          const GValue  *value,
@@ -1209,61 +1068,35 @@ on_drop (GtkDropTarget *target,
          gpointer       user_data)
 {
     (void) target;
+    (void) x;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-
-    dnd_clear_highlight (self);
 
     if (!G_VALUE_HOLDS_UINT (value))
         return FALSE;
 
-    guint source_filter_pos = g_value_get_uint (value);
+    guint source_pos = g_value_get_uint (value);
 
-    /* Resolve source entry from the selection/filter model */
-    g_autoptr (OTPEntry) source_entry = g_list_model_get_item (
-        G_LIST_MODEL (self->filter_model), source_filter_pos);
-    if (source_entry == NULL)
+    /* Determine target position from y coordinate */
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    if (n_items == 0)
         return FALSE;
 
-    guint source_pos = find_store_pos_for_entry (self, source_entry);
-    if (source_pos == GTK_INVALID_LIST_POSITION)
-        return FALSE;
+    /* Approximate row height */
+    gint height = gtk_widget_get_height (self->otp_list);
+    gdouble row_height = (gdouble) height / (gdouble) n_items;
+    guint target_pos = (guint)(y / row_height);
 
-    /* Find target entry under the cursor using widget picking */
-    GtkWidget *row_widget = NULL;
-    OTPEntry *target_entry = pick_entry_at (self, x, y, &row_widget);
-    if (target_entry == NULL)
-        return FALSE;
-
-    guint target_pos = find_store_pos_for_entry (self, target_entry);
-    if (target_pos == GTK_INVALID_LIST_POSITION)
-        return FALSE;
-
-    /* Determine if we should insert above or below the target row */
-    if (row_widget != NULL)
-    {
-        graphene_point_t row_pt;
-        if (gtk_widget_compute_point (row_widget, GTK_WIDGET (self->otp_list),
-                                      &GRAPHENE_POINT_INIT (0, 0), &row_pt))
-        {
-            gdouble row_height = gtk_widget_get_height (row_widget);
-            gdouble midpoint = row_pt.y + row_height / 2.0;
-            if (y >= midpoint && target_pos < g_list_model_get_n_items (G_LIST_MODEL (self->otp_store)) - 1)
-                target_pos++;
-        }
-    }
+    if (target_pos >= n_items)
+        target_pos = n_items - 1;
 
     if (source_pos == target_pos)
         return FALSE;
 
-    /* Adjust target position for the remove+insert shift */
-    guint insert_pos = target_pos;
-    if (source_pos < target_pos)
-        insert_pos--;
-
     /* Reorder in GListStore */
+    g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), source_pos);
     g_list_store_remove (self->otp_store, source_pos);
-    g_list_store_insert (self->otp_store, insert_pos, source_entry);
+    g_list_store_insert (self->otp_store, target_pos, entry);
 
     /* Reorder in the JSON database */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -1279,7 +1112,7 @@ on_drop (GtkDropTarget *target,
             {
                 json_incref (item);
                 json_array_remove (arr, source_pos);
-                json_array_insert (arr, insert_pos, item);
+                json_array_insert (arr, target_pos, item);
                 json_decref (item);
             }
 
@@ -1299,16 +1132,6 @@ on_drop (GtkDropTarget *target,
 static void
 setup_dnd (OTPClientWindow *self)
 {
-    /* CSS for drop indicator lines */
-    self->dnd_css_provider = gtk_css_provider_new ();
-    gtk_css_provider_load_from_string (self->dnd_css_provider,
-        ".drop-above { border-top: 2px solid @accent_color; }"
-        ".drop-below { border-bottom: 2px solid @accent_color; }");
-    gtk_style_context_add_provider_for_display (
-        gtk_widget_get_display (GTK_WIDGET (self)),
-        GTK_STYLE_PROVIDER (self->dnd_css_provider),
-        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
     GtkDragSource *drag_source = gtk_drag_source_new ();
     gtk_drag_source_set_actions (drag_source, GDK_ACTION_MOVE);
     g_signal_connect (drag_source, "prepare", G_CALLBACK (on_drag_prepare), self);
@@ -1316,8 +1139,6 @@ setup_dnd (OTPClientWindow *self)
 
     GtkDropTarget *drop_target = gtk_drop_target_new (G_TYPE_UINT, GDK_ACTION_MOVE);
     g_signal_connect (drop_target, "drop", G_CALLBACK (on_drop), self);
-    g_signal_connect (drop_target, "motion", G_CALLBACK (on_dnd_motion), self);
-    g_signal_connect (drop_target, "leave", G_CALLBACK (on_dnd_leave), self);
     gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (drop_target));
 }
 
@@ -1386,14 +1207,6 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->cross_db_store);
     g_clear_object (&win->flatten_model);
     g_clear_object (&win->settings);
-
-    if (win->dnd_css_provider != NULL)
-    {
-        gtk_style_context_remove_provider_for_display (
-            gtk_widget_get_display (GTK_WIDGET (win)),
-            GTK_STYLE_PROVIDER (win->dnd_css_provider));
-        g_clear_object (&win->dnd_css_provider);
-    }
 
     gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
@@ -2031,7 +1844,7 @@ lock_button_clicked (GtkButton       *button,
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 
-static void on_db_popover_closed (GtkPopover *popover, gpointer user_data);
+static void on_popover_closed (GtkPopover *popover, gpointer user_data);
 
 static void
 on_token_right_click (GtkGestureClick *gesture,
@@ -2055,7 +1868,7 @@ on_token_right_click (GtkGestureClick *gesture,
     gtk_widget_set_parent (popover, self->otp_list);
     GdkRectangle rect = { (int)x, (int)y, 1, 1 };
     gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-    g_signal_connect (popover, "closed", G_CALLBACK (on_db_popover_closed), NULL);
+    g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
     gtk_popover_popup (GTK_POPOVER (popover));
 
     g_object_unref (builder);
@@ -2349,12 +2162,23 @@ on_click_inactivity (GtkGestureClick *gesture,
         lock_app_reset_inactivity (app);
 }
 
+static gboolean
+popover_unparent_idle (gpointer data)
+{
+    GtkWidget *popover = GTK_WIDGET (data);
+    gtk_widget_unparent (popover);
+    g_object_unref (popover);
+    return G_SOURCE_REMOVE;
+}
+
 static void
-on_db_popover_closed (GtkPopover *popover,
-                      gpointer    user_data)
+on_popover_closed (GtkPopover *popover,
+                   gpointer    user_data)
 {
     (void) user_data;
-    gtk_widget_unparent (GTK_WIDGET (popover));
+    /* Defer unparent so the action activation completes first */
+    g_object_ref (popover);
+    g_idle_add (popover_unparent_idle, popover);
 }
 
 static void
@@ -2383,7 +2207,7 @@ on_db_right_click (GtkGestureClick *gesture,
     gtk_widget_set_parent (popover, self->database_list);
     GdkRectangle rect = { (int)x, (int)y, 1, 1 };
     gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-    g_signal_connect (popover, "closed", G_CALLBACK (on_db_popover_closed), NULL);
+    g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
     gtk_popover_popup (GTK_POPOVER (popover));
 
     g_object_unref (builder);
