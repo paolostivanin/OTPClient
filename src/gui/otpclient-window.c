@@ -1068,7 +1068,7 @@ find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
 static OTPEntry *
 pick_entry_at (OTPClientWindow *self, double x, double y, GtkWidget **row_widget_out)
 {
-    GtkWidget *w = gtk_widget_pick (GTK_WIDGET (self->otp_list), x, y, GTK_PICK_DEFAULT);
+    GtkWidget *w = gtk_widget_pick (GTK_WIDGET (self->otp_list), x, y, GTK_PICK_NON_TARGETABLE);
     GtkWidget *last_tagged = NULL;
 
     while (w != NULL && w != self->otp_list)
@@ -2031,6 +2031,8 @@ lock_button_clicked (GtkButton       *button,
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 
+static void on_db_popover_closed (GtkPopover *popover, gpointer user_data);
+
 static void
 on_token_right_click (GtkGestureClick *gesture,
                       gint             n_press,
@@ -2053,6 +2055,7 @@ on_token_right_click (GtkGestureClick *gesture,
     gtk_widget_set_parent (popover, self->otp_list);
     GdkRectangle rect = { (int)x, (int)y, 1, 1 };
     gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
+    g_signal_connect (popover, "closed", G_CALLBACK (on_db_popover_closed), NULL);
     gtk_popover_popup (GTK_POPOVER (popover));
 
     g_object_unref (builder);
