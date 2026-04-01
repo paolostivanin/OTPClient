@@ -1853,8 +1853,11 @@ on_token_right_click (GtkGestureClick *gesture,
                       gdouble          y,
                       OTPClientWindow *self)
 {
-    (void) gesture;
     (void) n_press;
+
+    /* Reset gesture state before showing popover to avoid
+     * "Broken accounting of active state" warnings */
+    gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
@@ -2188,8 +2191,9 @@ on_db_right_click (GtkGestureClick *gesture,
                    gdouble          y,
                    OTPClientWindow *self)
 {
-    (void) gesture;
     (void) n_press;
+
+    gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
 
     GtkListBoxRow *row = gtk_list_box_get_row_at_y (
         GTK_LIST_BOX (self->database_list), (gint)y);
