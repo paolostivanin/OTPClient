@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="addtoken_title">Add Token</string>
+    <string name="addtoken_scan_qr">Scan QR Code</string>
+    <string name="addtoken_issuer">Issuer</string>
+    <string name="addtoken_issuer_hint">e.g. Google, GitHub</string>
+    <string name="addtoken_label">Account / Label</string>
+    <string name="addtoken_label_hint">e.g. user@example.com</string>
+    <string name="addtoken_secret">Secret Key</string>
+    <string name="addtoken_secret_hint">Base32 encoded secret</string>
+    <string name="addtoken_algorithm">Algorithm</string>
+    <string name="addtoken_digits">Digits</string>
+    <string name="addtoken_period">Period (s)</string>
+    <string name="addtoken_counter">Counter</string>
+    <string name="addtoken_button">Add Token</string>
+    <string name="content_desc_back">Back</string>
+    <string name="qrscanner_title">Scan QR Code</string>
+    <string name="qrscanner_permission_required">Camera permission is required to scan QR codes</string>
+    <string name="qrscanner_camera_viewfinder">Camera viewfinder for QR code scanning</string>
+</resources>

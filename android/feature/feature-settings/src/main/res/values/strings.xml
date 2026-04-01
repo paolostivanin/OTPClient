@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_security">Security</string>
+    <string name="settings_section_display">Display</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System default</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_biometric_title">Biometric unlock</string>
+    <string name="settings_biometric_subtitle">Use fingerprint or face to unlock</string>
+    <string name="settings_autolock_title">Auto-lock</string>
+    <string name="settings_autolock_disabled">Disabled</string>
+    <string name="settings_autolock_30s">30 seconds</string>
+    <string name="settings_autolock_1m">1 minute</string>
+    <string name="settings_autolock_2m">2 minutes</string>
+    <string name="settings_autolock_5m">5 minutes</string>
+    <string name="settings_autolock_10m">10 minutes</string>
+    <string name="settings_show_next_otp_title">Show next OTP</string>
+    <string name="settings_show_next_otp_subtitle">Preview the upcoming code when current is expiring</string>
+    <string name="content_desc_back">Back</string>
+</resources>

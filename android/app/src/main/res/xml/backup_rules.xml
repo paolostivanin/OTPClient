@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto Backup rules.
+    Include: user preferences (theme, settings).
+    Exclude: encrypted databases, biometric credential storage, cached import/export files.
+-->
+<full-backup-content>
+    <!-- Include settings DataStore -->
+    <include domain="file" path="datastore/settings.preferences_pb" />
+
+    <!-- Exclude everything sensitive -->
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

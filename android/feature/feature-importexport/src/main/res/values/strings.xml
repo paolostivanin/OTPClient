@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="importexport_title">Import / Export</string>
+    <string name="importexport_section_import">Import</string>
+    <string name="importexport_section_export">Export</string>
+    <string name="importexport_password_title">Enter password</string>
+    <string name="importexport_password_label">Password</string>
+    <string name="importexport_ok">OK</string>
+    <string name="importexport_cancel">Cancel</string>
+    <string name="importexport_imported">Imported %1$d token(s)</string>
+    <string name="importexport_exported">Exported %1$d token(s)</string>
+    <string name="importexport_import_failed">Import failed</string>
+    <string name="importexport_export_failed">Export failed</string>
+    <string name="content_desc_back">Back</string>
+</resources>

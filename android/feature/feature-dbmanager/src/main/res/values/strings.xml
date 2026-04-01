@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dbmanager_title">Databases</string>
+    <string name="dbmanager_open_existing">Open existing database</string>
+    <string name="dbmanager_empty_message">No databases registered. Create a new one or open an existing file.</string>
+    <string name="dbmanager_new">New database</string>
+    <string name="dbmanager_rename">Rename database</string>
+    <string name="dbmanager_change_password">Change password</string>
+    <string name="dbmanager_remove_title">Remove database?</string>
+    <string name="dbmanager_remove_message">Remove \'%1$s\' from the list? The file will not be deleted.</string>
+    <string name="dbmanager_name_label">Name</string>
+    <string name="dbmanager_password_label">Password</string>
+    <string name="dbmanager_confirm_password_label">Confirm password</string>
+    <string name="dbmanager_current_password_label">Current password</string>
+    <string name="dbmanager_new_password_label">New password</string>
+    <string name="dbmanager_confirm_new_password_label">Confirm new password</string>
+    <string name="dbmanager_create">Create</string>
+    <string name="dbmanager_rename_action">Rename</string>
+    <string name="dbmanager_change">Change</string>
+    <string name="dbmanager_remove">Remove</string>
+    <string name="dbmanager_cancel">Cancel</string>
+    <string name="content_desc_back">Back</string>
+    <string name="content_desc_new_database">New database</string>
+    <string name="content_desc_rename">Rename</string>
+    <string name="content_desc_change_password">Change password</string>
+    <string name="content_desc_remove">Remove</string>
+</resources>

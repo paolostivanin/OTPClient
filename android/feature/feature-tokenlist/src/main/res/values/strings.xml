@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tokenlist_title">OTPClient</string>
+    <string name="tokenlist_search">Search</string>
+    <string name="tokenlist_search_placeholder">Search tokens…</string>
+    <string name="tokenlist_import_export">Import / Export</string>
+    <string name="tokenlist_settings">Settings</string>
+    <string name="tokenlist_lock">Lock</string>
+    <string name="tokenlist_databases">Databases</string>
+    <string name="tokenlist_add_token">Add token</string>
+    <string name="tokenlist_no_tokens_title">No tokens yet</string>
+    <string name="tokenlist_no_tokens_subtitle">Tap + to add your first token</string>
+    <string name="tokenlist_copy">Copy</string>
+    <string name="tokenlist_delete">Delete</string>
+    <string name="tokenlist_next_code">Next code</string>
+    <string name="tokenlist_copied">Copied %1$s</string>
+    <string name="tokenlist_delete_title">Delete token?</string>
+    <string name="tokenlist_delete_message">Remove %1$s?</string>
+    <string name="tokenlist_cancel">Cancel</string>
+    <string name="tokenlist_card_description">%1$s, code %2$s%3$s. Tap to copy.</string>
+    <string name="tokenlist_remaining_seconds">, %1$d seconds remaining</string>
+</resources>

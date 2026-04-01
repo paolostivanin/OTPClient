@@ -43,3 +43,21 @@ TODO*
 # Backup files
 *.ui~
 *.c~
+
+# Android stuff
+*.iml
+.gradle
+/local.properties
+*/build
+*/*/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.jar
+*.log

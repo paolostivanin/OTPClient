@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    OTPClient icon: combination padlock matching the desktop GTK4 app icon.
+    Scaled from 128x128 SVG to fit within 72dp safe zone of adaptive icon (108dp viewport).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="0.5625"
+        android:scaleY="0.5625"
+        android:translateX="18"
+        android:translateY="18">
+
+        <!-- Shackle (metallic arc) -->
+        <path
+            android:pathData="M41,34 C41,21.297 51.297,11 64,11 C76.703,11 87,21.297 87,34"
+            android:strokeColor="#9A9996"
+            android:strokeWidth="14"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+
+        <!-- Left vertical bar (tall) -->
+        <path
+            android:pathData="M34,34 L34,66 L48,66 L48,34 C46.25,33 35.75,33 34,34Z"
+            android:fillColor="#9A9996" />
+
+        <!-- Right vertical bar (short) -->
+        <path
+            android:pathData="M80,34 L80,42 L94,42 L94,34 C92.25,33 81.75,33 80,34Z"
+            android:fillColor="#9A9996" />
+
+        <!-- Oval at top of right bar -->
+        <path
+            android:pathData="M94,42 C94,40.344 90.867,39 87,39 C83.133,39 80,40.344 80,42 C80,43.656 83.133,45 87,45 C90.867,45 94,43.656 94,42Z"
+            android:fillColor="#5E5C64" />
+
+        <!-- Red body - bottom edge (darker red) -->
+        <path
+            android:pathData="M28.035,88 L99.965,88 C104.387,88 107.965,91.582 107.965,96 L107.965,112 C107.965,116.418 104.387,120 99.965,120 L28.035,120 C23.614,120 20.035,116.418 20.035,112 L20.035,96 C20.035,91.582 23.614,88 28.035,88Z"
+            android:fillColor="#C01C28" />
+
+        <!-- Red body - main -->
+        <path
+            android:pathData="M28,52 L100,52 C104.418,52 108,56.133 108,61.23 L108,102.77 C108,107.867 104.418,112 100,112 L28,112 C23.582,112 20,107.867 20,102.77 L20,61.23 C20,56.133 23.582,52 28,52Z"
+            android:fillColor="#ED333B" />
+
+        <!-- Silver strip - shadow -->
+        <path
+            android:pathData="M22,68 L106,68 C113.73,68 120,74.27 120,82 C120,89.73 113.73,96 106,96 L22,96 C14.27,96 8,89.73 8,82 C8,74.27 14.27,68 22,68Z"
+            android:fillColor="#C0BFBC" />
+
+        <!-- Silver strip - main -->
+        <path
+            android:pathData="M22,64 L106,64 C113.73,64 120,70.27 120,78 C120,85.73 113.73,92 106,92 L22,92 C14.27,92 8,85.73 8,78 C8,70.27 14.27,64 22,64Z"
+            android:fillColor="#F6F5F4" />
+
+        <!-- Blue dot 1 -->
+        <path
+            android:pathData="M25,78 m-5,0 a5,5 0,1 1,10 0 a5,5 0,1 1,-10 0"
+            android:fillColor="#1C71D8" />
+
+        <!-- Blue dot 2 -->
+        <path
+            android:pathData="M39,78 m-5,0 a5,5 0,1 1,10 0 a5,5 0,1 1,-10 0"
+            android:fillColor="#1C71D8" />
+
+        <!-- Blue dot 3 -->
+        <path
+            android:pathData="M53,78 m-5,0 a5,5 0,1 1,10 0 a5,5 0,1 1,-10 0"
+            android:fillColor="#1C71D8" />
+
+        <!-- Blue dot 4 -->
+        <path
+            android:pathData="M67,78 m-5,0 a5,5 0,1 1,10 0 a5,5 0,1 1,-10 0"
+            android:fillColor="#1C71D8" />
+
+        <!-- Dial arc (right side) -->
+        <path
+            android:pathData="M99.477,76.109 C100.438,74.32 102.586,73.531 104.473,74.281 C106.363,75.027 107.391,77.074 106.863,79.035"
+            android:strokeColor="#77767B"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+
+        <!-- Dial arc 2 -->
+        <path
+            android:pathData="M105,81.465 C103.434,82.371 101.453,82.109 100.172,80.828 C98.891,79.547 98.629,77.566 99.535,76"
+            android:strokeColor="#77767B"
+            android:strokeWidth="3"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000" />
+
+    </group>
+</vector>

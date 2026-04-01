@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="unlock_title">OTPClient</string>
+    <string name="unlock_subtitle_new">Create a new database</string>
+    <string name="unlock_subtitle_existing">Unlock your database</string>
+    <string name="unlock_password_label">Password</string>
+    <string name="unlock_confirm_password_label">Confirm password</string>
+    <string name="unlock_passwords_mismatch">Passwords do not match</string>
+    <string name="unlock_button_create">Create Database</string>
+    <string name="unlock_button_unlock">Unlock</string>
+    <string name="unlock_button_create_new">Create New Database</string>
+    <string name="unlock_button_biometric">Unlock with biometric</string>
+    <string name="unlock_hide_password">Hide password</string>
+    <string name="unlock_show_password">Show password</string>
+    <string name="unlock_biometric_title">Unlock OTPClient</string>
+    <string name="unlock_biometric_subtitle">Use your biometric to unlock</string>
+    <string name="unlock_biometric_negative">Use password</string>
+    <string name="unlock_biometric_no_password">No stored password. Please enter your password.</string>
+    <string name="content_desc_back">Back</string>
+</resources>
