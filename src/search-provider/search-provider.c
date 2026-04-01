@@ -29,6 +29,7 @@ typedef struct otp_search_entry_t {
     gchar *label;
     gchar *issuer;
     gchar *otp_value;
+    gchar *db_name;
 } OtpSearchEntry;
 
 static void otp_search_entry_free (OtpSearchEntry *entry);
@@ -69,6 +70,7 @@ otp_search_entry_free (OtpSearchEntry *entry)
     g_free (entry->label);
     g_free (entry->issuer);
     g_free (entry->otp_value);
+    g_free (entry->db_name);
     g_free (entry);
 }
 
@@ -106,51 +108,51 @@ get_entry_otp_value (json_t *obj)
 }
 
 
-static GPtrArray *
-load_entries_uncached (void)
+static void
+load_entries_from_db (GPtrArray   *entries,
+                      const gchar *db_path,
+                      const gchar *db_name,
+                      guint        db_index)
 {
-    GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify)otp_search_entry_free);
+    if (!gsettings_common_get_use_secret_service ())
+        return;
 
-    gchar *db_path = gsettings_common_get_db_path ();
-    if (!db_path) return entries;
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+                                               "string", db_path, NULL);
+    if (pwd == NULL)
+        return;
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = db_path;
+    db_data->db_path = g_strdup (db_path);
+    db_data->key = secure_strdup (pwd);
+    secret_password_free (pwd);
     db_data->max_file_size_from_memlock = global_max_file_size;
-
-    if (gsettings_common_get_use_secret_service ()) {
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", db_path, NULL);
-        if (!pwd) { g_free (db_data->db_path); g_free (db_data); return entries; }
-        db_data->key = secure_strdup (pwd);
-        secret_password_free (pwd);
-    } else {
-        g_free (db_data->db_path);
-        g_free (db_data);
-        return entries;
-    }
 
     GError *err = NULL;
     load_db (db_data, &err);
-    if (err || !db_data->in_memory_json_data) {
-        if (err) g_clear_error (&err);
+    if (err != NULL || db_data->in_memory_json_data == NULL)
+    {
+        if (err != NULL) g_clear_error (&err);
         gcry_free (db_data->key);
         g_slist_free_full (db_data->objects_hash, g_free);
         g_free (db_data->db_path);
         g_free (db_data);
-        return entries;
+        return;
     }
 
     gsize index;
     json_t *obj;
-    json_array_foreach (db_data->in_memory_json_data, index, obj) {
+    json_array_foreach (db_data->in_memory_json_data, index, obj)
+    {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
-        if (!label) continue;
+        if (label == NULL) continue;
         OtpSearchEntry *entry = g_new0 (OtpSearchEntry, 1);
-        entry->id = g_strdup_printf ("%" G_GSIZE_FORMAT, index);
+        entry->id = g_strdup_printf ("%u:%" G_GSIZE_FORMAT, db_index, index);
         entry->label = g_strdup (label);
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         entry->issuer = g_strdup (issuer ? issuer : "");
         entry->otp_value = get_entry_otp_value (obj);
+        entry->db_name = g_strdup (db_name);
         g_ptr_array_add (entries, entry);
     }
 
@@ -159,6 +161,29 @@ load_entries_uncached (void)
     g_slist_free_full (db_data->objects_hash, g_free);
     g_free (db_data->db_path);
     g_free (db_data);
+}
+
+static GPtrArray *
+load_entries_uncached (void)
+{
+    GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify) otp_search_entry_free);
+
+    g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
+    if (db_list != NULL && db_list->len > 0)
+    {
+        for (guint i = 0; i < db_list->len; i++)
+        {
+            DbListEntry *dbe = g_ptr_array_index (db_list, i);
+            load_entries_from_db (entries, dbe->path, dbe->name, i);
+        }
+    }
+    else
+    {
+        /* Fallback: single-DB mode using db-path setting */
+        g_autofree gchar *db_path = gsettings_common_get_db_path ();
+        if (db_path != NULL)
+            load_entries_from_db (entries, db_path, NULL, 0);
+    }
 
     return entries;
 }
@@ -271,7 +296,13 @@ handle_gnome_call (GDBusConnection       *conn,
                     g_variant_builder_init (&meta, G_VARIANT_TYPE ("a{sv}"));
                     g_variant_builder_add (&meta, "{sv}", "id", g_variant_new_string (e->id));
                     g_variant_builder_add (&meta, "{sv}", "name", g_variant_new_string (e->label));
-                    g_variant_builder_add (&meta, "{sv}", "description", g_variant_new_string (e->issuer));
+                    g_autofree gchar *desc = NULL;
+                    if (e->db_name != NULL && e->db_name[0] != '\0')
+                        desc = g_strdup_printf ("%s — %s", e->db_name,
+                                                (e->issuer && e->issuer[0]) ? e->issuer : e->label);
+                    else
+                        desc = g_strdup (e->issuer ? e->issuer : "");
+                    g_variant_builder_add (&meta, "{sv}", "description", g_variant_new_string (desc));
                     g_variant_builder_add (&meta, "{sv}", "icon", g_variant_new_string ("com.github.paolostivanin.OTPClient"));
                     g_variant_builder_add_value (&builder, g_variant_builder_end (&meta));
                 }
@@ -328,9 +359,15 @@ handle_krunner_call (GDBusConnection       *conn,
                 if (!e->otp_value) continue;
                 GVariantBuilder props;
                 g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-                g_autofree gchar *sub = (e->issuer && *e->issuer)
-                    ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value)
-                    : g_strdup (e->otp_value);
+                g_autofree gchar *sub = NULL;
+                if (e->db_name != NULL && e->db_name[0] != '\0')
+                    sub = (e->issuer && *e->issuer)
+                        ? g_strdup_printf ("%s — %s • %s", e->db_name, e->issuer, e->otp_value)
+                        : g_strdup_printf ("%s • %s", e->db_name, e->otp_value);
+                else
+                    sub = (e->issuer && *e->issuer)
+                        ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value)
+                        : g_strdup (e->otp_value);
                 g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
                 g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
                 g_variant_builder_add (&builder, "(sssida{sv})",

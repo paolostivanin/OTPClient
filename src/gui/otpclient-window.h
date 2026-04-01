@@ -26,4 +26,6 @@ gint                otpclient_window_get_selected_db_index (OTPClientWindow *sel
 void                otpclient_window_select_database (OTPClientWindow *self,
                                                       gint             index);
 
+void                otpclient_window_invalidate_cross_db (OTPClientWindow *self);
+
 G_END_DECLS

@@ -17,6 +17,9 @@
 #include "dialogs/password-dialog.h"
 #include "gui-misc.h"
 #include "lock-app.h"
+#include "secret-schema.h"
+#include "gsettings-common.h"
+#include "common.h"
 
 struct _OTPClientWindow
 {
@@ -42,6 +45,16 @@ struct _OTPClientWindow
     GListStore *db_store;
 
     guint otp_refresh_timer_id;
+
+    /* Drag-and-drop state */
+    GtkWidget *dnd_highlight_widget;
+    GtkCssProvider *dnd_css_provider;
+
+    /* Cross-database search */
+    GListStore *cross_db_store;
+    GtkFlattenListModel *flatten_model;
+    gboolean cross_db_loaded;
+    gboolean cross_db_loading;
 };
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -286,6 +299,9 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
     if (entry == NULL || label == NULL)
         return;
 
+    /* Tag widget so DnD can find which entry is under the cursor */
+    g_object_set_data (G_OBJECT (label), "otp-entry", entry);
+
     switch (column)
     {
         case OTP_COLUMN_ACCOUNT:
@@ -322,6 +338,21 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
         }
     }
 
+    /* Show DB name badge for cross-database entries in the Account column */
+    const gchar *db_name = otp_entry_get_db_name (entry);
+    if (column == OTP_COLUMN_ACCOUNT && db_name != NULL)
+    {
+        gtk_label_set_use_markup (GTK_LABEL (label), TRUE);
+        g_autofree gchar *escaped_text = g_markup_escape_text (text ? text : "", -1);
+        g_autofree gchar *escaped_db = g_markup_escape_text (db_name, -1);
+        g_autofree gchar *markup = g_strdup_printf (
+            "%s  <span size=\"small\" alpha=\"60%%\">[%s]</span>",
+            escaped_text, escaped_db);
+        gtk_label_set_markup (GTK_LABEL (label), markup);
+        return;
+    }
+
+    gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
     gtk_label_set_text (GTK_LABEL (label), text ? text : "");
 }
 
@@ -369,6 +400,11 @@ otp_validity_column_bind (GtkSignalListItemFactory *factory,
 {
     (void) factory;
     (void) user_data;
+
+    OTPEntry *entry = gtk_list_item_get_item (list_item);
+    GtkWidget *child = gtk_list_item_get_child (list_item);
+    if (entry != NULL && child != NULL)
+        g_object_set_data (G_OBJECT (child), "otp-entry", entry);
 
     validity_selected_changed (list_item, NULL, NULL);
 }
@@ -460,6 +496,216 @@ otpclient_window_stop_otp_timer (OTPClientWindow *self)
         g_source_remove (self->otp_refresh_timer_id);
         self->otp_refresh_timer_id = 0;
     }
+}
+
+/* ── Cross-database search ─────────────────────────────────────────── */
+
+static void
+cross_db_ensure_flatten_model (OTPClientWindow *self)
+{
+    if (self->flatten_model != NULL)
+        return;
+
+    GListStore *models = g_list_store_new (G_TYPE_LIST_MODEL);
+    g_list_store_append (models, G_LIST_MODEL (self->otp_store));
+    if (self->cross_db_store != NULL)
+        g_list_store_append (models, G_LIST_MODEL (self->cross_db_store));
+
+    self->flatten_model = gtk_flatten_list_model_new (G_LIST_MODEL (models));
+}
+
+static void
+cross_db_activate (OTPClientWindow *self)
+{
+    cross_db_ensure_flatten_model (self);
+    gtk_filter_list_model_set_model (self->filter_model, G_LIST_MODEL (self->flatten_model));
+}
+
+static void
+cross_db_deactivate (OTPClientWindow *self)
+{
+    gtk_filter_list_model_set_model (self->filter_model, G_LIST_MODEL (self->otp_store));
+}
+
+typedef struct {
+    GPtrArray *db_list;    /* array of DbListEntry (owned) */
+    gchar *current_db_path;
+    gint32 max_file_size;
+} CrossDbTaskData;
+
+static void
+cross_db_task_data_free (gpointer data)
+{
+    CrossDbTaskData *td = data;
+    g_free (td->current_db_path);
+    if (td->db_list != NULL)
+        g_ptr_array_unref (td->db_list);
+    g_free (td);
+}
+
+static void
+cross_db_load_thread (GTask        *task,
+                      gpointer      source,
+                      gpointer      task_data,
+                      GCancellable *cancellable)
+{
+    (void) source;
+    (void) cancellable;
+
+    CrossDbTaskData *td = task_data;
+    GListStore *result = g_list_store_new (OTP_TYPE_ENTRY);
+
+    for (guint i = 0; i < td->db_list->len; i++)
+    {
+        DbListEntry *dbe = g_ptr_array_index (td->db_list, i);
+
+        /* Skip the currently active database */
+        if (g_strcmp0 (dbe->path, td->current_db_path) == 0)
+            continue;
+
+        /* Look up password from Secret Service */
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+                                                   "string", dbe->path, NULL);
+        if (pwd == NULL)
+            continue;   /* No password stored for this DB -- skip it */
+
+        DatabaseData *db_data = g_new0 (DatabaseData, 1);
+        db_data->db_path = g_strdup (dbe->path);
+        db_data->key = secure_strdup (pwd);
+        secret_password_free (pwd);
+        db_data->max_file_size_from_memlock = td->max_file_size;
+
+        GError *err = NULL;
+        load_db (db_data, &err);
+        if (err != NULL || db_data->in_memory_json_data == NULL)
+        {
+            if (err != NULL)
+                g_clear_error (&err);
+            gcry_free (db_data->key);
+            g_slist_free_full (db_data->objects_hash, g_free);
+            g_free (db_data->db_path);
+            g_free (db_data);
+            continue;
+        }
+
+        gsize idx;
+        json_t *obj;
+        json_array_foreach (db_data->in_memory_json_data, idx, obj)
+        {
+            const gchar *label = json_string_value (json_object_get (obj, "label"));
+            const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+            const gchar *type = json_string_value (json_object_get (obj, "type"));
+            const gchar *algo = json_string_value (json_object_get (obj, "algo"));
+            const gchar *secret_str = json_string_value (json_object_get (obj, "secret"));
+            gint64 period = json_integer_value (json_object_get (obj, "period"));
+            gint64 counter = json_integer_value (json_object_get (obj, "counter"));
+            gint64 digits = json_integer_value (json_object_get (obj, "digits"));
+
+            if (period <= 0) period = 30;
+            if (digits <= 0) digits = 6;
+            if (type == NULL) type = "TOTP";
+            if (algo == NULL) algo = "SHA1";
+
+            OTPEntry *entry = otp_entry_new (
+                label ? label : "",
+                issuer ? issuer : "",
+                NULL,
+                type,
+                (guint32) period,
+                (guint64) counter,
+                algo,
+                (guint32) digits,
+                secret_str);
+
+            otp_entry_set_db_name (entry, dbe->name);
+            otp_entry_update_otp (entry);
+            g_list_store_append (result, entry);
+            g_object_unref (entry);
+        }
+
+        gcry_free (db_data->key);
+        json_decref (db_data->in_memory_json_data);
+        g_slist_free_full (db_data->objects_hash, g_free);
+        g_free (db_data->db_path);
+        g_free (db_data);
+    }
+
+    g_task_return_pointer (task, result, g_object_unref);
+}
+
+static void
+cross_db_load_done (GObject      *source,
+                    GAsyncResult *result,
+                    gpointer      user_data)
+{
+    (void) source;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    self->cross_db_loading = FALSE;
+
+    GListStore *store = g_task_propagate_pointer (G_TASK (result), NULL);
+    if (store == NULL)
+        return;
+
+    g_clear_object (&self->cross_db_store);
+    self->cross_db_store = store;
+    self->cross_db_loaded = TRUE;
+
+    /* Rebuild the flatten model with the new cross-db store */
+    g_clear_object (&self->flatten_model);
+
+    /* If there's an active search, wire up the flatten model */
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
+    if (text != NULL && text[0] != '\0')
+    {
+        cross_db_activate (self);
+        gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+    }
+}
+
+static void
+cross_db_trigger_load (OTPClientWindow *self)
+{
+    if (self->cross_db_loading)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL || !otpclient_application_get_use_secret_service (app))
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL)
+        return;
+
+    GPtrArray *db_list = gsettings_common_get_db_list ();
+    if (db_list == NULL || db_list->len <= 1)
+    {
+        if (db_list != NULL)
+            g_ptr_array_unref (db_list);
+        return;
+    }
+
+    self->cross_db_loading = TRUE;
+
+    CrossDbTaskData *td = g_new0 (CrossDbTaskData, 1);
+    td->db_list = db_list;
+    td->current_db_path = g_strdup (db_data->db_path);
+    td->max_file_size = db_data->max_file_size_from_memlock;
+
+    GTask *task = g_task_new (NULL, NULL, cross_db_load_done, self);
+    g_task_set_task_data (task, td, cross_db_task_data_free);
+    g_task_run_in_thread (task, cross_db_load_thread);
+    g_object_unref (task);
+}
+
+void
+otpclient_window_invalidate_cross_db (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    self->cross_db_loaded = FALSE;
+    if (self->cross_db_store != NULL)
+        g_list_store_remove_all (self->cross_db_store);
 }
 
 static gboolean
@@ -562,6 +808,26 @@ search_text_changed (GtkEntry        *entry,
                      OTPClientWindow *win)
 {
     (void) entry;
+
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (win->search_entry));
+    gboolean searching = (text != NULL && text[0] != '\0');
+
+    if (searching)
+    {
+        /* Trigger cross-DB load if needed */
+        if (!win->cross_db_loaded && !win->cross_db_loading)
+            cross_db_trigger_load (win);
+
+        /* Switch to flatten model if cross-DB data is available */
+        if (win->cross_db_loaded && win->cross_db_store != NULL
+            && g_list_model_get_n_items (G_LIST_MODEL (win->cross_db_store)) > 0)
+            cross_db_activate (win);
+    }
+    else
+    {
+        /* Search cleared: revert to single-DB model */
+        cross_db_deactivate (win);
+    }
 
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
 
@@ -731,9 +997,11 @@ on_otp_selection_changed (GtkSingleSelection *selection,
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
 
-    /* For HOTP tokens, increment counter and regenerate OTP on each selection */
+    /* For HOTP tokens, increment counter and regenerate OTP on each selection.
+     * Skip for cross-DB entries since their database is not actively loaded. */
     const gchar *type = otp_entry_get_otp_type (entry);
-    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0 && app != NULL)
+    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0
+        && app != NULL && otp_entry_get_db_name (entry) == NULL)
     {
         DatabaseData *db_data = otpclient_application_get_db_data (app);
         if (db_data != NULL && db_data->in_memory_json_data != NULL)
@@ -776,6 +1044,89 @@ on_otp_selection_changed (GtkSingleSelection *selection,
     }
 }
 
+/* ── Drag-and-drop helpers ─────────────────────────────────────────── */
+
+static guint
+find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
+{
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (OTPEntry) e = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+        if (e == entry)
+            return i;
+    }
+    return GTK_INVALID_LIST_POSITION;
+}
+
+/*
+ * Walk up from the widget at (x, y) looking for one tagged with "otp-entry".
+ * Returns the OTPEntry* or NULL.  If row_widget_out is non-NULL the deepest
+ * ancestor whose *parent* still has the tag is written there (useful for
+ * applying CSS highlight classes to the row-level widget).
+ */
+static OTPEntry *
+pick_entry_at (OTPClientWindow *self, double x, double y, GtkWidget **row_widget_out)
+{
+    GtkWidget *w = gtk_widget_pick (GTK_WIDGET (self->otp_list), x, y, GTK_PICK_DEFAULT);
+    GtkWidget *last_tagged = NULL;
+
+    while (w != NULL && w != self->otp_list)
+    {
+        OTPEntry *entry = g_object_get_data (G_OBJECT (w), "otp-entry");
+        if (entry != NULL)
+            last_tagged = w;
+        w = gtk_widget_get_parent (w);
+    }
+
+    if (last_tagged == NULL)
+    {
+        if (row_widget_out)
+            *row_widget_out = NULL;
+        return NULL;
+    }
+
+    OTPEntry *entry = g_object_get_data (G_OBJECT (last_tagged), "otp-entry");
+
+    /*
+     * Walk up from the tagged widget to find the nearest row-level container
+     * that we can apply CSS classes to.  We look for the widget whose grandparent
+     * is the GtkColumnView itself.
+     */
+    if (row_widget_out)
+    {
+        GtkWidget *rw = last_tagged;
+        while (rw != NULL && rw != self->otp_list)
+        {
+            GtkWidget *parent = gtk_widget_get_parent (rw);
+            if (parent != NULL)
+            {
+                GtkWidget *grandparent = gtk_widget_get_parent (parent);
+                if (grandparent != NULL && GTK_IS_COLUMN_VIEW (grandparent))
+                {
+                    *row_widget_out = parent;
+                    return entry;
+                }
+            }
+            rw = gtk_widget_get_parent (rw);
+        }
+        *row_widget_out = last_tagged;
+    }
+
+    return entry;
+}
+
+static void
+dnd_clear_highlight (OTPClientWindow *self)
+{
+    if (self->dnd_highlight_widget != NULL)
+    {
+        gtk_widget_remove_css_class (self->dnd_highlight_widget, "drop-above");
+        gtk_widget_remove_css_class (self->dnd_highlight_widget, "drop-below");
+        self->dnd_highlight_widget = NULL;
+    }
+}
+
 static GdkContentProvider *
 on_drag_prepare (GtkDragSource *source,
                  double         x,
@@ -787,6 +1138,12 @@ on_drag_prepare (GtkDragSource *source,
     (void) y;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    /* Disable DnD while search filter is active */
+    const gchar *search_text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
+    if (search_text != NULL && search_text[0] != '\0')
+        return NULL;
+
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
         return NULL;
@@ -798,6 +1155,52 @@ on_drag_prepare (GtkDragSource *source,
     return gdk_content_provider_new_for_value (&value);
 }
 
+static GdkDragAction
+on_dnd_motion (GtkDropTarget *target,
+               double         x,
+               double         y,
+               gpointer       user_data)
+{
+    (void) target;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    dnd_clear_highlight (self);
+
+    GtkWidget *row_widget = NULL;
+    OTPEntry *entry = pick_entry_at (self, x, y, &row_widget);
+    if (entry == NULL || row_widget == NULL)
+        return 0;
+
+    /* Determine above/below by comparing y to the midpoint of the row */
+    graphene_point_t row_pt;
+    if (!gtk_widget_compute_point (row_widget, GTK_WIDGET (self->otp_list),
+                                   &GRAPHENE_POINT_INIT (0, 0), &row_pt))
+        return 0;
+
+    gdouble row_top = row_pt.y;
+    gdouble row_height = gtk_widget_get_height (row_widget);
+    gdouble midpoint = row_top + row_height / 2.0;
+
+    if (y < midpoint)
+        gtk_widget_add_css_class (row_widget, "drop-above");
+    else
+        gtk_widget_add_css_class (row_widget, "drop-below");
+
+    self->dnd_highlight_widget = row_widget;
+
+    return GDK_ACTION_MOVE;
+}
+
+static void
+on_dnd_leave (GtkDropTarget *target,
+              gpointer       user_data)
+{
+    (void) target;
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    dnd_clear_highlight (self);
+}
+
 static gboolean
 on_drop (GtkDropTarget *target,
          const GValue  *value,
@@ -806,35 +1209,61 @@ on_drop (GtkDropTarget *target,
          gpointer       user_data)
 {
     (void) target;
-    (void) x;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    dnd_clear_highlight (self);
 
     if (!G_VALUE_HOLDS_UINT (value))
         return FALSE;
 
-    guint source_pos = g_value_get_uint (value);
+    guint source_filter_pos = g_value_get_uint (value);
 
-    /* Determine target position from y coordinate */
-    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
-    if (n_items == 0)
+    /* Resolve source entry from the selection/filter model */
+    g_autoptr (OTPEntry) source_entry = g_list_model_get_item (
+        G_LIST_MODEL (self->filter_model), source_filter_pos);
+    if (source_entry == NULL)
         return FALSE;
 
-    /* Approximate row height */
-    gint height = gtk_widget_get_height (self->otp_list);
-    gdouble row_height = (gdouble) height / (gdouble) n_items;
-    guint target_pos = (guint)(y / row_height);
+    guint source_pos = find_store_pos_for_entry (self, source_entry);
+    if (source_pos == GTK_INVALID_LIST_POSITION)
+        return FALSE;
 
-    if (target_pos >= n_items)
-        target_pos = n_items - 1;
+    /* Find target entry under the cursor using widget picking */
+    GtkWidget *row_widget = NULL;
+    OTPEntry *target_entry = pick_entry_at (self, x, y, &row_widget);
+    if (target_entry == NULL)
+        return FALSE;
+
+    guint target_pos = find_store_pos_for_entry (self, target_entry);
+    if (target_pos == GTK_INVALID_LIST_POSITION)
+        return FALSE;
+
+    /* Determine if we should insert above or below the target row */
+    if (row_widget != NULL)
+    {
+        graphene_point_t row_pt;
+        if (gtk_widget_compute_point (row_widget, GTK_WIDGET (self->otp_list),
+                                      &GRAPHENE_POINT_INIT (0, 0), &row_pt))
+        {
+            gdouble row_height = gtk_widget_get_height (row_widget);
+            gdouble midpoint = row_pt.y + row_height / 2.0;
+            if (y >= midpoint && target_pos < g_list_model_get_n_items (G_LIST_MODEL (self->otp_store)) - 1)
+                target_pos++;
+        }
+    }
 
     if (source_pos == target_pos)
         return FALSE;
 
+    /* Adjust target position for the remove+insert shift */
+    guint insert_pos = target_pos;
+    if (source_pos < target_pos)
+        insert_pos--;
+
     /* Reorder in GListStore */
-    g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), source_pos);
     g_list_store_remove (self->otp_store, source_pos);
-    g_list_store_insert (self->otp_store, target_pos, entry);
+    g_list_store_insert (self->otp_store, insert_pos, source_entry);
 
     /* Reorder in the JSON database */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -846,10 +1275,11 @@ on_drop (GtkDropTarget *target,
         {
             json_t *arr = db_data->in_memory_json_data;
             json_t *item = json_array_get (arr, source_pos);
-            if (item != NULL) {
+            if (item != NULL)
+            {
                 json_incref (item);
                 json_array_remove (arr, source_pos);
-                json_array_insert (arr, target_pos, item);
+                json_array_insert (arr, insert_pos, item);
                 json_decref (item);
             }
 
@@ -869,6 +1299,16 @@ on_drop (GtkDropTarget *target,
 static void
 setup_dnd (OTPClientWindow *self)
 {
+    /* CSS for drop indicator lines */
+    self->dnd_css_provider = gtk_css_provider_new ();
+    gtk_css_provider_load_from_string (self->dnd_css_provider,
+        ".drop-above { border-top: 2px solid @accent_color; }"
+        ".drop-below { border-bottom: 2px solid @accent_color; }");
+    gtk_style_context_add_provider_for_display (
+        gtk_widget_get_display (GTK_WIDGET (self)),
+        GTK_STYLE_PROVIDER (self->dnd_css_provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
     GtkDragSource *drag_source = gtk_drag_source_new ();
     gtk_drag_source_set_actions (drag_source, GDK_ACTION_MOVE);
     g_signal_connect (drag_source, "prepare", G_CALLBACK (on_drag_prepare), self);
@@ -876,6 +1316,8 @@ setup_dnd (OTPClientWindow *self)
 
     GtkDropTarget *drop_target = gtk_drop_target_new (G_TYPE_UINT, GDK_ACTION_MOVE);
     g_signal_connect (drop_target, "drop", G_CALLBACK (on_drop), self);
+    g_signal_connect (drop_target, "motion", G_CALLBACK (on_dnd_motion), self);
+    g_signal_connect (drop_target, "leave", G_CALLBACK (on_dnd_leave), self);
     gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (drop_target));
 }
 
@@ -941,7 +1383,17 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->filter_model);
     g_clear_object (&win->otp_store);
     g_clear_object (&win->db_store);
+    g_clear_object (&win->cross_db_store);
+    g_clear_object (&win->flatten_model);
     g_clear_object (&win->settings);
+
+    if (win->dnd_css_provider != NULL)
+    {
+        gtk_style_context_remove_provider_for_display (
+            gtk_widget_get_display (GTK_WIDGET (win)),
+            GTK_STYLE_PROVIDER (win->dnd_css_provider));
+        g_clear_object (&win->dnd_css_provider);
+    }
 
     gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
@@ -1234,6 +1686,11 @@ action_edit_token (GtkWidget  *widget,
     if (pos == GTK_INVALID_LIST_POSITION)
         return;
 
+    /* Cannot edit cross-DB entries */
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+        return;
+
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
@@ -1302,6 +1759,11 @@ action_delete_token (GtkWidget  *widget,
     if (pos == GTK_INVALID_LIST_POSITION)
         return;
 
+    /* Cannot delete cross-DB entries */
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+        return;
+
     AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
         adw_alert_dialog_new (_("Delete Token?"),
                               _("This action cannot be undone.")));
@@ -1328,6 +1790,11 @@ action_show_qr (GtkWidget  *widget,
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    /* Cannot show QR for cross-DB entries */
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -1488,6 +1955,11 @@ action_move_token (GtkWidget  *widget,
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    /* Cannot move cross-DB entries */
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
