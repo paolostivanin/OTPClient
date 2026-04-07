@@ -4,6 +4,7 @@ import com.otpclient.android.core.model.Argon2Params
 import com.otpclient.android.core.model.CryptoConstants
 import com.otpclient.android.core.model.DatabaseInfo
 import com.otpclient.android.core.model.OtpEntry
+import com.otpclient.android.core.sync.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,12 +17,13 @@ import javax.inject.Singleton
 @Singleton
 class DatabaseRepository @Inject constructor(
     private val databaseManager: DatabaseManager,
+    private val syncManager: SyncManager,
 ) {
     private val _entries = MutableStateFlow<List<OtpEntry>>(emptyList())
     val entries: StateFlow<List<OtpEntry>> = _entries.asStateFlow()
 
     private var currentPath: String? = null
-    private var currentPassword: String? = null
+    private var currentPassword: CharArray? = null
 
     val isUnlocked: Boolean
         get() = currentPassword != null
@@ -29,10 +31,13 @@ class DatabaseRepository @Inject constructor(
     suspend fun unlock(path: String, password: String): Result<List<OtpEntry>> =
         withContext(Dispatchers.IO) {
             try {
-                val loaded = databaseManager.loadDatabase(path, password)
+                val pwChars = password.toCharArray()
+                val loaded = databaseManager.loadDatabase(path, pwChars)
+                currentPassword?.fill('\u0000')
                 currentPath = path
-                currentPassword = password
+                currentPassword = pwChars
                 _entries.value = loaded
+                syncManager.syncOnOpen(path)
                 Result.success(loaded)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -42,9 +47,11 @@ class DatabaseRepository @Inject constructor(
     suspend fun createAndUnlock(path: String, password: String, params: Argon2Params = Argon2Params()): Result<Unit> =
         withContext(Dispatchers.IO) {
             try {
-                databaseManager.createDatabase(path, password, params)
+                val pwChars = password.toCharArray()
+                databaseManager.createDatabase(path, pwChars, params)
+                currentPassword?.fill('\u0000')
                 currentPath = path
-                currentPassword = password
+                currentPassword = pwChars
                 _entries.value = emptyList()
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -60,6 +67,7 @@ class DatabaseRepository @Inject constructor(
             val updated = _entries.value + entry
             databaseManager.saveDatabase(path, password, updated)
             _entries.value = updated
+            syncManager.syncOnSave(path)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -75,6 +83,7 @@ class DatabaseRepository @Inject constructor(
             updated[index] = entry
             databaseManager.saveDatabase(path, password, updated)
             _entries.value = updated
+            syncManager.syncOnSave(path)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -90,6 +99,7 @@ class DatabaseRepository @Inject constructor(
             updated.removeAt(index)
             databaseManager.saveDatabase(path, password, updated)
             _entries.value = updated
+            syncManager.syncOnSave(path)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -113,8 +123,11 @@ class DatabaseRepository @Inject constructor(
                 val path = currentPath ?: return@withContext Result.failure(DatabaseException("No database open"))
                 val password = currentPassword ?: return@withContext Result.failure(DatabaseException("Database locked"))
 
-                databaseManager.changePassword(path, password, newPassword, params)
-                currentPassword = newPassword
+                val newPwChars = newPassword.toCharArray()
+                databaseManager.changePassword(path, password, newPwChars, params)
+                currentPassword?.fill('\u0000')
+                currentPassword = newPwChars
+                syncManager.syncOnSave(path)
                 Result.success(Unit)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -146,6 +159,7 @@ class DatabaseRepository @Inject constructor(
     }
 
     fun lock() {
+        currentPassword?.fill('\u0000')
         currentPassword = null
         _entries.value = emptyList()
     }

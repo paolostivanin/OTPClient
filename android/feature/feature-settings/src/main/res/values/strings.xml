@@ -20,4 +20,21 @@
     <string name="settings_show_next_otp_title">Show next OTP</string>
     <string name="settings_show_next_otp_subtitle">Preview the upcoming code when current is expiring</string>
     <string name="content_desc_back">Back</string>
+    <string name="settings_section_sync">Sync</string>
+    <string name="settings_sync_provider">Sync provider</string>
+    <string name="settings_sync_none">None</string>
+    <string name="settings_sync_google_drive">Google Drive</string>
+    <string name="settings_sync_webdav">WebDAV</string>
+    <string name="settings_sync_google_signed_in">Signed in as %1$s</string>
+    <string name="settings_sync_google_sign_in">Sign in with Google</string>
+    <string name="settings_sync_google_sign_out">Sign out</string>
+    <string name="settings_sync_webdav_server_url">Server URL</string>
+    <string name="settings_sync_webdav_server_url_hint">https://cloud.example.com/remote.php/dav/files/user</string>
+    <string name="settings_sync_webdav_username">Username</string>
+    <string name="settings_sync_webdav_password">Password</string>
+    <string name="settings_sync_webdav_remote_path">Remote path</string>
+    <string name="settings_sync_webdav_save">Save WebDAV settings</string>
+    <string name="settings_sync_webdav_test">Test connection</string>
+    <string name="settings_sync_webdav_test_success">Connection successful</string>
+    <string name="settings_sync_webdav_test_failed">Connection failed</string>
 </resources>

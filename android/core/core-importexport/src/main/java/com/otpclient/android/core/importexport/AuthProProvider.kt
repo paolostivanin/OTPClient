@@ -62,25 +62,29 @@ object AuthProProvider {
         val ciphertext = fileBytes.copyOfRange(16 + SALT_SIZE + IV_SIZE, fileBytes.size - TAG_SIZE)
 
         val key = KeyDerivation.deriveKeyArgon2id(
-            password = password,
+            password = password.toCharArray(),
             salt = salt,
             iterations = ARGON2_ITER,
             memoryCostKiB = ARGON2_MEMCOST,
             parallelism = ARGON2_PARALLEL,
         )
 
-        val decrypted = AesGcmCipher.decrypt(
-            ciphertext = ciphertext,
-            tag = tag,
-            key = key,
-            iv = iv,
-            aad = ByteArray(0),
-        )
+        try {
+            val decrypted = AesGcmCipher.decrypt(
+                ciphertext = ciphertext,
+                tag = tag,
+                key = key,
+                iv = iv,
+                aad = ByteArray(0),
+            )
 
-        val jsonString = String(decrypted, Charsets.UTF_8)
-        val root = json.parseToJsonElement(jsonString).jsonObject
-        val auths = root["Authenticators"]?.jsonArray ?: throw ImportExportException("Missing 'Authenticators'")
-        return parseAuthenticators(auths.map { it.jsonObject })
+            val jsonString = String(decrypted, Charsets.UTF_8)
+            val root = json.parseToJsonElement(jsonString).jsonObject
+            val auths = root["Authenticators"]?.jsonArray ?: throw ImportExportException("Missing 'Authenticators'")
+            return parseAuthenticators(auths.map { it.jsonObject })
+        } finally {
+            key.fill(0)
+        }
     }
 
     private fun parseAuthenticators(auths: List<kotlinx.serialization.json.JsonObject>): List<OtpEntry> {
@@ -119,26 +123,30 @@ object AuthProProvider {
         val iv = ByteArray(IV_SIZE).also { random.nextBytes(it) }
 
         val key = KeyDerivation.deriveKeyArgon2id(
-            password = password,
+            password = password.toCharArray(),
             salt = salt,
             iterations = ARGON2_ITER,
             memoryCostKiB = ARGON2_MEMCOST,
             parallelism = ARGON2_PARALLEL,
         )
 
-        val encrypted = AesGcmCipher.encrypt(
-            plaintext = jsonData.toByteArray(Charsets.UTF_8),
-            key = key,
-            iv = iv,
-            aad = ByteArray(0),
-        )
+        try {
+            val encrypted = AesGcmCipher.encrypt(
+                plaintext = jsonData.toByteArray(Charsets.UTF_8),
+                key = key,
+                iv = iv,
+                aad = ByteArray(0),
+            )
 
-        File(path).outputStream().use { out ->
-            out.write(HEADER.toByteArray(Charsets.US_ASCII))
-            out.write(salt)
-            out.write(iv)
-            out.write(encrypted.ciphertext)
-            out.write(encrypted.tag)
+            File(path).outputStream().use { out ->
+                out.write(HEADER.toByteArray(Charsets.US_ASCII))
+                out.write(salt)
+                out.write(iv)
+                out.write(encrypted.ciphertext)
+                out.write(encrypted.tag)
+            }
+        } finally {
+            key.fill(0)
         }
     }
 

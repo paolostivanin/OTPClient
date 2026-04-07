@@ -12,6 +12,10 @@
     <string name="tokenlist_no_tokens_subtitle">Tap + to add your first token</string>
     <string name="tokenlist_copy">Copy</string>
     <string name="tokenlist_delete">Delete</string>
+    <string name="tokenlist_edit">Edit</string>
+    <string name="tokenlist_show_qr">Show QR code</string>
+    <string name="tokenlist_qr_dialog_title">QR Code</string>
+    <string name="tokenlist_close">Close</string>
     <string name="tokenlist_next_code">Next code</string>
     <string name="tokenlist_copied">Copied %1$s</string>
     <string name="tokenlist_delete_title">Delete token?</string>
@@ -19,4 +23,8 @@
     <string name="tokenlist_cancel">Cancel</string>
     <string name="tokenlist_card_description">%1$s, code %2$s%3$s. Tap to copy.</string>
     <string name="tokenlist_remaining_seconds">, %1$d seconds remaining</string>
+    <string name="tokenlist_sync_conflict_title">Sync conflict</string>
+    <string name="tokenlist_sync_conflict_message">Both local and remote databases have been modified. Which version do you want to keep?</string>
+    <string name="tokenlist_sync_keep_local">Keep local</string>
+    <string name="tokenlist_sync_keep_remote">Keep remote</string>
 </resources>

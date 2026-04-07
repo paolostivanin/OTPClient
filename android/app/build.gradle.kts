@@ -45,6 +45,8 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "/META-INF/INDEX.LIST"
+            excludes += "/META-INF/DEPENDENCIES"
         }
     }
 }
@@ -55,6 +57,7 @@ dependencies {
     implementation(project(":core:core-otp"))
     implementation(project(":core:core-database"))
     implementation(project(":core:core-importexport"))
+    implementation(project(":core:core-sync"))
     implementation(project(":feature:feature-unlock"))
     implementation(project(":feature:feature-tokenlist"))
     implementation(project(":feature:feature-addtoken"))

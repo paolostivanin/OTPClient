@@ -122,7 +122,7 @@ fun DatabaseManagerScreen(
                 onClick = { openFilePicker.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null)
+                Icon(Icons.Default.FolderOpen, contentDescription = stringResource(R.string.dbmanager_open_existing))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.dbmanager_open_existing))
             }
@@ -227,7 +227,7 @@ private fun DatabaseCard(
         ) {
             Icon(
                 Icons.Default.Storage,
-                contentDescription = null,
+                contentDescription = stringResource(R.string.content_desc_database_icon),
                 tint = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.width(12.dp))

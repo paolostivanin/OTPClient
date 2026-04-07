@@ -2,6 +2,7 @@
 <resources>
     <string name="addtoken_title">Add Token</string>
     <string name="addtoken_scan_qr">Scan QR Code</string>
+    <string name="addtoken_import_from_image">Import from Image</string>
     <string name="addtoken_issuer">Issuer</string>
     <string name="addtoken_issuer_hint">e.g. Google, GitHub</string>
     <string name="addtoken_label">Account / Label</string>
@@ -13,6 +14,8 @@
     <string name="addtoken_period">Period (s)</string>
     <string name="addtoken_counter">Counter</string>
     <string name="addtoken_button">Add Token</string>
+    <string name="addtoken_edit_title">Edit Token</string>
+    <string name="addtoken_save_button">Save</string>
     <string name="content_desc_back">Back</string>
     <string name="qrscanner_title">Scan QR Code</string>
     <string name="qrscanner_permission_required">Camera permission is required to scan QR codes</string>

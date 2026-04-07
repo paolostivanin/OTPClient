@@ -76,34 +76,42 @@ object AegisProvider {
             salt, n, r, p, KEY_SIZE,
         )
 
-        // Decrypt master key
-        val masterKey = AesGcmCipher.decrypt(
-            ciphertext = encKey,
-            tag = keyTag,
-            key = derivedKey,
-            iv = keyNonce,
-            aad = ByteArray(0),
-        )
+        try {
+            // Decrypt master key
+            val masterKey = AesGcmCipher.decrypt(
+                ciphertext = encKey,
+                tag = keyTag,
+                key = derivedKey,
+                iv = keyNonce,
+                aad = ByteArray(0),
+            )
 
-        // Decrypt database
-        val dbParams = header["params"]?.jsonObject ?: throw ImportExportException("Missing params")
-        val dbNonce = HexUtils.hexToBytes(dbParams["nonce"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db nonce"))
-        val dbTag = HexUtils.hexToBytes(dbParams["tag"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db tag"))
-        val dbB64 = root["db"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db data")
-        val dbEncrypted = Base64.decode(dbB64, Base64.DEFAULT)
+            try {
+                // Decrypt database
+                val dbParams = header["params"]?.jsonObject ?: throw ImportExportException("Missing params")
+                val dbNonce = HexUtils.hexToBytes(dbParams["nonce"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db nonce"))
+                val dbTag = HexUtils.hexToBytes(dbParams["tag"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db tag"))
+                val dbB64 = root["db"]?.jsonPrimitive?.content ?: throw ImportExportException("Missing db data")
+                val dbEncrypted = Base64.decode(dbB64, Base64.DEFAULT)
 
-        val dbDecrypted = AesGcmCipher.decrypt(
-            ciphertext = dbEncrypted,
-            tag = dbTag,
-            key = masterKey,
-            iv = dbNonce,
-            aad = ByteArray(0),
-        )
+                val dbDecrypted = AesGcmCipher.decrypt(
+                    ciphertext = dbEncrypted,
+                    tag = dbTag,
+                    key = masterKey,
+                    iv = dbNonce,
+                    aad = ByteArray(0),
+                )
 
-        val dbJson = String(dbDecrypted, Charsets.UTF_8)
-        val dbObj = json.parseToJsonElement(dbJson).jsonObject
-        val entriesArray = dbObj["entries"]?.jsonArray ?: throw ImportExportException("Missing entries")
-        return parseEntries(entriesArray.map { it.jsonObject })
+                val dbJson = String(dbDecrypted, Charsets.UTF_8)
+                val dbObj = json.parseToJsonElement(dbJson).jsonObject
+                val entriesArray = dbObj["entries"]?.jsonArray ?: throw ImportExportException("Missing entries")
+                return parseEntries(entriesArray.map { it.jsonObject })
+            } finally {
+                masterKey.fill(0)
+            }
+        } finally {
+            derivedKey.fill(0)
+        }
     }
 
     private fun parseEntries(entries: List<JsonObject>): List<OtpEntry> {
@@ -166,53 +174,55 @@ object AegisProvider {
             salt, 32768, 8, 1, KEY_SIZE,
         )
 
-        // Encrypt master key
-        val encMasterKey = AesGcmCipher.encrypt(
-            plaintext = masterKey,
-            key = derivedKey,
-            iv = keyNonce,
-            aad = ByteArray(0),
-        )
+        try {
+            // Encrypt master key
+            val encMasterKey = AesGcmCipher.encrypt(
+                plaintext = masterKey,
+                key = derivedKey,
+                iv = keyNonce,
+                aad = ByteArray(0),
+            )
 
-        // Build database JSON
-        val dbContent = buildDbJson(entries)
-        val dbNonce = ByteArray(NONCE_SIZE).also { random.nextBytes(it) }
-        val encDb = AesGcmCipher.encrypt(
-            plaintext = dbContent.toByteArray(Charsets.UTF_8),
-            key = masterKey,
-            iv = dbNonce,
-            aad = ByteArray(0),
-        )
+            // Build database JSON
+            val dbContent = buildDbJson(entries)
+            val dbNonce = ByteArray(NONCE_SIZE).also { random.nextBytes(it) }
+            val encDb = AesGcmCipher.encrypt(
+                plaintext = dbContent.toByteArray(Charsets.UTF_8),
+                key = masterKey,
+                iv = dbNonce,
+                aad = ByteArray(0),
+            )
 
-        val uuid = UUID.randomUUID().toString()
-        val dbB64 = Base64.encodeToString(encDb.ciphertext + encDb.tag, Base64.NO_WRAP)
+            val uuid = UUID.randomUUID().toString()
 
-        // Aegis encrypted format puts tag inside the base64 db content for the DB,
-        // but separate nonce/tag in params. We need to handle this correctly:
-        // The db field is base64(ciphertext) - tag is separate in params
-        val dbB64Ct = Base64.encodeToString(encDb.ciphertext, Base64.NO_WRAP)
+            // Aegis encrypted format: db field is base64(ciphertext), tag is separate in params
+            val dbB64Ct = Base64.encodeToString(encDb.ciphertext, Base64.NO_WRAP)
 
-        val output = buildString {
-            append("{\"version\":1,\"header\":{")
-            append("\"slots\":[{")
-            append("\"type\":1,")
-            append("\"uuid\":\"$uuid\",")
-            append("\"key\":\"${HexUtils.bytesToHex(encMasterKey.ciphertext)}\",")
-            append("\"key_params\":{")
-            append("\"nonce\":\"${HexUtils.bytesToHex(keyNonce)}\",")
-            append("\"tag\":\"${HexUtils.bytesToHex(encMasterKey.tag)}\"")
-            append("},")
-            append("\"n\":32768,\"r\":8,\"p\":1,")
-            append("\"salt\":\"${HexUtils.bytesToHex(salt)}\"")
-            append("}],")
-            append("\"params\":{")
-            append("\"nonce\":\"${HexUtils.bytesToHex(dbNonce)}\",")
-            append("\"tag\":\"${HexUtils.bytesToHex(encDb.tag)}\"")
-            append("}},")
-            append("\"db\":\"$dbB64Ct\"")
-            append("}")
+            val output = buildString {
+                append("{\"version\":1,\"header\":{")
+                append("\"slots\":[{")
+                append("\"type\":1,")
+                append("\"uuid\":\"$uuid\",")
+                append("\"key\":\"${HexUtils.bytesToHex(encMasterKey.ciphertext)}\",")
+                append("\"key_params\":{")
+                append("\"nonce\":\"${HexUtils.bytesToHex(keyNonce)}\",")
+                append("\"tag\":\"${HexUtils.bytesToHex(encMasterKey.tag)}\"")
+                append("},")
+                append("\"n\":32768,\"r\":8,\"p\":1,")
+                append("\"salt\":\"${HexUtils.bytesToHex(salt)}\"")
+                append("}],")
+                append("\"params\":{")
+                append("\"nonce\":\"${HexUtils.bytesToHex(dbNonce)}\",")
+                append("\"tag\":\"${HexUtils.bytesToHex(encDb.tag)}\"")
+                append("}},")
+                append("\"db\":\"$dbB64Ct\"")
+                append("}")
+            }
+            File(path).writeText(output, Charsets.UTF_8)
+        } finally {
+            derivedKey.fill(0)
+            masterKey.fill(0)
         }
-        File(path).writeText(output, Charsets.UTF_8)
     }
 
     private fun buildDbJson(entries: List<OtpEntry>): String {

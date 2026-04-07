@@ -32,6 +32,11 @@ dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-otp"))
     implementation(project(":core:core-database"))
+    implementation(project(":core:core-importexport"))
+    implementation(project(":core:core-sync"))
+    implementation(project(":feature:feature-settings"))
+
+    implementation(libs.zxing.core)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

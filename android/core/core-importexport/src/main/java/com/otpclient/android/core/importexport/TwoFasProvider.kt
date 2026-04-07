@@ -65,18 +65,21 @@ object TwoFasProvider {
         val tag = ciphertextWithTag.copyOfRange(ciphertextWithTag.size - TAG_SIZE, ciphertextWithTag.size)
 
         val key = deriveKey(password, salt)
+        try {
+            val decrypted = AesGcmCipher.decrypt(
+                ciphertext = ciphertext,
+                tag = tag,
+                key = key,
+                iv = iv,
+                aad = ByteArray(0),
+            )
 
-        val decrypted = AesGcmCipher.decrypt(
-            ciphertext = ciphertext,
-            tag = tag,
-            key = key,
-            iv = iv,
-            aad = ByteArray(0),
-        )
-
-        val jsonString = String(decrypted, Charsets.UTF_8)
-        val services = json.parseToJsonElement(jsonString).jsonArray
-        return parseServices(services.map { it.jsonObject })
+            val jsonString = String(decrypted, Charsets.UTF_8)
+            val services = json.parseToJsonElement(jsonString).jsonArray
+            return parseServices(services.map { it.jsonObject })
+        } finally {
+            key.fill(0)
+        }
     }
 
     private fun parseServices(services: List<kotlinx.serialization.json.JsonObject>): List<OtpEntry> {
@@ -120,36 +123,44 @@ object TwoFasProvider {
         val iv = ByteArray(IV_SIZE).also { random.nextBytes(it) }
         val key = deriveKey(password, salt)
 
-        val encrypted = AesGcmCipher.encrypt(
-            plaintext = servicesJson.toByteArray(Charsets.UTF_8),
-            key = key,
-            iv = iv,
-            aad = ByteArray(0),
-        )
+        try {
+            val encrypted = AesGcmCipher.encrypt(
+                plaintext = servicesJson.toByteArray(Charsets.UTF_8),
+                key = key,
+                iv = iv,
+                aad = ByteArray(0),
+            )
 
-        val ciphertextWithTag = encrypted.ciphertext + encrypted.tag
-        val encodedData = "${Base64.encodeToString(ciphertextWithTag, Base64.NO_WRAP)}:${Base64.encodeToString(salt, Base64.NO_WRAP)}:${Base64.encodeToString(iv, Base64.NO_WRAP)}"
+            val ciphertextWithTag = encrypted.ciphertext + encrypted.tag
+            val encodedData = "${Base64.encodeToString(ciphertextWithTag, Base64.NO_WRAP)}:${Base64.encodeToString(salt, Base64.NO_WRAP)}:${Base64.encodeToString(iv, Base64.NO_WRAP)}"
 
-        // Reference data
-        val refSalt = ByteArray(SALT_SIZE).also { random.nextBytes(it) }
-        val refIv = ByteArray(IV_SIZE).also { random.nextBytes(it) }
-        val refKey = deriveKey(password, refSalt)
-        val refData = "2fas-browser-extension".toByteArray(Charsets.UTF_8)
-        val refEncrypted = AesGcmCipher.encrypt(
-            plaintext = refData,
-            key = refKey,
-            iv = refIv,
-            aad = ByteArray(0),
-        )
-        val refCiphertextWithTag = refEncrypted.ciphertext + refEncrypted.tag
-        val encodedRef = "${Base64.encodeToString(refCiphertextWithTag, Base64.NO_WRAP)}:${Base64.encodeToString(refSalt, Base64.NO_WRAP)}:${Base64.encodeToString(refIv, Base64.NO_WRAP)}"
+            // Reference data
+            val refSalt = ByteArray(SALT_SIZE).also { random.nextBytes(it) }
+            val refIv = ByteArray(IV_SIZE).also { random.nextBytes(it) }
+            val refKey = deriveKey(password, refSalt)
+            try {
+                val refData = "2fas-browser-extension".toByteArray(Charsets.UTF_8)
+                val refEncrypted = AesGcmCipher.encrypt(
+                    plaintext = refData,
+                    key = refKey,
+                    iv = refIv,
+                    aad = ByteArray(0),
+                )
+                val refCiphertextWithTag = refEncrypted.ciphertext + refEncrypted.tag
+                val encodedRef = "${Base64.encodeToString(refCiphertextWithTag, Base64.NO_WRAP)}:${Base64.encodeToString(refSalt, Base64.NO_WRAP)}:${Base64.encodeToString(refIv, Base64.NO_WRAP)}"
 
-        val output = buildString {
-            append("{\"services\":[],\"groups\":[],\"schemaVersion\":$SCHEMA_VERSION,")
-            append("\"servicesEncrypted\":\"$encodedData\",")
-            append("\"reference\":\"$encodedRef\"}")
+                val output = buildString {
+                    append("{\"services\":[],\"groups\":[],\"schemaVersion\":$SCHEMA_VERSION,")
+                    append("\"servicesEncrypted\":\"$encodedData\",")
+                    append("\"reference\":\"$encodedRef\"}")
+                }
+                File(path).writeText(output, Charsets.UTF_8)
+            } finally {
+                refKey.fill(0)
+            }
+        } finally {
+            key.fill(0)
         }
-        File(path).writeText(output, Charsets.UTF_8)
     }
 
     private fun buildServicesJson(entries: List<OtpEntry>, epochTime: Long): String {
@@ -183,8 +194,12 @@ object TwoFasProvider {
 
     private fun deriveKey(password: String, salt: ByteArray): ByteArray {
         val spec = PBEKeySpec(password.toCharArray(), salt, KDF_ITERS, KEY_SIZE * 8)
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        return factory.generateSecret(spec).encoded
+        try {
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            return factory.generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
     }
 
     private fun jsonStr(s: String): String {

@@ -10,39 +10,48 @@ import javax.crypto.spec.PBEKeySpec
 object KeyDerivation {
 
     fun deriveKeyArgon2id(
-        password: String,
+        password: CharArray,
         salt: ByteArray,
         iterations: Int,
         memoryCostKiB: Int,
         parallelism: Int,
         hashLength: Int = 32,
     ): ByteArray {
-        val argon2 = Argon2Kt()
-        val result: Argon2KtResult = argon2.hash(
-            mode = Argon2Mode.ARGON2_ID,
-            password = password.toByteArray(Charsets.UTF_8),
-            salt = salt,
-            tCostInIterations = iterations,
-            mCostInKibibyte = memoryCostKiB,
-            parallelism = parallelism,
-            hashLengthInBytes = hashLength,
-        )
-        return result.rawHashAsByteArray()
+        val pwBytes = String(password).toByteArray(Charsets.UTF_8)
+        try {
+            val argon2 = Argon2Kt()
+            val result: Argon2KtResult = argon2.hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = pwBytes,
+                salt = salt,
+                tCostInIterations = iterations,
+                mCostInKibibyte = memoryCostKiB,
+                parallelism = parallelism,
+                hashLengthInBytes = hashLength,
+            )
+            return result.rawHashAsByteArray()
+        } finally {
+            pwBytes.fill(0)
+        }
     }
 
     fun deriveKeyPbkdf2Sha512(
-        password: String,
+        password: CharArray,
         salt: ByteArray,
         iterations: Int = 100_000,
         keyLengthBits: Int = 256,
     ): ByteArray {
         val spec = PBEKeySpec(
-            password.toCharArray(),
+            password,
             salt,
             iterations,
             keyLengthBits,
         )
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
-        return factory.generateSecret(spec).encoded
+        try {
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
+            return factory.generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
     }
 }

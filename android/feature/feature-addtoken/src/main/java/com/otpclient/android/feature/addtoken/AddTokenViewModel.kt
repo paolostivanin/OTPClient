@@ -19,7 +19,7 @@ class AddTokenViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<AddTokenUiState>(AddTokenUiState.Idle)
     val uiState: StateFlow<AddTokenUiState> = _uiState.asStateFlow()
 
-    fun addToken(
+    fun saveToken(
         type: String,
         issuer: String,
         label: String,
@@ -28,6 +28,7 @@ class AddTokenViewModel @Inject constructor(
         digits: Int,
         period: Int,
         counter: Long,
+        editIndex: Int? = null,
     ) {
         if (secret.isBlank()) {
             _uiState.value = AddTokenUiState.Error("Secret is required")
@@ -51,10 +52,14 @@ class AddTokenViewModel @Inject constructor(
 
         _uiState.value = AddTokenUiState.Saving
         viewModelScope.launch {
-            val result = databaseRepository.addEntry(entry)
+            val result = if (editIndex != null) {
+                databaseRepository.updateEntry(editIndex, entry)
+            } else {
+                databaseRepository.addEntry(entry)
+            }
             _uiState.value = result.fold(
                 onSuccess = { AddTokenUiState.Success },
-                onFailure = { AddTokenUiState.Error(it.message ?: "Failed to add token") },
+                onFailure = { AddTokenUiState.Error(it.message ?: "Failed to save token") },
             )
         }
     }

@@ -46,6 +46,8 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.coroutines.android)
+    implementation(libs.coroutines.play.services)
+    implementation("com.google.guava:guava:33.4.0-android")
 
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)

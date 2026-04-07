@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.otpclient.android.core.database.DatabaseRepository
 import com.otpclient.android.feature.settings.AppSettings
 import com.otpclient.android.feature.settings.SettingsRepository
 import com.otpclient.android.feature.settings.Theme
@@ -29,6 +30,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var appLockManager: AppLockManager
+
+    @Inject
+    lateinit var databaseRepository: DatabaseRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,6 +58,7 @@ class MainActivity : ComponentActivity() {
                     OTPClientApp(
                         defaultDbPath = filesDir.resolve("otpclient.enc").absolutePath,
                         appLockManager = appLockManager,
+                        databaseRepository = databaseRepository,
                     )
                 }
             }

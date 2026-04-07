@@ -24,4 +24,5 @@
     <string name="content_desc_rename">Rename</string>
     <string name="content_desc_change_password">Change password</string>
     <string name="content_desc_remove">Remove</string>
+    <string name="content_desc_database_icon">Database</string>
 </resources>

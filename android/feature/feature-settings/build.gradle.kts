@@ -30,6 +30,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-model"))
+    implementation(project(":core:core-sync"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.material3)

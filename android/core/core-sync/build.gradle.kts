@@ -1,13 +1,12 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
 
 android {
-    namespace = "com.otpclient.android.core.database"
+    namespace = "com.otpclient.android.core.sync"
     compileSdk = 35
 
     defaultConfig {
@@ -25,11 +24,18 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:core-model"))
-    implementation(project(":core:core-crypto"))
-    implementation(project(":core:core-sync"))
-    implementation(libs.serialization.json)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
-    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
+    implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
+    implementation(libs.core.ktx)
+
+    // Networking
+    implementation(libs.okhttp)
+
+    // Google Drive
+    implementation(libs.google.api.client.android)
+    implementation(libs.google.api.services.drive)
+    implementation(libs.play.services.auth)
 }

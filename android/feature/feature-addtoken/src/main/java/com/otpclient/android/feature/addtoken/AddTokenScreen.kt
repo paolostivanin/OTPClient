@@ -1,5 +1,8 @@
 package com.otpclient.android.feature.addtoken
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +16,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -41,31 +46,97 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import com.otpclient.android.core.importexport.OtpauthUri
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTokenScreen(
     onBack: () -> Unit,
     onScanQr: () -> Unit = {},
+    scannedUri: String? = null,
+    editIndex: Int? = null,
+    initialEntry: com.otpclient.android.core.model.OtpEntry? = null,
     viewModel: AddTokenViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val isEditMode = editIndex != null
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-    var type by rememberSaveable { mutableStateOf("TOTP") }
-    var issuer by rememberSaveable { mutableStateOf("") }
-    var label by rememberSaveable { mutableStateOf("") }
-    var secret by rememberSaveable { mutableStateOf("") }
-    var algorithm by rememberSaveable { mutableStateOf("SHA1") }
-    var digits by rememberSaveable { mutableIntStateOf(6) }
-    var period by rememberSaveable { mutableIntStateOf(30) }
-    var counter by rememberSaveable { mutableLongStateOf(0L) }
+    var type by rememberSaveable { mutableStateOf(initialEntry?.type ?: "TOTP") }
+    var issuer by rememberSaveable { mutableStateOf(initialEntry?.issuer ?: "") }
+    var label by rememberSaveable { mutableStateOf(initialEntry?.label ?: "") }
+    var secret by rememberSaveable { mutableStateOf(initialEntry?.secret ?: "") }
+    var algorithm by rememberSaveable { mutableStateOf(initialEntry?.algo ?: "SHA1") }
+    var digits by rememberSaveable { mutableIntStateOf(initialEntry?.digits ?: 6) }
+    var period by rememberSaveable { mutableIntStateOf(initialEntry?.period ?: 30) }
+    var counter by rememberSaveable { mutableLongStateOf(initialEntry?.counter ?: 0L) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap == null) {
+                    snackbarHostState.showSnackbar("Failed to load image")
+                    return@launch
+                }
+                val image = InputImage.fromBitmap(bitmap, 0)
+                val scanner = BarcodeScanning.getClient()
+                val barcodes = scanner.process(image).await()
+                val otpauthUrl = barcodes.firstOrNull { it.rawValue?.startsWith("otpauth://") == true }?.rawValue
+                if (otpauthUrl != null) {
+                    OtpauthUri.parse(otpauthUrl)?.let { entry ->
+                        type = entry.type
+                        issuer = entry.issuer
+                        label = entry.label
+                        secret = entry.secret
+                        algorithm = entry.algo
+                        digits = entry.digits
+                        period = entry.period
+                        counter = entry.counter
+                    } ?: snackbarHostState.showSnackbar("Invalid otpauth URI")
+                } else {
+                    snackbarHostState.showSnackbar("No QR code found in image")
+                }
+                scanner.close()
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Error scanning image: ${e.message}")
+            }
+        }
+    }
+
+    LaunchedEffect(scannedUri) {
+        scannedUri?.let { uri ->
+            OtpauthUri.parse(uri)?.let { entry ->
+                type = entry.type
+                issuer = entry.issuer
+                label = entry.label
+                secret = entry.secret
+                algorithm = entry.algo
+                digits = entry.digits
+                period = entry.period
+                counter = entry.counter
+            }
+        }
+    }
 
     LaunchedEffect(uiState) {
         when (val state = uiState) {
@@ -78,7 +149,7 @@ fun AddTokenScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.addtoken_title)) },
+                title = { Text(stringResource(if (isEditMode) R.string.addtoken_edit_title else R.string.addtoken_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_desc_back))
@@ -99,9 +170,20 @@ fun AddTokenScreen(
                 onClick = onScanQr,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                Icon(Icons.Default.QrCodeScanner, contentDescription = stringResource(R.string.addtoken_scan_qr))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.addtoken_scan_qr))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = { imagePickerLauncher.launch("image/*") },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Image, contentDescription = stringResource(R.string.addtoken_import_from_image))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.addtoken_import_from_image))
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -244,7 +326,7 @@ fun AddTokenScreen(
 
             Button(
                 onClick = {
-                    viewModel.addToken(
+                    viewModel.saveToken(
                         type = type,
                         issuer = issuer,
                         label = label,
@@ -253,12 +335,13 @@ fun AddTokenScreen(
                         digits = digits,
                         period = period,
                         counter = counter,
+                        editIndex = editIndex,
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = uiState !is AddTokenUiState.Saving,
             ) {
-                Text(stringResource(R.string.addtoken_button))
+                Text(stringResource(if (isEditMode) R.string.addtoken_save_button else R.string.addtoken_button))
             }
 
             Spacer(modifier = Modifier.height(16.dp))

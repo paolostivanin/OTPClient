@@ -19,7 +19,7 @@ class DatabaseManager @Inject constructor() {
         encodeDefaults = true
     }
 
-    fun loadDatabase(path: String, password: String): List<OtpEntry> {
+    fun loadDatabase(path: String, password: CharArray): List<OtpEntry> {
         val file = File(path)
         val fileBytes = file.readBytes()
         val version = detectVersion(fileBytes)
@@ -31,7 +31,7 @@ class DatabaseManager @Inject constructor() {
         }
     }
 
-    fun saveDatabase(path: String, password: String, entries: List<OtpEntry>, params: Argon2Params = Argon2Params()) {
+    fun saveDatabase(path: String, password: CharArray, entries: List<OtpEntry>, params: Argon2Params = Argon2Params()) {
         val jsonString = json.encodeToString(entries)
         // Match C behavior: encrypt strlen(json) + 1 (includes null terminator)
         val payload = jsonString.toByteArray(Charsets.UTF_8) + byteArrayOf(0)
@@ -57,25 +57,29 @@ class DatabaseManager @Inject constructor() {
             hashLength = CryptoConstants.ARGON2ID_KEYLEN,
         )
 
-        val encrypted = AesGcmCipher.encrypt(
-            plaintext = payload,
-            key = key,
-            iv = iv,
-            aad = headerBytes,
-        )
+        try {
+            val encrypted = AesGcmCipher.encrypt(
+                plaintext = payload,
+                key = key,
+                iv = iv,
+                aad = headerBytes,
+            )
 
-        File(path).outputStream().use { out ->
-            out.write(headerBytes)
-            out.write(encrypted.ciphertext)
-            out.write(encrypted.tag)
+            File(path).outputStream().use { out ->
+                out.write(headerBytes)
+                out.write(encrypted.ciphertext)
+                out.write(encrypted.tag)
+            }
+        } finally {
+            key.fill(0)
         }
     }
 
-    fun createDatabase(path: String, password: String, params: Argon2Params = Argon2Params()) {
+    fun createDatabase(path: String, password: CharArray, params: Argon2Params = Argon2Params()) {
         saveDatabase(path, password, emptyList(), params)
     }
 
-    fun changePassword(path: String, oldPassword: String, newPassword: String, params: Argon2Params = Argon2Params()) {
+    fun changePassword(path: String, oldPassword: CharArray, newPassword: CharArray, params: Argon2Params = Argon2Params()) {
         val entries = loadDatabase(path, oldPassword)
         saveDatabase(path, newPassword, entries, params)
     }
@@ -88,7 +92,7 @@ class DatabaseManager @Inject constructor() {
         return if (headerName == CryptoConstants.DB_HEADER_NAME) 2 else 1
     }
 
-    private fun loadV2(fileBytes: ByteArray, password: String): List<OtpEntry> {
+    private fun loadV2(fileBytes: ByteArray, password: CharArray): List<OtpEntry> {
         val headerBytes = fileBytes.copyOfRange(0, CryptoConstants.DB_HEADER_V2_SIZE)
         val header = DbHeaderV2.fromByteArray(headerBytes)
 
@@ -104,26 +108,30 @@ class DatabaseManager @Inject constructor() {
             hashLength = CryptoConstants.ARGON2ID_KEYLEN,
         )
 
-        val decrypted = AesGcmCipher.decrypt(
-            ciphertext = ciphertext,
-            tag = tag,
-            key = key,
-            iv = header.iv,
-            aad = headerBytes,
-        )
+        try {
+            val decrypted = AesGcmCipher.decrypt(
+                ciphertext = ciphertext,
+                tag = tag,
+                key = key,
+                iv = header.iv,
+                aad = headerBytes,
+            )
 
-        // Strip the trailing null byte that the C code adds
-        val jsonBytes = if (decrypted.isNotEmpty() && decrypted.last() == 0.toByte()) {
-            decrypted.copyOf(decrypted.size - 1)
-        } else {
-            decrypted
+            // Strip the trailing null byte that the C code adds
+            val jsonBytes = if (decrypted.isNotEmpty() && decrypted.last() == 0.toByte()) {
+                decrypted.copyOf(decrypted.size - 1)
+            } else {
+                decrypted
+            }
+
+            val jsonString = String(jsonBytes, Charsets.UTF_8)
+            return json.decodeFromString<List<OtpEntry>>(jsonString)
+        } finally {
+            key.fill(0)
         }
-
-        val jsonString = String(jsonBytes, Charsets.UTF_8)
-        return json.decodeFromString<List<OtpEntry>>(jsonString)
     }
 
-    private fun loadV1(fileBytes: ByteArray, password: String, path: String): List<OtpEntry> {
+    private fun loadV1(fileBytes: ByteArray, password: CharArray, path: String): List<OtpEntry> {
         val headerBytes = fileBytes.copyOfRange(0, CryptoConstants.DB_HEADER_V1_SIZE)
         val header = DbHeaderV1.fromByteArray(headerBytes)
 
@@ -137,27 +145,31 @@ class DatabaseManager @Inject constructor() {
             keyLengthBits = CryptoConstants.KEY_SIZE * 8,
         )
 
-        val decrypted = AesGcmCipher.decrypt(
-            ciphertext = ciphertext,
-            tag = tag,
-            key = key,
-            iv = header.iv,
-            aad = headerBytes,
-        )
+        try {
+            val decrypted = AesGcmCipher.decrypt(
+                ciphertext = ciphertext,
+                tag = tag,
+                key = key,
+                iv = header.iv,
+                aad = headerBytes,
+            )
 
-        val jsonBytes = if (decrypted.isNotEmpty() && decrypted.last() == 0.toByte()) {
-            decrypted.copyOf(decrypted.size - 1)
-        } else {
-            decrypted
+            val jsonBytes = if (decrypted.isNotEmpty() && decrypted.last() == 0.toByte()) {
+                decrypted.copyOf(decrypted.size - 1)
+            } else {
+                decrypted
+            }
+
+            val jsonString = String(jsonBytes, Charsets.UTF_8)
+            val entries = json.decodeFromString<List<OtpEntry>>(jsonString)
+
+            // Auto-migrate V1 to V2
+            saveDatabase(path, password, entries)
+
+            return entries
+        } finally {
+            key.fill(0)
         }
-
-        val jsonString = String(jsonBytes, Charsets.UTF_8)
-        val entries = json.decodeFromString<List<OtpEntry>>(jsonString)
-
-        // Auto-migrate V1 to V2
-        saveDatabase(path, password, entries)
-
-        return entries
     }
 }
 

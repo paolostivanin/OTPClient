@@ -13,16 +13,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.LockClock
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -37,9 +41,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.otpclient.android.core.sync.SyncProviderType
+import com.otpclient.android.core.sync.WebDavConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,6 +55,8 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val syncState by viewModel.syncState.collectAsStateWithLifecycle()
+    val webDavTestResult by viewModel.webDavTestResult.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -107,6 +116,37 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
+
+            SectionHeader(stringResource(R.string.settings_section_sync))
+
+            SyncProviderSelector(
+                currentType = syncState.providerType,
+                onTypeSelected = viewModel::setSyncProviderType,
+            )
+
+            when (syncState.providerType) {
+                SyncProviderType.GOOGLE_DRIVE -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    GoogleDriveSettings(
+                        accountEmail = syncState.googleAccountEmail,
+                        onSignIn = { /* Google Sign-In intent handled by Activity */ },
+                        onSignOut = { viewModel.setGoogleAccountEmail(null) },
+                    )
+                }
+                SyncProviderType.WEBDAV -> {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    WebDavSettings(
+                        config = syncState.webDavConfig,
+                        testResult = webDavTestResult,
+                        onSave = viewModel::saveWebDavConfig,
+                        onTest = viewModel::testWebDavConnection,
+                        onClearTestResult = viewModel::clearWebDavTestResult,
+                    )
+                }
+                SyncProviderType.NONE -> {}
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -141,7 +181,7 @@ private fun SettingSwitch(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, contentDescription = title, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge)
@@ -174,7 +214,7 @@ private fun ThemeSelector(
         ) {
             Icon(
                 Icons.Default.DarkMode,
-                contentDescription = null,
+                contentDescription = stringResource(R.string.settings_theme),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(modifier = Modifier.width(12.dp))
@@ -240,7 +280,7 @@ private fun AutoLockSelector(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Default.LockClock,
-                    contentDescription = null,
+                    contentDescription = stringResource(R.string.settings_autolock_title),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -278,6 +318,184 @@ private fun AutoLockSelector(
                         Text(label, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncProviderSelector(
+    currentType: SyncProviderType,
+    onTypeSelected: (SyncProviderType) -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Cloud,
+                contentDescription = stringResource(R.string.settings_sync_provider),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.settings_sync_provider), style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                val options = listOf(
+                    SyncProviderType.NONE to stringResource(R.string.settings_sync_none),
+                    SyncProviderType.GOOGLE_DRIVE to stringResource(R.string.settings_sync_google_drive),
+                    SyncProviderType.WEBDAV to stringResource(R.string.settings_sync_webdav),
+                )
+                options.forEach { (type, label) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTypeSelected(type) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = currentType == type,
+                            onClick = { onTypeSelected(type) },
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GoogleDriveSettings(
+    accountEmail: String?,
+    onSignIn: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            if (accountEmail != null) {
+                Text(
+                    text = stringResource(R.string.settings_sync_google_signed_in, accountEmail),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.settings_sync_google_sign_out))
+                }
+            } else {
+                Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.settings_sync_google_sign_in))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WebDavSettings(
+    config: WebDavConfig,
+    testResult: Boolean?,
+    onSave: (WebDavConfig) -> Unit,
+    onTest: (WebDavConfig) -> Unit,
+    onClearTestResult: () -> Unit,
+) {
+    var serverUrl by remember(config) { mutableStateOf(config.serverUrl) }
+    var username by remember(config) { mutableStateOf(config.username) }
+    var password by remember(config) { mutableStateOf(config.password) }
+    var remotePath by remember(config) { mutableStateOf(config.remotePath) }
+
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+        ) {
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { serverUrl = it; onClearTestResult() },
+                label = { Text(stringResource(R.string.settings_sync_webdav_server_url)) },
+                placeholder = { Text(stringResource(R.string.settings_sync_webdav_server_url_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it; onClearTestResult() },
+                label = { Text(stringResource(R.string.settings_sync_webdav_username)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it; onClearTestResult() },
+                label = { Text(stringResource(R.string.settings_sync_webdav_password)) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = remotePath,
+                onValueChange = { remotePath = it; onClearTestResult() },
+                label = { Text(stringResource(R.string.settings_sync_webdav_remote_path)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        onTest(WebDavConfig(serverUrl, username, password, remotePath))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.settings_sync_webdav_test))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = {
+                        onSave(WebDavConfig(serverUrl, username, password, remotePath))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.settings_sync_webdav_save))
+                }
+            }
+
+            testResult?.let { success ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        if (success) R.string.settings_sync_webdav_test_success
+                        else R.string.settings_sync_webdav_test_failed,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

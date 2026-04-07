@@ -160,7 +160,7 @@ fun ImportExportScreen(
             importFormats.forEach { format ->
                 FormatCard(
                     format = format,
-                    icon = { Icon(Icons.Default.Download, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Download, contentDescription = stringResource(R.string.importexport_section_import)) },
                     enabled = uiState !is ImportExportUiState.Processing,
                     onClick = {
                         selectedFormat = format
@@ -182,7 +182,7 @@ fun ImportExportScreen(
             exportFormats.forEach { format ->
                 FormatCard(
                     format = format,
-                    icon = { Icon(Icons.Default.Upload, contentDescription = null) },
+                    icon = { Icon(Icons.Default.Upload, contentDescription = stringResource(R.string.importexport_section_export)) },
                     enabled = uiState !is ImportExportUiState.Processing,
                     onClick = {
                         selectedFormat = format

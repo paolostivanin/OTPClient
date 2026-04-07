@@ -95,7 +95,7 @@ fun UnlockScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.Lock,
-                contentDescription = null,
+                contentDescription = stringResource(R.string.unlock_title),
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -218,7 +218,7 @@ fun UnlockScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(Icons.Default.Fingerprint, contentDescription = null)
+                        Icon(Icons.Default.Fingerprint, contentDescription = stringResource(R.string.unlock_button_biometric))
                         Spacer(modifier = Modifier.size(8.dp))
                         Text(stringResource(R.string.unlock_button_biometric))
                     }

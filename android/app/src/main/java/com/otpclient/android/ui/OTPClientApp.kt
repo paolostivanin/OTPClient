@@ -7,6 +7,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import com.otpclient.android.core.database.DatabaseRepository
 import com.otpclient.android.core.importexport.GoogleMigrationProvider
 import com.otpclient.android.core.importexport.OtpauthUri
 import com.otpclient.android.feature.addtoken.AddTokenScreen
@@ -22,6 +25,7 @@ import com.otpclient.android.lifecycle.AppLockManager
 fun OTPClientApp(
     defaultDbPath: String,
     appLockManager: AppLockManager? = null,
+    databaseRepository: DatabaseRepository? = null,
 ) {
     val navController = rememberNavController()
 
@@ -55,6 +59,7 @@ fun OTPClientApp(
         composable("tokenlist") {
             TokenListScreen(
                 onAddToken = { navController.navigate("addtoken") },
+                onEditToken = { index -> navController.navigate("edittoken/$index") },
                 onSettings = { navController.navigate("settings") },
                 onImportExport = { navController.navigate("importexport") },
                 onDatabaseManager = { navController.navigate("dbmanager") },
@@ -66,10 +71,26 @@ fun OTPClientApp(
             )
         }
 
-        composable("addtoken") {
+        composable("addtoken") { backStackEntry ->
+            val scannedUri = backStackEntry.savedStateHandle.get<String>("scanned_uri")
+            backStackEntry.savedStateHandle.remove<String>("scanned_uri")
             AddTokenScreen(
                 onBack = { navController.popBackStack() },
                 onScanQr = { navController.navigate("qrscanner") },
+                scannedUri = scannedUri,
+            )
+        }
+
+        composable(
+            "edittoken/{index}",
+            arguments = listOf(navArgument("index") { type = NavType.IntType }),
+        ) { backStackEntry ->
+            val index = backStackEntry.arguments?.getInt("index") ?: 0
+            val entry = databaseRepository?.entries?.value?.getOrNull(index)
+            AddTokenScreen(
+                onBack = { navController.popBackStack() },
+                editIndex = index,
+                initialEntry = entry,
             )
         }
 

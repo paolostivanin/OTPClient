@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.otpclient.android.core.database.DatabaseRepository
 import com.otpclient.android.core.model.OtpEntry
 import com.otpclient.android.core.otp.OtpGenerator
+import com.otpclient.android.core.sync.SyncConflict
+import com.otpclient.android.core.sync.SyncManager
+import com.otpclient.android.core.sync.SyncStatus
+import com.otpclient.android.feature.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +22,12 @@ import javax.inject.Inject
 @HiltViewModel
 class TokenListViewModel @Inject constructor(
     private val databaseRepository: DatabaseRepository,
+    private val settingsRepository: SettingsRepository,
+    private val syncManager: SyncManager,
 ) : ViewModel() {
+
+    val pendingConflict: StateFlow<SyncConflict?> = syncManager.pendingConflict
+    val syncStatus: StateFlow<SyncStatus> = syncManager.syncStatus
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
@@ -29,7 +38,8 @@ class TokenListViewModel @Inject constructor(
         databaseRepository.entries,
         _searchQuery,
         _tickSeconds,
-    ) { entries, query, tick ->
+        settingsRepository.settings,
+    ) { entries, query, tick, settings ->
         val filtered = if (query.isBlank()) entries else {
             entries.filter { entry ->
                 entry.label.contains(query, ignoreCase = true) ||
@@ -43,10 +53,16 @@ class TokenListViewModel @Inject constructor(
                 OtpGenerator.remainingSeconds(entry.period)
             } else null
 
+            val nextOtp = if (settings.showNextOtp && entry.type == "TOTP") {
+                val nextPeriodTime = ((tick / entry.period) + 1) * entry.period
+                generateOtp(entry, nextPeriodTime)
+            } else null
+
             TokenUiModel(
                 index = entries.indexOf(entry),
                 entry = entry,
                 currentOtp = otp,
+                nextOtp = nextOtp,
                 remainingSeconds = remaining,
                 period = entry.period,
             )
@@ -85,6 +101,10 @@ class TokenListViewModel @Inject constructor(
         }
     }
 
+    fun resolveConflict(keepLocal: Boolean) {
+        syncManager.resolveConflict(keepLocal)
+    }
+
     fun lock() {
         databaseRepository.lock()
     }
@@ -119,6 +139,7 @@ data class TokenUiModel(
     val index: Int,
     val entry: OtpEntry,
     val currentOtp: String,
+    val nextOtp: String?,
     val remainingSeconds: Int?,
     val period: Int,
 )
