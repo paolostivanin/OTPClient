@@ -81,6 +81,13 @@ on_unlock_clicked (GtkButton      *button,
     gchar *secure_pwd = gcry_calloc_secure (strlen (pwd) + 1, 1);
     memcpy (secure_pwd, pwd, strlen (pwd) + 1);
 
+    /* Clear password entry widgets */
+    gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+    if (self->confirm_row != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
+    if (self->current_password_row != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
+
     adw_dialog_close (ADW_DIALOG (self));
 
     if (self->callback != NULL)

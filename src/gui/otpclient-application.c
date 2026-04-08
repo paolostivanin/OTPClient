@@ -42,6 +42,7 @@ gboolean use_secret_service;
     gchar *validity_color;
     gchar *validity_warning_color;
     gboolean minimize_to_tray;
+    guint clipboard_clear_timeout;
 };
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
@@ -559,6 +560,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_color = g_settings_get_string (self->settings, "validity-color");
         self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
         self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+        self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
     } else {
         self->settings = NULL;
         self->show_next_otp = FALSE;
@@ -572,6 +574,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_color = g_strdup ("#008000");
         self->validity_warning_color = g_strdup ("#ffa500");
         self->minimize_to_tray = FALSE;
+        self->clipboard_clear_timeout = 30;
     }
 
     /* Apply dark theme preference */
@@ -889,9 +892,24 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     g_free (self->validity_warning_color);
     self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
     self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+    self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
 
     /* Apply dark theme */
     adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
                                         self->use_dark_theme ? ADW_COLOR_SCHEME_FORCE_DARK
                                                              : ADW_COLOR_SCHEME_DEFAULT);
+}
+
+guint otpclient_application_get_clipboard_clear_timeout (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), 30);
+    return self->clipboard_clear_timeout;
+}
+
+void otpclient_application_set_clipboard_clear_timeout (OTPClientApplication *self, guint timeout)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->clipboard_clear_timeout = timeout;
+    if (self->settings != NULL)
+        g_settings_set_uint (self->settings, "clipboard-clear-timeout", timeout);
 }

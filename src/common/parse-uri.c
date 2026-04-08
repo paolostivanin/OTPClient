@@ -1,3 +1,5 @@
+#define _DEFAULT_SOURCE
+#include <string.h>
 #include <glib.h>
 #include "common.h"
 #include "file-size.h"
@@ -127,7 +129,7 @@ get_otpauth_data (const gchar  *path,
 
     gchar *sec_buf = gcry_calloc_secure (fs, 1);
     memcpy (sec_buf, file_buf, fs);
-    memset (file_buf, 0, fs);
+    explicit_bzero (file_buf, fs);
     g_free (file_buf);
 
     set_otps_from_uris (sec_buf, &otps);
@@ -212,7 +214,7 @@ parse_parameters (const gchar   *modified_uri,
         } else if (g_ascii_strncasecmp (tokens[i], "period=", 7) == 0) {
             tokens[i] += 7;
             gint64 period_val = g_ascii_strtoll (tokens[i], NULL, 10);
-            if (period_val > 0 && period_val <= G_MAXUINT32) {
+            if (period_val > 0 && period_val <= 300) {
                 otp->period = (guint32) period_val;
             }
             tokens[i] -= 7;
@@ -231,7 +233,10 @@ parse_parameters (const gchar   *modified_uri,
             tokens[i] -= 7;
         } else if (g_ascii_strncasecmp (tokens[i], "counter=", 8) == 0) {
             tokens[i] += 8;
-            otp->counter = (guint64)g_ascii_strtoll (tokens[i], NULL, 10);
+            gint64 counter_val = g_ascii_strtoll (tokens[i], NULL, 10);
+            if (counter_val >= 0) {
+                otp->counter = (guint64) counter_val;
+            }
             tokens[i] -= 8;
         }
         i++;

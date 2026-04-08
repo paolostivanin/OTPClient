@@ -81,6 +81,11 @@
       <summary>Show sidebar</summary>
       <description>Whether the database sidebar is visible</description>
     </key>
+    <key name="clipboard-clear-timeout" type="u">
+      <default>30</default>
+      <summary>Clipboard clear timeout</summary>
+      <description>Seconds after which the clipboard is automatically cleared after copying an OTP code. Set to 0 to disable.</description>
+    </key>
     <key name="minimize-to-tray" type="b">
       <default>false</default>
       <summary>Minimize to Tray</summary>

@@ -1,3 +1,5 @@
+#define _DEFAULT_SOURCE
+#include <string.h>
 #include <glib/gi18n.h>
 #include "import-dialog.h"
 #include "import-export.h"
@@ -62,7 +64,7 @@ do_import (ImportDialog *self)
         return;
 
     if (self->import_password != NULL) {
-        memset (self->import_password, 0, strlen (self->import_password));
+        explicit_bzero (self->import_password, strlen (self->import_password));
         gcry_free (self->import_password);
         self->import_password = NULL;
     }
@@ -71,6 +73,7 @@ do_import (ImportDialog *self)
         gsize len = strlen (text);
         self->import_password = gcry_calloc_secure (len + 1, 1);
         memcpy (self->import_password, text, len);
+        gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
     }
 
     goffset file_size = get_file_size (self->selected_file);
@@ -166,7 +169,7 @@ import_dialog_finalize (GObject *object)
     ImportDialog *self = IMPORT_DIALOG (object);
     g_free (self->selected_file);
     if (self->import_password != NULL) {
-        memset (self->import_password, 0, strlen (self->import_password));
+        explicit_bzero (self->import_password, strlen (self->import_password));
         gcry_free (self->import_password);
     }
     G_OBJECT_CLASS (import_dialog_parent_class)->finalize (object);

@@ -20,6 +20,7 @@ struct _SettingsDialog
     GtkWidget *inactivity_combo;
     GtkWidget *secret_service_switch;
     GtkWidget *search_provider_switch;
+    GtkWidget *clipboard_clear_combo;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
 #endif
@@ -103,6 +104,18 @@ on_search_provider_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_search_provider_enabled (self->app, active);
+}
+
+static void
+on_clipboard_clear_changed (AdwComboRow    *combo,
+                            GParamSpec     *pspec,
+                            SettingsDialog *self)
+{
+    (void) pspec;
+    static const guint timeout_values[] = { 0, 10, 15, 30, 60, 120 };
+    guint selected = adw_combo_row_get_selected (combo);
+    if (selected < G_N_ELEMENTS (timeout_values))
+        otpclient_application_set_clipboard_clear_timeout (self->app, timeout_values[selected]);
 }
 
 #ifdef ENABLE_MINIMIZE_TO_TRAY
@@ -387,6 +400,30 @@ settings_dialog_new (OTPClientApplication *app)
     g_signal_connect (self->inactivity_combo, "notify::selected",
                       G_CALLBACK (on_inactivity_changed), self);
     adw_preferences_group_add (security_group, self->inactivity_combo);
+
+    const char * const clip_timeout_items[] = {
+        "Never", "10 seconds", "15 seconds", "30 seconds",
+        "1 minute", "2 minutes", NULL
+    };
+    static const guint clip_timeout_values[] = { 0, 10, 15, 30, 60, 120 };
+    GtkStringList *clip_timeout_model = gtk_string_list_new (clip_timeout_items);
+    self->clipboard_clear_combo = adw_combo_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->clipboard_clear_combo),
+                                    _("Clear Clipboard After"));
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->clipboard_clear_combo),
+                                  _("Automatically clear the clipboard after copying an OTP code"));
+    adw_combo_row_set_model (ADW_COMBO_ROW (self->clipboard_clear_combo), G_LIST_MODEL (clip_timeout_model));
+    /* Select current value */
+    guint current_clip_timeout = otpclient_application_get_clipboard_clear_timeout (app);
+    for (guint i = 0; i < G_N_ELEMENTS (clip_timeout_values); i++) {
+        if (clip_timeout_values[i] == current_clip_timeout) {
+            adw_combo_row_set_selected (ADW_COMBO_ROW (self->clipboard_clear_combo), i);
+            break;
+        }
+    }
+    g_signal_connect (self->clipboard_clear_combo, "notify::selected",
+                      G_CALLBACK (on_clipboard_clear_changed), self);
+    adw_preferences_group_add (security_group, self->clipboard_clear_combo);
 
     self->secret_service_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->secret_service_switch),

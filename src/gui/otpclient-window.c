@@ -26,6 +26,7 @@ struct _OTPClientWindow
     AdwApplicationWindow parent;
 
     GSettings *settings;
+    GtkWidget *toast_overlay;
     GtkWidget *split_view;
     GtkWidget *sidebar_toggle_button;
     GtkWidget *add_button;
@@ -40,6 +41,7 @@ struct _OTPClientWindow
     GListStore *otp_store;
     GtkFilterListModel *filter_model;
     GtkCustomFilter *search_filter;
+    GtkSortListModel *sort_model;
     GtkSingleSelection *otp_selection;
 
     GListStore *db_store;
@@ -55,6 +57,13 @@ struct _OTPClientWindow
     GtkFlattenListModel *flatten_model;
     gboolean cross_db_loaded;
     gboolean cross_db_loading;
+
+    /* Clipboard auto-clear */
+    guint clipboard_clear_timer_id;
+
+    /* Undo delete */
+    json_t *deleted_token;
+    guint   deleted_token_pos;
 };
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -417,6 +426,24 @@ add_text_column (GtkColumnView *view,
     gtk_column_view_column_set_expand (view_column, TRUE);
     gtk_column_view_column_set_resizable (view_column, TRUE);
 
+    /* Add sorters for Account and Issuer columns */
+    if (column == OTP_COLUMN_ACCOUNT)
+    {
+        GtkExpression *expr = gtk_property_expression_new (OTP_TYPE_ENTRY, NULL, "account");
+        GtkStringSorter *sorter = gtk_string_sorter_new (expr);
+        gtk_string_sorter_set_ignore_case (sorter, TRUE);
+        gtk_column_view_column_set_sorter (view_column, GTK_SORTER (sorter));
+        g_object_unref (sorter);
+    }
+    else if (column == OTP_COLUMN_ISSUER)
+    {
+        GtkExpression *expr = gtk_property_expression_new (OTP_TYPE_ENTRY, NULL, "issuer");
+        GtkStringSorter *sorter = gtk_string_sorter_new (expr);
+        gtk_string_sorter_set_ignore_case (sorter, TRUE);
+        gtk_column_view_column_set_sorter (view_column, GTK_SORTER (sorter));
+        g_object_unref (sorter);
+    }
+
     gtk_column_view_append_column (view, view_column);
 }
 
@@ -747,15 +774,19 @@ setup_otp_view (OTPClientWindow *self)
     self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),
                                                      GTK_FILTER (self->search_filter));
 
-    self->otp_selection = gtk_single_selection_new (g_object_ref (G_LIST_MODEL (self->filter_model)));
-
-    gtk_single_selection_set_autoselect (self->otp_selection, FALSE);
-    gtk_single_selection_set_can_unselect (self->otp_selection, TRUE);
-
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Account"), OTP_COLUMN_ACCOUNT);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Issuer"), OTP_COLUMN_ISSUER);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("OTP Value"), OTP_COLUMN_VALUE);
     add_validity_column (GTK_COLUMN_VIEW (self->otp_list));
+
+    GtkSorter *column_sorter = gtk_column_view_get_sorter (GTK_COLUMN_VIEW (self->otp_list));
+    self->sort_model = gtk_sort_list_model_new (g_object_ref (G_LIST_MODEL (self->filter_model)),
+                                                 column_sorter ? g_object_ref (column_sorter) : NULL);
+
+    self->otp_selection = gtk_single_selection_new (g_object_ref (G_LIST_MODEL (self->sort_model)));
+
+    gtk_single_selection_set_autoselect (self->otp_selection, FALSE);
+    gtk_single_selection_set_can_unselect (self->otp_selection, TRUE);
 
     gtk_column_view_set_model (GTK_COLUMN_VIEW (self->otp_list), GTK_SELECTION_MODEL (self->otp_selection));
 }
@@ -973,6 +1004,16 @@ otpclient_window_select_database (OTPClientWindow *self,
         gtk_list_box_select_row (GTK_LIST_BOX (self->database_list), row);
 }
 
+static gboolean
+clipboard_clear_cb (gpointer user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    gdk_clipboard_set_text (clipboard, "");
+    self->clipboard_clear_timer_id = 0;
+    return G_SOURCE_REMOVE;
+}
+
 static void
 on_otp_selection_changed (GtkSingleSelection *selection,
                           GParamSpec         *pspec,
@@ -1025,6 +1066,16 @@ on_otp_selection_changed (GtkSingleSelection *selection,
 
     GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
     gdk_clipboard_set_text (clipboard, otp_value);
+
+    /* Schedule clipboard clear */
+    if (self->clipboard_clear_timer_id != 0)
+        g_source_remove (self->clipboard_clear_timer_id);
+    guint clear_timeout = 30;
+    if (app != NULL)
+        clear_timeout = otpclient_application_get_clipboard_clear_timeout (app);
+    if (clear_timeout > 0)
+        self->clipboard_clear_timer_id = g_timeout_add_seconds (clear_timeout,
+                                                                  clipboard_clear_cb, self);
 
     /* Send notification unless disabled */
     if (app != NULL && !otpclient_application_get_disable_notifications (app))
@@ -1351,6 +1402,18 @@ otpclient_window_dispose (GObject *object)
 
 
 
+    if (win->deleted_token != NULL)
+    {
+        json_decref (win->deleted_token);
+        win->deleted_token = NULL;
+    }
+
+    if (win->clipboard_clear_timer_id != 0)
+    {
+        g_source_remove (win->clipboard_clear_timer_id);
+        win->clipboard_clear_timer_id = 0;
+    }
+
     if (win->otp_refresh_timer_id != 0)
     {
         g_source_remove (win->otp_refresh_timer_id);
@@ -1364,6 +1427,7 @@ otpclient_window_dispose (GObject *object)
         gtk_single_selection_set_model (win->otp_selection, NULL);
 
     g_clear_object (&win->otp_selection);
+    g_clear_object (&win->sort_model);
     g_clear_object (&win->filter_model);
     g_clear_object (&win->otp_store);
     g_clear_object (&win->db_store);
@@ -1694,6 +1758,43 @@ action_edit_token (GtkWidget  *widget,
 }
 
 static void
+on_undo_delete (AdwToast *toast,
+                gpointer  user_data)
+{
+    (void) toast;
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    if (self->deleted_token == NULL)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    gsize arr_len = json_array_size (db_data->in_memory_json_data);
+    guint insert_pos = (self->deleted_token_pos <= arr_len) ? self->deleted_token_pos : (guint) arr_len;
+    json_array_insert (db_data->in_memory_json_data, insert_pos, self->deleted_token);
+
+    json_decref (self->deleted_token);
+    self->deleted_token = NULL;
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL) {
+        g_warning ("Failed to update DB after undo: %s", err->message);
+        g_clear_error (&err);
+        return;
+    }
+
+    on_db_modified (self);
+}
+
+static void
 on_delete_response (AdwAlertDialog *dialog,
                     GAsyncResult   *result,
                     gpointer        user_data)
@@ -1717,6 +1818,12 @@ on_delete_response (AdwAlertDialog *dialog,
     if (db_data == NULL || db_data->in_memory_json_data == NULL)
         return;
 
+    /* Save a copy for undo */
+    if (self->deleted_token != NULL)
+        json_decref (self->deleted_token);
+    self->deleted_token = json_deep_copy (json_array_get (db_data->in_memory_json_data, pos));
+    self->deleted_token_pos = pos;
+
     json_array_remove (db_data->in_memory_json_data, pos);
 
     GError *err = NULL;
@@ -1724,10 +1831,19 @@ on_delete_response (AdwAlertDialog *dialog,
     if (err != NULL) {
         g_warning ("Failed to update DB after delete: %s", err->message);
         g_clear_error (&err);
+        json_decref (self->deleted_token);
+        self->deleted_token = NULL;
         return;
     }
 
     on_db_modified (self);
+
+    /* Show undo toast */
+    AdwToast *undo_toast = adw_toast_new (_("Token deleted"));
+    adw_toast_set_button_label (undo_toast, _("Undo"));
+    adw_toast_set_timeout (undo_toast, 5);
+    g_signal_connect (undo_toast, "button-clicked", G_CALLBACK (on_undo_delete), self);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), undo_toast);
 }
 
 static void
@@ -2641,6 +2757,7 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
 
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
     gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, toast_overlay);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, add_button);
 gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);

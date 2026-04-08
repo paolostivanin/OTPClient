@@ -11,6 +11,7 @@ struct _KdfDialog
     GtkWidget *iter_spin;
     GtkWidget *memcost_spin;
     GtkWidget *parallelism_spin;
+    GtkWidget *error_label;
 };
 
 G_DEFINE_FINAL_TYPE (KdfDialog, kdf_dialog, ADW_TYPE_DIALOG)
@@ -41,10 +42,11 @@ on_apply_clicked (GtkButton *button,
     gint32 new_mc = (gint32) mc_d;
     gint32 new_par = (gint32) par_d;
 
-    if (new_iter < 1 || new_mc < 8192 || new_par < 1)
+    if (new_iter < 2 || new_mc < 65536 || new_par < 1)
     {
-        g_warning ("Invalid KDF parameters: iter=%d, memcost=%d, parallelism=%d",
-                   new_iter, new_mc, new_par);
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Invalid parameters: iterations \u2265 2, memory \u2265 64 MiB, parallelism \u2265 1"));
+        gtk_widget_set_visible (self->error_label, TRUE);
         return;
     }
 
@@ -56,7 +58,8 @@ on_apply_clicked (GtkButton *button,
     update_db (self->db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to re-encrypt database with new KDF params: %s", err->message);
+        gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
+        gtk_widget_set_visible (self->error_label, TRUE);
         g_clear_error (&err);
         return;
     }
@@ -123,12 +126,12 @@ kdf_dialog_new (DatabaseData *db_data)
     GtkWidget *new_group = adw_preferences_group_new ();
     adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (new_group), _("New Values"));
 
-    self->iter_spin = adw_spin_row_new_with_range (1, 64, 1);
+    self->iter_spin = adw_spin_row_new_with_range (2, 64, 1);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->iter_spin), _("Iterations"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->iter_spin), db_data->argon2id_iter);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->iter_spin);
 
-    self->memcost_spin = adw_spin_row_new_with_range (8192, 1048576, 1024);
+    self->memcost_spin = adw_spin_row_new_with_range (65536, 1048576, 1024);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->memcost_spin), _("Memory Cost (KiB)"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->memcost_spin), db_data->argon2id_memcost);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->memcost_spin);
@@ -139,6 +142,13 @@ kdf_dialog_new (DatabaseData *db_data)
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->parallelism_spin);
 
     gtk_box_append (GTK_BOX (box), new_group);
+
+    /* Error label */
+    self->error_label = gtk_label_new (NULL);
+    gtk_widget_add_css_class (self->error_label, "error");
+    gtk_widget_set_visible (self->error_label, FALSE);
+    gtk_label_set_wrap (GTK_LABEL (self->error_label), TRUE);
+    gtk_box_append (GTK_BOX (box), self->error_label);
 
     /* Apply button */
     GtkWidget *apply_btn = gtk_button_new_with_label (_("Apply"));

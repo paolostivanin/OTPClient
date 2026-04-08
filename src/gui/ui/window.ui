@@ -47,6 +47,7 @@
                   <object class="GtkMenuButton" id="settings_button">
                     <property name="icon-name">open-menu-symbolic</property>
                     <property name="menu-model">settings_menu</property>
+                    <property name="tooltip-text" translatable="yes">Main menu</property>
                   </object>
                 </child>
                 <style>
@@ -57,6 +58,8 @@
           </object>
         </child>
         <child>
+          <object class="AdwToastOverlay" id="toast_overlay">
+          <child>
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <child>
@@ -133,6 +136,8 @@
                 </property>
               </object>
             </child>
+          </object>
+          </child>
           </object>
         </child>
       </object>

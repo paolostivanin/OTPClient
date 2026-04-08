@@ -24,6 +24,7 @@ struct _ManualAddDialog
     GtkWidget *counter_row;
     GtkWidget *add_button;
     GtkWidget *error_label;
+    GtkWidget *sha1_banner;
 };
 
 G_DEFINE_FINAL_TYPE (ManualAddDialog, manual_add_dialog, ADW_TYPE_DIALOG)
@@ -59,6 +60,17 @@ on_type_changed (AdwComboRow     *combo_row,
     /* 0 = TOTP, 1 = HOTP */
     gtk_widget_set_visible (self->period_row, selected == 0);
     gtk_widget_set_visible (self->counter_row, selected == 1);
+}
+
+static void
+on_algo_changed (AdwComboRow     *combo_row,
+                 GParamSpec      *pspec,
+                 ManualAddDialog *self)
+{
+    (void) pspec;
+    guint selected = adw_combo_row_get_selected (combo_row);
+    /* 0 = SHA1, show warning */
+    adw_banner_set_revealed (ADW_BANNER (self->sha1_banner), selected == 0);
 }
 
 static void
@@ -221,6 +233,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     self->algo_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->algo_combo), _("Algorithm"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->algo_combo), G_LIST_MODEL (algo_model));
+    g_signal_connect (self->algo_combo, "notify::selected", G_CALLBACK (on_algo_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->algo_combo);
 
     /* Digits */
@@ -245,6 +258,11 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->counter_spin);
 
     gtk_box_append (GTK_BOX (box), settings_group);
+
+    /* SHA1 warning banner */
+    self->sha1_banner = adw_banner_new (_("SHA1 is considered weak. Use SHA256 or SHA512 if your provider supports it."));
+    adw_banner_set_revealed (ADW_BANNER (self->sha1_banner), TRUE);
+    gtk_box_append (GTK_BOX (box), self->sha1_banner);
 
     /* Error label */
     self->error_label = gtk_label_new (NULL);

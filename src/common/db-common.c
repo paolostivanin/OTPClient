@@ -5,6 +5,8 @@
 #include <jansson.h>
 #include <glib/gstdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "gquarks.h"
 #include "db-common.h"
 #include "file-size.h"
@@ -485,6 +487,17 @@ encrypt_db (DatabaseData *db_data,
     }
 
     free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
+
+    /* Flush and sync to disk before cleanup to prevent data loss on power failure */
+    if (!g_output_stream_close (G_OUTPUT_STREAM (out_stream), NULL, NULL)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to flush database file to disk");
+    }
+    int fd = g_open (db_data->db_path, O_RDONLY, 0);
+    if (fd >= 0) {
+        fsync (fd);
+        close (fd);
+    }
+
     cleanup_db_gfile (out_file, out_stream, NULL);
 
     db_data->current_db_version = DB_VERSION;

@@ -105,6 +105,13 @@ on_file_dialog_save_complete (GObject      *source,
             break;
     }
 
+    /* Clear password entry widgets after use */
+    if (gtk_widget_get_visible (self->password_row))
+    {
+        gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+        gtk_editable_set_text (GTK_EDITABLE (self->password_confirm_row), "");
+    }
+
     if (error_msg != NULL)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label), error_msg);
