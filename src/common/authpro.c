@@ -52,7 +52,13 @@ get_authpro_data (const gchar  *path,
         return NULL;
     }
 
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
+    if (password != NULL) {
+        return get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err);
+    } else {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return get_otps_from_plain_backup (path, err);
+    }
 }
 
 
@@ -286,10 +292,16 @@ parse_authpro_json_data (const gchar *data,
     for (guint i = 0; i < json_array_size (array); i++) {
         json_t *obj = json_array_get (array, i);
 
+        const gchar *secret_str = json_string_value (json_object_get (obj, "Secret"));
+        if (secret_str == NULL) {
+            g_printerr ("Skipping AuthPro entry with missing secret\n");
+            continue;
+        }
+
         otp_t *otp = g_new0 (otp_t, 1);
         otp->issuer = g_strdup (json_string_value (json_object_get (obj, "Issuer")));
         otp->account_name = g_strdup (json_string_value (json_object_get (obj, "Username")));
-        otp->secret = secure_strdup (json_string_value (json_object_get (obj, "Secret")));
+        otp->secret = secure_strdup (secret_str);
         otp->digits = (guint32)json_integer_value (json_object_get(obj, "Digits"));
         otp->counter = json_integer_value (json_object_get (obj, "Counter"));
         otp->period = (guint32)json_integer_value (json_object_get (obj, "Period"));

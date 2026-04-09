@@ -173,7 +173,7 @@ command_line (GApplication                *application __attribute__((unused)),
             if (!g_file_set_contents (cmdline_opts->import_file, json, -1, &err)) {
                 g_application_command_line_printerr (cmdline, "Error writing file: %s\n", err->message);
                 g_clear_error (&err);
-                free (json);
+                gcry_free (json);
                 g_free_cmdline_opts (cmdline_opts);
                 return -1;
             }
@@ -181,7 +181,7 @@ command_line (GApplication                *application __attribute__((unused)),
         } else {
             g_application_command_line_print (cmdline, "%s\n", json);
         }
-        free (json);
+        gcry_free (json);
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }

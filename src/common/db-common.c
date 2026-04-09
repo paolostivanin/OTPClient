@@ -63,8 +63,8 @@ load_db (DatabaseData    *db_data,
     db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
     gcry_free (in_memory_json);
     if (db_data->in_memory_json_data == NULL) {
-        gchar *msg = g_strconcat ("Error while loading json data: ", jerr.text, NULL);
-        g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE, "%s", msg);
+        g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE,
+                     "Error while loading json data: %s", jerr.text);
         return;
     }
 
@@ -84,8 +84,8 @@ load_db (DatabaseData    *db_data,
         db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
         gcry_free (in_memory_json);
         if (db_data->in_memory_json_data == NULL) {
-            gchar *msg = g_strconcat ("Error while loading json data: ", jerr.text, NULL);
-            g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE, "%s", msg);
+            g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE,
+                         "Error while loading json data: %s", jerr.text);
             return;
         }
     }

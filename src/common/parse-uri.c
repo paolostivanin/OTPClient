@@ -38,31 +38,36 @@ get_otpauth_uri (json_t *obj)
 {
     gchar *constructed_label = NULL;
 
+    const gchar *type = json_string_value (json_object_get (obj, "type"));
+    const gchar *label = json_string_value (json_object_get (obj, "label"));
+    const gchar *secret = json_string_value (json_object_get (obj, "secret"));
+    const gchar *algo = json_string_value (json_object_get (obj, "algo"));
+    if (type == NULL || label == NULL || secret == NULL || algo == NULL) {
+        return g_strdup ("");
+    }
+
     GString *uri = g_string_new (NULL);
     g_string_append (uri, "otpauth://");
     const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "totp/");
-        constructed_label = g_strconcat ("Steam:", json_string_value (json_object_get (obj, "label")), NULL);
+        constructed_label = g_strconcat ("Steam:", label, NULL);
     } else {
-        gchar *type_lower = g_utf8_strdown (json_string_value (json_object_get (obj, "type")),  -1);
+        gchar *type_lower = g_utf8_strdown (type, -1);
         g_string_append (uri, type_lower);
         g_free (type_lower);
         g_string_append (uri, "/");
         if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
-            constructed_label = g_strconcat (json_string_value (json_object_get (obj, "issuer")),
-                                             ":",
-                                             json_string_value (json_object_get (obj, "label")),
-                                             NULL);
+            constructed_label = g_strconcat (issuer, ":", label, NULL);
         } else {
-            constructed_label = g_strdup (json_string_value (json_object_get (obj, "label")));
+            constructed_label = g_strdup (label);
         }
     }
 
     gchar *escaped_label = g_uri_escape_string (constructed_label, NULL, FALSE);
     g_string_append (uri, escaped_label);
     g_string_append (uri, "?secret=");
-    g_string_append (uri, json_string_value (json_object_get (obj, "secret")));
+    g_string_append (uri, secret);
     if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
         g_string_append (uri, "&issuer=Steam");
     }
@@ -70,26 +75,26 @@ get_otpauth_uri (json_t *obj)
     gchar *escaped_issuer = NULL;
     if (issuer != NULL && g_utf8_strlen (issuer, -1) > 0) {
         g_string_append (uri, "&issuer=");
-        escaped_issuer = g_uri_escape_string (json_string_value (json_object_get (obj, "issuer")), NULL, FALSE);
-        g_string_append (uri,escaped_issuer);
+        escaped_issuer = g_uri_escape_string (issuer, NULL, FALSE);
+        g_string_append (uri, escaped_issuer);
     }
 
     gchar *str_to_append = NULL;
     g_string_append (uri, "&digits=");
-    str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "digits")));
-    g_string_append (uri,str_to_append);
+    str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "digits")));
+    g_string_append (uri, str_to_append);
     g_free (str_to_append);
     g_string_append (uri, "&algorithm=");
-    g_string_append (uri, json_string_value ( json_object_get (obj, "algo")));
+    g_string_append (uri, algo);
 
-    if (g_ascii_strcasecmp (json_string_value (json_object_get (obj, "type")), "TOTP") == 0) {
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         g_string_append (uri, "&period=");
-        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "period")));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "period")));
         g_string_append (uri, str_to_append);
         g_free (str_to_append);
     } else {
         g_string_append (uri, "&counter=");
-        str_to_append = g_strdup_printf ("%lld", json_integer_value ( json_object_get (obj, "counter")));
+        str_to_append = g_strdup_printf ("%lld", json_integer_value (json_object_get (obj, "counter")));
         g_string_append (uri, str_to_append);
         g_free (str_to_append);
     }

@@ -161,6 +161,7 @@ on_import_clicked (GtkButton    *button,
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_open (dialog, win, NULL,
                           on_file_dialog_open_complete, self);
+    g_object_unref (dialog);
 }
 
 static void

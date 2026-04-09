@@ -135,6 +135,7 @@ on_export_clicked (GtkButton    *button,
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_save (dialog, win, NULL,
                           on_file_dialog_save_complete, self);
+    g_object_unref (dialog);
 }
 
 static void

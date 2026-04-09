@@ -259,7 +259,13 @@ get_otps_from_encrypted_backup (const gchar       *path,
     GSList *otps = NULL;
 
     json_t *root = get_json_root (path);
-    gchar **b64_encoded_data = g_strsplit (json_string_value (json_object_get (root, "servicesEncrypted")), ":", 3);
+    const gchar *services_encrypted = json_string_value (json_object_get (root, "servicesEncrypted"));
+    if (services_encrypted == NULL) {
+        g_free (twofas_data);
+        json_decref (root);
+        return NULL;
+    }
+    gchar **b64_encoded_data = g_strsplit (services_encrypted, ":", 3);
     decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
     if (twofas_data->json_data != NULL) {
         otps = parse_twofas_json_data (twofas_data->json_data, err);
@@ -489,9 +495,12 @@ parse_twofas_json_data (const gchar *data,
         }
 
         const gchar *algo = json_string_value (json_object_get (otp_obj, "algorithm"));
-        if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
-            g_ascii_strcasecmp (algo, "SHA256") == 0 ||
-            g_ascii_strcasecmp (algo, "SHA512") == 0) {
+        if (algo == NULL) {
+            g_printerr ("Skipping token due to missing algorithm field\n");
+            skip = TRUE;
+        } else if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
+                   g_ascii_strcasecmp (algo, "SHA256") == 0 ||
+                   g_ascii_strcasecmp (algo, "SHA512") == 0) {
             otp->algo = g_utf8_strup (algo, -1);
         } else {
             g_printerr ("Skipping token due to unsupported algo: %s\n", algo);

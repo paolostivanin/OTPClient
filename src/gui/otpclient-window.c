@@ -1611,6 +1611,7 @@ action_add_qr_file (GtkWidget  *widget,
 
     gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
                           on_qr_file_selected, self);
+    g_object_unref (dialog);
 }
 
 static void
@@ -2295,6 +2296,7 @@ new_db_button_clicked (GtkButton       *button,
 
     gtk_file_dialog_save (dialog, GTK_WINDOW (self), NULL,
                           on_new_db_file_selected, self);
+    g_object_unref (dialog);
 }
 
 static void
@@ -2412,6 +2414,7 @@ open_db_button_clicked (GtkButton       *button,
 
     gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
                           on_open_db_file_selected, self);
+    g_object_unref (dialog);
 }
 
 static gboolean

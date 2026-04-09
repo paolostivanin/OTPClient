@@ -124,7 +124,20 @@ get_otps_from_encrypted_backup (const gchar          *path,
         return NULL;
     }
 
-    json_t *arr = json_object_get (json_object_get(json, "header"), "slots");
+    json_t *header = json_object_get (json, "header");
+    if (header == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'header' object.");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
+    json_t *arr = json_object_get (header, "slots");
+    if (arr == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'slots' array.");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
     gint index = 0;
     for (; index < (gint)json_array_size(arr); index++) {
         json_t *j_type = json_object_get (json_array_get(arr, index), "type");
@@ -155,7 +168,17 @@ get_otps_from_encrypted_backup (const gchar          *path,
         json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
         return NULL;
     }
-    json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
+    json_t *dbp = json_object_get (header, "params");
+    if (dbp == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'params' in header.");
+        g_free (salt);
+        g_free (enc_key);
+        g_free (key_nonce);
+        g_free (key_tag);
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
     guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
     if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
@@ -550,7 +573,7 @@ parse_aegis_json_data (const gchar *data,
 
     json_t *array = json_object_get (root, "entries");
     if (array == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'entries' array.");
         json_decref (root);
         return NULL;
     }
