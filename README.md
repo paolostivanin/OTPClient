@@ -1,5 +1,41 @@
 # OTPClient
-Highly secure and easy to use GTK4/libadwaita application for two-factor authentication that supports both Time-based One-time Passwords (TOTP) and HMAC-Based One-Time Passwords (HOTP).
+GTK4/libadwaita application for managing TOTP and HOTP two-factor authentication tokens.
+
+## Features
+
+### Supported standards
+- TOTP and HOTP
+- Custom digits (4–10) and custom period (10–120s)
+- SHA1, SHA256, and SHA512 algorithms
+- Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
+
+### Import & Export
+- [Aegis](https://github.com/beemdevelopment/Aegis) (encrypted and plain)
+- [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) (encrypted and plain)
+- [2FAS](https://github.com/twofas) (encrypted and plain)
+- [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) (plain, key URI format)
+- Google migration QR codes (import only)
+
+### Security
+- Local database encrypted with AES256-GCM
+- Key derived via Argon2id (default: 4 iterations, 128 MiB memory, parallelism 4)
+- Decrypted content held in libgcrypt secure memory, never written to disk
+- Integration with the OS secret service via libsecret
+
+## Installation
+OTPClient is available as a Flatpak and in several distro repositories. See the [packages list](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages) for details.
+
+### Building from source
+1. Install all the libraries listed under [requirements](#requirements).
+2. Clone and build:
+```
+git clone https://github.com/paolostivanin/OTPClient.git
+cd OTPClient
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=/usr ..
+make
+sudo make install
+```
 
 ## Requirements
 | Name                                                | Min Version |
@@ -17,43 +53,10 @@ Highly secure and easy to use GTK4/libadwaita application for two-factor authent
 | libsecret                                           | 0.20        |
 | qrencode                                            | 4.1.0       |
 
-:warning: Please note that the memlock value should be `>= 64 MB`. Any value less than this may cause issues when dealing with tens of tokens (especially when importing from third parties backups).
-See this [wiki section](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for info on how to check the current value and set, if needed, a higher one.
-
-## Features
-- integration with the OS' secret service provider via libsecret
-- support both TOTP and HOTP
-- support setting custom digits (between 4 and 10 inclusive)
-- support setting a custom period (between 10 and 120 seconds inclusive)
-- support SHA1, SHA256 and SHA512 algorithms
-- support for Steam codes (please read [THIS PAGE](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
-- import and export encrypted/plain [Aegis](https://github.com/beemdevelopment/Aegis) backup
-- import and export plain [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) backup (key URI format only)
-- import and export encrypted/plain [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) backup
-- import and export encrypted/plain [2FAS](https://github.com/twofas) backup
-- import of Google's migration QR codes
-- local database is encrypted using AES256-GCM
-  - key is derived using PBKDF2 with SHA512 and 100k iterations
-  - decrypted file is never saved (and hopefully never swapped) to disk. While the app is running, the decrypted content resides in a "secure memory" buffer allocated by Gcrypt
-
-## Protobuf
-The protobuf files needed to decode Google's otpauth-migration qr codes have been generated with `protoc --c_out=src/ proto/google-migration.proto` 
+**Note:** The system memlock limit should be at least 64 MB. Lower values may cause issues when handling many tokens, especially when importing third-party backups. See the [wiki](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for how to check and adjust this.
 
 ## Wiki
-For things like roadmap, screenshots, how to use OTPClient, etc, please have a look at the [project's wiki](https://github.com/paolostivanin/OTPClient/wiki). You'll find a lot of useful information there.
-
-## Manual installation
-If OTPClient hasn't been packaged for your distro ([check here](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages)) and your distro doesn't support Flatpak, then you'll have to manually compile and install OTPClient.
-1. install all the needed libraries listed under [requirements](#requirements)
-2. clone and install OTPClient:
-```
-git clone https://github.com/paolostivanin/OTPClient.git
-cd OTPClient
-mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make
-sudo make install
-```
+For screenshots, roadmap, and usage guides, see the [project wiki](https://github.com/paolostivanin/OTPClient/wiki).
 
 ## License
-This software is released under the GPLv3 license. Please have a look at the [LICENSE](LICENSE) file for more details.
+This software is released under the GPLv3 license. See the [LICENSE](LICENSE) file for details.

@@ -2,18 +2,18 @@
 
 ## Supported Versions
 
-The following list describes whether a version is eligible or not for security updates.
+Only the versions listed below receive security updates.
 
-| Version | Supported          | EOL         |
-|---------|--------------------|-------------|
-| 5.0.x   | :white_check_mark: | -           |
-| 4.4.x   | :white_check_mark: | -           |
+| Version | Status      |
+|---------|-------------|
+| 5.0.x   | Active      |
+| 4.4.x   | Maintenance |
+| < 4.4   | End of life |
 
 ## Reporting a Vulnerability
 
-In case you should find a vulnerability, please report it privately to me via [e-mail](mailto:info@paolostivanin.com).
-The following is the workflow:
-- security issue is found, an e-mail is sent to me
-- within 24 hours I will reply to your e-mail with some info like, for example, whether it actually is a security issue and how serious it is
-- within 7 days I will develop and ship a fix
-- once the update is out I will open a [security advisory](https://github.com/paolostivanin/OTPClient/security/advisories)
+To report a vulnerability, email [info@paolostivanin.com](mailto:info@paolostivanin.com). Please do not open a public issue.
+
+1. **Acknowledgment** — you will receive a reply within 24 hours confirming receipt and an initial assessment.
+2. **Fix** — a patch will be developed and released within 7 days.
+3. **Disclosure** — once the fix is published, a [security advisory](https://github.com/paolostivanin/OTPClient/security/advisories) will be opened on GitHub.
