@@ -193,5 +193,5 @@ gui_misc_send_notification (GApplication *app,
 {
     g_autoptr (GNotification) notification = g_notification_new (title);
     g_notification_set_body (notification, body);
-    g_application_send_notification (app, NULL, notification);
+    g_application_send_notification (app, "otpclient", notification);
 }

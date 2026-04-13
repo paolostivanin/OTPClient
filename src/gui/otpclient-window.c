@@ -67,6 +67,9 @@ struct _OTPClientWindow
     /* Clipboard auto-clear */
     guint clipboard_clear_timer_id;
 
+    /* Suppress clipboard copy + notification for programmatic selection changes */
+    gboolean suppress_selection_action;
+
     /* Undo delete */
     json_t *deleted_token;
     guint   deleted_token_pos;
@@ -972,8 +975,16 @@ search_text_changed (GtkEntry        *entry,
     /* Auto-select when search narrows to a single result */
     guint n = g_list_model_get_n_items (G_LIST_MODEL (win->filter_model));
     if (n == 1)
+    {
+        win->suppress_selection_action = TRUE;
         gtk_single_selection_set_selected (win->otp_selection, 0);
+        win->suppress_selection_action = FALSE;
+    }
 }
+
+static void on_otp_selection_changed (GtkSingleSelection *selection,
+                                      GParamSpec         *pspec,
+                                      OTPClientWindow    *self);
 
 static void
 search_entry_activate (GtkEntry        *entry,
@@ -981,7 +992,8 @@ search_entry_activate (GtkEntry        *entry,
 {
     (void) entry;
 
-    /* Enter in search bar: close search */
+    /* Enter in search bar: copy selected OTP and close search */
+    on_otp_selection_changed (self->otp_selection, NULL, self);
     gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (self->search_bar), FALSE);
 }
 
@@ -1138,6 +1150,9 @@ on_otp_selection_changed (GtkSingleSelection *selection,
     if (pos == GTK_INVALID_LIST_POSITION)
         return;
 
+    if (self->suppress_selection_action)
+        return;
+
     OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (selection));
     if (entry == NULL)
         return;
@@ -1198,7 +1213,7 @@ on_otp_selection_changed (GtkSingleSelection *selection,
                                                    issuer ? issuer : otp_entry_get_account (entry));
         g_autoptr (GNotification) notification = g_notification_new ("OTPClient");
         g_notification_set_body (notification, body);
-        g_application_send_notification (G_APPLICATION (app), NULL, notification);
+        g_application_send_notification (G_APPLICATION (app), "otp-copied", notification);
     }
 }
 
