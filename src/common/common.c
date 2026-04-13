@@ -353,6 +353,8 @@ json_object_get_hash (json_t *obj)
     const gsize buf_size = 256;
     gchar *tmp_string = gcry_calloc_secure (buf_size, 1);
     json_object_foreach (obj, key, value) {
+        if (g_strcmp0 (key, "group") == 0)
+            continue;
         if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
             gsize cur_len = strlen (tmp_string);
@@ -389,6 +391,7 @@ free_otps_gslist (GSList *otps,
         g_free (otp_data->account_name);
         g_free (otp_data->issuer);
         gcry_free (otp_data->secret);
+        g_free (otp_data->group);
     }
     g_slist_free (otps);
 }
@@ -402,7 +405,8 @@ build_json_obj (const gchar *type,
                 guint        digits,
                 const gchar *algo,
                 guint        period,
-                guint64      ctr)
+                guint64      ctr,
+                const gchar *group)
 {
     json_t *obj = json_object ();
     json_object_set (obj, "type", json_string (type));
@@ -418,6 +422,9 @@ build_json_obj (const gchar *type,
     } else {
         json_object_set (obj, "counter", json_integer ((json_int_t)ctr));
     }
+
+    if (group != NULL && group[0] != '\0')
+        json_object_set (obj, "group", json_string (group));
 
     return obj;
 }

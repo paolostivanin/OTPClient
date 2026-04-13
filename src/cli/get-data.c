@@ -78,12 +78,16 @@ list_all_acc_iss (DatabaseData *db_data)
 {
     gsize index;
     json_t *obj;
-    g_print ("================\n");
-    g_print ("Account | Issuer\n");
-    g_print ("================\n");
+    g_print ("=========================\n");
+    g_print ("Account | Issuer | Group\n");
+    g_print ("=========================\n");
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
-        g_print ("%s | %s\n", json_string_value (json_object_get (obj, "label")), json_string_value (json_object_get (obj, "issuer")));
-        g_print ("----------------\n");
+        const gchar *group = json_string_value (json_object_get (obj, "group"));
+        g_print ("%s | %s | %s\n",
+                 json_string_value (json_object_get (obj, "label")),
+                 json_string_value (json_object_get (obj, "issuer")),
+                 group ? group : "");
+        g_print ("-------------------------\n");
     }
 }
 

@@ -41,6 +41,7 @@ static gchar    *get_reference_data             (guchar            *derived_key,
                                                  guchar            *salt);
 
 static GSList   *parse_twofas_json_data         (const gchar       *data,
+                                                 GHashTable        *group_map,
                                                  GError           **err);
 
 
@@ -94,7 +95,27 @@ export_twofas (const gchar *export_path,
     json_t *root = json_object ();
     json_t *services_array = json_array ();
     json_object_set (root, "services", services_array);
-    json_object_set (root, "groups", json_array());
+
+    /* Build groups array and group name → UUID map */
+    json_t *groups_array = json_array ();
+    GHashTable *group_id_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    {
+        gsize idx;
+        json_t *tmp_obj;
+        guint grp_counter = 0;
+        json_array_foreach (json_db_data, idx, tmp_obj) {
+            const gchar *group = json_string_value (json_object_get (tmp_obj, "group"));
+            if (group != NULL && group[0] != '\0' && !g_hash_table_contains (group_id_map, group)) {
+                g_autofree gchar *grp_id = g_strdup_printf ("grp-%u", grp_counter++);
+                g_hash_table_insert (group_id_map, g_strdup (group), g_strdup (grp_id));
+                json_t *grp_obj = json_object ();
+                json_object_set (grp_obj, "id", json_string (grp_id));
+                json_object_set (grp_obj, "name", json_string (group));
+                json_array_append_new (groups_array, grp_obj);
+            }
+        }
+    }
+    json_object_set (root, "groups", groups_array);
     json_object_set (root, "updatedAt", json_integer (epoch_time));
     json_object_set (root, "schemaVersion", json_integer (4));
 
@@ -142,8 +163,16 @@ export_twofas (const gchar *export_path,
         json_object_set (export_obj, "otp", otp_obj);
         json_object_set (export_obj, "order", order_obj);
 
+        const gchar *group = json_string_value (json_object_get (db_obj, "group"));
+        if (group != NULL && group[0] != '\0') {
+            const gchar *grp_id = g_hash_table_lookup (group_id_map, group);
+            if (grp_id != NULL)
+                json_object_set (export_obj, "groupId", json_string (grp_id));
+        }
+
         json_array_append (services_array, export_obj);
     }
+    g_hash_table_destroy (group_id_map);
 
     gchar *json_data = json_dumps ((password == NULL) ? root : services_array, JSON_COMPACT);
     if (json_data == NULL) {
@@ -201,7 +230,7 @@ export_twofas (const gchar *export_path,
 
         json_t *enc_root = json_object ();
         json_object_set (enc_root, "services", json_array ());
-        json_object_set (enc_root, "groups", json_array());
+        json_object_set (enc_root, "groups", json_incref (groups_array));
         json_object_set (enc_root, "schemaVersion", json_integer (4));
         gchar *encoded_data = get_encoded_data (enc_data_with_tag, json_data_size + TWOFAS_TAG, salt, iv);
         json_object_set (enc_root, "servicesEncrypted", json_string (encoded_data));
@@ -265,13 +294,27 @@ get_otps_from_encrypted_backup (const gchar       *path,
         json_decref (root);
         return NULL;
     }
+    /* Build group UUID → name map from outer (unencrypted) JSON */
+    GHashTable *group_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    json_t *groups = json_object_get (root, "groups");
+    if (groups != NULL && json_is_array (groups)) {
+        for (guint gi = 0; gi < json_array_size (groups); gi++) {
+            json_t *grp = json_array_get (groups, gi);
+            const gchar *gid = json_string_value (json_object_get (grp, "id"));
+            const gchar *gname = json_string_value (json_object_get (grp, "name"));
+            if (gid != NULL && gname != NULL)
+                g_hash_table_insert (group_map, g_strdup (gid), g_strdup (gname));
+        }
+    }
+
     gchar **b64_encoded_data = g_strsplit (services_encrypted, ":", 3);
     decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
     if (twofas_data->json_data != NULL) {
-        otps = parse_twofas_json_data (twofas_data->json_data, err);
+        otps = parse_twofas_json_data (twofas_data->json_data, group_map, err);
         gcry_free (twofas_data->json_data);
     }
     g_strfreev (b64_encoded_data);
+    g_hash_table_destroy (group_map);
     g_free (twofas_data->salt);
     g_free (twofas_data->iv);
     g_free (twofas_data);
@@ -296,9 +339,23 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
+    /* Build group UUID → name map */
+    GHashTable *group_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    json_t *groups = json_object_get (json, "groups");
+    if (groups != NULL && json_is_array (groups)) {
+        for (guint gi = 0; gi < json_array_size (groups); gi++) {
+            json_t *grp = json_array_get (groups, gi);
+            const gchar *gid = json_string_value (json_object_get (grp, "id"));
+            const gchar *gname = json_string_value (json_object_get (grp, "name"));
+            if (gid != NULL && gname != NULL)
+                g_hash_table_insert (group_map, g_strdup (gid), g_strdup (gname));
+        }
+    }
+
     gchar *dumped_json = json_dumps (json_object_get (json, "services"), 0);
-    GSList *otps = parse_twofas_json_data (dumped_json, err);
+    GSList *otps = parse_twofas_json_data (dumped_json, group_map, err);
     gcry_free (dumped_json);
+    g_hash_table_destroy (group_map);
 
     return otps;
 }
@@ -447,6 +504,7 @@ get_reference_data (guchar *derived_key,
 
 static GSList *
 parse_twofas_json_data (const gchar *data,
+                        GHashTable  *group_map,
                         GError     **err)
 {
     json_error_t jerr;
@@ -508,6 +566,13 @@ parse_twofas_json_data (const gchar *data,
         }
 
         if (!skip) {
+            const gchar *group_id = json_string_value (json_object_get (obj, "groupId"));
+            if (group_id != NULL && group_map != NULL) {
+                const gchar *group_name = g_hash_table_lookup (group_map, group_id);
+                otp->group = (group_name != NULL) ? g_strdup (group_name) : NULL;
+            } else {
+                otp->group = NULL;
+            }
             otps = g_slist_append (otps, otp);
         } else {
             gcry_free (otp->secret);

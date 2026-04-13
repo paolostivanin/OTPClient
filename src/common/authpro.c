@@ -82,8 +82,43 @@ export_authpro (const gchar *export_path,
     json_t *root = json_object ();
     json_t *auth_array = json_array ();
     json_object_set (root, "Authenticators", auth_array);
-    json_object_set (root, "Categories", json_array());
-    json_object_set (root, "AuthenticatorCategories", json_array());
+
+    /* Build Categories and AuthenticatorCategories from groups */
+    json_t *categories_array = json_array ();
+    json_t *auth_cat_array = json_array ();
+    GHashTable *group_id_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    {
+        gsize idx;
+        json_t *tmp_obj;
+        guint cat_counter = 0;
+        json_array_foreach (json_db_data, idx, tmp_obj) {
+            const gchar *group = json_string_value (json_object_get (tmp_obj, "group"));
+            if (group != NULL && group[0] != '\0' && !g_hash_table_contains (group_id_map, group)) {
+                g_autofree gchar *cat_id = g_strdup_printf ("cat-%u", cat_counter++);
+                g_hash_table_insert (group_id_map, g_strdup (group), g_strdup (cat_id));
+                json_t *cat_obj = json_object ();
+                json_object_set (cat_obj, "Id", json_string (cat_id));
+                json_object_set (cat_obj, "Name", json_string (group));
+                json_array_append_new (categories_array, cat_obj);
+            }
+        }
+        json_array_foreach (json_db_data, idx, tmp_obj) {
+            const gchar *group = json_string_value (json_object_get (tmp_obj, "group"));
+            if (group != NULL && group[0] != '\0') {
+                const gchar *cat_id = g_hash_table_lookup (group_id_map, group);
+                const gchar *secret = json_string_value (json_object_get (tmp_obj, "secret"));
+                if (cat_id != NULL && secret != NULL) {
+                    json_t *ac_obj = json_object ();
+                    json_object_set (ac_obj, "CategoryId", json_string (cat_id));
+                    json_object_set (ac_obj, "AuthenticatorSecret", json_string (secret));
+                    json_array_append_new (auth_cat_array, ac_obj);
+                }
+            }
+        }
+    }
+    g_hash_table_destroy (group_id_map);
+    json_object_set (root, "Categories", categories_array);
+    json_object_set (root, "AuthenticatorCategories", auth_cat_array);
     json_object_set (root, "CustomIcons", json_array());
 
     json_t *db_obj, *export_obj;
@@ -288,6 +323,35 @@ parse_authpro_json_data (const gchar *data,
         return NULL;
     }
 
+    /* Build category ID → name map */
+    GHashTable *cat_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    json_t *categories = json_object_get (root, "Categories");
+    if (categories != NULL && json_is_array (categories)) {
+        for (guint ci = 0; ci < json_array_size (categories); ci++) {
+            json_t *cat = json_array_get (categories, ci);
+            const gchar *id = json_string_value (json_object_get (cat, "Id"));
+            const gchar *name = json_string_value (json_object_get (cat, "Name"));
+            if (id != NULL && name != NULL)
+                g_hash_table_insert (cat_map, g_strdup (id), g_strdup (name));
+        }
+    }
+
+    /* Build secret → category name map (first category only) */
+    GHashTable *secret_cat_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+    json_t *auth_categories = json_object_get (root, "AuthenticatorCategories");
+    if (auth_categories != NULL && json_is_array (auth_categories)) {
+        for (guint ci = 0; ci < json_array_size (auth_categories); ci++) {
+            json_t *ac = json_array_get (auth_categories, ci);
+            const gchar *secret = json_string_value (json_object_get (ac, "AuthenticatorSecret"));
+            const gchar *cat_id = json_string_value (json_object_get (ac, "CategoryId"));
+            if (secret != NULL && cat_id != NULL) {
+                const gchar *cat_name = g_hash_table_lookup (cat_map, cat_id);
+                if (cat_name != NULL && !g_hash_table_contains (secret_cat_map, secret))
+                    g_hash_table_insert (secret_cat_map, g_strdup (secret), g_strdup (cat_name));
+            }
+        }
+    }
+
     GSList *otps = NULL;
     for (guint i = 0; i < json_array_size (array); i++) {
         json_t *obj = json_array_get (array, i);
@@ -344,6 +408,8 @@ parse_authpro_json_data (const gchar *data,
         }
 
         if (!skip) {
+            const gchar *cat_name = g_hash_table_lookup (secret_cat_map, secret_str);
+            otp->group = (cat_name != NULL) ? g_strdup (cat_name) : NULL;
             otps = g_slist_append (otps, otp);
         } else {
             gcry_free (otp->secret);
@@ -354,6 +420,9 @@ parse_authpro_json_data (const gchar *data,
             g_free (otp);
         }
     }
+
+    g_hash_table_destroy (cat_map);
+    g_hash_table_destroy (secret_cat_map);
 
     json_decref (root);
 

@@ -36,6 +36,8 @@ typedef struct otp_object_t {
     gchar *issuer;
 
     gchar *secret;
+
+    gchar *group;
 } otp_t;
 
 
@@ -79,7 +81,8 @@ json_t           *build_json_obj                 (const gchar        *type,
                                                   guint               digits,
                                                   const gchar        *algo,
                                                   guint               period,
-                                                  guint64             ctr);
+                                                  guint64             ctr,
+                                                  const gchar        *group);
 
 json_t           *get_json_root                  (const gchar        *path);
 

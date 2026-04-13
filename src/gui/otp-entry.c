@@ -17,6 +17,7 @@ struct _OTPEntry
     guint32 digits;
     gchar *secret;       /* base32-encoded, held in gcrypt secure memory */
     gchar *db_name;      /* non-NULL when entry comes from another database */
+    gchar *group;        /* NULL means ungrouped */
 };
 
 enum
@@ -32,6 +33,7 @@ enum
     PROP_DIGITS,
     PROP_SECRET,
     PROP_DB_NAME,
+    PROP_GROUP,
     N_PROPS
 };
 
@@ -67,6 +69,7 @@ otp_entry_finalize (GObject *object)
     }
 
     g_clear_pointer (&self->db_name, g_free);
+    g_clear_pointer (&self->group, g_free);
 
     G_OBJECT_CLASS (otp_entry_parent_class)->finalize (object);
 }
@@ -110,6 +113,9 @@ otp_entry_get_property (GObject    *object,
             break;
         case PROP_DB_NAME:
             g_value_set_string (value, self->db_name);
+            break;
+        case PROP_GROUP:
+            g_value_set_string (value, self->group);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -175,6 +181,10 @@ otp_entry_set_property (GObject      *object,
             g_free (self->db_name);
             self->db_name = g_value_dup_string (value);
             break;
+        case PROP_GROUP:
+            g_free (self->group);
+            self->group = g_value_dup_string (value);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -218,6 +228,9 @@ otp_entry_class_init (OTPEntryClass *klass)
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     properties[PROP_DB_NAME] =
         g_param_spec_string ("db-name", NULL, NULL, NULL,
+                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+    properties[PROP_GROUP] =
+        g_param_spec_string ("group", NULL, NULL, NULL,
                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
     g_object_class_install_properties (object_class, N_PROPS, properties);
@@ -451,4 +464,25 @@ otp_entry_set_db_name (OTPEntry    *self,
     g_free (self->db_name);
     self->db_name = g_strdup (db_name);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_DB_NAME]);
+}
+
+const gchar *
+otp_entry_get_group (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), NULL);
+    return self->group;
+}
+
+void
+otp_entry_set_group (OTPEntry    *self,
+                     const gchar *group)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+
+    if (g_strcmp0 (self->group, group) == 0)
+        return;
+
+    g_free (self->group);
+    self->group = g_strdup (group);
+    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_GROUP]);
 }

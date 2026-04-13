@@ -344,6 +344,9 @@ populate_window_from_db (OTPClientApplication *self)
                                           period, counter,
                                           algo ? algo : "SHA1",
                                           digits, secret);
+        const gchar *group = json_string_value (json_object_get (obj, "group"));
+        if (group != NULL)
+            otp_entry_set_group (entry, group);
 
         otp_entry_update_otp (entry);
 

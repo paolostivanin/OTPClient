@@ -458,6 +458,12 @@ export_aegis (const gchar   *export_path,
 
         json_object_set (export_obj, "icon", json_null ());
 
+        const gchar *group = json_string_value (json_object_get (db_obj, "group"));
+        if (group != NULL)
+            json_object_set (export_obj, "group", json_string (group));
+        else
+            json_object_set (export_obj, "group", json_null ());
+
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (info_obj, "algo", json_object_get (db_obj, "algo"));
@@ -634,6 +640,8 @@ parse_aegis_json_data (const gchar *data,
         }
 
         if (!skip) {
+            const gchar *group_val = json_string_value (json_object_get (obj, "group"));
+            otp->group = (group_val != NULL) ? g_strdup (group_val) : NULL;
             otps = g_slist_append (otps, otp);
         } else {
             gcry_free (otp->secret);

@@ -35,6 +35,11 @@
                 </style>
               </object>
             </child>
+            <child type="start">
+              <object class="GtkDropDown" id="group_dropdown">
+                <property name="tooltip-text" translatable="yes">Filter by group</property>
+              </object>
+            </child>
             <child type="end">
               <object class="GtkBox" id="titlebar_end_buttons_box">
                 <child>

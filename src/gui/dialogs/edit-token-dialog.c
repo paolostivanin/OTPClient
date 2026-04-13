@@ -15,6 +15,7 @@ struct _EditTokenDialog
 
     GtkWidget *label_row;
     GtkWidget *issuer_row;
+    GtkWidget *group_row;
     GtkWidget *save_button;
     GtkWidget *error_label;
 };
@@ -30,8 +31,15 @@ on_save_clicked (GtkButton       *button,
     const gchar *label_text = gtk_editable_get_text (GTK_EDITABLE (self->label_row));
     const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (self->issuer_row));
 
+    const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
+
     json_object_set (self->token_obj, "label", json_string (label_text));
     json_object_set (self->token_obj, "issuer", json_string (issuer));
+
+    if (group_text != NULL && group_text[0] != '\0')
+        json_object_set (self->token_obj, "group", json_string (group_text));
+    else
+        json_object_del (self->token_obj, "group");
 
     GError *err = NULL;
     update_db (self->db_data, &err);
@@ -131,6 +139,14 @@ edit_token_dialog_new (json_t            *token_obj,
     if (issuer != NULL)
         gtk_editable_set_text (GTK_EDITABLE (self->issuer_row), issuer);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->issuer_row);
+
+    /* Group */
+    self->group_row = adw_entry_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->group_row), _("Group"));
+    const gchar *grp = json_string_value (json_object_get (token_obj, "group"));
+    if (grp != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->group_row), grp);
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->group_row);
 
     gtk_box_append (GTK_BOX (box), group);
 

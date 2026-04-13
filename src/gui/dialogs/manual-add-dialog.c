@@ -22,6 +22,7 @@ struct _ManualAddDialog
     GtkWidget *counter_spin;
     GtkWidget *period_row;
     GtkWidget *counter_row;
+    GtkWidget *group_row;
     GtkWidget *add_button;
     GtkWidget *error_label;
     GtkWidget *sha1_banner;
@@ -102,8 +103,11 @@ on_add_clicked (GtkButton       *button,
     double counter_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->counter_spin));
     guint64 counter = (guint64) counter_d;
 
+    const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
+    const gchar *group = (group_text != NULL && group_text[0] != '\0') ? group_text : NULL;
+
     json_t *obj = build_json_obj (type, label_text, issuer, secret,
-                                   digits, algo, period, counter);
+                                   digits, algo, period, counter, group);
 
     guint32 hash = json_object_get_hash (obj);
     if (g_slist_find_custom (self->db_data->objects_hash,
@@ -206,6 +210,10 @@ manual_add_dialog_new (DatabaseData      *db_data,
     self->issuer_row = adw_entry_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->issuer_row), _("Issuer"));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (details_group), self->issuer_row);
+
+    self->group_row = adw_entry_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->group_row), _("Group"));
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (details_group), self->group_row);
 
     self->secret_row = adw_entry_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->secret_row), _("Secret (Base32)"));

@@ -164,7 +164,7 @@ add_otps_to_db (GSList       *otps,
     guint list_len = g_slist_length (otps);
     for (guint i = 0; i < list_len; i++) {
         otp_t *otp = g_slist_nth_data (otps, i);
-        obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter);
+        obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
         guint32 hash = json_object_get_hash (obj);
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) == NULL) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));

@@ -40,6 +40,10 @@ void         otp_entry_set_db_name  (OTPEntry    *self,
                                      const gchar *db_name);
 const gchar *otp_entry_get_db_name (OTPEntry *self);
 
+void         otp_entry_set_group   (OTPEntry    *self,
+                                     const gchar *group);
+const gchar *otp_entry_get_group   (OTPEntry *self);
+
 void         otp_entry_update_otp   (OTPEntry *self);
 
 gchar       *otp_entry_get_next_otp (OTPEntry *self);

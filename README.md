@@ -9,6 +9,12 @@ GTK4/libadwaita application for managing TOTP and HOTP two-factor authentication
 - SHA1, SHA256, and SHA512 algorithms
 - Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 
+### Organization
+- Token grouping: assign tokens to groups (e.g. "Work", "Personal") for quick filtering
+- Header bar dropdown to filter by group, or use `group:<name>` / `#<name>` in the search bar
+- Groups can be assigned via the right-click context menu, the edit dialog, or when adding a token
+- Groups are preserved during Aegis, AuthenticatorPro, and 2FAS import/export
+
 ### Import & Export
 - [Aegis](https://github.com/beemdevelopment/Aegis) (encrypted and plain)
 - [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) (encrypted and plain)

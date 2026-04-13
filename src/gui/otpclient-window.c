@@ -52,6 +52,12 @@ struct _OTPClientWindow
     GtkWidget *dnd_highlight_row;
     GtkCssProvider *dnd_css_provider;
 
+    /* Group filter */
+    GtkWidget *group_dropdown;
+    GtkStringList *group_list_model;
+    gchar *active_group_filter;  /* NULL = "All", "" = "Ungrouped", non-empty = group name */
+    gboolean syncing_group_filter;
+
     /* Cross-database search */
     GListStore *cross_db_store;
     GtkFlattenListModel *flatten_model;
@@ -638,6 +644,9 @@ cross_db_load_thread (GTask        *task,
                 (guint32) digits,
                 secret_str);
 
+            const gchar *group = json_string_value (json_object_get (obj, "group"));
+            if (group != NULL)
+                otp_entry_set_group (entry, group);
             otp_entry_set_db_name (entry, dbe->name);
             otp_entry_update_otp (entry);
             g_list_store_append (result, entry);
@@ -736,28 +745,83 @@ search_filter_func (gpointer item,
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
     OTPEntry *entry = OTP_ENTRY (item);
 
+    /* --- Group dropdown filter --- */
+    if (self->active_group_filter != NULL)
+    {
+        const gchar *entry_group = otp_entry_get_group (entry);
+        if (self->active_group_filter[0] == '\0')
+        {
+            /* "Ungrouped" sentinel: only show entries with no group */
+            if (entry_group != NULL && entry_group[0] != '\0')
+                return FALSE;
+        }
+        else
+        {
+            /* Specific group: must match exactly */
+            if (g_strcmp0 (entry_group, self->active_group_filter) != 0)
+                return FALSE;
+        }
+    }
+
+    /* --- Search text filter --- */
     const gchar *search_text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
     if (search_text == NULL || search_text[0] == '\0')
         return TRUE;
 
+    /* Parse "group:xxx" or "#xxx" prefix */
+    const gchar *remaining_text = search_text;
+    g_autofree gchar *search_group = NULL;
+
+    if (g_str_has_prefix (search_text, "group:"))
+    {
+        const gchar *rest = search_text + 6;
+        const gchar *space = strchr (rest, ' ');
+        if (space != NULL)
+        {
+            search_group = g_strndup (rest, space - rest);
+            remaining_text = space + 1;
+        }
+        else
+        {
+            search_group = g_strdup (rest);
+            remaining_text = NULL;
+        }
+    }
+    else if (search_text[0] == '#' && search_text[1] != '\0')
+    {
+        const gchar *rest = search_text + 1;
+        const gchar *space = strchr (rest, ' ');
+        if (space != NULL)
+        {
+            search_group = g_strndup (rest, space - rest);
+            remaining_text = space + 1;
+        }
+        else
+        {
+            search_group = g_strdup (rest);
+            remaining_text = NULL;
+        }
+    }
+
+    if (search_group != NULL)
+    {
+        const gchar *entry_group = otp_entry_get_group (entry);
+        g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
+        g_autofree gchar *eg_lower = entry_group ? g_utf8_strdown (entry_group, -1) : g_strdup ("");
+        if (g_strstr_len (eg_lower, -1, sg_lower) == NULL)
+            return FALSE;
+
+        /* If no remaining text after group prefix, we're done */
+        if (remaining_text == NULL || remaining_text[0] == '\0')
+            return TRUE;
+    }
+
+    /* Account/issuer substring match on remaining text */
+    const gchar *text_to_match = remaining_text;
     const gchar *account = otp_entry_get_account (entry);
     const gchar *issuer = otp_entry_get_issuer (entry);
 
-    const gchar *cached = g_object_get_data (G_OBJECT (self->search_entry), "search-lower-cache");
-    const gchar *cached_src = g_object_get_data (G_OBJECT (self->search_entry), "search-lower-src");
-    g_autofree gchar *search_lower = NULL;
-    if (cached != NULL && cached_src != NULL && g_strcmp0 (cached_src, search_text) == 0)
-    {
-        search_lower = g_strdup (cached);
-    }
-    else
-    {
-        search_lower = g_utf8_strdown (search_text, -1);
-        g_object_set_data_full (G_OBJECT (self->search_entry), "search-lower-cache",
-                                g_strdup (search_lower), g_free);
-        g_object_set_data_full (G_OBJECT (self->search_entry), "search-lower-src",
-                                g_strdup (search_text), g_free);
-    }
+    g_autofree gchar *search_lower = g_utf8_strdown (text_to_match, -1);
     g_autofree gchar *account_lower = account ? g_utf8_strdown (account, -1) : g_strdup ("");
     g_autofree gchar *issuer_lower = issuer ? g_utf8_strdown (issuer, -1) : g_strdup ("");
 
@@ -852,6 +916,55 @@ search_text_changed (GtkEntry        *entry,
     {
         /* Search cleared: revert to single-DB model */
         cross_db_deactivate (win);
+    }
+
+    /* Sync search group prefix → dropdown */
+    if (!win->syncing_group_filter && win->group_list_model != NULL)
+    {
+        g_autofree gchar *search_group = NULL;
+        if (g_str_has_prefix (text, "group:"))
+        {
+            const gchar *rest = text + 6;
+            const gchar *space = strchr (rest, ' ');
+            search_group = space ? g_strndup (rest, space - rest) : g_strdup (rest);
+        }
+        else if (text[0] == '#' && text[1] != '\0')
+        {
+            const gchar *rest = text + 1;
+            const gchar *space = strchr (rest, ' ');
+            search_group = space ? g_strndup (rest, space - rest) : g_strdup (rest);
+        }
+
+        if (search_group != NULL)
+        {
+            /* Find matching group in dropdown and select it */
+            guint n_items = g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model));
+            g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
+            win->syncing_group_filter = TRUE;
+            gboolean found = FALSE;
+            for (guint i = 1; i < n_items - 1; i++)
+            {
+                const gchar *item = gtk_string_list_get_string (win->group_list_model, i);
+                g_autofree gchar *item_lower = g_utf8_strdown (item, -1);
+                if (g_strstr_len (item_lower, -1, sg_lower) != NULL)
+                {
+                    gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), i);
+                    found = TRUE;
+                    break;
+                }
+            }
+            if (!found)
+                gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 0);
+            win->syncing_group_filter = FALSE;
+        }
+        else if (!searching)
+        {
+            /* Search cleared: reset dropdown to "All" */
+            win->syncing_group_filter = TRUE;
+            g_clear_pointer (&win->active_group_filter, g_free);
+            gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 0);
+            win->syncing_group_filter = FALSE;
+        }
     }
 
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
@@ -1433,6 +1546,8 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->db_store);
     g_clear_object (&win->cross_db_store);
     g_clear_object (&win->flatten_model);
+    g_clear_object (&win->group_list_model);
+    g_clear_pointer (&win->active_group_filter, g_free);
     g_clear_object (&win->settings);
 
     if (win->dnd_css_provider != NULL)
@@ -1459,6 +1574,111 @@ otpclient_window_get_otp_selection (OTPClientWindow *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
     return self->otp_selection;
+}
+
+static void
+rebuild_group_list (OTPClientWindow *self)
+{
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    /* Collect unique group names */
+    GHashTable *groups = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+    gsize index;
+    json_t *obj;
+    json_array_foreach (db_data->in_memory_json_data, index, obj)
+    {
+        const gchar *group = json_string_value (json_object_get (obj, "group"));
+        if (group != NULL && group[0] != '\0')
+            g_hash_table_add (groups, g_strdup (group));
+    }
+
+    /* Sort group names */
+    GList *group_names = g_hash_table_get_keys (groups);
+    group_names = g_list_sort (group_names, (GCompareFunc) g_utf8_collate);
+
+    /* Remember current selection */
+    g_autofree gchar *prev_filter = g_strdup (self->active_group_filter);
+
+    /* Rebuild the string list */
+    if (self->group_list_model != NULL)
+        g_clear_object (&self->group_list_model);
+
+    self->group_list_model = gtk_string_list_new (NULL);
+    gtk_string_list_append (self->group_list_model, _("All"));
+    for (GList *l = group_names; l != NULL; l = l->next)
+        gtk_string_list_append (self->group_list_model, (const gchar *) l->data);
+    gtk_string_list_append (self->group_list_model, _("Ungrouped"));
+
+    self->syncing_group_filter = TRUE;
+    gtk_drop_down_set_model (GTK_DROP_DOWN (self->group_dropdown),
+                             G_LIST_MODEL (self->group_list_model));
+
+    /* Restore previous selection if still present */
+    guint restore_pos = 0; /* default to "All" */
+    if (prev_filter != NULL)
+    {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model));
+        for (guint i = 0; i < n; i++)
+        {
+            const gchar *item = gtk_string_list_get_string (self->group_list_model, i);
+            if (prev_filter[0] == '\0' && g_strcmp0 (item, _("Ungrouped")) == 0)
+            {
+                restore_pos = i;
+                break;
+            }
+            else if (g_strcmp0 (item, prev_filter) == 0)
+            {
+                restore_pos = i;
+                break;
+            }
+        }
+    }
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (self->group_dropdown), restore_pos);
+    self->syncing_group_filter = FALSE;
+
+    g_list_free (group_names);
+    g_hash_table_destroy (groups);
+}
+
+static void
+on_group_dropdown_changed (GtkDropDown     *dropdown,
+                           GParamSpec      *pspec,
+                           OTPClientWindow *self)
+{
+    (void) pspec;
+
+    if (self->syncing_group_filter)
+        return;
+
+    guint selected = gtk_drop_down_get_selected (dropdown);
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model));
+
+    g_clear_pointer (&self->active_group_filter, g_free);
+
+    if (selected == 0)
+    {
+        /* "All" — no group filter */
+        self->active_group_filter = NULL;
+    }
+    else if (selected == n - 1)
+    {
+        /* "Ungrouped" — empty string sentinel */
+        self->active_group_filter = g_strdup ("");
+    }
+    else
+    {
+        const gchar *group_name = gtk_string_list_get_string (self->group_list_model, selected);
+        self->active_group_filter = g_strdup (group_name);
+    }
+
+    gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
 }
 
 static void
@@ -1504,10 +1724,15 @@ on_db_modified (gpointer user_data)
                                           period, counter,
                                           algo ? algo : "SHA1",
                                           digits, secret);
+        const gchar *group = json_string_value (json_object_get (obj, "group"));
+        if (group != NULL)
+            otp_entry_set_group (entry, group);
         otp_entry_update_otp (entry);
         g_list_store_append (store, entry);
         g_object_unref (entry);
     }
+
+    rebuild_group_list (self);
 }
 
 static void
@@ -2132,6 +2357,193 @@ lock_button_clicked (GtkButton       *button,
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 
+static void
+action_set_group (GtkWidget  *widget,
+                  const char *action_name,
+                  GVariant   *parameter)
+{
+    (void) action_name;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+    if (token_obj == NULL)
+        return;
+
+    const gchar *group_name = g_variant_get_string (parameter, NULL);
+    if (group_name != NULL && group_name[0] != '\0')
+        json_object_set (token_obj, "group", json_string (group_name));
+    else
+        json_object_del (token_obj, "group");
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to update db after group change: %s", err->message);
+        g_clear_error (&err);
+        return;
+    }
+
+    on_db_modified (self);
+}
+
+static void
+action_remove_from_group (GtkWidget  *widget,
+                          const char *action_name,
+                          GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
+    if (token_obj == NULL)
+        return;
+
+    json_object_del (token_obj, "group");
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to update db after group removal: %s", err->message);
+        g_clear_error (&err);
+        return;
+    }
+
+    on_db_modified (self);
+}
+
+typedef struct {
+    OTPClientWindow *self;
+    guint token_pos;
+} NewGroupContext;
+
+static void
+on_new_group_response (AdwAlertDialog  *dialog,
+                       GAsyncResult    *result,
+                       NewGroupContext  *ctx)
+{
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+    if (g_strcmp0 (response, "add") != 0)
+    {
+        g_free (ctx);
+        return;
+    }
+
+    GtkWidget *extra = adw_alert_dialog_get_extra_child (dialog);
+    const gchar *group_name = gtk_editable_get_text (GTK_EDITABLE (extra));
+    if (group_name == NULL || group_name[0] == '\0')
+    {
+        g_free (ctx);
+        return;
+    }
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (ctx->self)));
+    if (app == NULL)
+    {
+        g_free (ctx);
+        return;
+    }
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+    {
+        g_free (ctx);
+        return;
+    }
+
+    json_t *token_obj = json_array_get (db_data->in_memory_json_data, ctx->token_pos);
+    if (token_obj != NULL)
+    {
+        json_object_set (token_obj, "group", json_string (group_name));
+
+        GError *err = NULL;
+        update_db (db_data, &err);
+        if (err != NULL)
+        {
+            g_warning ("Failed to update db after new group: %s", err->message);
+            g_clear_error (&err);
+        }
+        else
+        {
+            on_db_modified (ctx->self);
+        }
+    }
+
+    g_free (ctx);
+}
+
+static void
+action_new_group (GtkWidget  *widget,
+                  const char *action_name,
+                  GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+        return;
+
+    NewGroupContext *ctx = g_new0 (NewGroupContext, 1);
+    ctx->self = self;
+    ctx->token_pos = pos;
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (adw_alert_dialog_new (
+        _("New Group"), _("Enter a name for the new group:")));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"), "add", _("Add"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "add", ADW_RESPONSE_SUGGESTED);
+    adw_alert_dialog_set_default_response (dialog, "add");
+
+    GtkWidget *entry = gtk_entry_new ();
+    gtk_entry_set_placeholder_text (GTK_ENTRY (entry), _("Group name"));
+    adw_alert_dialog_set_extra_child (dialog, entry);
+
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_new_group_response, ctx);
+}
+
 static void on_popover_closed (GtkPopover *popover, gpointer user_data);
 
 static void
@@ -2153,15 +2565,92 @@ on_token_right_click (GtkGestureClick *gesture,
 
     GtkBuilder *builder = gtk_builder_new_from_resource (
         "/com/github/paolostivanin/OTPClient/ui/context-menus.ui");
-    GMenuModel *menu_model = G_MENU_MODEL (gtk_builder_get_object (builder, "token_context_menu"));
+    GMenuModel *base_menu = G_MENU_MODEL (gtk_builder_get_object (builder, "token_context_menu"));
 
-    GtkWidget *popover = gtk_popover_menu_new_from_model (menu_model);
+    /* Build a copy of the base menu and add "Set Group" submenu */
+    GMenu *menu = g_menu_new ();
+
+    /* Copy existing sections from base menu */
+    gint n_sections = g_menu_model_get_n_items (base_menu);
+    for (gint i = 0; i < n_sections; i++)
+    {
+        g_autoptr (GMenuLinkIter) iter = g_menu_model_iterate_item_links (base_menu, i);
+        while (g_menu_link_iter_next (iter))
+        {
+            const gchar *link_name = g_menu_link_iter_get_name (iter);
+            GMenuModel *link = g_menu_link_iter_get_value (iter);
+            if (g_strcmp0 (link_name, G_MENU_LINK_SECTION) == 0)
+                g_menu_append_section (menu, NULL, link);
+            else if (g_strcmp0 (link_name, G_MENU_LINK_SUBMENU) == 0)
+                g_menu_append_submenu (menu, NULL, link);
+            g_object_unref (link);
+        }
+    }
+
+    /* Build "Set Group" submenu dynamically */
+    GMenu *group_submenu = g_menu_new ();
+
+    /* Add existing groups */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+    {
+        DatabaseData *db_data = otpclient_application_get_db_data (app);
+        if (db_data != NULL && db_data->in_memory_json_data != NULL)
+        {
+            GHashTable *groups = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+            gsize idx;
+            json_t *obj;
+            json_array_foreach (db_data->in_memory_json_data, idx, obj)
+            {
+                const gchar *g = json_string_value (json_object_get (obj, "group"));
+                if (g != NULL && g[0] != '\0')
+                    g_hash_table_add (groups, g_strdup (g));
+            }
+
+            GList *names = g_hash_table_get_keys (groups);
+            names = g_list_sort (names, (GCompareFunc) g_utf8_collate);
+            if (names != NULL)
+            {
+                GMenu *existing_section = g_menu_new ();
+                for (GList *l = names; l != NULL; l = l->next)
+                {
+                    GMenuItem *item = g_menu_item_new ((const gchar *) l->data, NULL);
+                    g_menu_item_set_action_and_target (item, "win.set-group", "s", (const gchar *) l->data);
+                    g_menu_append_item (existing_section, item);
+                    g_object_unref (item);
+                }
+                g_menu_append_section (group_submenu, NULL, G_MENU_MODEL (existing_section));
+                g_object_unref (existing_section);
+            }
+
+            g_list_free (names);
+            g_hash_table_destroy (groups);
+        }
+    }
+
+    /* Add "New Group..." and "Remove from Group" */
+    GMenu *manage_section = g_menu_new ();
+    g_menu_append (manage_section, _("New Group\u2026"), "win.new-group");
+    g_menu_append (manage_section, _("Remove from Group"), "win.remove-from-group");
+    g_menu_append_section (group_submenu, NULL, G_MENU_MODEL (manage_section));
+    g_object_unref (manage_section);
+
+    /* Add the group submenu as a new section in the main menu */
+    GMenu *group_section = g_menu_new ();
+    g_menu_append_submenu (group_section, _("Set Group"), G_MENU_MODEL (group_submenu));
+    g_menu_append_section (menu, NULL, G_MENU_MODEL (group_section));
+    g_object_unref (group_section);
+    g_object_unref (group_submenu);
+
+    GtkWidget *popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
     gtk_widget_set_parent (popover, self->otp_list);
     GdkRectangle rect = { (int)x, (int)y, 1, 1 };
     gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
     g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
     gtk_popover_popup (GTK_POPOVER (popover));
 
+    g_object_unref (menu);
     g_object_unref (builder);
 }
 
@@ -2715,6 +3204,15 @@ otpclient_window_init (OTPClientWindow *self)
 
     setup_otp_view (self);
     setup_database_list (self);
+
+    /* Initialize group dropdown with default model */
+    self->group_list_model = gtk_string_list_new (NULL);
+    gtk_string_list_append (self->group_list_model, _("All"));
+    gtk_string_list_append (self->group_list_model, _("Ungrouped"));
+    gtk_drop_down_set_model (GTK_DROP_DOWN (self->group_dropdown),
+                             G_LIST_MODEL (self->group_list_model));
+    g_signal_connect (self->group_dropdown, "notify::selected",
+                      G_CALLBACK (on_group_dropdown_changed), self);
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->sidebar_toggle_button),
                                   adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view)));
 
@@ -2772,6 +3270,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, new_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
 
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);
 
@@ -2797,6 +3296,9 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);
     gtk_widget_class_install_action (widget_class, "win.show-qr", NULL, action_show_qr);
     gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);
+    gtk_widget_class_install_action (widget_class, "win.set-group", "s", action_set_group);
+    gtk_widget_class_install_action (widget_class, "win.new-group", NULL, action_new_group);
+    gtk_widget_class_install_action (widget_class, "win.remove-from-group", NULL, action_remove_from_group);
     gtk_widget_class_install_action (widget_class, "win.rename-db", NULL, action_rename_db);
     gtk_widget_class_install_action (widget_class, "win.set-primary-db", NULL, action_set_primary_db);
     gtk_widget_class_install_action (widget_class, "win.remove-db", NULL, action_remove_db);
