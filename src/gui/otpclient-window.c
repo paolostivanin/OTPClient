@@ -1647,6 +1647,13 @@ rebuild_group_list (OTPClientWindow *self)
     g_hash_table_destroy (groups);
 }
 
+void
+otpclient_window_rebuild_groups (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    rebuild_group_list (self);
+}
+
 static void
 on_group_dropdown_changed (GtkDropDown     *dropdown,
                            GParamSpec      *pspec,
@@ -2558,6 +2565,7 @@ on_token_right_click (GtkGestureClick *gesture,
     /* Reset gesture state before showing popover to avoid
      * "Broken accounting of active state" warnings */
     gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    gtk_event_controller_reset (GTK_EVENT_CONTROLLER (gesture));
 
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
@@ -2973,6 +2981,7 @@ on_db_right_click (GtkGestureClick *gesture,
     (void) n_press;
 
     gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
+    gtk_event_controller_reset (GTK_EVENT_CONTROLLER (gesture));
 
     GtkListBoxRow *row = gtk_list_box_get_row_at_y (
         GTK_LIST_BOX (self->database_list), (gint)y);

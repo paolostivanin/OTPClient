@@ -353,6 +353,8 @@ populate_window_from_db (OTPClientApplication *self)
         g_list_store_append (store, entry);
         g_object_unref (entry);
     }
+
+    otpclient_window_rebuild_groups (self->window);
 }
 
 static void
