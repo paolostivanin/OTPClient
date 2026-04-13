@@ -992,9 +992,13 @@ search_entry_activate (GtkEntry        *entry,
 {
     (void) entry;
 
-    /* Enter in search bar: copy selected OTP and close search */
+    /* Enter in search bar: copy selected OTP and close search.
+     * Suppress selection actions while closing the search bar so the
+     * filter change does not re-trigger a copy/notification. */
     on_otp_selection_changed (self->otp_selection, NULL, self);
+    self->suppress_selection_action = TRUE;
     gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (self->search_bar), FALSE);
+    self->suppress_selection_action = FALSE;
 }
 
 static void
@@ -1717,6 +1721,11 @@ on_db_modified (gpointer user_data)
         return;
 
     GListStore *store = self->otp_store;
+
+    /* Suppress selection-change side effects (clipboard copy, notifications)
+     * while we tear down and rebuild the store. */
+    self->suppress_selection_action = TRUE;
+
     g_list_store_remove_all (store);
 
     gsize index;
@@ -1755,6 +1764,8 @@ on_db_modified (gpointer user_data)
     }
 
     rebuild_group_list (self);
+
+    self->suppress_selection_action = FALSE;
 }
 
 static void
@@ -2379,6 +2390,13 @@ lock_button_clicked (GtkButton       *button,
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 
+static gboolean
+on_db_modified_idle (gpointer user_data)
+{
+    on_db_modified (user_data);
+    return G_SOURCE_REMOVE;
+}
+
 static void
 action_set_group (GtkWidget  *widget,
                   const char *action_name,
@@ -2423,7 +2441,9 @@ action_set_group (GtkWidget  *widget,
         return;
     }
 
-    on_db_modified (self);
+    /* Defer store rebuild so the popover menu can close cleanly first,
+     * avoiding "Broken accounting of active state" warnings. */
+    g_idle_add (on_db_modified_idle, self);
 }
 
 static void
@@ -2467,7 +2487,8 @@ action_remove_from_group (GtkWidget  *widget,
         return;
     }
 
-    on_db_modified (self);
+    /* Defer store rebuild so the popover menu can close cleanly first. */
+    g_idle_add (on_db_modified_idle, self);
 }
 
 typedef struct {
@@ -2560,6 +2581,7 @@ action_new_group (GtkWidget  *widget,
 
     GtkWidget *entry = gtk_entry_new ();
     gtk_entry_set_placeholder_text (GTK_ENTRY (entry), _("Group name"));
+    gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
     adw_alert_dialog_set_extra_child (dialog, entry);
 
     adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
@@ -2581,6 +2603,25 @@ on_token_right_click (GtkGestureClick *gesture,
      * "Broken accounting of active state" warnings */
     gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
     gtk_event_controller_reset (GTK_EVENT_CONTROLLER (gesture));
+
+    /* Select the row under the cursor so a right-click alone is enough. */
+    OTPEntry *picked = pick_entry_at (self, x, y, NULL);
+    if (picked != NULL)
+    {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_selection));
+        for (guint i = 0; i < n; i++)
+        {
+            g_autoptr (OTPEntry) e = g_list_model_get_item (
+                G_LIST_MODEL (self->otp_selection), i);
+            if (e == picked)
+            {
+                self->suppress_selection_action = TRUE;
+                gtk_single_selection_set_selected (self->otp_selection, i);
+                self->suppress_selection_action = FALSE;
+                break;
+            }
+        }
+    }
 
     guint pos = gtk_single_selection_get_selected (self->otp_selection);
     if (pos == GTK_INVALID_LIST_POSITION)
