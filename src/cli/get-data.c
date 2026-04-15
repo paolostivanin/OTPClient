@@ -13,7 +13,7 @@ static void get_token       (json_t         *obj,
                              gboolean        show_next_token);
 
 
-void
+gboolean
 show_token (DatabaseData *db_data,
             const gchar  *account,
             const gchar  *issuer,
@@ -67,9 +67,8 @@ show_token (DatabaseData *db_data,
         g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
-
-        return;
     }
+    return found;
 }
 
 
@@ -82,10 +81,12 @@ list_all_acc_iss (DatabaseData *db_data)
     g_print ("Account | Issuer | Group\n");
     g_print ("=========================\n");
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
+        const gchar *label = json_string_value (json_object_get (obj, "label"));
+        const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         const gchar *group = json_string_value (json_object_get (obj, "group"));
         g_print ("%s | %s | %s\n",
-                 json_string_value (json_object_get (obj, "label")),
-                 json_string_value (json_object_get (obj, "issuer")),
+                 label ? label : "",
+                 issuer ? issuer : "",
                  group ? group : "");
         g_print ("-------------------------\n");
     }
@@ -116,6 +117,10 @@ get_token (json_t       *obj,
         g_printerr ("[ERROR] Token has no type field, skipping.\n");
         return;
     }
+    if (secret == NULL) {
+        g_printerr ("[ERROR] Token has no secret field, skipping.\n");
+        return;
+    }
     gint period;
     gint64 counter;
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
@@ -128,16 +133,51 @@ get_token (json_t       *obj,
         gchar *next_totp = NULL;
         if ((issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) ? TRUE : FALSE) {
             current_totp = get_steam_totp_at (secret, current_ts, period, &cotp_err);
-            if (show_next_token) next_totp = get_steam_totp_at (secret, current_ts + period, period, &cotp_err);
+            if (cotp_err != NO_ERROR) {
+                g_printerr ("[ERROR] Failed to generate Steam TOTP (error %d).\n", cotp_err);
+                free (current_totp);
+                return;
+            }
+            if (show_next_token) {
+                next_totp = get_steam_totp_at (secret, current_ts + period, period, &cotp_err);
+                if (cotp_err != NO_ERROR) {
+                    g_printerr ("[ERROR] Failed to generate next Steam TOTP (error %d).\n", cotp_err);
+                    free (current_totp);
+                    free (next_totp);
+                    return;
+                }
+            }
         } else {
             current_totp = get_totp_at (secret, current_ts, digits, period, algo, &cotp_err);
-            if (show_next_token) next_totp = get_totp_at (secret, current_ts + period, digits, period, algo, &cotp_err);
+            if (cotp_err != NO_ERROR) {
+                g_printerr ("[ERROR] Failed to generate TOTP (error %d).\n", cotp_err);
+                free (current_totp);
+                return;
+            }
+            if (show_next_token) {
+                next_totp = get_totp_at (secret, current_ts + period, digits, period, algo, &cotp_err);
+                if (cotp_err != NO_ERROR) {
+                    g_printerr ("[ERROR] Failed to generate next TOTP (error %d).\n", cotp_err);
+                    free (current_totp);
+                    free (next_totp);
+                    return;
+                }
+            }
         }
         g_print (_("Current TOTP (valid for %d more second(s)): %s\n"), token_validity, current_totp);
         if (show_next_token) g_print ("Next TOTP: %s\n", next_totp);
+        free (current_totp);
+        free (next_totp);
     } else {
         counter = json_integer_value (json_object_get (obj, "counter"));
-        g_print (_("Current HOTP: %s\n"), get_hotp (secret, counter, digits, algo, &cotp_err));
+        gchar *hotp = get_hotp (secret, counter, digits, algo, &cotp_err);
+        if (cotp_err != NO_ERROR) {
+            g_printerr ("[ERROR] Failed to generate HOTP (error %d).\n", cotp_err);
+            free (hotp);
+            return;
+        }
+        g_print (_("Current HOTP: %s\n"), hotp);
+        free (hotp);
         // counter must be updated every time it is accessed
         json_object_set (obj, "counter", json_integer (counter + 1));
         GError *err = NULL;

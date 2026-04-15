@@ -206,7 +206,7 @@ on_export_file_save_complete (GObject      *source,
         g_clear_error (&err);
     }
 
-    free (json);
+    gcry_free (json);
 }
 
 static void

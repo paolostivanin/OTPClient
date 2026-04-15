@@ -144,14 +144,18 @@ export_twofas (const gchar *export_path,
             json_object_set (otp_obj, "account", json_string (label));
         }
 
-        gchar *algo = g_ascii_strup (json_string_value (json_object_get (db_obj, "algo")), -1);
+        const gchar *algo_raw = json_string_value (json_object_get (db_obj, "algo"));
+        if (algo_raw == NULL) algo_raw = "SHA1";
+        gchar *algo = g_ascii_strup (algo_raw, -1);
         json_object_set (otp_obj, "algorithm", json_string (algo));
         g_free (algo);
 
         json_object_set (otp_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (otp_obj, "source", json_string ("Manual"));
 
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        const gchar *type_raw = json_string_value (json_object_get (db_obj, "type"));
+        if (type_raw == NULL) type_raw = "TOTP";
+        if (g_ascii_strcasecmp (type_raw, "TOTP") == 0) {
             json_object_set (otp_obj, "period", json_object_get (db_obj, "period"));
             json_object_set (otp_obj, "tokenType", json_string ("TOTP"));
         } else {
@@ -389,6 +393,19 @@ decrypt_data (const gchar **b64_data,
     if (enc_data_with_tag_size <= TWOFAS_TAG) {
         g_printerr ("Encrypted data is too small.\n");
         g_free (enc_data_with_tag);
+        g_free (twofas_data->salt);
+        g_free (twofas_data->iv);
+        twofas_data->salt = NULL;
+        twofas_data->iv = NULL;
+        return;
+    }
+    if (salt_out_len != TWOFAS_SALT || iv_out_len != TWOFAS_IV) {
+        g_printerr ("Invalid salt or IV length in encrypted backup (salt=%zu, iv=%zu).\n", salt_out_len, iv_out_len);
+        g_free (enc_data_with_tag);
+        g_free (twofas_data->salt);
+        g_free (twofas_data->iv);
+        twofas_data->salt = NULL;
+        twofas_data->iv = NULL;
         return;
     }
     guchar tag[TWOFAS_TAG];

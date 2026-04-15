@@ -213,8 +213,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             exported_file_path = g_build_filename (export_directory, "freeotpplus-exports.txt", NULL);
             ret_msg = export_freeotpplus (exported_file_path, db_data->in_memory_json_data);
             exported = TRUE;
-        }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
+        } else if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AEGIS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {
@@ -225,8 +224,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             ret_msg = export_aegis (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
-        }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
+        } else if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, TWOFAS_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {
@@ -237,8 +235,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             ret_msg = export_twofas (exported_file_path, export_pwd, db_data->in_memory_json_data);
             gcry_free (export_pwd);
             exported = TRUE;
-        }
-        if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
+        } else if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
             if (g_ascii_strcasecmp (cmdline_opts->export_type, AUTHPRO_ENC_ACTION_NAME) == 0) {
                 export_pwd = get_pwd (_("Type the export encryption password: "), STDIN_FILENO);
                 if (export_pwd == NULL) {

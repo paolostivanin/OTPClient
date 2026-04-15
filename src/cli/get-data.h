@@ -4,7 +4,7 @@
 
 G_BEGIN_DECLS
 
-void show_token         (DatabaseData *db_data,
+gboolean show_token     (DatabaseData *db_data,
                          const gchar  *account,
                          const gchar  *issuer,
                          gboolean      match_exactly,
