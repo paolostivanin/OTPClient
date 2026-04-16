@@ -43,6 +43,22 @@ static const PageInfo welcome_pages[] = {
            "The primary database is loaded automatically on startup.")
     },
     {
+        "folder-symbolic",
+        N_("Organize with Groups"),
+        N_("Organize your tokens into groups for quick filtering.\n\n"
+           "Use the dropdown in the header bar to filter by group, "
+           "or search with the \u201cgroup:\u201d prefix. "
+           "Assign groups by right-clicking a token.")
+    },
+    {
+        "system-search-symbolic",
+        N_("Keyboard Shortcuts & Search"),
+        N_("Use Ctrl+N to add a token, Ctrl+F to search, F2 to edit, "
+           "and Ctrl+? to see all shortcuts.\n\n"
+           "Desktop search integration lets you find tokens from "
+           "GNOME or KDE without opening the app.")
+    },
+    {
         "security-high-symbolic",
         N_("Security"),
         N_("Secret Service integration can store your database password "
@@ -53,11 +69,10 @@ static const PageInfo welcome_pages[] = {
     {
         "preferences-system-symbolic",
         N_("Settings & Backup"),
-        N_("All preferences are in the Settings dialog.\n\n"
-           "You can export and import your settings as JSON from "
-           "Settings \u2192 Backup, or via the CLI:\n"
-           "  otpclient-cli --export-settings\n"
-           "  otpclient-cli --import-settings --file settings.json")
+        N_("All preferences are in the Settings dialog, including "
+           "countdown colors and clipboard auto-clear.\n\n"
+           "Export and import your settings from Settings \u2192 Backup, "
+           "or via the CLI with --export-settings and --import-settings.")
     },
 };
 
@@ -66,9 +81,19 @@ static const PageInfo welcome_pages[] = {
 static const PageInfo whats_new_pages[] = {
     {
         "com.github.paolostivanin.OTPClient",
-        N_("What\u2019s New"),
-        N_("OTPClient has been updated with several improvements.\n\n"
-           "Here\u2019s a summary of the key changes.")
+        N_("A Brand New Look"),
+        N_("OTPClient has been completely redesigned with GTK4 "
+           "and libadwaita.\n\n"
+           "The interface is faster, follows modern GNOME conventions, "
+           "and supports both light and dark themes natively.")
+    },
+    {
+        "folder-symbolic",
+        N_("Token Groups"),
+        N_("Organize your tokens into groups for quick access.\n\n"
+           "Use the dropdown in the header bar to filter by group. "
+           "Right-click a token to assign it, or search with "
+           "the \u201cgroup:\u201d prefix.")
     },
     {
         "drive-harddisk-symbolic",
@@ -78,21 +103,36 @@ static const PageInfo whats_new_pages[] = {
            "or remove it from the list. The primary database loads on startup.")
     },
     {
-        "security-high-symbolic",
-        N_("Secret Service Changes"),
-        N_("Secret Service integration is now disabled by default.\n\n"
-           "When enabled, it stores your database password in the system keyring "
-           "so the app unlocks automatically. You can toggle it in "
-           "Settings \u2192 Security.")
+        "preferences-desktop-keyboard-symbolic",
+        N_("Keyboard Shortcuts"),
+        N_("Common actions now have keyboard shortcuts: Ctrl+N to add, "
+           "Ctrl+F to search, F2 to edit, and more.\n\n"
+           "Press Ctrl+? to see all available shortcuts.")
     },
     {
-        "preferences-system-symbolic",
-        N_("Settings Migration & Export"),
-        N_("Configuration has moved from the config file to GSettings "
-           "(migrated automatically).\n\n"
-           "You can now export and import settings as JSON from "
-           "Settings \u2192 Backup, or via the CLI with --export-settings "
-           "and --import-settings.")
+        "system-search-symbolic",
+        N_("Desktop Search"),
+        N_("Search from GNOME or KDE to find tokens across all "
+           "your databases.\n\n"
+           "In-app search also works across databases. Cross-database "
+           "results show the database name and are read-only.")
+    },
+    {
+        "security-high-symbolic",
+        N_("Security & Settings"),
+        N_("Secret Service integration (keyring) is now disabled by default. "
+           "You can enable it in Settings \u2192 Security.\n\n"
+           "Settings have moved to GSettings (migrated automatically). "
+           "Export and import settings from Settings \u2192 Backup.")
+    },
+    {
+        "starred-symbolic",
+        N_("And More"),
+        N_("Customize countdown colors in Settings. Drag and drop to "
+           "reorder tokens. Undo accidental deletions with a toast "
+           "notification.\n\n"
+           "Import encrypted backups directly in the app with "
+           "inline password fields.")
     },
 };
 
