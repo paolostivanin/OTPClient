@@ -10,6 +10,15 @@ jobs:
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
+  ubuntu2404LTS:
+    docker:
+      - image: ubuntu:24.04
+    steps:
+      - checkout
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+
   debianStable:
     docker:
       - image: debian:stable
@@ -42,6 +51,7 @@ workflows:
   build:
     jobs:
       - ubuntuLatest
+      - ubuntu2404LTS
       - debianStable
       - fedoraLatestStable
       - archlinux

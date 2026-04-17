@@ -46,18 +46,18 @@ sudo make install
 ## Requirements
 | Name                                                | Min Version |
 |-----------------------------------------------------|-------------|
-| GTK                                                 | 4.18.0      |
+| GTK                                                 | 4.10.0      |
 | libadwaita                                          | 1.5.0       |
-| Glib                                                | 2.82.0      |
-| jansson                                             | 2.14        |
-| libgcrypt                                           | 1.11.0      |
-| libpng                                              | 1.6.30      |
+| Glib                                                | 2.74.0      |
+| jansson                                             | 2.13        |
+| libgcrypt                                           | 1.10.1      |
+| libpng                                              | 1.6.0       |
 | [libcotp](https://github.com/paolostivanin/libcotp) | 4.0.0       |
 | zbar                                                | 0.20        |
-| protobuf-c                                          | 1.4.0       |
-| uuid                                                | 2.34        |
+| protobuf-c                                          | 1.3.0       |
+| uuid                                                | 2.30        |
 | libsecret                                           | 0.20        |
-| qrencode                                            | 4.1.0       |
+| qrencode                                            | 4.0.0       |
 
 **Note:** The system memlock limit should be at least 64 MB. Lower values may cause issues when handling many tokens, especially when importing third-party backups. See the [wiki](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for how to check and adjust this.
 
