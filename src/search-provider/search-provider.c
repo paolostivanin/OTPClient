@@ -4,6 +4,7 @@
 #include <libsecret/secret.h>
 #include <gcrypt.h>
 #include <cotp.h>
+#include <string.h>
 #include <time.h>
 
 /* Project-specific headers */
@@ -32,6 +33,7 @@ static GPtrArray *load_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
 static void send_notification (const gchar *label, const gchar *otp_value);
+static void copy_to_clipboard (const gchar *otp_value, gboolean is_kde);
 static gchar *get_db_path (void);
 static gboolean get_use_secret_service (void);
 static gboolean get_search_provider_enabled (void);
@@ -208,6 +210,45 @@ static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms,
     return TRUE;
 }
 
+static gboolean copy_via_klipper (const gchar *otp_value) {
+    GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+    if (!conn) return FALSE;
+    GError *err = NULL;
+    GVariant *result = g_dbus_connection_call_sync (conn,
+            "org.kde.klipper", "/klipper", "org.kde.klipper.klipper",
+            "setClipboardContents", g_variant_new ("(s)", otp_value),
+            NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, &err);
+    g_object_unref (conn);
+    if (err) { g_error_free (err); return FALSE; }
+    if (result) g_variant_unref (result);
+    return TRUE;
+}
+
+static gboolean copy_via_subprocess (const gchar *otp_value) {
+    const gchar *session = g_getenv ("XDG_SESSION_TYPE");
+    gboolean is_wayland = (session && g_ascii_strcasecmp (session, "wayland") == 0);
+    const gchar *argv_wl[] = { "wl-copy", NULL };
+    const gchar *argv_x11[] = { "xclip", "-selection", "clipboard", NULL };
+    const gchar **argv = is_wayland ? argv_wl : argv_x11;
+    GError *err = NULL;
+    GSubprocess *proc = g_subprocess_newv (argv,
+            G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE,
+            &err);
+    if (!proc) { if (err) g_error_free (err); return FALSE; }
+    GBytes *input = g_bytes_new (otp_value, strlen (otp_value));
+    gboolean ok = g_subprocess_communicate (proc, input, NULL, NULL, NULL, &err);
+    g_bytes_unref (input);
+    if (err) g_error_free (err);
+    g_object_unref (proc);
+    return ok;
+}
+
+static void copy_to_clipboard (const gchar *otp_value, gboolean is_kde) {
+    if (!otp_value) return;
+    if (is_kde && copy_via_klipper (otp_value)) return;
+    copy_via_subprocess (otp_value);
+}
+
 static void send_notification (const gchar *label, const gchar *otp_value) {
     if (!otp_value) return;
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
@@ -284,6 +325,7 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
             }
         }
         g_ptr_array_free (entries, TRUE);
+        copy_to_clipboard (otp, FALSE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else { g_dbus_method_invocation_return_value (inv, NULL); }
@@ -331,6 +373,7 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
             }
         }
         g_ptr_array_free (entries, TRUE);
+        copy_to_clipboard (otp, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else if (g_strcmp0 (method, "Actions") == 0) {
