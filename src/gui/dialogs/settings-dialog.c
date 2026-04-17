@@ -466,13 +466,13 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_set_title (backup_group, _("Backup"));
 
     GtkWidget *export_row = otp_button_row_new ();
-    otp_button_row_set_text (OTP_BUTTON_ROW (export_row), _("Export Settings"));
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (export_row), _("Export Settings"));
     g_signal_connect (export_row, "activated",
                       G_CALLBACK (on_export_settings_clicked), self);
     adw_preferences_group_add (backup_group, export_row);
 
     GtkWidget *import_row = otp_button_row_new ();
-    otp_button_row_set_text (OTP_BUTTON_ROW (import_row), _("Import Settings"));
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (import_row), _("Import Settings"));
     g_signal_connect (import_row, "activated",
                       G_CALLBACK (on_import_settings_clicked), self);
     adw_preferences_group_add (backup_group, import_row);
