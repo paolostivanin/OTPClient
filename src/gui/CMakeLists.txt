@@ -11,6 +11,7 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/src/gui/gui.gresource.xml
         ${PROJECT_SOURCE_DIR}/src/gui/ui/window.ui
         ${PROJECT_SOURCE_DIR}/src/gui/ui/shortcuts-window.ui
+        ${PROJECT_SOURCE_DIR}/src/gui/ui/otp-button-row.css
 )
 
 file(GLOB GUI_HEADER_FILES

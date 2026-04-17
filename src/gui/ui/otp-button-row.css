@@ -1,0 +1,16 @@
+row.button-row > box.header {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+row.button-row label {
+  font-weight: bold;
+}
+
+row.button-row:hover {
+  background-color: alpha(currentColor, 0.07);
+}
+
+row.button-row:active {
+  background-color: alpha(currentColor, 0.16);
+}
