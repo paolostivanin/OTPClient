@@ -1,5 +1,7 @@
 #include "otp-button-row.h"
 
+#if !ADW_CHECK_VERSION(1, 6, 0)
+
 struct _OtpButtonRow
 {
     AdwPreferencesRow parent_instance;
@@ -9,7 +11,6 @@ struct _OtpButtonRow
     GtkWidget *label;
     GtkWidget *end_image;
 
-    gchar *text;
     gchar *start_icon_name;
     gchar *end_icon_name;
 };
@@ -17,7 +18,6 @@ struct _OtpButtonRow
 enum
 {
     PROP_0,
-    PROP_TEXT,
     PROP_START_ICON_NAME,
     PROP_END_ICON_NAME,
     N_PROPS
@@ -90,7 +90,6 @@ otp_button_row_finalize (GObject *object)
 {
     OtpButtonRow *self = OTP_BUTTON_ROW (object);
 
-    g_clear_pointer (&self->text, g_free);
     g_clear_pointer (&self->start_icon_name, g_free);
     g_clear_pointer (&self->end_icon_name, g_free);
 
@@ -107,9 +106,6 @@ otp_button_row_get_property (GObject    *object,
 
     switch (prop_id)
     {
-        case PROP_TEXT:
-            g_value_set_string (value, self->text);
-            break;
         case PROP_START_ICON_NAME:
             g_value_set_string (value, self->start_icon_name);
             break;
@@ -131,9 +127,6 @@ otp_button_row_set_property (GObject      *object,
 
     switch (prop_id)
     {
-        case PROP_TEXT:
-            otp_button_row_set_text (self, g_value_get_string (value));
-            break;
         case PROP_START_ICON_NAME:
             otp_button_row_set_start_icon_name (self, g_value_get_string (value));
             break;
@@ -148,8 +141,8 @@ otp_button_row_set_property (GObject      *object,
 static void
 otp_button_row_class_init (OtpButtonRowClass *klass)
 {
-    GObjectClass      *object_class = G_OBJECT_CLASS (klass);
-    GtkListBoxRowClass *row_class   = GTK_LIST_BOX_ROW_CLASS (klass);
+    GObjectClass       *object_class = G_OBJECT_CLASS (klass);
+    GtkListBoxRowClass *row_class    = GTK_LIST_BOX_ROW_CLASS (klass);
 
     object_class->finalize     = otp_button_row_finalize;
     object_class->get_property = otp_button_row_get_property;
@@ -157,9 +150,6 @@ otp_button_row_class_init (OtpButtonRowClass *klass)
 
     row_class->activate = otp_button_row_activate_impl;
 
-    properties[PROP_TEXT] =
-        g_param_spec_string ("text", NULL, NULL, NULL,
-                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
     properties[PROP_START_ICON_NAME] =
         g_param_spec_string ("start-icon-name", NULL, NULL, NULL,
                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
@@ -203,34 +193,16 @@ otp_button_row_init (OtpButtonRow *self)
     gtk_box_append (GTK_BOX (self->box), self->end_image);
 
     gtk_list_box_row_set_child (GTK_LIST_BOX_ROW (self), self->box);
+
+    g_object_bind_property (self, "title",
+                            self->label, "label",
+                            G_BINDING_SYNC_CREATE);
 }
 
 GtkWidget *
 otp_button_row_new (void)
 {
     return g_object_new (OTP_TYPE_BUTTON_ROW, NULL);
-}
-
-const gchar *
-otp_button_row_get_text (OtpButtonRow *self)
-{
-    g_return_val_if_fail (OTP_IS_BUTTON_ROW (self), NULL);
-    return self->text;
-}
-
-void
-otp_button_row_set_text (OtpButtonRow *self,
-                         const gchar  *text)
-{
-    g_return_if_fail (OTP_IS_BUTTON_ROW (self));
-
-    if (g_strcmp0 (self->text, text) == 0)
-        return;
-
-    g_free (self->text);
-    self->text = g_strdup (text);
-    gtk_label_set_label (GTK_LABEL (self->label), text != NULL ? text : "");
-    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TEXT]);
 }
 
 const gchar *
@@ -276,3 +248,5 @@ otp_button_row_set_end_icon_name (OtpButtonRow *self,
     update_end_icon (self);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_END_ICON_NAME]);
 }
+
+#endif /* !ADW_CHECK_VERSION(1, 6, 0) */
