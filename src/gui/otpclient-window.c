@@ -891,6 +891,23 @@ otpclient_window_hide_loading (OTPClientWindow *self)
     update_empty_state (self);
 }
 
+void
+otpclient_window_set_locked_indicator (OTPClientWindow *self,
+                                        gboolean         locked)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    if (self->lock_button == NULL)
+        return;
+
+    if (locked) {
+        gtk_button_set_icon_name (GTK_BUTTON (self->lock_button), "changes-prevent-symbolic");
+        gtk_widget_set_tooltip_text (self->lock_button, _("Database is locked"));
+    } else {
+        gtk_button_set_icon_name (GTK_BUTTON (self->lock_button), "system-lock-screen-symbolic");
+        gtk_widget_set_tooltip_text (self->lock_button, _("Lock database"));
+    }
+}
+
 static void
 setup_otp_view (OTPClientWindow *self)
 {
@@ -1529,9 +1546,17 @@ static void
 setup_dnd (OTPClientWindow *self)
 {
     self->dnd_css_provider = gtk_css_provider_new ();
+    /* 3 px solid bar plus a soft outer glow so the indicator stays visible across
+     * light and dark themes regardless of the row's own background. The negative
+     * margin pulls the bar to the row edge so adjacent rows' borders don't cancel
+     * out the highlight visually. */
     gtk_css_provider_load_from_string (self->dnd_css_provider,
-        ".drop-above { border-top: 2px solid @accent_color; }"
-        ".drop-below { border-bottom: 2px solid @accent_color; }");
+        "row.drop-above {"
+        "  box-shadow: inset 0 3px 0 0 @accent_bg_color, 0 -1px 4px alpha(@accent_bg_color, 0.4);"
+        "}"
+        "row.drop-below {"
+        "  box-shadow: inset 0 -3px 0 0 @accent_bg_color, 0 1px 4px alpha(@accent_bg_color, 0.4);"
+        "}");
     gtk_style_context_add_provider_for_display (
         gtk_widget_get_display (GTK_WIDGET (self)),
         GTK_STYLE_PROVIDER (self->dnd_css_provider),

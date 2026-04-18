@@ -33,4 +33,7 @@ void                otpclient_window_rebuild_groups  (OTPClientWindow *self);
 void                otpclient_window_show_loading    (OTPClientWindow *self);
 void                otpclient_window_hide_loading    (OTPClientWindow *self);
 
+void                otpclient_window_set_locked_indicator (OTPClientWindow *self,
+                                                           gboolean         locked);
+
 G_END_DECLS

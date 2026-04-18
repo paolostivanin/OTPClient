@@ -3,6 +3,7 @@
 #include "manual-add-dialog.h"
 #include "common.h"
 #include "db-common.h"
+#include "parse-uri.h"
 
 struct _ManualAddDialog
 {
@@ -26,6 +27,8 @@ struct _ManualAddDialog
     GtkWidget *add_button;
     GtkWidget *error_label;
     GtkWidget *sha1_banner;
+
+    gboolean applying_uri;  /* re-entrancy guard while populating fields */
 };
 
 G_DEFINE_FINAL_TYPE (ManualAddDialog, manual_add_dialog, ADW_TYPE_DIALOG)
@@ -41,11 +44,80 @@ update_add_sensitivity (ManualAddDialog *self)
     gtk_widget_set_sensitive (self->add_button, sensitive);
 }
 
+static gboolean
+try_apply_otpauth_uri (ManualAddDialog *self,
+                       const gchar     *text)
+{
+    if (text == NULL || g_ascii_strncasecmp (text, "otpauth://", 10) != 0)
+        return FALSE;
+
+    GSList *otps = NULL;
+    set_otps_from_uris (text, &otps);
+    if (otps == NULL)
+        return FALSE;
+
+    otp_t *otp = otps->data;
+    if (otp == NULL || otp->secret == NULL || otp->type == NULL) {
+        free_otps_gslist (otps, g_slist_length (otps));
+        return FALSE;
+    }
+
+    self->applying_uri = TRUE;
+
+    gtk_editable_set_text (GTK_EDITABLE (self->secret_row), otp->secret);
+    if (otp->account_name != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->label_row), otp->account_name);
+    if (otp->issuer != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->issuer_row), otp->issuer);
+
+    gboolean is_hotp = (g_ascii_strcasecmp (otp->type, "HOTP") == 0);
+    adw_combo_row_set_selected (ADW_COMBO_ROW (self->type_combo), is_hotp ? 1 : 0);
+
+    if (otp->algo != NULL) {
+        guint algo_idx = 0;
+        if (g_ascii_strcasecmp (otp->algo, "SHA256") == 0) algo_idx = 1;
+        else if (g_ascii_strcasecmp (otp->algo, "SHA512") == 0) algo_idx = 2;
+        adw_combo_row_set_selected (ADW_COMBO_ROW (self->algo_combo), algo_idx);
+    }
+
+    if (otp->digits >= 4 && otp->digits <= 10)
+        adw_spin_row_set_value (ADW_SPIN_ROW (self->digits_spin), (double) otp->digits);
+
+    if (is_hotp) {
+        adw_spin_row_set_value (ADW_SPIN_ROW (self->counter_spin), (double) otp->counter);
+    } else if (otp->period > 0 && otp->period <= 300) {
+        adw_spin_row_set_value (ADW_SPIN_ROW (self->period_spin), (double) otp->period);
+    }
+
+    free_otps_gslist (otps, g_slist_length (otps));
+
+    self->applying_uri = FALSE;
+    return TRUE;
+}
+
 static void
 on_field_changed (GtkEditable     *editable,
                   ManualAddDialog *self)
 {
     (void) editable;
+    update_add_sensitivity (self);
+    gtk_widget_set_visible (self->error_label, FALSE);
+}
+
+static void
+on_secret_changed (GtkEditable     *editable,
+                   ManualAddDialog *self)
+{
+    if (self->applying_uri) {
+        update_add_sensitivity (self);
+        return;
+    }
+
+    const gchar *text = gtk_editable_get_text (editable);
+    if (text != NULL && g_ascii_strncasecmp (text, "otpauth://", 10) == 0) {
+        try_apply_otpauth_uri (self, text);
+    }
+
     update_add_sensitivity (self);
     gtk_widget_set_visible (self->error_label, FALSE);
 }
@@ -216,8 +288,8 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (details_group), self->group_row);
 
     self->secret_row = adw_entry_row_new ();
-    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->secret_row), _("Secret (Base32)"));
-    g_signal_connect (self->secret_row, "changed", G_CALLBACK (on_field_changed), self);
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->secret_row), _("Secret (Base32) or otpauth:// URI"));
+    g_signal_connect (self->secret_row, "changed", G_CALLBACK (on_secret_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (details_group), self->secret_row);
 
     gtk_box_append (GTK_BOX (box), details_group);

@@ -8,13 +8,28 @@ struct _KdfDialog
 
     DatabaseData *db_data;
 
+    GtkWidget *preset_combo;
     GtkWidget *iter_spin;
     GtkWidget *memcost_spin;
     GtkWidget *parallelism_spin;
     GtkWidget *error_label;
+
+    gboolean applying_preset;  /* re-entrancy guard */
 };
 
 G_DEFINE_FINAL_TYPE (KdfDialog, kdf_dialog, ADW_TYPE_DIALOG)
+
+/* Index 3 = Custom; the first three rows are honored presets. */
+static const struct {
+    gint32 iter;
+    gint32 memcost;   /* KiB */
+    gint32 parallelism;
+} kdf_presets[] = {
+    { 3, 131072, 2 },   /* Standard  — 128 MiB */
+    { 5, 262144, 4 },   /* Strong    — 256 MiB */
+    { 8, 524288, 4 },   /* Paranoid  — 512 MiB */
+};
+#define KDF_PRESET_CUSTOM 3
 
 static void
 kdf_dialog_init (KdfDialog *self)
@@ -26,6 +41,56 @@ static void
 kdf_dialog_class_init (KdfDialogClass *klass)
 {
     (void) klass;
+}
+
+static guint
+detect_preset_index (gint32 iter, gint32 memcost, gint32 parallelism)
+{
+    for (guint i = 0; i < G_N_ELEMENTS (kdf_presets); i++) {
+        if (kdf_presets[i].iter == iter &&
+            kdf_presets[i].memcost == memcost &&
+            kdf_presets[i].parallelism == parallelism)
+            return i;
+    }
+    return KDF_PRESET_CUSTOM;
+}
+
+static void
+on_preset_changed (AdwComboRow *combo_row,
+                    GParamSpec  *pspec,
+                    KdfDialog   *self)
+{
+    (void) pspec;
+    guint idx = adw_combo_row_get_selected (combo_row);
+    if (idx >= G_N_ELEMENTS (kdf_presets))
+        return;  /* Custom — leave spins as-is */
+
+    self->applying_preset = TRUE;
+    adw_spin_row_set_value (ADW_SPIN_ROW (self->iter_spin), kdf_presets[idx].iter);
+    adw_spin_row_set_value (ADW_SPIN_ROW (self->memcost_spin), kdf_presets[idx].memcost);
+    adw_spin_row_set_value (ADW_SPIN_ROW (self->parallelism_spin), kdf_presets[idx].parallelism);
+    self->applying_preset = FALSE;
+}
+
+static void
+on_spin_changed (AdwSpinRow  *spin_row,
+                  GParamSpec  *pspec,
+                  KdfDialog   *self)
+{
+    (void) spin_row;
+    (void) pspec;
+    if (self->applying_preset)
+        return;
+    /* User edited a spin row — reflect that the values may no longer match a preset. */
+    double iter_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->iter_spin));
+    double mc_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->memcost_spin));
+    double par_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->parallelism_spin));
+    guint idx = detect_preset_index ((gint32) iter_d, (gint32) mc_d, (gint32) par_d);
+    if (adw_combo_row_get_selected (ADW_COMBO_ROW (self->preset_combo)) != idx) {
+        self->applying_preset = TRUE;  /* avoid bouncing back through on_preset_changed */
+        adw_combo_row_set_selected (ADW_COMBO_ROW (self->preset_combo), idx);
+        self->applying_preset = FALSE;
+    }
 }
 
 static void
@@ -129,6 +194,24 @@ kdf_dialog_new (DatabaseData *db_data)
     GtkWidget *new_group = adw_preferences_group_new ();
     adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (new_group), _("New Values"));
 
+    /* Preset selector — Standard / Strong / Paranoid / Custom */
+    const char * const preset_names[] = {
+        N_("Standard (128 MiB)"),
+        N_("Strong (256 MiB)"),
+        N_("Paranoid (512 MiB)"),
+        N_("Custom"),
+        NULL
+    };
+    const char *preset_translated[5];
+    for (guint i = 0; preset_names[i] != NULL; i++)
+        preset_translated[i] = _(preset_names[i]);
+    preset_translated[4] = NULL;
+    GtkStringList *preset_model = gtk_string_list_new (preset_translated);
+    self->preset_combo = adw_combo_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->preset_combo), _("Preset"));
+    adw_combo_row_set_model (ADW_COMBO_ROW (self->preset_combo), G_LIST_MODEL (preset_model));
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->preset_combo);
+
     self->iter_spin = adw_spin_row_new_with_range (2, 64, 1);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->iter_spin), _("Iterations"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->iter_spin), db_data->argon2id_iter);
@@ -143,6 +226,18 @@ kdf_dialog_new (DatabaseData *db_data)
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->parallelism_spin), _("Parallelism"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->parallelism_spin), db_data->argon2id_parallelism);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->parallelism_spin);
+
+    /* Initialize preset selection from current values, then wire signals to avoid
+     * spurious cross-talk during construction. */
+    guint cur_preset = detect_preset_index (db_data->argon2id_iter,
+                                              db_data->argon2id_memcost,
+                                              db_data->argon2id_parallelism);
+    adw_combo_row_set_selected (ADW_COMBO_ROW (self->preset_combo), cur_preset);
+
+    g_signal_connect (self->preset_combo, "notify::selected", G_CALLBACK (on_preset_changed), self);
+    g_signal_connect (self->iter_spin, "notify::value", G_CALLBACK (on_spin_changed), self);
+    g_signal_connect (self->memcost_spin, "notify::value", G_CALLBACK (on_spin_changed), self);
+    g_signal_connect (self->parallelism_spin, "notify::value", G_CALLBACK (on_spin_changed), self);
 
     gtk_box_append (GTK_BOX (box), new_group);
 

@@ -388,14 +388,28 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (security_group, self->auto_lock_switch);
 
     const char * const timeout_items[] = {
-        "1 minute", "2 minutes", "5 minutes", "10 minutes",
-        "15 minutes", "30 minutes", "1 hour", NULL
+        N_("1 minute"), N_("2 minutes"), N_("5 minutes"), N_("10 minutes"),
+        N_("15 minutes"), N_("30 minutes"), N_("1 hour"), NULL
     };
-    GtkStringList *timeout_model = gtk_string_list_new (timeout_items);
+    static const gint inactivity_values[] = { 60, 120, 300, 600, 900, 1800, 3600 };
+    const char *timeout_translated[G_N_ELEMENTS (inactivity_values) + 1];
+    for (guint i = 0; i < G_N_ELEMENTS (inactivity_values); i++)
+        timeout_translated[i] = _(timeout_items[i]);
+    timeout_translated[G_N_ELEMENTS (inactivity_values)] = NULL;
+    GtkStringList *timeout_model = gtk_string_list_new (timeout_translated);
     self->inactivity_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->inactivity_combo),
                                     _("Inactivity Timeout"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->inactivity_combo), G_LIST_MODEL (timeout_model));
+    /* Sync the selection to the current stored value so reopening the dialog
+     * shows what's actually configured rather than always defaulting to row 0. */
+    guint current_inactivity = (guint) otpclient_application_get_inactivity_timeout (app);
+    for (guint i = 0; i < G_N_ELEMENTS (inactivity_values); i++) {
+        if ((guint) inactivity_values[i] == current_inactivity) {
+            adw_combo_row_set_selected (ADW_COMBO_ROW (self->inactivity_combo), i);
+            break;
+        }
+    }
     gtk_widget_set_sensitive (self->inactivity_combo,
                               otpclient_application_get_auto_lock (app));
     g_signal_connect (self->inactivity_combo, "notify::selected",
@@ -403,11 +417,15 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (security_group, self->inactivity_combo);
 
     const char * const clip_timeout_items[] = {
-        "Never", "10 seconds", "15 seconds", "30 seconds",
-        "1 minute", "2 minutes", NULL
+        N_("Never"), N_("10 seconds"), N_("15 seconds"), N_("30 seconds"),
+        N_("1 minute"), N_("2 minutes"), NULL
     };
     static const guint clip_timeout_values[] = { 0, 10, 15, 30, 60, 120 };
-    GtkStringList *clip_timeout_model = gtk_string_list_new (clip_timeout_items);
+    const char *clip_translated[G_N_ELEMENTS (clip_timeout_values) + 1];
+    for (guint i = 0; i < G_N_ELEMENTS (clip_timeout_values); i++)
+        clip_translated[i] = _(clip_timeout_items[i]);
+    clip_translated[G_N_ELEMENTS (clip_timeout_values)] = NULL;
+    GtkStringList *clip_timeout_model = gtk_string_list_new (clip_translated);
     self->clipboard_clear_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->clipboard_clear_combo),
                                     _("Clear Clipboard After"));

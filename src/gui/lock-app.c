@@ -61,6 +61,9 @@ lock_app_lock (OTPClientApplication *app)
     if (win == NULL)
         return;
 
+    if (OTPCLIENT_IS_WINDOW (win))
+        otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
+
     /* Show password dialog to unlock */
     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                on_unlock_password,
@@ -72,6 +75,10 @@ void
 lock_app_unlock (OTPClientApplication *app)
 {
     otpclient_application_set_app_locked (app, FALSE);
+
+    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    if (win != NULL && OTPCLIENT_IS_WINDOW (win))
+        otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), FALSE);
 
     if (lock_data != NULL)
         lock_data->last_user_activity = g_get_monotonic_time ();
