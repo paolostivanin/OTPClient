@@ -38,6 +38,7 @@ struct _OTPClientWindow
     GtkWidget *new_db_button;
     GtkWidget *open_db_button;
     GtkWidget *otp_list;
+    GtkWidget *content_stack;
     GListStore *otp_store;
     GtkFilterListModel *filter_model;
     GtkCustomFilter *search_filter;
@@ -101,6 +102,26 @@ validity_widgets_free (ValidityWidgets *widgets)
         g_source_remove (widgets->timeout_id);
 
     g_free (widgets);
+}
+
+G_GNUC_PRINTF (2, 3)
+static void
+show_error_toast (OTPClientWindow *self, const gchar *format, ...)
+{
+    if (self == NULL || self->toast_overlay == NULL)
+        return;
+
+    va_list args;
+    va_start (args, format);
+    g_autofree gchar *msg = g_strdup_vprintf (format, args);
+    va_end (args);
+
+    // Mirror to the journal so failures stay debuggable from logs.
+    g_warning ("%s", msg);
+
+    AdwToast *toast = adw_toast_new (msg);
+    adw_toast_set_timeout (toast, 6);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
 }
 
 static void
@@ -833,9 +854,36 @@ search_filter_func (gpointer item,
 }
 
 static void
+update_empty_state (OTPClientWindow *self)
+{
+    if (self->content_stack == NULL || self->otp_store == NULL)
+        return;
+
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack),
+                                      n_items > 0 ? "list" : "empty");
+}
+
+static void
+on_otp_store_items_changed (GListModel *model,
+                            guint       position,
+                            guint       removed,
+                            guint       added,
+                            gpointer    user_data)
+{
+    (void) model;
+    (void) position;
+    (void) removed;
+    (void) added;
+    update_empty_state (OTPCLIENT_WINDOW (user_data));
+}
+
+static void
 setup_otp_view (OTPClientWindow *self)
 {
     self->otp_store = G_LIST_STORE (g_object_ref_sink (g_list_store_new (OTP_TYPE_ENTRY)));
+    g_signal_connect (self->otp_store, "items-changed",
+                      G_CALLBACK (on_otp_store_items_changed), self);
 
     self->search_filter = gtk_custom_filter_new (search_filter_func, self, NULL);
     self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),
@@ -1455,7 +1503,7 @@ on_drop (GtkDropTarget *target,
             update_db (db_data, &err);
             if (err != NULL)
             {
-                g_warning ("Failed to update db after reorder: %s", err->message);
+                show_error_toast (self, _("Failed to save reordered tokens: %s"), err->message);
                 g_clear_error (&err);
             }
         }
@@ -1808,7 +1856,7 @@ on_qr_file_selected (GObject      *source,
     GError *err = NULL;
     gchar *otpauth_uri = qrcode_parse_image_file (path, &err);
     if (otpauth_uri == NULL) {
-        g_warning ("QR parse failed: %s", err ? err->message : "unknown");
+        show_error_toast (self, _("Could not read QR code: %s"), err ? err->message : _("unknown error"));
         g_clear_error (&err);
         return;
     }
@@ -1835,7 +1883,7 @@ on_qr_file_selected (GObject      *source,
         free_otps_gslist (otps, g_slist_length (otps));
         update_db (db_data, &err);
         if (err != NULL) {
-            g_warning ("Failed to update DB: %s", err->message);
+            show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
             g_clear_error (&err);
         } else {
             reload_db (db_data, &err);
@@ -1893,7 +1941,7 @@ action_add_qr_webcam (GtkWidget  *widget,
     GError *err = NULL;
     gchar *otpauth_uri = webcam_scan_qrcode (&err);
     if (otpauth_uri == NULL) {
-        g_warning ("Webcam scan failed: %s", err ? err->message : "unknown");
+        show_error_toast (self, _("Webcam scan failed: %s"), err ? err->message : _("unknown error"));
         g_clear_error (&err);
         return;
     }
@@ -1907,7 +1955,7 @@ action_add_qr_webcam (GtkWidget  *widget,
         free_otps_gslist (otps, g_slist_length (otps));
         update_db (db_data, &err);
         if (err != NULL) {
-            g_warning ("Failed to update DB: %s", err->message);
+            show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
             g_clear_error (&err);
         } else {
             reload_db (db_data, &err);
@@ -2045,7 +2093,7 @@ on_undo_delete (AdwToast *toast,
     GError *err = NULL;
     update_db (db_data, &err);
     if (err != NULL) {
-        g_warning ("Failed to update DB after undo: %s", err->message);
+        show_error_toast (self, _("Failed to restore deleted token: %s"), err->message);
         g_clear_error (&err);
         return;
     }
@@ -2088,7 +2136,7 @@ on_delete_response (AdwAlertDialog *dialog,
     GError *err = NULL;
     update_db (db_data, &err);
     if (err != NULL) {
-        g_warning ("Failed to update DB after delete: %s", err->message);
+        show_error_toast (self, _("Failed to delete token: %s"), err->message);
         g_clear_error (&err);
         json_decref (self->deleted_token);
         self->deleted_token = NULL;
@@ -2232,7 +2280,7 @@ on_move_target_password (const gchar *password,
     load_db (target, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to open target database: %s", err->message);
+        show_error_toast (self, _("Could not open target database: %s"), err->message);
         g_clear_error (&err);
         gcry_free (target->key);
         g_free (target->db_path);
@@ -2250,7 +2298,7 @@ on_move_target_password (const gchar *password,
     update_db (target, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to save token to target database: %s", err->message);
+        show_error_toast (self, _("Could not write token to target database: %s"), err->message);
         g_clear_error (&err);
     }
     else
@@ -2263,7 +2311,7 @@ on_move_target_password (const gchar *password,
             update_db (src, &err);
             if (err != NULL)
             {
-                g_warning ("Failed to update source database: %s", err->message);
+                show_error_toast (self, _("Could not remove token from source database: %s"), err->message);
                 g_clear_error (&err);
             }
             on_db_modified (self);
@@ -2436,7 +2484,7 @@ action_set_group (GtkWidget  *widget,
     update_db (db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to update db after group change: %s", err->message);
+        show_error_toast (self, _("Failed to change group: %s"), err->message);
         g_clear_error (&err);
         return;
     }
@@ -2482,7 +2530,7 @@ action_remove_from_group (GtkWidget  *widget,
     update_db (db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to update db after group removal: %s", err->message);
+        show_error_toast (self, _("Failed to remove token from group: %s"), err->message);
         g_clear_error (&err);
         return;
     }
@@ -2540,7 +2588,7 @@ on_new_group_response (AdwAlertDialog  *dialog,
         update_db (db_data, &err);
         if (err != NULL)
         {
-            g_warning ("Failed to update db after new group: %s", err->message);
+            show_error_toast (ctx->self, _("Failed to assign group: %s"), err->message);
             g_clear_error (&err);
         }
         else
@@ -2808,7 +2856,7 @@ on_new_db_password_received (const gchar *password,
     update_db (db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to create new database: %s", err->message);
+        show_error_toast (self, _("Could not create database: %s"), err->message);
         g_clear_error (&err);
         gcry_free (db_data->key);
         g_free (db_data->db_path);
@@ -2820,7 +2868,7 @@ on_new_db_password_received (const gchar *password,
     load_db (db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to load new database: %s", err->message);
+        show_error_toast (self, _("Created database but could not reload it: %s"), err->message);
         g_clear_error (&err);
     }
 
@@ -2926,7 +2974,7 @@ on_open_db_password_received (const gchar *password,
     load_db (db_data, &err);
     if (err != NULL)
     {
-        g_warning ("Failed to load database: %s", err->message);
+        show_error_toast (self, _("Could not open database: %s"), err->message);
         g_clear_error (&err);
         gcry_free (db_data->key);
         g_free (db_data->db_path);
@@ -3269,6 +3317,7 @@ otpclient_window_init (OTPClientWindow *self)
 
     setup_otp_view (self);
     setup_database_list (self);
+    update_empty_state (self);
 
     /* Initialize group dropdown with default model */
     self->group_list_model = gtk_string_list_new (NULL);
@@ -3335,6 +3384,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, new_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
 
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);
