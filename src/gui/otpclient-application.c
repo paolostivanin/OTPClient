@@ -364,20 +364,38 @@ otpclient_application_activate (GApplication *application)
     gtk_window_present (GTK_WINDOW(self->window));
 }
 
+static void on_password_received (const gchar *password, gpointer user_data);
+
 static void
-on_password_received (const gchar *password,
-                      gpointer     user_data)
+unlock_db_thread (GTask        *task,
+                  gpointer      source_object,
+                  gpointer      task_data,
+                  GCancellable *cancellable)
 {
+    (void) source_object;
+    (void) cancellable;
+    DatabaseData *db_data = task_data;
+    GError *err = NULL;
+    load_db (db_data, &err);
+    if (err != NULL)
+        g_task_return_error (task, err);
+    else
+        g_task_return_boolean (task, TRUE);
+}
+
+static void
+on_unlock_done (GObject      *source_object,
+                GAsyncResult *result,
+                gpointer      user_data)
+{
+    (void) source_object;
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
-    if (password == NULL || self->db_data == NULL)
-        return;
-
-    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
-    memcpy (self->db_data->key, password, strlen (password) + 1);
+    if (self->window != NULL)
+        otpclient_window_hide_loading (self->window);
 
     GError *err = NULL;
-    load_db (self->db_data, &err);
+    g_task_propagate_boolean (G_TASK (result), &err);
     if (err != NULL)
     {
         g_warning ("Failed to load database: %s", err->message);
@@ -419,6 +437,27 @@ on_password_received (const gchar *password,
     populate_window_from_db (self);
     if (self->window != NULL)
         otpclient_window_start_otp_timer (self->window);
+}
+
+static void
+on_password_received (const gchar *password,
+                      gpointer     user_data)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+
+    if (password == NULL || self->db_data == NULL)
+        return;
+
+    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (self->db_data->key, password, strlen (password) + 1);
+
+    if (self->window != NULL)
+        otpclient_window_show_loading (self->window);
+
+    GTask *task = g_task_new (self, self->cancellable, on_unlock_done, self);
+    g_task_set_task_data (task, self->db_data, NULL);
+    g_task_run_in_thread (task, unlock_db_thread);
+    g_object_unref (task);
 }
 
 static void

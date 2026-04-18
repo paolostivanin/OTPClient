@@ -878,6 +878,22 @@ on_otp_store_items_changed (GListModel *model,
     update_empty_state (OTPCLIENT_WINDOW (user_data));
 }
 
+void
+otpclient_window_show_loading (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    if (self->content_stack == NULL)
+        return;
+    gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "loading");
+}
+
+void
+otpclient_window_hide_loading (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    update_empty_state (self);
+}
+
 static void
 setup_otp_view (OTPClientWindow *self)
 {

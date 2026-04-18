@@ -30,4 +30,7 @@ void                otpclient_window_invalidate_cross_db (OTPClientWindow *self)
 
 void                otpclient_window_rebuild_groups  (OTPClientWindow *self);
 
+void                otpclient_window_show_loading    (OTPClientWindow *self);
+void                otpclient_window_hide_loading    (OTPClientWindow *self);
+
 G_END_DECLS
