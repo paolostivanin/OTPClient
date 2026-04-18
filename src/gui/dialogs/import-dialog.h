@@ -9,7 +9,12 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (ImportDialog, import_dialog, IMPORT, DIALOG, AdwDialog)
 
-typedef void (*ImportCallback) (gpointer user_data);
+typedef struct {
+    guint added;       /* tokens appended to the database */
+    guint skipped;     /* duplicates ignored */
+} ImportSummary;
+
+typedef void (*ImportCallback) (const ImportSummary *summary, gpointer user_data);
 
 ImportDialog *import_dialog_new (DatabaseData   *db_data,
                                  GtkWidget      *parent,

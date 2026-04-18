@@ -27,19 +27,23 @@ struct _ImportDialog
 
 G_DEFINE_FINAL_TYPE (ImportDialog, import_dialog, ADW_TYPE_DIALOG)
 
+/* Per-format filter spec: NULL pattern lists fall back to "All files".
+ * Patterns are case-insensitive thanks to gtk_file_filter_add_suffix. */
 static const struct {
     const gchar *label;
     const gchar *action_name;
     gboolean needs_password;
+    const gchar *filter_label;          /* shown in the file picker dropdown */
+    const gchar *filter_suffixes[3];    /* NULL-terminated; e.g. {"json", NULL} */
 } import_formats[] = {
-    { "FreeOTP+ (Plain)",       FREEOTPPLUS_PLAIN_ACTION_NAME,  FALSE },
-    { "Aegis (Plain JSON)",     AEGIS_PLAIN_ACTION_NAME,        FALSE },
-    { "Aegis (Encrypted)",      AEGIS_ENC_ACTION_NAME,          TRUE  },
-    { "AuthPro (Plain JSON)",   AUTHPRO_PLAIN_ACTION_NAME,      FALSE },
-    { "AuthPro (Encrypted)",    AUTHPRO_ENC_ACTION_NAME,        TRUE  },
-    { "2FAS (Plain JSON)",      TWOFAS_PLAIN_ACTION_NAME,       FALSE },
-    { "2FAS (Encrypted)",       TWOFAS_ENC_ACTION_NAME,         TRUE  },
-    { "Google QR (File)",       GOOGLE_FILE_ACTION_NAME,        FALSE },
+    { "FreeOTP+ (Plain)",       FREEOTPPLUS_PLAIN_ACTION_NAME,  FALSE, "Plain text (*.txt)",   {"txt", NULL, NULL} },
+    { "Aegis (Plain JSON)",     AEGIS_PLAIN_ACTION_NAME,        FALSE, "JSON (*.json)",        {"json", NULL, NULL} },
+    { "Aegis (Encrypted)",      AEGIS_ENC_ACTION_NAME,          TRUE,  "JSON (*.json)",        {"json", NULL, NULL} },
+    { "AuthPro (Plain JSON)",   AUTHPRO_PLAIN_ACTION_NAME,      FALSE, "JSON (*.json)",        {"json", NULL, NULL} },
+    { "AuthPro (Encrypted)",    AUTHPRO_ENC_ACTION_NAME,        TRUE,  "Encrypted backup",     {"bin", "dat", NULL} },
+    { "2FAS (Plain JSON)",      TWOFAS_PLAIN_ACTION_NAME,       FALSE, "2FAS backup (*.2fas)", {"2fas", "json", NULL} },
+    { "2FAS (Encrypted)",       TWOFAS_ENC_ACTION_NAME,         TRUE,  "2FAS backup (*.2fas)", {"2fas", "json", NULL} },
+    { "Google QR (File)",       GOOGLE_FILE_ACTION_NAME,        FALSE, "Image (PNG/JPEG)",     {"png", "jpg", "jpeg"} },
 };
 
 #define N_IMPORT_FORMATS G_N_ELEMENTS (import_formats)
@@ -94,9 +98,10 @@ do_import (ImportDialog *self)
         return;
     }
 
+    ImportSummary summary = {0, 0};
     if (otps != NULL)
     {
-        add_otps_to_db (otps, self->db_data);
+        add_otps_to_db_ex (otps, self->db_data, &summary.added, &summary.skipped);
         update_db (self->db_data, &err);
         if (err != NULL)
         {
@@ -123,7 +128,7 @@ do_import (ImportDialog *self)
     adw_dialog_close (ADW_DIALOG (self));
 
     if (self->callback != NULL)
-        self->callback (self->callback_data);
+        self->callback (&summary, self->callback_data);
 }
 
 static void
@@ -157,6 +162,27 @@ on_import_clicked (GtkButton    *button,
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Select file to import"));
+
+    guint fmt_idx = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
+    if (fmt_idx < N_IMPORT_FORMATS && import_formats[fmt_idx].filter_label != NULL) {
+        g_autoptr (GtkFileFilter) filter = gtk_file_filter_new ();
+        gtk_file_filter_set_name (filter, _(import_formats[fmt_idx].filter_label));
+        for (guint i = 0; i < G_N_ELEMENTS (import_formats[fmt_idx].filter_suffixes); i++) {
+            const gchar *suffix = import_formats[fmt_idx].filter_suffixes[i];
+            if (suffix == NULL) break;
+            gtk_file_filter_add_suffix (filter, suffix);
+        }
+
+        g_autoptr (GtkFileFilter) all_filter = gtk_file_filter_new ();
+        gtk_file_filter_set_name (all_filter, _("All files"));
+        gtk_file_filter_add_pattern (all_filter, "*");
+
+        g_autoptr (GListStore) filters = g_list_store_new (GTK_TYPE_FILE_FILTER);
+        g_list_store_append (filters, filter);
+        g_list_store_append (filters, all_filter);
+        gtk_file_dialog_set_filters (dialog, G_LIST_MODEL (filters));
+        gtk_file_dialog_set_default_filter (dialog, filter);
+    }
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_open (dialog, win, NULL,

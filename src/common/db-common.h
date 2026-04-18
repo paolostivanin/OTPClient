@@ -107,6 +107,13 @@ void    reload_db          (DatabaseData  *db_data,
 void    add_otps_to_db     (GSList       *otps,
                             DatabaseData *db_data);
 
+/* Same as add_otps_to_db but reports how many entries were appended versus
+ * skipped as duplicates. Either out-param may be NULL. */
+void    add_otps_to_db_ex  (GSList       *otps,
+                            DatabaseData *db_data,
+                            guint        *added_out,
+                            guint        *skipped_out);
+
 gint    check_duplicate    (gconstpointer   data,
                             gconstpointer   user_data);
 

@@ -106,7 +106,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         get_pwd:
         db_data->key = get_pwd (_("Type the DB decryption password: "), password_fd);
         if (db_data->key == NULL) {
-            g_print ("Password was NULL, exiting...\n");
+            g_printerr ("%s\n", _("No password provided, exiting."));
             if (password_fd != STDIN_FILENO) {
                 close (password_fd);
             }
@@ -132,9 +132,14 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     } else {
         load_db (db_data, &err);
         if (err != NULL) {
-            gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
-            g_printerr ("%s\n", msg);
-            g_free (msg);
+            if (err->domain == bad_tag_gquark ()) {
+                g_printerr ("%s\n", _("Incorrect password."));
+            } else {
+                gchar *msg = g_strconcat (_("Error while loading the database: "), err->message, NULL);
+                g_printerr ("%s\n", msg);
+                g_free (msg);
+            }
+            g_clear_error (&err);
             return FALSE;
         }
     }

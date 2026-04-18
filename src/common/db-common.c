@@ -189,10 +189,13 @@ reload_db (DatabaseData  *db_data,
 
 
 void
-add_otps_to_db (GSList       *otps,
-                DatabaseData *db_data)
+add_otps_to_db_ex (GSList       *otps,
+                   DatabaseData *db_data,
+                   guint        *added_out,
+                   guint        *skipped_out)
 {
     json_t *obj;
+    guint added = 0, skipped = 0;
     guint list_len = g_slist_length (otps);
     for (guint i = 0; i < list_len; i++) {
         otp_t *otp = g_slist_nth_data (otps, i);
@@ -201,10 +204,21 @@ add_otps_to_db (GSList       *otps,
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) == NULL) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
             db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
+            added++;
         } else {
-            g_print ("[INFO] Duplicate element not added\n");
+            skipped++;
         }
     }
+    if (added_out != NULL) *added_out = added;
+    if (skipped_out != NULL) *skipped_out = skipped;
+}
+
+
+void
+add_otps_to_db (GSList       *otps,
+                DatabaseData *db_data)
+{
+    add_otps_to_db_ex (otps, db_data, NULL, NULL);
 }
 
 

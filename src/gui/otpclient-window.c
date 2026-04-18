@@ -1830,6 +1830,39 @@ on_db_modified (gpointer user_data)
 }
 
 static void
+on_import_done (const ImportSummary *summary,
+                gpointer             user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    on_db_modified (self);
+
+    if (summary == NULL || self->toast_overlay == NULL)
+        return;
+
+    g_autofree gchar *msg = NULL;
+    if (summary->added == 0 && summary->skipped == 0) {
+        msg = g_strdup (_("No tokens were imported."));
+    } else if (summary->skipped == 0) {
+        msg = g_strdup_printf (ngettext ("Imported %u token.",
+                                         "Imported %u tokens.",
+                                         summary->added), summary->added);
+    } else if (summary->added == 0) {
+        msg = g_strdup_printf (ngettext ("Skipped %u duplicate.",
+                                         "Skipped %u duplicates.",
+                                         summary->skipped), summary->skipped);
+    } else {
+        msg = g_strdup_printf (_("Imported %u, skipped %u duplicate%s."),
+                               summary->added, summary->skipped,
+                               summary->skipped == 1 ? "" : "s");
+    }
+
+    AdwToast *toast = adw_toast_new (msg);
+    adw_toast_set_timeout (toast, 6);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+}
+
+static void
 action_add_manual (GtkWidget  *widget,
                    const char *action_name,
                    GVariant   *parameter)
@@ -1997,7 +2030,7 @@ action_import (GtkWidget  *widget,
         return;
 
     ImportDialog *dlg = import_dialog_new (db_data, GTK_WIDGET (self),
-                                            on_db_modified, self);
+                                            on_import_done, self);
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
