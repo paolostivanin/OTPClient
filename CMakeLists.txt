@@ -36,6 +36,35 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     list(APPEND COMMON_LINK_OPTIONS -pie)
 endif()
 
+# Optional hardening flags — gated on compiler support so older toolchains
+# (e.g. the GCC shipped on Ubuntu 24.04 LTS) keep building cleanly.
+include(CheckCCompilerFlag)
+foreach(_hardening_flag
+        -fcf-protection=full
+        -fzero-call-used-regs=used-gpr
+        -fstrict-flex-arrays=2
+        -ftrivial-auto-var-init=zero)
+    string(MAKE_C_IDENTIFIER "HAVE${_hardening_flag}" _hardening_var)
+    check_c_compiler_flag("${_hardening_flag}" ${_hardening_var})
+    if(${_hardening_var})
+        list(APPEND COMMON_C_OPTIONS "${_hardening_flag}")
+    endif()
+endforeach()
+
+# Enable LTO for Release builds when the toolchain supports it.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _ipo_supported OUTPUT _ipo_error)
+    if(_ipo_supported)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(STATUS "LTO not supported: ${_ipo_error}")
+    endif()
+endif()
+
 if(IS_FLATPAK)
     list(APPEND COMMON_COMPILE_DEFINITIONS IS_FLATPAK)
 endif()
