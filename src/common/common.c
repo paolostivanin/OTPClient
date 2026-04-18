@@ -2,6 +2,7 @@
 #include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <sys/resource.h>
+#include <sys/prctl.h>
 #include <cotp.h>
 #include "gcrypt.h"
 #include "jansson.h"
@@ -33,6 +34,16 @@ set_memlock_value (gint32 *memlock_value)
 gchar *
 init_libs (gint32 max_file_size)
 {
+    // Prevent secrets from leaking into core dumps if the process crashes.
+    // Best-effort: a failure here is non-fatal but worth a warning.
+    if (prctl (PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+        g_warning ("Failed to disable core dumps via PR_SET_DUMPABLE; secrets may leak on crash.");
+    }
+    struct rlimit core_limit = { 0, 0 };
+    if (setrlimit (RLIMIT_CORE, &core_limit) != 0) {
+        g_warning ("Failed to set RLIMIT_CORE to 0; core dumps may still be produced on crash.");
+    }
+
     gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
     if (!gcry_check_version ("1.10.1")) {
         return g_strdup ("The required version of GCrypt is 1.10.1 or greater.");

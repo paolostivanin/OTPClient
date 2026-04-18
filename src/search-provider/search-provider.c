@@ -361,15 +361,16 @@ handle_krunner_call (GDBusConnection       *conn,
                 if (!e->otp_value) continue;
                 GVariantBuilder props;
                 g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
+                // Deliberately do NOT include the OTP value in the subtitle:
+                // any process on the session bus can poll Match. The code is
+                // only handed out via Run, where the user sees a notification.
                 g_autofree gchar *sub = NULL;
                 if (e->db_name != NULL && e->db_name[0] != '\0')
                     sub = (e->issuer && *e->issuer)
-                        ? g_strdup_printf ("%s — %s • %s", e->db_name, e->issuer, e->otp_value)
-                        : g_strdup_printf ("%s • %s", e->db_name, e->otp_value);
+                        ? g_strdup_printf ("%s — %s", e->db_name, e->issuer)
+                        : g_strdup (e->db_name);
                 else
-                    sub = (e->issuer && *e->issuer)
-                        ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value)
-                        : g_strdup (e->otp_value);
+                    sub = g_strdup (e->issuer ? e->issuer : "");
                 g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
                 g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
                 g_variant_builder_add (&builder, "(sssida{sv})",

@@ -309,6 +309,20 @@ decrypt_db (DatabaseData *db_data,
         return NULL;
     }
 
+    if (db_data->current_db_version >= 2) {
+        if (db_data->argon2id_iter < ARGON2ID_MIN_ITER || db_data->argon2id_iter > ARGON2ID_MAX_ITER ||
+            db_data->argon2id_memcost < ARGON2ID_MIN_MC || db_data->argon2id_memcost > ARGON2ID_MAX_MC ||
+            db_data->argon2id_parallelism < ARGON2ID_MIN_PARAL || db_data->argon2id_parallelism > ARGON2ID_MAX_PARAL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Database header contains out-of-range Argon2id parameters "
+                         "(iter=%d, memcost=%d KiB, parallelism=%d). Refusing to open: the file may be tampered or corrupted.",
+                         db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism);
+            cleanup_db_gfile (in_file, in_stream, NULL);
+            free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+            return NULL;
+        }
+    }
+
     goffset input_file_size = get_file_size (db_data->db_path);
     guchar tag[TAG_SIZE];
     if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, NULL) ||
