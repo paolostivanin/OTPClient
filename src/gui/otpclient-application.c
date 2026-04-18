@@ -205,6 +205,9 @@ on_change_password_received (const gchar *password,
     self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
     memcpy (self->db_data->key, password, strlen (password) + 1);
 
+    /* Force fresh salt + KDF derivation under the new password */
+    db_invalidate_kdf_cache (self->db_data);
+
     /* Re-encrypt the database with the new key */
     GError *err = NULL;
     update_db (self->db_data, &err);
@@ -675,6 +678,7 @@ otpclient_application_dispose (GObject *object)
 
     if (self->db_data != NULL)
     {
+        db_invalidate_kdf_cache (self->db_data);
         if (self->db_data->in_memory_json_data != NULL)
             json_decref (self->db_data->in_memory_json_data);
         if (self->db_data->key != NULL)
@@ -727,6 +731,7 @@ otpclient_application_set_db_data (OTPClientApplication *self,
 
     if (self->db_data != NULL)
     {
+        db_invalidate_kdf_cache (self->db_data);
         if (self->db_data->in_memory_json_data != NULL)
             json_decref (self->db_data->in_memory_json_data);
         if (self->db_data->key != NULL)

@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
@@ -51,6 +52,20 @@ static void      free_db_resources  (gcry_cipher_hd_t  hd,
                                      gchar            *dec_buf,
                                      DbHeaderData_v1  *header_data_v1,
                                      DbHeaderData_v2  *header_data_v2);
+
+
+void
+db_invalidate_kdf_cache (DatabaseData *db_data)
+{
+    if (db_data == NULL)
+        return;
+    if (db_data->cached_derived_key != NULL) {
+        gcry_free (db_data->cached_derived_key);
+        db_data->cached_derived_key = NULL;
+    }
+    explicit_bzero (db_data->cached_salt, KDF_SALT_SIZE);
+    db_data->has_cached_key = FALSE;
+}
 
 
 void
@@ -272,6 +287,22 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
     } else {
+        // Cache hit: same salt as the last derive => same key (password and
+        // KDF params haven't changed, since the cache is invalidated on
+        // password change). Return a fresh copy so callers can free it.
+        if (!use_legacy_length
+            && db_data->has_cached_key
+            && db_data->cached_derived_key != NULL
+            && memcmp (db_data->cached_salt, salt, KDF_SALT_SIZE) == 0) {
+            derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+            if (derived_key == NULL) {
+                g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
+                return NULL;
+            }
+            memcpy (derived_key, db_data->cached_derived_key, ARGON2ID_KEYLEN);
+            return derived_key;
+        }
+
         derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
         const unsigned long params[4] = {ARGON2ID_TAGLEN, db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism};
         gcry_kdf_hd_t hd;
@@ -297,6 +328,18 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
         gcry_kdf_close (hd);
+
+        // Populate cache only on the corrected-length path; the legacy retry
+        // is for one-shot read of pre-fix files and shouldn't poison the cache.
+        if (!use_legacy_length) {
+            if (db_data->cached_derived_key == NULL)
+                db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+            if (db_data->cached_derived_key != NULL) {
+                memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
+                memcpy (db_data->cached_salt, salt, KDF_SALT_SIZE);
+                db_data->has_cached_key = TRUE;
+            }
+        }
     }
 
     return derived_key;
@@ -519,7 +562,15 @@ encrypt_db (DatabaseData *db_data,
     memcpy (header_data->header_name, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
     header_data->db_version = DB_VERSION;
     gcry_create_nonce (header_data->iv, IV_SIZE);
-    gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
+    // Reuse the previously-derived salt when we have a cached key so the KDF
+    // step is a memcpy instead of a 150 ms Argon2id derivation. The per-save
+    // random IV above guarantees AES-GCM nonce uniqueness independently of
+    // salt reuse. db_invalidate_kdf_cache() is called on password change to
+    // force a fresh salt + key on the next save.
+    if (db_data->has_cached_key)
+        memcpy (header_data->salt, db_data->cached_salt, KDF_SALT_SIZE);
+    else
+        gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
     header_data->argon2id_iter = db_data->argon2id_iter;
     header_data->argon2id_memcost = db_data->argon2id_memcost;
     header_data->argon2id_parallelism = db_data->argon2id_parallelism;

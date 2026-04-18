@@ -133,6 +133,7 @@ load_entries_from_db (GPtrArray   *entries,
     if (err != NULL || db_data->in_memory_json_data == NULL)
     {
         if (err != NULL) g_clear_error (&err);
+        db_invalidate_kdf_cache (db_data);
         gcry_free (db_data->key);
         g_slist_free_full (db_data->objects_hash, g_free);
         g_free (db_data->db_path);
@@ -156,6 +157,7 @@ load_entries_from_db (GPtrArray   *entries,
         g_ptr_array_add (entries, entry);
     }
 
+    db_invalidate_kdf_cache (db_data);
     gcry_free (db_data->key);
     json_decref (db_data->in_memory_json_data);
     g_slist_free_full (db_data->objects_hash, g_free);

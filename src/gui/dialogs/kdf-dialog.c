@@ -54,6 +54,9 @@ on_apply_clicked (GtkButton *button,
     self->db_data->argon2id_memcost = new_mc;
     self->db_data->argon2id_parallelism = new_par;
 
+    /* New KDF parameters invalidate the cached derived key */
+    db_invalidate_kdf_cache (self->db_data);
+
     GError *err = NULL;
     update_db (self->db_data, &err);
     if (err != NULL)

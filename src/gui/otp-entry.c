@@ -18,7 +18,18 @@ struct _OTPEntry
     gchar *secret;       /* base32-encoded, held in gcrypt secure memory */
     gchar *db_name;      /* non-NULL when entry comes from another database */
     gchar *group;        /* NULL means ungrouped */
+
+    /* Cached lowercase variants for fast search filtering */
+    gchar *account_lower;
+    gchar *issuer_lower;
+    gchar *group_lower;
 };
+
+static gchar *
+strdown_or_empty (const gchar *s)
+{
+    return s ? g_utf8_strdown (s, -1) : g_strdup ("");
+}
 
 enum
 {
@@ -70,6 +81,10 @@ otp_entry_finalize (GObject *object)
 
     g_clear_pointer (&self->db_name, g_free);
     g_clear_pointer (&self->group, g_free);
+
+    g_clear_pointer (&self->account_lower, g_free);
+    g_clear_pointer (&self->issuer_lower, g_free);
+    g_clear_pointer (&self->group_lower, g_free);
 
     G_OBJECT_CLASS (otp_entry_parent_class)->finalize (object);
 }
@@ -135,10 +150,14 @@ otp_entry_set_property (GObject      *object,
         case PROP_ACCOUNT:
             g_free (self->account);
             self->account = g_value_dup_string (value);
+            g_free (self->account_lower);
+            self->account_lower = strdown_or_empty (self->account);
             break;
         case PROP_ISSUER:
             g_free (self->issuer);
             self->issuer = g_value_dup_string (value);
+            g_free (self->issuer_lower);
+            self->issuer_lower = strdown_or_empty (self->issuer);
             break;
         case PROP_OTP_VALUE:
             g_free (self->otp_value);
@@ -184,6 +203,8 @@ otp_entry_set_property (GObject      *object,
         case PROP_GROUP:
             g_free (self->group);
             self->group = g_value_dup_string (value);
+            g_free (self->group_lower);
+            self->group_lower = strdown_or_empty (self->group);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -343,6 +364,8 @@ otp_entry_set_account (OTPEntry    *self,
 
     g_free (self->account);
     self->account = g_strdup (account);
+    g_free (self->account_lower);
+    self->account_lower = strdown_or_empty (self->account);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ACCOUNT]);
 }
 
@@ -357,6 +380,8 @@ otp_entry_set_issuer (OTPEntry    *self,
 
     g_free (self->issuer);
     self->issuer = g_strdup (issuer);
+    g_free (self->issuer_lower);
+    self->issuer_lower = strdown_or_empty (self->issuer);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ISSUER]);
 }
 
@@ -473,6 +498,27 @@ otp_entry_get_group (OTPEntry *self)
     return self->group;
 }
 
+const gchar *
+otp_entry_get_account_lower (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), "");
+    return self->account_lower ? self->account_lower : "";
+}
+
+const gchar *
+otp_entry_get_issuer_lower (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), "");
+    return self->issuer_lower ? self->issuer_lower : "";
+}
+
+const gchar *
+otp_entry_get_group_lower (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), "");
+    return self->group_lower ? self->group_lower : "";
+}
+
 void
 otp_entry_set_group (OTPEntry    *self,
                      const gchar *group)
@@ -484,5 +530,7 @@ otp_entry_set_group (OTPEntry    *self,
 
     g_free (self->group);
     self->group = g_strdup (group);
+    g_free (self->group_lower);
+    self->group_lower = strdown_or_empty (self->group);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_GROUP]);
 }

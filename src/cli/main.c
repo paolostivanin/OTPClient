@@ -90,6 +90,7 @@ main (gint    argc,
 void
 free_dbdata (DatabaseData *db_data)
 {
+    db_invalidate_kdf_cache (db_data);
     gcry_free (db_data->key);
     g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);

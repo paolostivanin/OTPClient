@@ -44,6 +44,11 @@ void         otp_entry_set_group   (OTPEntry    *self,
                                      const gchar *group);
 const gchar *otp_entry_get_group   (OTPEntry *self);
 
+/* Cached lowercase variants for fast search filtering. Never NULL. */
+const gchar *otp_entry_get_account_lower (OTPEntry *self);
+const gchar *otp_entry_get_issuer_lower  (OTPEntry *self);
+const gchar *otp_entry_get_group_lower   (OTPEntry *self);
+
 void         otp_entry_update_otp   (OTPEntry *self);
 
 gchar       *otp_entry_get_next_otp (OTPEntry *self);

@@ -632,6 +632,7 @@ cross_db_load_thread (GTask        *task,
         {
             if (err != NULL)
                 g_clear_error (&err);
+            db_invalidate_kdf_cache (db_data);
             gcry_free (db_data->key);
             g_slist_free_full (db_data->objects_hash, g_free);
             g_free (db_data->db_path);
@@ -677,6 +678,7 @@ cross_db_load_thread (GTask        *task,
             g_object_unref (entry);
         }
 
+        db_invalidate_kdf_cache (db_data);
         gcry_free (db_data->key);
         json_decref (db_data->in_memory_json_data);
         g_slist_free_full (db_data->objects_hash, g_free);
@@ -829,9 +831,8 @@ search_filter_func (gpointer item,
 
     if (search_group != NULL)
     {
-        const gchar *entry_group = otp_entry_get_group (entry);
         g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
-        g_autofree gchar *eg_lower = entry_group ? g_utf8_strdown (entry_group, -1) : g_strdup ("");
+        const gchar *eg_lower = otp_entry_get_group_lower (entry);
         if (g_strstr_len (eg_lower, -1, sg_lower) == NULL)
             return FALSE;
 
@@ -841,13 +842,9 @@ search_filter_func (gpointer item,
     }
 
     /* Account/issuer substring match on remaining text */
-    const gchar *text_to_match = remaining_text;
-    const gchar *account = otp_entry_get_account (entry);
-    const gchar *issuer = otp_entry_get_issuer (entry);
-
-    g_autofree gchar *search_lower = g_utf8_strdown (text_to_match, -1);
-    g_autofree gchar *account_lower = account ? g_utf8_strdown (account, -1) : g_strdup ("");
-    g_autofree gchar *issuer_lower = issuer ? g_utf8_strdown (issuer, -1) : g_strdup ("");
+    g_autofree gchar *search_lower = g_utf8_strdown (remaining_text, -1);
+    const gchar *account_lower = otp_entry_get_account_lower (entry);
+    const gchar *issuer_lower = otp_entry_get_issuer_lower (entry);
 
     return (g_strstr_len (account_lower, -1, search_lower) != NULL ||
             g_strstr_len (issuer_lower, -1, search_lower) != NULL);
@@ -2874,6 +2871,7 @@ on_new_db_password_received (const gchar *password,
     {
         show_error_toast (self, _("Could not create database: %s"), err->message);
         g_clear_error (&err);
+        db_invalidate_kdf_cache (db_data);
         gcry_free (db_data->key);
         g_free (db_data->db_path);
         g_free (db_data);
@@ -2992,6 +2990,7 @@ on_open_db_password_received (const gchar *password,
     {
         show_error_toast (self, _("Could not open database: %s"), err->message);
         g_clear_error (&err);
+        db_invalidate_kdf_cache (db_data);
         gcry_free (db_data->key);
         g_free (db_data->db_path);
         g_free (db_data);
