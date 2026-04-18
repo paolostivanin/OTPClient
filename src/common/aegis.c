@@ -110,207 +110,170 @@ get_otps_from_encrypted_backup (const gchar          *path,
                                 gint32                max_file_size,
                                 GError              **err)
 {
-    // Due to icons, custom icons, etc, loading the entire json into secure memory could drain the pool and could cause
-    // the app to segfault. Since we only need the decrypted data to be handled in secure memory, we can use the standard memory
-    // for the other data.
+    GSList            *otps          = NULL;
+    json_t            *json          = NULL;
+    guchar            *salt          = NULL;
+    guchar            *enc_key       = NULL;
+    guchar            *key_nonce     = NULL;
+    guchar            *key_tag       = NULL;
+    guchar            *keybuf        = NULL;
+    guchar            *master_key    = NULL;
+    guchar            *nonce         = NULL;
+    guchar            *tag           = NULL;
+    guchar            *b64decoded_db = NULL;
+    gchar             *decrypted_db  = NULL;
+    gchar             *cleaned_db    = NULL;
+    gcry_cipher_hd_t   hd            = NULL;
+    // Tracks whether the jansson global allocator is still pointing at g_malloc.
+    // It MUST be flipped back to gcry_malloc_secure before returning so the
+    // rest of the codebase keeps loading sensitive data into secure memory.
+    gboolean           using_g_alloc = TRUE;
+
+    // Due to icons / custom icons / etc, loading the entire envelope JSON into
+    // secure memory could drain the pool and segfault. We only need the
+    // decrypted database in secure memory; everything else can live in the
+    // standard heap.
     json_set_alloc_funcs (g_malloc0, g_free);
 
     json_error_t j_err;
-    json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
+    json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
-        g_printerr ("Error loading json: %s\n", j_err.text);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while loading the Aegis backup: %s", j_err.text);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
 
     json_t *header = json_object_get (json, "header");
     if (header == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'header' object.");
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
     json_t *arr = json_object_get (header, "slots");
     if (arr == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'slots' array.");
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
-    gint index = 0;
-    for (; index < (gint)json_array_size(arr); index++) {
-        json_t *j_type = json_object_get (json_array_get(arr, index), "type");
-        json_int_t int_type = json_integer_value (j_type);
-        if (int_type == 1) break;
+
+    gint slot_index = 0;
+    for (; slot_index < (gint)json_array_size (arr); slot_index++) {
+        json_t *j_type = json_object_get (json_array_get (arr, slot_index), "type");
+        if (json_integer_value (j_type) == 1) break;
     }
-    if (index >= (gint)json_array_size(arr)) {
+    if (slot_index >= (gint)json_array_size (arr)) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "No password slot found in the Aegis backup.");
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
-    json_t *wanted_obj = json_array_get (arr, index);
-    gint n = (gint)json_integer_value (json_object_get (wanted_obj, "n"));
-    gint p = (gint)json_integer_value (json_object_get (wanted_obj, "p"));
-    guchar *salt = hexstr_to_bytes (json_string_value (json_object_get (wanted_obj, "salt")));
-    guchar *enc_key = hexstr_to_bytes(json_string_value (json_object_get (wanted_obj, "key")));
+
+    json_t *wanted_obj = json_array_get (arr, slot_index);
+    gint n  = (gint)json_integer_value (json_object_get (wanted_obj, "n"));
+    gint p  = (gint)json_integer_value (json_object_get (wanted_obj, "p"));
+    salt    = hexstr_to_bytes (json_string_value (json_object_get (wanted_obj, "salt")));
+    enc_key = hexstr_to_bytes (json_string_value (json_object_get (wanted_obj, "key")));
+
     json_t *kp = json_object_get (wanted_obj, "key_params");
-    guchar *key_nonce = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce"))) : NULL;
-    guchar *key_tag = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "tag"))) : NULL;
+    key_nonce  = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce"))) : NULL;
+    key_tag    = (kp != NULL) ? hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")))   : NULL;
     if (salt == NULL || enc_key == NULL || key_nonce == NULL || key_tag == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid hex fields in key slot.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
+
     json_t *dbp = json_object_get (header, "params");
     if (dbp == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'params' in header.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
-    }
-    guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
-    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
-        g_printerr ("Error while deriving the key.\n");
-        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the Aegis decryption key.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        gcry_free (keybuf);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
 
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (keybuf, key_nonce, AEGIS_NONCE_SIZE);
+    keybuf = gcry_malloc (AEGIS_KEY_SIZE);
+    // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+    if (gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE, p, AEGIS_KEY_SIZE, keybuf) != 0) {
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the Aegis decryption key.");
+        goto cleanup;
+    }
+
+    hd = open_cipher_and_set_data (keybuf, key_nonce, AEGIS_NONCE_SIZE);
     if (hd == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the Aegis cipher handle.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        gcry_free (keybuf);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
 
-    guchar *master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
+    master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
     if (gcry_cipher_decrypt (hd, master_key, AEGIS_KEY_SIZE, enc_key, AEGIS_KEY_SIZE) != 0) {
-        g_printerr ("Error while decrypting the master key.\n");
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the Aegis master key.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        gcry_free (master_key);
-        gcry_free (keybuf);
-        gcry_cipher_close (hd);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
-    gpg_error_t gpg_err = gcry_cipher_checktag (hd, key_tag, AEGIS_TAG_SIZE);
-    if (gpg_err != 0) {
+    if (gcry_cipher_checktag (hd, key_tag, AEGIS_TAG_SIZE) != 0) {
         g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (master key). Either the password is wrong or the file is corrupted.");
-        g_free (salt);
-        g_free (enc_key);
-        g_free (key_nonce);
-        g_free (key_tag);
-        gcry_free (master_key);
-        gcry_free (keybuf);
-        gcry_cipher_close (hd);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
+        goto cleanup;
     }
 
+    // Done with the key-decrypt cipher; reuse the handle for the database decrypt.
+    gcry_cipher_close (hd);
+    hd = NULL;
+
+    nonce = hexstr_to_bytes (json_string_value (json_object_get (dbp, "nonce")));
+    tag   = hexstr_to_bytes (json_string_value (json_object_get (dbp, "tag")));
+    if (nonce == NULL || tag == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid nonce/tag in database params.");
+        goto cleanup;
+    }
+
+    hd = open_cipher_and_set_data (master_key, nonce, AEGIS_NONCE_SIZE);
+    if (hd == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the Aegis database cipher handle.");
+        goto cleanup;
+    }
+
+    gsize out_len;
+    b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
+    if (out_len > (gsize)(max_file_size * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        goto cleanup;
+    }
+
+    // Done extracting from the envelope JSON. Decref it now (while jansson is
+    // still on g_malloc) and switch the allocator to secure memory so the
+    // database parser places OTP secrets in the secure pool.
+    json_decref (json);
+    json = NULL;
+    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+    using_g_alloc = FALSE;
+
+    decrypted_db = gcry_calloc_secure (out_len, 1);
+    if (gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the Aegis database.");
+        goto cleanup;
+    }
+    if (gcry_cipher_checktag (hd, tag, AEGIS_TAG_SIZE) != 0) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
+        goto cleanup;
+    }
+
+    cleaned_db = remove_icons_from_db (decrypted_db, TRUE);
+    otps = parse_aegis_json_data (cleaned_db, err);
+
+cleanup:
     g_free (salt);
     g_free (enc_key);
     g_free (key_nonce);
     g_free (key_tag);
-    gcry_free (keybuf);
-    gcry_cipher_close (hd);
-
-    guchar *nonce = hexstr_to_bytes (json_string_value (json_object_get (dbp, "nonce")));
-    guchar *tag = hexstr_to_bytes (json_string_value (json_object_get (dbp, "tag")));
-    if (nonce == NULL || tag == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid nonce/tag in database params.");
-        g_free (nonce);
-        g_free (tag);
-        gcry_free (master_key);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
-    }
-
-    hd = open_cipher_and_set_data (master_key, nonce, 12);
-    if (hd == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the Aegis database cipher handle.");
-        g_free (tag);
-        g_free (nonce);
-        gcry_free (master_key);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
-    }
-
-    gsize out_len;
-    guchar *b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
-    if (out_len > (gint32)(max_file_size * SECMEM_SIZE_THRESHOLD_RATIO)) {
-        // Input data is too big, so we don't load it into secure memory
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
-        g_free (tag);
-        g_free (nonce);
-        gcry_free (master_key);
-        g_free (b64decoded_db);
-        gcry_cipher_close (hd);
-        json_decref (json);
-        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-        return NULL;
-    }
-    // we no longer need the json object, so we can free up some secure memory
-    json_decref (json);
-    json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
-
-    gchar *decrypted_db = gcry_calloc_secure (out_len, 1);
-    gpg_err = gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len);
-    if (gpg_err) {
-        goto clean_and_exit;
-    }
-    gpg_err = gcry_cipher_checktag (hd, tag, AEGIS_TAG_SIZE);
-    if (gpg_err != 0) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Invalid TAG (database). Either the password is wrong or the file is corrupted.");
-        clean_and_exit:
-        g_free (b64decoded_db);
-        g_free (nonce);
-        g_free (tag);
-        gcry_free (master_key);
-        gcry_free (decrypted_db);
-        gcry_cipher_close (hd);
-        return NULL;
-    }
-
-    g_free (b64decoded_db);
     g_free (nonce);
     g_free (tag);
-    gcry_cipher_close (hd);
-    gcry_free (master_key);
+    g_free (b64decoded_db);
 
-    gchar *cleaned_db = remove_icons_from_db (decrypted_db, TRUE);
-    GSList *otps = parse_aegis_json_data (cleaned_db, err);
-    gcry_free (cleaned_db);
+    // Decref the envelope JSON before flipping the allocator back: jansson
+    // uses the *current* global allocator's free function.
+    if (json != NULL) {
+        json_decref (json);
+    }
+    if (using_g_alloc) {
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+    }
+
+    if (hd != NULL)           gcry_cipher_close (hd);
+    if (keybuf != NULL)       gcry_free (keybuf);
+    if (master_key != NULL)   gcry_free (master_key);
+    if (decrypted_db != NULL) gcry_free (decrypted_db);
+    if (cleaned_db != NULL)   gcry_free (cleaned_db);
 
     return otps;
 }
@@ -363,7 +326,8 @@ export_aegis (const gchar   *export_path,
         gcry_create_nonce (key_nonce, AEGIS_NONCE_SIZE);
 
         derived_master_key = gcry_calloc_secure(AEGIS_KEY_SIZE, 1);
-        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
+        // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+        gpg_error_t gpg_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);

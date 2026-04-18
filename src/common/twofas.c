@@ -193,7 +193,8 @@ export_twofas (const gchar *export_path,
         guchar *iv = g_malloc0 (TWOFAS_IV);
         gcry_create_nonce (iv, TWOFAS_IV);
         guchar *derived_key = gcry_malloc_secure (32);
-        gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
+        // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+        gpg_error_t g_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                              salt, TWOFAS_SALT, TWOFAS_KDF_ITERS, 32, derived_key);
         if (g_err != GPG_ERR_NO_ERROR) {
             g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
@@ -416,7 +417,8 @@ decrypt_data (const gchar **b64_data,
     g_free (enc_data_with_tag);
 
     guchar *derived_key = gcry_malloc_secure (32);
-    gpg_error_t g_err = gcry_kdf_derive (pwd, (gsize)g_utf8_strlen (pwd, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
+    // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+    gpg_error_t g_err = gcry_kdf_derive (pwd, strlen (pwd), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                          twofas_data->salt, salt_out_len, TWOFAS_KDF_ITERS, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
         g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));

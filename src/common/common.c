@@ -185,9 +185,10 @@ get_authpro_derived_key (const gchar *password,
     // taglen, iterations, memory_cost (65536=64MiB), parallelism
     const unsigned long params[4] = {32, 3, 65536, 4};
     gcry_kdf_hd_t hd;
+    // gcry_kdf_open expects the password length in BYTES, not Unicode characters.
     if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                        params, 4,
-                       password,  (gsize)g_utf8_strlen (password, -1),
+                       password, strlen (password),
                        salt, AUTHPRO_SALT_TAG,
                        NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
         g_printerr ("Error while opening the KDF handler\n");

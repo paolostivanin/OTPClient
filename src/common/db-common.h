@@ -76,6 +76,11 @@ typedef struct db_data_t {
     gint32 argon2id_iter;
     gint32 argon2id_memcost;
     gint32 argon2id_parallelism;
+
+    // Set TRUE when decrypt_db succeeded only with the legacy g_utf8_strlen
+    // password byte length. The next encrypt_db will silently re-encrypt with
+    // the corrected strlen length, migrating the file in place.
+    gboolean needs_legacy_kdf_migration;
 } DatabaseData;
 
 

@@ -17,6 +17,15 @@ static gint32    get_db_version     (const gchar      *db_path);
 static guchar   *get_db_derived_key (DatabaseData     *db_data,
                                      gint32            db_version,
                                      const guint8     *salt,
+                                     gboolean          use_legacy_length,
+                                     GError          **err);
+
+static gchar    *try_decrypt_v2     (DatabaseData     *db_data,
+                                     DbHeaderData_v2  *header_data,
+                                     guchar           *enc_buf,
+                                     gsize             enc_buf_size,
+                                     const guchar     *tag,
+                                     gboolean          use_legacy_length,
                                      GError          **err);
 
 static gchar    *decrypt_db         (DatabaseData     *db_data,
@@ -95,6 +104,14 @@ load_db (DatabaseData    *db_data,
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
         guint32 hash = json_object_get_hash (obj);
         db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
+    }
+
+    // Opportunistic KDF byte-length migration: if decrypt only succeeded with
+    // the legacy g_utf8_strlen length, silently re-encrypt now with the
+    // corrected strlen length. encrypt_db clears the flag on success.
+    if (db_data->needs_legacy_kdf_migration) {
+        g_message ("Migrating database to corrected KDF password byte length.");
+        update_db (db_data, err);
     }
 }
 
@@ -219,10 +236,25 @@ static guchar *
 get_db_derived_key (DatabaseData  *db_data,
                     gint32         db_version,
                     const guint8  *salt,
+                    gboolean       use_legacy_length,
                     GError       **err)
 {
+    // gcry_kdf_* expects the password length in BYTES, but historically this
+    // code passed g_utf8_strlen (CHARACTER count), truncating non-ASCII passwords
+    // mid-byte and weakening the KDF. strlen is correct; use_legacy_length=TRUE
+    // is only set on the retry path used to read databases written by older
+    // OTPClient versions (see try_decrypt_v2 / decrypt_db).
+    gsize pwd_len = use_legacy_length
+                    ? (gsize) g_utf8_strlen (db_data->key, -1)
+                    : strlen (db_data->key);
+
     guchar *derived_key = NULL;
     if (db_version < 2) {
+        // v1 (PBKDF2) databases were always written with the legacy length, so
+        // their decrypt path keeps the legacy behavior. After successful load
+        // the caller migrates the DB to v2 with the corrected length.
+        pwd_len = (gsize) g_utf8_strlen (db_data->key, -1);
+
         gsize key_len = gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256);
 
         derived_key = gcry_malloc_secure (key_len);
@@ -231,7 +263,7 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
 
-        if (gcry_kdf_derive (db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
+        if (gcry_kdf_derive (db_data->key, pwd_len,
                              GCRY_KDF_PBKDF2, GCRY_MD_SHA512,
                              salt, KDF_SALT_SIZE,
                              KDF_ITERATIONS, key_len, derived_key) != GPG_ERR_NO_ERROR) {
@@ -245,7 +277,7 @@ get_db_derived_key (DatabaseData  *db_data,
         gcry_kdf_hd_t hd;
         if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                            params, 4,
-                           db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
+                           db_data->key, pwd_len,
                            salt, KDF_SALT_SIZE,
                            NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
             gcry_free (derived_key);
@@ -268,6 +300,64 @@ get_db_derived_key (DatabaseData  *db_data,
     }
 
     return derived_key;
+}
+
+
+static gchar *
+try_decrypt_v2 (DatabaseData    *db_data,
+                DbHeaderData_v2 *header_data,
+                guchar          *enc_buf,
+                gsize            enc_buf_size,
+                const guchar    *tag,
+                gboolean         use_legacy_length,
+                GError         **err)
+{
+    guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data->salt, use_legacy_length, err);
+    if (derived_key == NULL) {
+        return NULL;
+    }
+
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
+    if (!hd) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
+    if (!dec_buf) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the data.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    gcry_cipher_close (hd);
+    gcry_free (derived_key);
+    return dec_buf;
 }
 
 
@@ -346,36 +436,48 @@ decrypt_db (DatabaseData *db_data,
     g_object_unref (in_stream);
     g_object_unref (in_file);
 
-    guchar *derived_key = NULL;
     if (db_data->current_db_version >= 2) {
-        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v2->salt, err);
-    } else {
-        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, err);
+        // Modern path: try the corrected (strlen) password length first.
+        gchar *dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, FALSE, err);
+
+        if (dec_buf == NULL && err != NULL && *err != NULL && (*err)->domain == bad_tag_gquark ()) {
+            // BAD_TAG with the corrected length: the DB may have been written
+            // with the legacy g_utf8_strlen byte length (which truncated multi-byte
+            // passwords). Skip the retry for pure-ASCII passwords where strlen and
+            // g_utf8_strlen always agree — the second attempt would just waste a
+            // ~150-300ms Argon2id derivation on a guaranteed-identical result.
+            gsize byte_len = strlen (db_data->key);
+            gsize char_len = (gsize) g_utf8_strlen (db_data->key, -1);
+            if (byte_len != char_len) {
+                g_clear_error (err);
+                dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, TRUE, err);
+                if (dec_buf != NULL) {
+                    db_data->needs_legacy_kdf_migration = TRUE;
+                }
+            }
+        }
+
+        free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
+        return dec_buf;
     }
+
+    // v1 (PBKDF2) path: always written with the legacy length, so decrypt with
+    // that. The caller migrates v1 -> v2 right after, which is when the
+    // corrected length starts being used.
+    guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, FALSE, err);
     if (derived_key == NULL) {
         free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
     }
 
-    gcry_cipher_hd_t hd;
-    if (db_data->current_db_version >= 2) {
-        hd = open_cipher_and_set_data (derived_key, header_data_v2->iv, IV_SIZE);
-    } else {
-        hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
-    }
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
     if (!hd) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
         free_db_resources (NULL, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
     }
 
-    gpg_error_t gpg_err;
-    if (db_data->current_db_version >= 2) {
-        gpg_err = gcry_cipher_authenticate (hd, header_data_v2, header_data_size);
-    } else {
-        gpg_err = gcry_cipher_authenticate (hd, header_data_v1, header_data_size);
-    }
-    if (gpg_err != GPG_ERR_NO_ERROR) {
+    if (gcry_cipher_authenticate (hd, header_data_v1, header_data_size) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
         free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
@@ -438,7 +540,10 @@ encrypt_db (DatabaseData *db_data,
         return;
     }
 
-    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, err);
+    // encrypt_db unconditionally uses the corrected (strlen) password byte length.
+    // The legacy g_utf8_strlen length is only used on the decrypt retry path
+    // when reading older databases (see decrypt_db / try_decrypt_v2).
+    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, FALSE, err);
     if (derived_key == NULL) {
         cleanup_db_gfile (out_file, out_stream, NULL);
         g_free (header_data);
@@ -515,6 +620,8 @@ encrypt_db (DatabaseData *db_data,
     cleanup_db_gfile (out_file, out_stream, NULL);
 
     db_data->current_db_version = DB_VERSION;
+    // The just-written file uses the corrected password byte length.
+    db_data->needs_legacy_kdf_migration = FALSE;
 }
 
 
