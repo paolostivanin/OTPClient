@@ -210,21 +210,29 @@ kdf_dialog_new (DatabaseData *db_data)
     self->preset_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->preset_combo), _("Preset"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->preset_combo), G_LIST_MODEL (preset_model));
+    gtk_widget_set_tooltip_text (self->preset_combo,
+        _("Pick a preset unless you have a reason to tune Argon2id by hand."));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->preset_combo);
 
     self->iter_spin = adw_spin_row_new_with_range (2, 64, 1);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->iter_spin), _("Iterations"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->iter_spin), db_data->argon2id_iter);
+    gtk_widget_set_tooltip_text (self->iter_spin,
+        _("Number of Argon2id passes. Higher values slow brute-force attacks but make unlock take longer."));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->iter_spin);
 
     self->memcost_spin = adw_spin_row_new_with_range (65536, 1048576, 1024);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->memcost_spin), _("Memory Cost (KiB)"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->memcost_spin), db_data->argon2id_memcost);
+    gtk_widget_set_tooltip_text (self->memcost_spin,
+        _("RAM (in KiB) used during key derivation. Higher values defend against GPU and ASIC attacks."));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->memcost_spin);
 
     self->parallelism_spin = adw_spin_row_new_with_range (1, 16, 1);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->parallelism_spin), _("Parallelism"));
     adw_spin_row_set_value (ADW_SPIN_ROW (self->parallelism_spin), db_data->argon2id_parallelism);
+    gtk_widget_set_tooltip_text (self->parallelism_spin,
+        _("Number of threads used in parallel during derivation. Limited by available CPU cores."));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->parallelism_spin);
 
     /* Initialize preset selection from current values, then wire signals to avoid

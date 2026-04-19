@@ -1,5 +1,6 @@
 #include <glib.h>
 #include <glib/gi18n.h>
+#include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
 #include <termios.h>
@@ -7,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 #include <glib/gstdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -299,6 +301,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         } else {
             if (exported) {
                 g_print (_("Data successfully exported to: %s\n"), exported_file_path);
+                /* Mirror the GUI export path: stamp the GSettings key the
+                 * GUI's backup-age banner consults so the warning clears. */
+                {
+                    g_autoptr (GSettings) settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+                    g_settings_set_int64 (settings, "last-export-time", (gint64) time (NULL));
+                }
             } else {
                 gchar *msg = g_strconcat ("Option not recognized: ", cmdline_opts->export_type, NULL);
                 g_print ("%s\n", msg);

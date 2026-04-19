@@ -96,6 +96,11 @@
       <summary>Last seen application version</summary>
       <description>Tracks the last version the user has seen, used to show What's New dialogs on upgrade</description>
     </key>
+    <key name="last-export-time" type="x">
+      <default>0</default>
+      <summary>Last successful export timestamp</summary>
+      <description>Unix timestamp of the most recent successful export, used to remind the user to take periodic backups. 0 means never exported.</description>
+    </key>
   </schema>
 </schemalist>
 

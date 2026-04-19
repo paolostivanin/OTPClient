@@ -1,4 +1,5 @@
 #include <glib/gi18n.h>
+#include <time.h>
 #include "export-dialog.h"
 #include "import-export.h"
 
@@ -118,6 +119,13 @@ on_file_dialog_save_complete (GObject      *source,
         gtk_widget_set_visible (self->error_label, TRUE);
         g_free (error_msg);
         return;
+    }
+
+    /* Record this successful export so the main window can stop nagging
+     * the user about taking a backup (see otpclient_window_refresh_backup_banner). */
+    {
+        g_autoptr (GSettings) settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+        g_settings_set_int64 (settings, "last-export-time", (gint64) time (NULL));
     }
 
     adw_dialog_close (ADW_DIALOG (self));

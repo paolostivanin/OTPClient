@@ -279,7 +279,10 @@ emit_token (json_t       *obj,
             }
         }
         if (format == OUTPUT_FORMAT_TABLE) {
-            g_print (_("Current TOTP (valid for %d more second(s)): %s\n"), token_validity, current_totp);
+            g_print (ngettext ("Current TOTP (valid for %d more second): %s\n",
+                                "Current TOTP (valid for %d more seconds): %s\n",
+                                token_validity),
+                     token_validity, current_totp);
             if (show_next_token) g_print ("Next TOTP: %s\n", next_totp);
         } else if (row != NULL) {
             json_object_set_new (row, "current", json_string (current_totp));

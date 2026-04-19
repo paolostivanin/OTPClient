@@ -68,6 +68,13 @@
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <child>
+              <object class="AdwBanner" id="backup_age_banner">
+                <property name="revealed">False</property>
+                <property name="button-label" translatable="yes">Export Now</property>
+                <property name="action-name">win.export</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkSearchBar" id="search_bar">
                 <child>
                   <object class="GtkSearchEntry" id="search_entry">

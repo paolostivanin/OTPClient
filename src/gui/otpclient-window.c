@@ -34,6 +34,7 @@ struct _OTPClientWindow
     GtkWidget *search_entry;
     GtkWidget *lock_button;
     GtkWidget *settings_button;
+    GtkWidget *backup_age_banner;
     GtkWidget *database_list;
     GtkWidget *new_db_button;
     GtkWidget *open_db_button;
@@ -868,6 +869,53 @@ search_filter_func (gpointer item,
             g_strstr_len (issuer_lower, -1, search_lower) != NULL);
 }
 
+/* Show a banner reminding the user to take a backup. We surface it when:
+ *   - the user has tokens but has never run an export, OR
+ *   - the last successful export is older than BACKUP_AGE_WARN_DAYS.
+ * The banner stays hidden when the DB is empty so brand-new users aren't
+ * scolded immediately. */
+#define BACKUP_AGE_WARN_DAYS 30
+
+static void
+refresh_backup_age_banner (OTPClientWindow *self)
+{
+    if (self->backup_age_banner == NULL || self->settings == NULL || self->otp_store == NULL)
+        return;
+
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    if (n_items == 0)
+    {
+        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), FALSE);
+        return;
+    }
+
+    gint64 last_export = g_settings_get_int64 (self->settings, "last-export-time");
+    gint64 now = (gint64) g_get_real_time () / G_USEC_PER_SEC;
+    const gint64 warn_secs = (gint64) BACKUP_AGE_WARN_DAYS * 24 * 60 * 60;
+
+    if (last_export == 0)
+    {
+        adw_banner_set_title (ADW_BANNER (self->backup_age_banner),
+                              _("You haven't exported a backup yet — keep a copy somewhere safe."));
+        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), TRUE);
+    }
+    else if (now - last_export > warn_secs)
+    {
+        gint days = (gint) ((now - last_export) / (60 * 60 * 24));
+        g_autofree gchar *msg = g_strdup_printf (
+            ngettext ("Your last backup is %d day old.",
+                      "Your last backup is %d days old.",
+                      days),
+            days);
+        adw_banner_set_title (ADW_BANNER (self->backup_age_banner), msg);
+        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), TRUE);
+    }
+    else
+    {
+        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), FALSE);
+    }
+}
+
 static void
 update_empty_state (OTPClientWindow *self)
 {
@@ -877,6 +925,8 @@ update_empty_state (OTPClientWindow *self)
     guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
     gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack),
                                       n_items > 0 ? "list" : "empty");
+
+    refresh_backup_age_banner (self);
 }
 
 static void
@@ -1927,9 +1977,10 @@ on_import_done (const ImportSummary *summary,
                                          "Skipped %u duplicates.",
                                          summary->skipped), summary->skipped);
     } else {
-        msg = g_strdup_printf (_("Imported %u, skipped %u duplicate%s."),
-                               summary->added, summary->skipped,
-                               summary->skipped == 1 ? "" : "s");
+        msg = g_strdup_printf (ngettext ("Imported %u, skipped %u duplicate.",
+                                         "Imported %u, skipped %u duplicates.",
+                                         summary->skipped),
+                               summary->added, summary->skipped);
     }
 
     AdwToast *toast = adw_toast_new (msg);
@@ -3432,6 +3483,11 @@ otpclient_window_init (OTPClientWindow *self)
 
         gboolean show_sidebar = g_settings_get_boolean (self->settings, "show-sidebar");
         adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), show_sidebar);
+
+        /* Banner state depends on this key — refresh whenever it changes
+         * (e.g. when the export dialog records a fresh export). */
+        g_signal_connect_swapped (self->settings, "changed::last-export-time",
+                                   G_CALLBACK (refresh_backup_age_banner), self);
     }
     else
     {
@@ -3501,6 +3557,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_entry);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, settings_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, backup_age_banner);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, sidebar_toggle_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, split_view);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, database_list);
