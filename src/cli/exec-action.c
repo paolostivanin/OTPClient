@@ -1,10 +1,12 @@
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gcrypt.h>
+#include <jansson.h>
 #include <termios.h>
 #include <libsecret/secret.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 #include <glib/gstdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -28,6 +30,39 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 {
     if (cmdline_opts->list_databases) {
         g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
+        if (cmdline_opts->output_format == OUTPUT_FORMAT_JSON) {
+            json_t *arr = json_array ();
+            if (db_list != NULL) {
+                for (guint i = 0; i < db_list->len; i++) {
+                    DbListEntry *entry = g_ptr_array_index (db_list, i);
+                    json_t *row = json_object ();
+                    json_object_set_new (row, "name", json_string (entry->name ? entry->name : ""));
+                    json_object_set_new (row, "path", json_string (entry->path ? entry->path : ""));
+                    json_array_append_new (arr, row);
+                }
+            }
+            char *dumped = json_dumps (arr, JSON_INDENT (2));
+            g_print ("%s\n", dumped);
+            gcry_free (dumped);
+            json_decref (arr);
+            return TRUE;
+        }
+        if (cmdline_opts->output_format == OUTPUT_FORMAT_CSV) {
+            g_print ("name,path\n");
+            if (db_list != NULL) {
+                for (guint i = 0; i < db_list->len; i++) {
+                    DbListEntry *entry = g_ptr_array_index (db_list, i);
+                    /* names/paths shouldn't normally contain commas, but escape just in case. */
+                    const gchar *n = entry->name ? entry->name : "";
+                    const gchar *p = entry->path ? entry->path : "";
+                    gboolean quote_n = strpbrk (n, ",\"\r\n") != NULL;
+                    gboolean quote_p = strpbrk (p, ",\"\r\n") != NULL;
+                    if (quote_n) g_print ("\"%s\",", n); else g_print ("%s,", n);
+                    if (quote_p) g_print ("\"%s\"\n", p); else g_print ("%s\n", p);
+                }
+            }
+            return TRUE;
+        }
         if (db_list == NULL || db_list->len == 0) {
             g_print ("No databases found in the configuration.\n");
             return TRUE;
@@ -149,11 +184,13 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     if (cmdline_opts->show) {
-        show_token (db_data, cmdline_opts->account, cmdline_opts->issuer, cmdline_opts->match_exact, cmdline_opts->show_next);
+        show_token (db_data, cmdline_opts->account, cmdline_opts->issuer,
+                    cmdline_opts->match_exact, cmdline_opts->show_next,
+                    cmdline_opts->output_format);
     }
 
     if (cmdline_opts->list) {
-        list_all_acc_iss (db_data);
+        list_all_acc_iss (db_data, cmdline_opts->output_format);
     }
 
     if (cmdline_opts->import) {

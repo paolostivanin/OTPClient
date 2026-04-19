@@ -64,6 +64,7 @@ main (gint    argc,
                     { "password-file", 'p', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) Read database password from a file instead of stdin.", NULL },
                     { "export-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export application settings as JSON.", NULL },
                     { "import-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import application settings from a JSON file (requires --file).", NULL },
+                    { "output", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Output format for --show, --list, --list-databases: table (default), json, csv.", "FORMAT" },
                     { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
                     { NULL }
             };
@@ -139,6 +140,8 @@ command_line (GApplication                *application __attribute__((unused)),
     cmdline_opts->password_file = NULL;
     cmdline_opts->export_settings = FALSE;
     cmdline_opts->import_settings = FALSE;
+    cmdline_opts->output = NULL;
+    cmdline_opts->output_format = OUTPUT_FORMAT_TABLE;
 
     if (!parse_options (cmdline, cmdline_opts)) {
         g_free_cmdline_opts (cmdline_opts);
@@ -262,6 +265,23 @@ parse_options (GApplicationCommandLine *cmdline,
     g_variant_dict_lookup (options, "export", "b", &cmdline_opts->export);
     g_variant_dict_lookup (options, "export-settings", "b", &cmdline_opts->export_settings);
     g_variant_dict_lookup (options, "import-settings", "b", &cmdline_opts->import_settings);
+
+    if (g_variant_dict_lookup (options, "output", "s", &cmdline_opts->output)) {
+        if (g_ascii_strcasecmp (cmdline_opts->output, "table") == 0) {
+            cmdline_opts->output_format = OUTPUT_FORMAT_TABLE;
+        } else if (g_ascii_strcasecmp (cmdline_opts->output, "json") == 0) {
+            cmdline_opts->output_format = OUTPUT_FORMAT_JSON;
+        } else if (g_ascii_strcasecmp (cmdline_opts->output, "csv") == 0) {
+            cmdline_opts->output_format = OUTPUT_FORMAT_CSV;
+        } else {
+            g_application_command_line_print (cmdline, "Unknown --output value '%s'. Expected: table, json, csv.\n", cmdline_opts->output);
+            return FALSE;
+        }
+        if (!cmdline_opts->show && !cmdline_opts->list && !cmdline_opts->list_databases) {
+            g_application_command_line_print (cmdline, "The --output option only applies to --show, --list, or --list-databases.\n");
+            return FALSE;
+        }
+    }
 
     guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export + cmdline_opts->export_settings + cmdline_opts->import_settings;
     if (action_count == 0) {
@@ -395,5 +415,6 @@ g_free_cmdline_opts (CmdlineOpts *co)
     g_free (co->export_type);
     g_free (co->export_dir);
     g_free (co->password_file);
+    g_free (co->output);
     g_free (co);
 }

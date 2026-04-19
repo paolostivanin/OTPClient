@@ -7,6 +7,12 @@ G_BEGIN_DECLS
 
 #define MAX_ABS_PATH_LEN 256
 
+typedef enum {
+    OUTPUT_FORMAT_TABLE = 0,
+    OUTPUT_FORMAT_JSON,
+    OUTPUT_FORMAT_CSV,
+} OutputFormat;
+
 typedef struct cmdline_opts_t {
     gchar *database;
     gboolean show;
@@ -26,6 +32,8 @@ typedef struct cmdline_opts_t {
     gchar *password_file;
     gboolean export_settings;
     gboolean import_settings;
+    gchar *output;            /* raw --output string, NULL when unset */
+    OutputFormat output_format;
 } CmdlineOpts;
 
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
