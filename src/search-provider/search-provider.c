@@ -19,10 +19,14 @@
 
 static gint32 global_max_file_size = 0;
 
-#define CACHE_TTL_SECONDS 5
+/* Cache TTL is a fallback: file monitors invalidate the cache eagerly when a
+ * DB file is touched on disk. The TTL covers the case where the on-disk DB
+ * is unchanged but a HOTP counter / secret service value moved underneath us. */
+#define CACHE_TTL_SECONDS 60
 
 static GPtrArray *cached_entries = NULL;
 static gint64     cached_at = 0;
+static GPtrArray *file_monitors = NULL;
 
 typedef struct otp_search_entry_t {
     gchar *id;
@@ -38,6 +42,11 @@ static GPtrArray *get_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
 static void send_notification (const gchar *label, const gchar *otp_value);
+static void clear_file_monitors (void);
+static void add_file_monitor (const gchar *path);
+static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
+                                GFileMonitorEvent event, gpointer user_data);
+static gboolean prewarm_cache (gpointer user_data);
 
 static const gchar *krunner_introspection_xml =
 "<node>"
@@ -165,9 +174,63 @@ load_entries_from_db (GPtrArray   *entries,
     g_free (db_data);
 }
 
+static void
+on_db_file_changed (GFileMonitor      *monitor G_GNUC_UNUSED,
+                    GFile             *file G_GNUC_UNUSED,
+                    GFile             *other G_GNUC_UNUSED,
+                    GFileMonitorEvent  event,
+                    gpointer           user_data G_GNUC_UNUSED)
+{
+    /* Invalidate on any event that could change the DB contents. CHANGED
+     * fires often during a write; CHANGES_DONE_HINT marks the end of a
+     * write batch. Either way, drop the cache so the next query rebuilds. */
+    if (event == G_FILE_MONITOR_EVENT_CHANGED ||
+        event == G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT ||
+        event == G_FILE_MONITOR_EVENT_CREATED ||
+        event == G_FILE_MONITOR_EVENT_DELETED ||
+        event == G_FILE_MONITOR_EVENT_RENAMED ||
+        event == G_FILE_MONITOR_EVENT_MOVED_IN ||
+        event == G_FILE_MONITOR_EVENT_MOVED_OUT)
+    {
+        cached_at = 0;
+    }
+}
+
+
+static void
+clear_file_monitors (void)
+{
+    if (file_monitors == NULL) return;
+    g_ptr_array_free (file_monitors, TRUE);
+    file_monitors = NULL;
+}
+
+
+static void
+add_file_monitor (const gchar *path)
+{
+    if (path == NULL) return;
+    g_autoptr(GFile) f = g_file_new_for_path (path);
+    g_autoptr(GError) err = NULL;
+    GFileMonitor *m = g_file_monitor_file (f, G_FILE_MONITOR_NONE, NULL, &err);
+    if (m == NULL) {
+        if (err != NULL)
+            g_warning ("Failed to monitor %s: %s", path, err->message);
+        return;
+    }
+    g_signal_connect (m, "changed", G_CALLBACK (on_db_file_changed), NULL);
+    if (file_monitors == NULL)
+        file_monitors = g_ptr_array_new_with_free_func (g_object_unref);
+    g_ptr_array_add (file_monitors, m);
+}
+
+
 static GPtrArray *
 load_entries_uncached (void)
 {
+    /* Re-arm monitors on every reload to follow changes in the DB list. */
+    clear_file_monitors ();
+
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify) otp_search_entry_free);
 
     g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
@@ -176,6 +239,7 @@ load_entries_uncached (void)
         for (guint i = 0; i < db_list->len; i++)
         {
             DbListEntry *dbe = g_ptr_array_index (db_list, i);
+            add_file_monitor (dbe->path);
             load_entries_from_db (entries, dbe->path, dbe->name, i);
         }
     }
@@ -183,8 +247,10 @@ load_entries_uncached (void)
     {
         /* Fallback: single-DB mode using db-path setting */
         g_autofree gchar *db_path = gsettings_common_get_db_path ();
-        if (db_path != NULL)
+        if (db_path != NULL) {
+            add_file_monitor (db_path);
             load_entries_from_db (entries, db_path, NULL, 0);
+        }
     }
 
     return entries;
@@ -195,7 +261,7 @@ static GPtrArray *
 get_entries (void)
 {
     gint64 now = time (NULL);
-    if (cached_entries != NULL && (now - cached_at) < CACHE_TTL_SECONDS)
+    if (cached_entries != NULL && cached_at != 0 && (now - cached_at) < CACHE_TTL_SECONDS)
         return cached_entries;
 
     if (cached_entries != NULL)
@@ -204,6 +270,17 @@ get_entries (void)
     cached_entries = load_entries_uncached ();
     cached_at = now;
     return cached_entries;
+}
+
+
+static gboolean
+prewarm_cache (gpointer user_data G_GNUC_UNUSED)
+{
+    /* Run once on idle so the first user query doesn't pay the Argon2id
+     * cost interactively. Failures are silently ignored — they'll be
+     * retried on the next query. */
+    (void) get_entries ();
+    return G_SOURCE_REMOVE;
 }
 
 
@@ -492,7 +569,13 @@ main (int    argc,
     if (force_gnome)
         g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE,
                         on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
+    g_idle_add (prewarm_cache, NULL);
     g_main_loop_run (main_loop);
+    clear_file_monitors ();
+    if (cached_entries != NULL) {
+        g_ptr_array_free (cached_entries, TRUE);
+        cached_entries = NULL;
+    }
     g_main_loop_unref (main_loop);
     return 0;
 }
