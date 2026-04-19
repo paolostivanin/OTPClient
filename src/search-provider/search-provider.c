@@ -32,8 +32,12 @@ typedef struct otp_search_entry_t {
     gchar *id;
     gchar *label;
     gchar *issuer;
-    gchar *otp_value;
     gchar *db_name;
+    gchar *db_path;        /* needed to recompute OTP on Run/Activate */
+    gsize  json_index;     /* position of the token within the DB's JSON array */
+    /* Pre-folded copies for entry_matches_terms — avoid casefolding per query. */
+    gchar *label_fold;
+    gchar *issuer_fold;
 } OtpSearchEntry;
 
 static void otp_search_entry_free (OtpSearchEntry *entry);
@@ -41,6 +45,7 @@ static GPtrArray *load_entries_uncached (void);
 static GPtrArray *get_entries (void);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
+static gchar *compute_otp_for_entry (const OtpSearchEntry *entry);
 static void send_notification (const gchar *label, const gchar *otp_value);
 static void clear_file_monitors (void);
 static void add_file_monitor (const gchar *path);
@@ -78,8 +83,10 @@ otp_search_entry_free (OtpSearchEntry *entry)
     g_free (entry->id);
     g_free (entry->label);
     g_free (entry->issuer);
-    g_free (entry->otp_value);
     g_free (entry->db_name);
+    g_free (entry->db_path);
+    g_free (entry->label_fold);
+    g_free (entry->issuer_fold);
     g_free (entry);
 }
 
@@ -156,13 +163,20 @@ load_entries_from_db (GPtrArray   *entries,
     {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
         if (label == NULL) continue;
+        const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         OtpSearchEntry *entry = g_new0 (OtpSearchEntry, 1);
         entry->id = g_strdup_printf ("%u:%" G_GSIZE_FORMAT, db_index, index);
         entry->label = g_strdup (label);
-        const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         entry->issuer = g_strdup (issuer ? issuer : "");
-        entry->otp_value = get_entry_otp_value (obj);
         entry->db_name = g_strdup (db_name);
+        entry->db_path = g_strdup (db_path);
+        entry->json_index = index;
+        /* Pre-casefold for entry_matches_terms — done once at load instead of
+         * once per term per query. Live OTP codes are no longer cached: they're
+         * recomputed on demand in compute_otp_for_entry, so a heap inspection
+         * of the daemon shows only labels/issuers, not active codes. */
+        entry->label_fold = g_utf8_casefold (entry->label, -1);
+        entry->issuer_fold = g_utf8_casefold (entry->issuer, -1);
         g_ptr_array_add (entries, entry);
     }
 
@@ -289,16 +303,58 @@ entry_matches_terms (const OtpSearchEntry *entry,
                      gchar               **terms,
                      gsize                 terms_len)
 {
-    if (terms_len == 0 || !entry->label) return FALSE;
-    g_autofree gchar *l_fold = g_utf8_casefold (entry->label, -1);
-    g_autofree gchar *i_fold = g_utf8_casefold (entry->issuer ? entry->issuer : "", -1);
+    if (terms_len == 0 || !entry->label_fold) return FALSE;
     for (gsize i = 0; i < terms_len; i++) {
         if (!terms[i]) continue;
         g_autofree gchar *t_fold = g_utf8_casefold (terms[i], -1);
-        if (!g_strstr_len (l_fold, -1, t_fold) && !g_strstr_len (i_fold, -1, t_fold))
+        if (!g_strstr_len (entry->label_fold, -1, t_fold) &&
+            !g_strstr_len (entry->issuer_fold, -1, t_fold))
             return FALSE;
     }
     return TRUE;
+}
+
+
+static gchar *
+compute_otp_for_entry (const OtpSearchEntry *entry)
+{
+    /* Open, decrypt, look up the JSON object, compute the OTP, then wipe
+     * everything. The Argon2id derivation pays the user-visible latency, but
+     * the cached derived key in db_data->cached_derived_key + the file
+     * monitor + the 60 s entry cache mean this only happens on the first Run
+     * after the DB has changed. The trade vs caching the OTP value: heap
+     * inspection of the daemon never reveals an active OTP. */
+    if (entry == NULL || entry->db_path == NULL) return NULL;
+    if (!gsettings_common_get_use_secret_service ()) return NULL;
+
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+                                               "string", entry->db_path, NULL);
+    if (pwd == NULL) return NULL;
+
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->db_path = g_strdup (entry->db_path);
+    db_data->key = secure_strdup (pwd);
+    secret_password_free (pwd);
+    db_data->max_file_size_from_memlock = global_max_file_size;
+
+    GError *err = NULL;
+    load_db (db_data, &err);
+    gchar *otp = NULL;
+    if (err == NULL && db_data->in_memory_json_data != NULL) {
+        json_t *obj = json_array_get (db_data->in_memory_json_data, entry->json_index);
+        if (obj != NULL)
+            otp = get_entry_otp_value (obj);
+    }
+    if (err != NULL) g_clear_error (&err);
+
+    db_invalidate_kdf_cache (db_data);
+    if (db_data->key) gcry_free (db_data->key);
+    if (db_data->in_memory_json_data) json_decref (db_data->in_memory_json_data);
+    g_slist_free_full (db_data->objects_hash, g_free);
+    g_free (db_data->db_path);
+    g_free (db_data);
+
+    return otp;
 }
 
 
@@ -400,7 +456,7 @@ handle_gnome_call (GDBusConnection       *conn,
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
             if (g_strcmp0 (e->id, id) == 0) {
-                otp = g_strdup (e->otp_value);
+                otp = compute_otp_for_entry (e);
                 label = g_strdup (e->label);
                 break;
             }
@@ -437,7 +493,6 @@ handle_krunner_call (GDBusConnection       *conn,
             for (guint i = 0; i < entries->len; i++) {
                 OtpSearchEntry *e = g_ptr_array_index (entries, i);
                 if (!entry_matches_terms (e, terms, terms_len)) continue;
-                if (!e->otp_value) continue;
                 GVariantBuilder props;
                 g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
                 // Deliberately do NOT include the OTP value in the subtitle:
@@ -469,7 +524,7 @@ handle_krunner_call (GDBusConnection       *conn,
         for (guint i = 0; i < entries->len; i++) {
             OtpSearchEntry *e = g_ptr_array_index (entries, i);
             if (g_strcmp0 (e->id, id) == 0) {
-                otp = g_strdup (e->otp_value);
+                otp = compute_otp_for_entry (e);
                 label = g_strdup (e->label);
                 break;
             }
