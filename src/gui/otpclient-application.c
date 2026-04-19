@@ -1,4 +1,5 @@
 #include <glib/gi18n.h>
+#include <glib-unix.h>
 #include <adwaita.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
@@ -573,6 +574,38 @@ init_database (OTPClientApplication *self)
 }
 
 static void
+clear_session_clipboard (void)
+{
+    /* Best-effort: requires a default GdkDisplay, which is only present after
+     * the app activates. Outside that window the clipboard is naturally empty. */
+    GdkDisplay *display = gdk_display_get_default ();
+    if (display == NULL)
+        return;
+    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
+    if (clipboard != NULL)
+        gdk_clipboard_set_text (clipboard, "");
+}
+
+static gboolean
+otpclient_application_signal_quit (gpointer user_data)
+{
+    GApplication *app = G_APPLICATION (user_data);
+    clear_session_clipboard ();
+    g_application_quit (app);
+    return G_SOURCE_REMOVE;
+}
+
+static void
+otpclient_application_shutdown (GApplication *application)
+{
+    /* Covers the normal-exit case (Quit action, window close, app.quit). The
+     * signal path goes through clear_session_clipboard before calling quit,
+     * but doing it here too is idempotent. */
+    clear_session_clipboard ();
+    G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (application);
+}
+
+static void
 otpclient_application_startup (GApplication *application)
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION(application);
@@ -630,6 +663,12 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
                                             ADW_COLOR_SCHEME_FORCE_DARK);
 
     G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
+
+    /* Clear the clipboard and exit cleanly on signal-driven termination so
+     * we don't leave a copied OTP behind when the user kills the process. */
+    g_unix_signal_add (SIGINT,  otpclient_application_signal_quit, application);
+    g_unix_signal_add (SIGTERM, otpclient_application_signal_quit, application);
+    g_unix_signal_add (SIGHUP,  otpclient_application_signal_quit, application);
 
     gtk_window_set_default_icon_name (APPLICATION_ID);
     self->window = OTPCLIENT_WINDOW(otpclient_window_new (self));
@@ -703,6 +742,7 @@ otpclient_application_class_init (OTPClientApplicationClass *klass)
 
     application_class->activate = otpclient_application_activate;
     application_class->startup = otpclient_application_startup;
+    application_class->shutdown = otpclient_application_shutdown;
     object_class->dispose = otpclient_application_dispose;
 }
 

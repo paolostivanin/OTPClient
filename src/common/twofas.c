@@ -51,8 +51,7 @@ get_twofas_data (const gchar  *path,
                  gsize         db_size,
                  GError      **err)
 {
-    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+    if (!path_is_safe_regular_file (path, err)) {
         return NULL;
     }
 

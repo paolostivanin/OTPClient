@@ -8,6 +8,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <errno.h>
 #include "gquarks.h"
 #include "db-common.h"
 #include "file-size.h"
@@ -709,15 +710,21 @@ perform_backup_restore (const gchar *path,
     GFile *src = g_file_new_for_path (src_path);
     GFile *dst = g_file_new_for_path (dst_path);
 
-    g_free (src_path);
-    g_free (dst_path);
-
     if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
         g_printerr ("Couldn't %s: %s\n", is_backup ? "create the backup" : "restore the backup", err->message);
         g_clear_error (&err);
     } else {
+        /* g_file_copy preserves the source's permissions, but on a fresh
+         * destination created via umask the result can be world-readable.
+         * Force 0600 so the backup is no more permissive than the live DB. */
+        if (g_chmod (dst_path, 0600) != 0) {
+            g_warning ("Failed to chmod 0600 on %s: %s", dst_path, g_strerror (errno));
+        }
         g_print("%s\n", is_backup ? _("Backup copy successfully created.") : _("Backup copy successfully restored."));
     }
+
+    g_free (src_path);
+    g_free (dst_path);
 
     g_object_unref (src);
     g_object_unref (dst);

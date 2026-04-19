@@ -93,4 +93,10 @@ GKeyFile         *get_kf_ptr                     (void);
 gboolean          is_secmem_available            (gsize               required_size,
                                                   GError            **err);
 
+/* Validate that path refers to a regular file (not a symlink, directory, or
+ * special file) using a single open(O_NOFOLLOW)+fstat. Narrows the TOCTOU
+ * window vs g_file_test, and refuses to open through symlinks. */
+gboolean          path_is_safe_regular_file      (const gchar        *path,
+                                                  GError            **err);
+
 G_END_DECLS

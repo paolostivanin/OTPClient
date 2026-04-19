@@ -1,8 +1,13 @@
+#define _GNU_SOURCE
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <sys/resource.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 #include <cotp.h>
 #include "gcrypt.h"
 #include "jansson.h"
@@ -63,16 +68,15 @@ init_libs (gint32 max_file_size)
 gint
 get_algo_int_from_str (const gchar *algo)
 {
-    gint algo_int;
-    if (g_strcmp0 (algo, "SHA1") == 0) {
-        algo_int = COTP_SHA1;
-    } else if (g_strcmp0 (algo, "SHA256") == 0) {
-        algo_int = COTP_SHA256;
-    } else {
-        algo_int = COTP_SHA512;
-    }
-
-    return algo_int;
+    if (g_strcmp0 (algo, "SHA1") == 0)
+        return COTP_SHA1;
+    if (g_strcmp0 (algo, "SHA256") == 0)
+        return COTP_SHA256;
+    if (g_strcmp0 (algo, "SHA512") == 0)
+        return COTP_SHA512;
+    g_warning ("Unknown OTP algorithm '%s'; defaulting to SHA1.",
+               algo != NULL ? algo : "(null)");
+    return COTP_SHA1;
 }
 
 
@@ -511,5 +515,38 @@ is_secmem_available (gsize    required_size,
         return FALSE;
     }
     gcry_free (test);
+    return TRUE;
+}
+
+
+gboolean
+path_is_safe_regular_file (const gchar  *path,
+                           GError      **err)
+{
+    if (path == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "No path supplied.");
+        return FALSE;
+    }
+    int fd = open (path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Refusing to open '%s': %s", path,
+                     errno == ELOOP ? "is a symlink" : g_strerror (errno));
+        return FALSE;
+    }
+    struct stat st;
+    if (fstat (fd, &st) < 0) {
+        int saved_errno = errno;
+        close (fd);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Cannot stat '%s': %s", path, g_strerror (saved_errno));
+        return FALSE;
+    }
+    close (fd);
+    if (!S_ISREG (st.st_mode)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "'%s' is not a regular file.", path);
+        return FALSE;
+    }
     return TRUE;
 }

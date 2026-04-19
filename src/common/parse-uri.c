@@ -145,12 +145,21 @@ get_otpauth_data (const gchar  *path,
 }
 
 
+/* Real otpauth:// URIs are well under 1 KB. Cap at 4 KB so a malformed or
+ * malicious backup file with a megabyte-long token can't drag the parser
+ * through gigabytes of g_strsplit allocations. */
+#define MAX_OTPAUTH_URI_LEN 4096
+
 static void
 parse_uri (const gchar   *uri,
            GSList       **otps)
 {
     const gchar *uri_copy = uri;
     if (g_ascii_strncasecmp (uri_copy, "otpauth://", 10) != 0) {
+        return;
+    }
+    if (strnlen (uri_copy, MAX_OTPAUTH_URI_LEN + 1) > MAX_OTPAUTH_URI_LEN) {
+        g_warning ("Skipping otpauth URI larger than %d bytes.", MAX_OTPAUTH_URI_LEN);
         return;
     }
     uri_copy += 10;
