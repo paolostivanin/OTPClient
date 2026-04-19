@@ -74,6 +74,12 @@ struct _OTPClientWindow
     /* Undo delete */
     json_t *deleted_token;
     guint   deleted_token_pos;
+
+    /* Deferred HOTP counter persistence: counters are advanced in the
+     * in-memory JSON immediately, but the (expensive) re-encrypt + rewrite
+     * is held off until the next lock / shutdown so a burst of HOTP clicks
+     * costs one disk write instead of N. */
+    gboolean hotp_counter_dirty;
 };
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -349,6 +355,15 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
             text = otp_entry_get_issuer (entry);
             break;
         case OTP_COLUMN_VALUE:
+            /* For cross-DB entries we never computed the OTP upfront; do it
+             * the first time the row is bound for display. The result is
+             * cached on the entry so subsequent rebinds are free. */
+            if (otp_entry_get_db_name (entry) != NULL)
+            {
+                const gchar *cached = otp_entry_get_otp_value (entry);
+                if (cached == NULL || cached[0] == '\0')
+                    otp_entry_update_otp (entry);
+            }
             text = otp_entry_get_otp_value (entry);
             break;
         default:
@@ -673,7 +688,10 @@ cross_db_load_thread (GTask        *task,
             if (group != NULL)
                 otp_entry_set_group (entry, group);
             otp_entry_set_db_name (entry, dbe->name);
-            otp_entry_update_otp (entry);
+            /* OTP is computed lazily — see otp_text_column_bind /
+             * on_otp_selection_changed. Computing every cross-DB entry's OTP
+             * upfront wastes cycles when the user only opens search to find
+             * one token. */
             g_list_store_append (result, entry);
             g_object_unref (entry);
         }
@@ -1259,16 +1277,17 @@ on_otp_selection_changed (GtkSingleSelection *selection,
             if (token_obj != NULL)
             {
                 json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
-                GError *err = NULL;
-                update_db (db_data, &err);
-                if (err != NULL)
-                {
-                    g_warning ("Failed to persist HOTP counter: %s", err->message);
-                    g_clear_error (&err);
-                }
+                /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up. */
+                self->hotp_counter_dirty = TRUE;
             }
         }
     }
+
+    /* For cross-DB entries, the cached OTP may be missing (never computed)
+     * or stale (TOTP rotated since the row was first bound). Recompute now
+     * so the user always copies a fresh code. */
+    if (otp_entry_get_db_name (entry) != NULL)
+        otp_entry_update_otp (entry);
 
     const gchar *otp_value = otp_entry_get_otp_value (entry);
     if (otp_value == NULL || otp_value[0] == '\0')
@@ -1618,7 +1637,8 @@ otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
 
-
+    /* Persist any deferred HOTP counter advances before tearing down. */
+    otpclient_window_flush_pending_writes (win);
 
     if (win->deleted_token != NULL)
     {
@@ -1665,6 +1685,36 @@ otpclient_window_dispose (GObject *object)
 
     gtk_widget_dispose_template (GTK_WIDGET (object), OTPCLIENT_TYPE_WINDOW);
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
+}
+
+void
+otpclient_window_flush_pending_writes (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    if (!self->hotp_counter_dirty)
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to persist deferred HOTP counters: %s", err->message);
+        g_clear_error (&err);
+    }
+    else
+    {
+        self->hotp_counter_dirty = FALSE;
+    }
 }
 
 GListStore *

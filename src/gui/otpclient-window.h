@@ -36,4 +36,6 @@ void                otpclient_window_hide_loading    (OTPClientWindow *self);
 void                otpclient_window_set_locked_indicator (OTPClientWindow *self,
                                                            gboolean         locked);
 
+void                otpclient_window_flush_pending_writes (OTPClientWindow *self);
+
 G_END_DECLS

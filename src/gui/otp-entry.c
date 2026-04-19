@@ -260,10 +260,11 @@ otp_entry_class_init (OTPEntryClass *klass)
 static void
 otp_entry_init (OTPEntry *self)
 {
-    self->period = 30;
-    self->digits = 6;
-    self->algorithm = g_strdup ("SHA1");
-    self->otp_type = g_strdup ("TOTP");
+    /* Construct-only string properties ("otp-type", "algorithm") and the
+     * uint defaults ("period", "digits") all have GParamSpec defaults that
+     * GObject applies at construction time via set_property, so there is no
+     * need to seed them here. */
+    (void) self;
 }
 
 OTPEntry *

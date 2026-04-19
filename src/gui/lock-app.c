@@ -62,7 +62,11 @@ lock_app_lock (OTPClientApplication *app)
         return;
 
     if (OTPCLIENT_IS_WINDOW (win))
+    {
+        /* Persist any deferred HOTP counter advances while we still hold the key. */
+        otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win));
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
+    }
 
     /* Show password dialog to unlock */
     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
