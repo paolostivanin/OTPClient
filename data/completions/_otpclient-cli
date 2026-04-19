@@ -1,0 +1,53 @@
+#compdef otpclient-cli
+# zsh completion for otpclient-cli
+# Install to a directory listed in $fpath, e.g. /usr/share/zsh/site-functions/_otpclient-cli
+
+_otpclient_cli() {
+    local -a actions selectors io fmt types
+    actions=(
+        '--show[show OTP for a given account/issuer]'
+        '-s[show OTP for a given account/issuer]'
+        '--list[list all tokens in the database]'
+        '-l[list all tokens in the database]'
+        '--list-databases[print known databases from the configuration]'
+        '--list-types[print supported import/export types]'
+        '--import[import tokens from a backup file]'
+        '--export[export tokens to a backup file]'
+        '--export-settings[print or save app settings as JSON]'
+        '--import-settings[restore app settings from a JSON file]'
+        '--version[print version and exit]'
+        '-v[print version and exit]'
+    )
+    selectors=(
+        '--database=[database path or name]:database:_files'
+        '-d+[database path or name]:database:_files'
+        '--account=[account label]:account: '
+        '-a+[account label]:account: '
+        '--issuer=[issuer]:issuer: '
+        '-i+[issuer]:issuer: '
+        '--match-exact[case-sensitive equality match]'
+        '-m[case-sensitive equality match]'
+        '--show-next[also print the next OTP]'
+        '-n[also print the next OTP]'
+    )
+    io=(
+        '--type=[backup format identifier]:type:(aegis_plain aegis_enc authpro_plain authpro_enc twofas_plain twofas_enc freeotpplus_plain google_qr_file)'
+        '-t+[backup format identifier]:type:(aegis_plain aegis_enc authpro_plain authpro_enc twofas_plain twofas_enc freeotpplus_plain google_qr_file)'
+        '--file=[backup or settings file]:file:_files'
+        '-f+[backup or settings file]:file:_files'
+        '--output-dir=[export destination directory]:dir:_files -/'
+        '-o+[export destination directory]:dir:_files -/'
+        '--password-file=[file containing the DB password]:file:_files'
+        '-p+[file containing the DB password]:file:_files'
+        '--output=[output format]:format:(table json csv)'
+    )
+
+    _arguments -s -S \
+        $actions \
+        $selectors \
+        $io \
+        '--help[show help]' \
+        '-h[show help]'
+}
+
+_otpclient_cli "$@"

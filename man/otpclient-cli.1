@@ -1,0 +1,186 @@
+.TH OTPCLIENT-CLI 1 "April 2026" "otpclient-cli" "OTPClient Manual"
+.SH NAME
+otpclient-cli \- command-line interface for OTPClient
+.SH SYNOPSIS
+.B otpclient-cli
+.B \-\-show
+.RB [ \-d
+.IR DB ]
+.RB [ \-a
+.IR ACCOUNT ]
+.RB [ \-i
+.IR ISSUER ]
+.RB [ \-m ]
+.RB [ \-n ]
+.RB [ \-\-output
+.IR FORMAT ]
+.br
+.B otpclient-cli \-\-list
+.RB [ \-d
+.IR DB ]
+.RB [ \-\-output
+.IR FORMAT ]
+.br
+.B otpclient-cli \-\-list-databases
+.RB [ \-\-output
+.IR FORMAT ]
+.br
+.B otpclient-cli \-\-list-types
+.br
+.B otpclient-cli \-\-import \-\-type
+.I TYPE
+.B \-\-file
+.I PATH
+.RB [ \-d
+.IR DB ]
+.br
+.B otpclient-cli \-\-export \-\-type
+.I TYPE
+.RB [ \-\-output-dir
+.IR DIR ]
+.RB [ \-d
+.IR DB ]
+.br
+.B otpclient-cli \-\-export-settings
+.RB [ \-\-file
+.IR PATH ]
+.br
+.B otpclient-cli \-\-import-settings \-\-file
+.I PATH
+.SH DESCRIPTION
+.B otpclient-cli
+is the command-line counterpart to the OTPClient GUI. It can show one-time
+passwords, list the contents of a database, import or export tokens in any
+of the supported formats, and back up or restore application settings.
+The on-disk database format is identical to the one used by the GUI and is
+encrypted with AES-256-GCM using an Argon2id-derived key.
+.SH OPTIONS
+.SS Actions
+Exactly one action must be supplied on each invocation.
+.TP
+.BR \-s ", " \-\-show
+Show the OTP for one or more tokens. Requires
+.B \-\-account
+or
+.BR \-\-issuer .
+.TP
+.BR \-l ", " \-\-list
+List every token in the database (account, issuer, group).
+.TP
+.B \-\-list-databases
+Print the list of known databases from the configuration.
+.TP
+.B \-\-list-types
+Print the import/export type identifiers accepted by
+.BR \-\-type .
+.TP
+.B \-\-import
+Import tokens from a backup file. Requires
+.B \-\-type
+and
+.BR \-\-file .
+.TP
+.B \-\-export
+Export tokens to a backup file. Requires
+.BR \-\-type .
+.TP
+.B \-\-export-settings
+Print the application settings (GSettings) as JSON, or write them to the
+file given via
+.BR \-\-file .
+.TP
+.B \-\-import-settings
+Restore application settings from the JSON file given via
+.BR \-\-file .
+.TP
+.BR \-v ", " \-\-version
+Print the version and exit.
+.SS Selection
+.TP
+.BR \-d ", " \-\-database " " \fIDB\fR
+Path to the database, or a database name as printed by
+.BR \-\-list-databases .
+When omitted, the default database from the configuration is used.
+.TP
+.BR \-a ", " \-\-account " " \fIACCOUNT\fR
+Account label to match (used with
+.BR \-\-show ).
+.TP
+.BR \-i ", " \-\-issuer " " \fIISSUER\fR
+Issuer to match (used with
+.BR \-\-show ).
+.TP
+.BR \-m ", " \-\-match-exact
+Match
+.B \-\-account
+and
+.B \-\-issuer
+with case-sensitive equality instead of the default case-insensitive
+contains-style comparison.
+.TP
+.BR \-n ", " \-\-show-next
+Also print the OTP that will become valid after the current period.
+Has no effect for HOTP tokens.
+.SS Input / output
+.TP
+.BR \-t ", " \-\-type " " \fITYPE\fR
+Backup format identifier. Use
+.B \-\-list-types
+to see the accepted values.
+.TP
+.BR \-f ", " \-\-file " " \fIPATH\fR
+Backup file to import or settings file to write/read.
+.TP
+.BR \-o ", " \-\-output-dir " " \fIDIR\fR
+Destination directory for
+.BR \-\-export .
+Defaults to the user's home directory. Not available in the Flatpak build.
+.TP
+.BR \-p ", " \-\-password-file " " \fIPATH\fR
+Read the database decryption password from the first line of
+.I PATH
+instead of prompting on stdin. The file must be a regular file (not a
+symlink) with mode
+.B 0600
+or stricter.
+.TP
+.BI \-\-output= FORMAT
+Output format for
+.BR \-\-show ", " \-\-list ", and " \-\-list-databases .
+Accepted values:
+.BR table " (default), " json " or " csv .
+JSON output is a single document; CSV output starts with a header row.
+.SH EXAMPLES
+.TP
+List every account/issuer pair in the default database:
+.B otpclient-cli \-\-list
+.TP
+Print the current OTP for an account, plus the next one:
+.B otpclient-cli \-\-show \-a alice -n
+.TP
+Get the current OTP as a JSON object for scripting:
+.B otpclient-cli \-\-show \-a alice \-\-output=json
+.TP
+Import an Aegis encrypted backup:
+.B otpclient-cli \-\-import \-\-type aegis_enc \-\-file aegis.json
+.TP
+Export to a 2FAS plain backup in /tmp:
+.B otpclient-cli \-\-export \-\-type twofas_plain \-o /tmp
+.TP
+Use a passphrase file (chmod 0600) instead of stdin:
+.B otpclient-cli \-\-show \-a alice \-p ~/.config/otpclient/passphrase
+.SH EXIT STATUS
+.B otpclient-cli
+exits with
+.B 0
+on success and a non-zero status on error (incorrect password, missing
+file, malformed input, etc.). Specific error messages are written to
+standard error.
+.SH FILES
+.TP
+.I ~/.config/otpclient/otpclient.cfg
+Configuration file holding the default database path.
+.SH SEE ALSO
+.BR otpclient (1)
+.SH BUGS
+Report issues at https://github.com/paolostivanin/OTPClient/issues

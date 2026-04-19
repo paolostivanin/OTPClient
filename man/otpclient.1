@@ -1,0 +1,56 @@
+.TH OTPCLIENT 1 "April 2026" "otpclient" "OTPClient Manual"
+.SH NAME
+otpclient \- GTK4 / libadwaita client for TOTP and HOTP one-time passwords
+.SH SYNOPSIS
+.B otpclient
+.SH DESCRIPTION
+.B OTPClient
+is a GTK4 / libadwaita application that generates Time-based (TOTP) and
+HMAC-based (HOTP) one-time passwords. The encrypted token database is
+stored on disk using AES-256-GCM with an Argon2id-derived key.
+.SH FEATURES
+.IP \(bu 3
+TOTP and HOTP support.
+.IP \(bu 3
+Custom digits (4-10), period (1-300 s), and algorithm (SHA1, SHA256, SHA512).
+.IP \(bu 3
+Steam-style codes.
+.IP \(bu 3
+Manage multiple databases and switch between them.
+.IP \(bu 3
+Per-token grouping with filterable views.
+.IP \(bu 3
+Import and export Aegis (plain or encrypted), AuthPro (plain or encrypted),
+2FAS (plain or encrypted), FreeOTP+ (plain), and Google Authenticator QR
+codes (file or live capture).
+.IP \(bu 3
+Add new tokens manually, by scanning a QR code from a file, or via the
+device camera.
+.IP \(bu 3
+Auto-lock after a configurable inactivity timeout, on screensaver
+activation, or on demand.
+.IP \(bu 3
+Optional integration with the system Secret Service for keyring-stored
+database passwords (also enables cross-database search).
+.IP \(bu 3
+Optional GNOME Shell / KDE KRunner search provider that surfaces tokens
+in the system search results.
+.SH FILES
+.TP
+.I ~/.var/app/com.github.paolostivanin.OTPClient/config/otpclient/otpclient.cfg
+Flatpak configuration file (when running under Flatpak).
+.TP
+.I ~/.config/otpclient/otpclient.cfg
+Configuration file containing the path to the active database.
+.TP
+GSettings schema
+.I com.github.paolostivanin.OTPClient
+Stores user preferences (theme, auto-lock, notifications, KDF parameters, etc.).
+.SH ENVIRONMENT
+.TP
+.B XDG_CONFIG_HOME
+Honoured by GLib for locating the configuration file.
+.SH SEE ALSO
+.BR otpclient-cli (1)
+.SH BUGS
+Report issues at https://github.com/paolostivanin/OTPClient/issues

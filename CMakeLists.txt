@@ -135,7 +135,7 @@ if(BUILD_GUI)
 
     install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES data/com.github.paolostivanin.OTPClient.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-    install(FILES man/otpclient.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    install(FILES man/otpclient.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
     set(GUI_UI_FILES
             src/gui/ui/window.ui
@@ -158,7 +158,23 @@ if(BUILD_CLI)
     set_target_properties(${PROJECT_NAME}-cli PROPERTIES OUTPUT_NAME "otpclient-cli")
 
     install(TARGETS ${PROJECT_NAME}-cli DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES man/otpclient-cli.1.gz DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+    install(FILES man/otpclient-cli.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+
+    # Shell completions for otpclient-cli. Honour pkg-config's reported dirs
+    # when available; otherwise fall back to the conventional locations.
+    pkg_get_variable(BASH_COMPLETION_DIR bash-completion completionsdir)
+    if(NOT BASH_COMPLETION_DIR)
+        set(BASH_COMPLETION_DIR "${CMAKE_INSTALL_DATADIR}/bash-completion/completions")
+    endif()
+    install(FILES data/completions/otpclient-cli.bash
+            DESTINATION ${BASH_COMPLETION_DIR}
+            RENAME otpclient-cli)
+
+    install(FILES data/completions/_otpclient-cli
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/zsh/site-functions)
+
+    install(FILES data/completions/otpclient-cli.fish
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/fish/vendor_completions.d)
 endif()
 
 if(BUILD_SEARCH_PROVIDER)
