@@ -79,9 +79,13 @@ struct _OTPClientWindow
     /* Deferred HOTP counter persistence: counters are advanced in the
      * in-memory JSON immediately, but the (expensive) re-encrypt + rewrite
      * is held off until the next lock / shutdown so a burst of HOTP clicks
-     * costs one disk write instead of N. */
+     * costs one disk write instead of N. A debounced timer caps the window
+     * of loss to a few seconds in case of a hard crash (kill -9, OOM). */
     gboolean hotp_counter_dirty;
+    guint    hotp_flush_timeout_id;
 };
+
+#define HOTP_FLUSH_DEBOUNCE_SECONDS 5
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
 
@@ -101,6 +105,8 @@ typedef struct
     guint remaining;
     guint period;
 } ValidityWidgets;
+
+static void schedule_hotp_flush (OTPClientWindow *self);
 
 static void
 validity_widgets_free (ValidityWidgets *widgets)
@@ -882,22 +888,30 @@ refresh_backup_age_banner (OTPClientWindow *self)
     if (self->backup_age_banner == NULL || self->settings == NULL || self->otp_store == NULL)
         return;
 
+    gboolean reveal = FALSE;
+
     guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
     if (n_items == 0)
-    {
-        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), FALSE);
-        return;
-    }
+        goto apply;
 
     gint64 last_export = g_settings_get_int64 (self->settings, "last-export-time");
+    gint64 snoozed_until = g_settings_get_int64 (self->settings, "backup-banner-snoozed-until");
     gint64 now = (gint64) g_get_real_time () / G_USEC_PER_SEC;
     const gint64 warn_secs = (gint64) BACKUP_AGE_WARN_DAYS * 24 * 60 * 60;
+
+    if (snoozed_until > now)
+        goto apply;
 
     if (last_export == 0)
     {
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner),
                               _("You haven't exported a backup yet — keep a copy somewhere safe."));
-        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), TRUE);
+        reveal = TRUE;
+    }
+    else if (last_export > now)
+    {
+        /* Clock skew: stored timestamp is in the future (likely NTP correction
+         * after a recent export). Treat as fresh and hide the banner. */
     }
     else if (now - last_export > warn_secs)
     {
@@ -908,12 +922,13 @@ refresh_backup_age_banner (OTPClientWindow *self)
                       days),
             days);
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner), msg);
-        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), TRUE);
+        reveal = TRUE;
     }
-    else
-    {
-        adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), FALSE);
-    }
+
+apply:
+    adw_banner_set_revealed (ADW_BANNER (self->backup_age_banner), reveal);
+    gtk_widget_action_set_enabled (GTK_WIDGET (self),
+                                   "win.snooze-backup-banner", reveal);
 }
 
 static void
@@ -960,6 +975,14 @@ otpclient_window_hide_loading (OTPClientWindow *self)
 }
 
 void
+otpclient_window_show_error_toast (OTPClientWindow *self,
+                                    const gchar     *message)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    show_error_toast (self, "%s", message != NULL ? message : "");
+}
+
+void
 otpclient_window_set_locked_indicator (OTPClientWindow *self,
                                         gboolean         locked)
 {
@@ -974,6 +997,24 @@ otpclient_window_set_locked_indicator (OTPClientWindow *self,
         gtk_button_set_icon_name (GTK_BUTTON (self->lock_button), "system-lock-screen-symbolic");
         gtk_widget_set_tooltip_text (self->lock_button, _("Lock database"));
     }
+}
+
+void
+otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
+                                          gboolean         enabled)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    static const gchar * const db_actions[] = {
+        "win.add-manual",
+        "win.add-qr-file",
+        "win.add-qr-webcam",
+        "win.import",
+        "win.export",
+    };
+
+    for (gsize i = 0; i < G_N_ELEMENTS (db_actions); i++)
+        gtk_widget_action_set_enabled (GTK_WIDGET (self), db_actions[i], enabled);
 }
 
 static void
@@ -1289,6 +1330,22 @@ clipboard_clear_cb (gpointer user_data)
     return G_SOURCE_REMOVE;
 }
 
+void
+otpclient_window_clear_clipboard_now (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    if (self->clipboard_clear_timer_id != 0)
+    {
+        g_source_remove (self->clipboard_clear_timer_id);
+        self->clipboard_clear_timer_id = 0;
+    }
+
+    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    if (clipboard != NULL)
+        gdk_clipboard_set_text (clipboard, "");
+}
+
 static void
 on_otp_selection_changed (GtkSingleSelection *selection,
                           GParamSpec         *pspec,
@@ -1327,8 +1384,11 @@ on_otp_selection_changed (GtkSingleSelection *selection,
             if (token_obj != NULL)
             {
                 json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
-                /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up. */
+                /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up.
+                 * Also arm a debounced timer so a hard crash within HOTP_FLUSH_DEBOUNCE_SECONDS
+                 * (rather than a clean shutdown) still persists the new counter. */
                 self->hotp_counter_dirty = TRUE;
+                schedule_hotp_flush (self);
             }
         }
     }
@@ -1742,6 +1802,12 @@ otpclient_window_flush_pending_writes (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
 
+    if (self->hotp_flush_timeout_id != 0)
+    {
+        g_source_remove (self->hotp_flush_timeout_id);
+        self->hotp_flush_timeout_id = 0;
+    }
+
     if (!self->hotp_counter_dirty)
         return;
 
@@ -1765,6 +1831,25 @@ otpclient_window_flush_pending_writes (OTPClientWindow *self)
     {
         self->hotp_counter_dirty = FALSE;
     }
+}
+
+static gboolean
+hotp_flush_debounce_cb (gpointer user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    self->hotp_flush_timeout_id = 0;
+    otpclient_window_flush_pending_writes (self);
+    return G_SOURCE_REMOVE;
+}
+
+static void
+schedule_hotp_flush (OTPClientWindow *self)
+{
+    if (self->hotp_flush_timeout_id != 0)
+        return;
+    self->hotp_flush_timeout_id =
+        g_timeout_add_seconds (HOTP_FLUSH_DEBOUNCE_SECONDS,
+                                hotp_flush_debounce_cb, self);
 }
 
 GListStore *
@@ -2182,6 +2267,26 @@ action_export (GtkWidget  *widget,
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
+#define BACKUP_BANNER_SNOOZE_DAYS 7
+
+static void
+action_snooze_backup_banner (GtkWidget  *widget,
+                             const char *action_name,
+                             GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    if (self->settings == NULL)
+        return;
+
+    gint64 now = (gint64) g_get_real_time () / G_USEC_PER_SEC;
+    gint64 until = now + (gint64) BACKUP_BANNER_SNOOZE_DAYS * 24 * 60 * 60;
+    g_settings_set_int64 (self->settings, "backup-banner-snoozed-until", until);
+    refresh_backup_age_banner (self);
+}
+
 static void
 action_settings (GtkWidget  *widget,
                  const char *action_name,
@@ -2475,23 +2580,33 @@ on_move_target_password (const gchar *password,
     }
     else
     {
-        /* Remove the token from the current (source) database */
+        /* Remove the token from the current (source) database. If writing
+         * the source back fails, restore the in-memory copy so the UI stays
+         * consistent with the on-disk state — otherwise a later reload would
+         * resurrect the token and the user would have a silent duplicate. */
         DatabaseData *src = otpclient_application_get_db_data (app);
         if (src != NULL && src->in_memory_json_data != NULL)
         {
+            json_t *removed = json_incref (json_array_get (src->in_memory_json_data, ctx->token_pos));
             json_array_remove (src->in_memory_json_data, ctx->token_pos);
             update_db (src, &err);
             if (err != NULL)
             {
-                show_error_toast (self, _("Could not remove token from source database: %s"), err->message);
+                json_array_insert (src->in_memory_json_data, ctx->token_pos, removed);
+                show_error_toast (self,
+                    _("Could not remove the token from the source database: %s. The token now exists in both databases; please remove the duplicate manually."),
+                    err->message);
                 g_clear_error (&err);
             }
+            json_decref (removed);
             on_db_modified (self);
         }
     }
 
     /* Clean up target */
-    json_decref (target->in_memory_json_data);
+    db_invalidate_kdf_cache (target);
+    if (target->in_memory_json_data != NULL)
+        json_decref (target->in_memory_json_data);
     gcry_free (target->key);
     g_free (target->db_path);
     g_slist_free_full (target->objects_hash, g_free);
@@ -3484,9 +3599,12 @@ otpclient_window_init (OTPClientWindow *self)
         gboolean show_sidebar = g_settings_get_boolean (self->settings, "show-sidebar");
         adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), show_sidebar);
 
-        /* Banner state depends on this key — refresh whenever it changes
-         * (e.g. when the export dialog records a fresh export). */
+        /* Banner state depends on these keys — refresh whenever they change
+         * (e.g. when the export dialog records a fresh export, or the user
+         * snoozes the reminder). */
         g_signal_connect_swapped (self->settings, "changed::last-export-time",
+                                   G_CALLBACK (refresh_backup_age_banner), self);
+        g_signal_connect_swapped (self->settings, "changed::backup-banner-snoozed-until",
                                    G_CALLBACK (refresh_backup_age_banner), self);
     }
     else
@@ -3497,6 +3615,10 @@ otpclient_window_init (OTPClientWindow *self)
     setup_otp_view (self);
     setup_database_list (self);
     update_empty_state (self);
+
+    /* No DB is loaded yet — keep DB-dependent actions (and the empty-state
+     * Add/Import CTAs that target them) disabled until populate runs. */
+    otpclient_window_set_db_actions_enabled (self, FALSE);
 
     /* Initialize group dropdown with default model */
     self->group_list_model = gtk_string_list_new (NULL);
@@ -3584,6 +3706,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_i, GDK_CONTROL_MASK, "win.import", NULL);
     gtk_widget_class_install_action (widget_class, "win.export", NULL, action_export);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_e, GDK_CONTROL_MASK, "win.export", NULL);
+    gtk_widget_class_install_action (widget_class, "win.snooze-backup-banner", NULL, action_snooze_backup_banner);
     gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_comma, GDK_CONTROL_MASK, "win.settings", NULL);
     gtk_widget_class_install_action (widget_class, "win.edit-token", NULL, action_edit_token);

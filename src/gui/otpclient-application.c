@@ -289,8 +289,12 @@ version_xy_less_than (const gchar *a,
                       const gchar *b)
 {
     gint ax = 0, ay = 0, bx = 0, by = 0;
-    sscanf (a, "%d.%d", &ax, &ay);
-    sscanf (b, "%d.%d", &bx, &by);
+    /* If either parse fails (malformed last-seen-version) treat as "no
+     * upgrade" rather than firing a misleading What's New dialog. */
+    if (sscanf (a, "%d.%d", &ax, &ay) != 2)
+        return FALSE;
+    if (sscanf (b, "%d.%d", &bx, &by) != 2)
+        return FALSE;
     return (ax < bx) || (ax == bx && ay < by);
 }
 
@@ -311,6 +315,10 @@ static void
 populate_window_from_db (OTPClientApplication *self)
 {
     if (self->db_data == NULL || self->db_data->in_memory_json_data == NULL)
+        return;
+    /* Window can be NULL if it was destroyed while the unlock thread was
+     * still running (150–300 ms Argon2id derive). Bail rather than deref. */
+    if (self->window == NULL)
         return;
 
     GListStore *store = otpclient_window_get_otp_store (self->window);
@@ -359,6 +367,7 @@ populate_window_from_db (OTPClientApplication *self)
     }
 
     otpclient_window_rebuild_groups (self->window);
+    otpclient_window_set_db_actions_enabled (self->window, TRUE);
 }
 
 static void
@@ -395,14 +404,14 @@ on_unlock_done (GObject      *source_object,
     (void) source_object;
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
-    if (self->window != NULL)
-        otpclient_window_hide_loading (self->window);
-
     GError *err = NULL;
     g_task_propagate_boolean (G_TASK (result), &err);
     if (err != NULL)
     {
         g_warning ("Failed to load database: %s", err->message);
+
+        if (self->window != NULL)
+            otpclient_window_hide_loading (self->window);
 
         /* Show password dialog again on wrong password */
         if (err->code == BAD_TAG_ERRCODE)
@@ -419,6 +428,19 @@ on_unlock_done (GObject      *source_object,
                 adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
             }
             return;
+        }
+
+        /* Any other failure (file too big, malformed header, secmem
+         * exhaustion, KDF param out-of-range, ...) is a dead-end: surface it
+         * to the user instead of leaving them staring at an empty window. */
+        if (self->window != NULL)
+        {
+            g_autofree gchar *msg = g_strdup_printf (_("Could not open database: %s"), err->message);
+            otpclient_window_show_error_toast (self->window, msg);
+        }
+        if (self->db_data != NULL && self->db_data->key != NULL) {
+            gcry_free (self->db_data->key);
+            self->db_data->key = NULL;
         }
         g_clear_error (&err);
         return;
@@ -438,9 +460,14 @@ on_unlock_done (GObject      *source_object,
                                NULL);
     }
 
+    /* Populate first, *then* swap out the loading page — otherwise
+     * non-empty databases briefly flash the empty-state placeholder. */
     populate_window_from_db (self);
     if (self->window != NULL)
+    {
+        otpclient_window_hide_loading (self->window);
         otpclient_window_start_otp_timer (self->window);
+    }
 }
 
 static void
@@ -590,6 +617,12 @@ static gboolean
 otpclient_application_signal_quit (gpointer user_data)
 {
     GApplication *app = G_APPLICATION (user_data);
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (app);
+    /* Persist any deferred HOTP counter advances before bailing — otherwise
+     * a SIGTERM (e.g. from the session manager during logout) loses them
+     * and the next startup serves stale codes. */
+    if (self->window != NULL)
+        otpclient_window_flush_pending_writes (self->window);
     clear_session_clipboard ();
     g_application_quit (app);
     return G_SOURCE_REMOVE;
@@ -601,6 +634,9 @@ otpclient_application_shutdown (GApplication *application)
     /* Covers the normal-exit case (Quit action, window close, app.quit). The
      * signal path goes through clear_session_clipboard before calling quit,
      * but doing it here too is idempotent. */
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (application);
+    if (self->window != NULL)
+        otpclient_window_flush_pending_writes (self->window);
     clear_session_clipboard ();
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (application);
 }

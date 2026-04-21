@@ -30,9 +30,6 @@
                     <property name="tooltip-text" translatable="yes">Add token</property>
                   </object>
                 </child>
-                <style>
-                  <class name="linked"/>
-                </style>
               </object>
             </child>
             <child type="start">
@@ -272,6 +269,10 @@
       <item>
         <attribute name="label" translatable="yes">KDF Parameters</attribute>
         <attribute name="action">app.kdf-settings</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Snooze Backup Reminder</attribute>
+        <attribute name="action">win.snooze-backup-banner</attribute>
       </item>
     </section>
     <section>

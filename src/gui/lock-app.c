@@ -65,7 +65,9 @@ lock_app_lock (OTPClientApplication *app)
     {
         /* Persist any deferred HOTP counter advances while we still hold the key. */
         otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win));
+        otpclient_window_clear_clipboard_now (OTPCLIENT_WINDOW (win));
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
+        otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), FALSE);
     }
 
     /* Show password dialog to unlock */
@@ -82,7 +84,10 @@ lock_app_unlock (OTPClientApplication *app)
 
     GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
     if (win != NULL && OTPCLIENT_IS_WINDOW (win))
+    {
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), FALSE);
+        otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), TRUE);
+    }
 
     if (lock_data != NULL)
         lock_data->last_user_activity = g_get_monotonic_time ();

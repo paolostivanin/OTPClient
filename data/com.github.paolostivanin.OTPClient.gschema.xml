@@ -101,6 +101,11 @@
       <summary>Last successful export timestamp</summary>
       <description>Unix timestamp of the most recent successful export, used to remind the user to take periodic backups. 0 means never exported.</description>
     </key>
+    <key name="backup-banner-snoozed-until" type="x">
+      <default>0</default>
+      <summary>Backup-age banner snooze deadline</summary>
+      <description>Unix timestamp until which the backup-age banner is suppressed. Set when the user explicitly snoozes the reminder.</description>
+    </key>
   </schema>
 </schemalist>
 

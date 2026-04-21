@@ -33,9 +33,17 @@ void                otpclient_window_rebuild_groups  (OTPClientWindow *self);
 void                otpclient_window_show_loading    (OTPClientWindow *self);
 void                otpclient_window_hide_loading    (OTPClientWindow *self);
 
+void                otpclient_window_show_error_toast (OTPClientWindow *self,
+                                                       const gchar     *message);
+
 void                otpclient_window_set_locked_indicator (OTPClientWindow *self,
                                                            gboolean         locked);
 
+void                otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
+                                                             gboolean         enabled);
+
 void                otpclient_window_flush_pending_writes (OTPClientWindow *self);
+
+void                otpclient_window_clear_clipboard_now (OTPClientWindow *self);
 
 G_END_DECLS
