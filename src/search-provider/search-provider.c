@@ -24,9 +24,12 @@ static gint32 global_max_file_size = 0;
  * is unchanged but a HOTP counter / secret service value moved underneath us. */
 #define CACHE_TTL_SECONDS 60
 
-static GPtrArray *cached_entries = NULL;
-static gint64     cached_at = 0;
-static GPtrArray *file_monitors = NULL;
+static GPtrArray  *cached_entries = NULL;
+static gint64      cached_at = 0;
+/* path (gchar*) → GFileMonitor*. Diffed across reloads so monitors for
+ * unchanged DB paths survive without a brief monitor-less window during
+ * which writes would slip past the cache invalidator. */
+static GHashTable *file_monitors = NULL;
 
 typedef struct otp_search_entry_t {
     gchar *id;
@@ -48,7 +51,7 @@ static gchar *get_entry_otp_value (json_t *obj);
 static gchar *compute_otp_for_entry (const OtpSearchEntry *entry);
 static void send_notification (const gchar *label, const gchar *otp_value);
 static void clear_file_monitors (void);
-static void add_file_monitor (const gchar *path);
+static void sync_file_monitors (GPtrArray *desired_paths);
 static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
                                 GFileMonitorEvent event, gpointer user_data);
 static gboolean prewarm_cache (gpointer user_data);
@@ -215,56 +218,98 @@ static void
 clear_file_monitors (void)
 {
     if (file_monitors == NULL) return;
-    g_ptr_array_free (file_monitors, TRUE);
+    g_hash_table_destroy (file_monitors);
     file_monitors = NULL;
 }
 
 
 static void
-add_file_monitor (const gchar *path)
+sync_file_monitors (GPtrArray *desired_paths)
 {
-    if (path == NULL) return;
-    g_autoptr(GFile) f = g_file_new_for_path (path);
-    g_autoptr(GError) err = NULL;
-    GFileMonitor *m = g_file_monitor_file (f, G_FILE_MONITOR_NONE, NULL, &err);
-    if (m == NULL) {
-        if (err != NULL)
-            g_warning ("Failed to monitor %s: %s", path, err->message);
-        return;
-    }
-    g_signal_connect (m, "changed", G_CALLBACK (on_db_file_changed), NULL);
     if (file_monitors == NULL)
-        file_monitors = g_ptr_array_new_with_free_func (g_object_unref);
-    g_ptr_array_add (file_monitors, m);
+        file_monitors = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                               g_free, g_object_unref);
+
+    /* Drop monitors whose path is no longer in the desired set. */
+    GHashTableIter iter;
+    gpointer key;
+    g_hash_table_iter_init (&iter, file_monitors);
+    while (g_hash_table_iter_next (&iter, &key, NULL))
+    {
+        gboolean wanted = FALSE;
+        for (guint i = 0; i < desired_paths->len; i++)
+        {
+            if (g_strcmp0 (key, g_ptr_array_index (desired_paths, i)) == 0)
+            {
+                wanted = TRUE;
+                break;
+            }
+        }
+        if (!wanted)
+            g_hash_table_iter_remove (&iter);
+    }
+
+    /* Add monitors for paths we don't already track. */
+    for (guint i = 0; i < desired_paths->len; i++)
+    {
+        const gchar *path = g_ptr_array_index (desired_paths, i);
+        if (path == NULL || g_hash_table_contains (file_monitors, path))
+            continue;
+        g_autoptr(GFile) f = g_file_new_for_path (path);
+        g_autoptr(GError) err = NULL;
+        GFileMonitor *m = g_file_monitor_file (f, G_FILE_MONITOR_NONE, NULL, &err);
+        if (m == NULL)
+        {
+            if (err != NULL)
+                g_warning ("Failed to monitor %s: %s", path, err->message);
+            continue;
+        }
+        g_signal_connect (m, "changed", G_CALLBACK (on_db_file_changed), NULL);
+        g_hash_table_insert (file_monitors, g_strdup (path), m);
+    }
 }
 
 
 static GPtrArray *
 load_entries_uncached (void)
 {
-    /* Re-arm monitors on every reload to follow changes in the DB list. */
-    clear_file_monitors ();
-
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify) otp_search_entry_free);
 
+    /* Collect the desired set of paths, then diff our current monitor set
+     * against it — see sync_file_monitors. */
+    g_autoptr (GPtrArray) desired_paths = g_ptr_array_new ();
+
     g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
+    g_autofree gchar *fallback_path = NULL;
     if (db_list != NULL && db_list->len > 0)
     {
         for (guint i = 0; i < db_list->len; i++)
         {
             DbListEntry *dbe = g_ptr_array_index (db_list, i);
-            add_file_monitor (dbe->path);
-            load_entries_from_db (entries, dbe->path, dbe->name, i);
+            if (dbe->path != NULL)
+                g_ptr_array_add (desired_paths, dbe->path);
         }
     }
     else
     {
-        /* Fallback: single-DB mode using db-path setting */
-        g_autofree gchar *db_path = gsettings_common_get_db_path ();
-        if (db_path != NULL) {
-            add_file_monitor (db_path);
-            load_entries_from_db (entries, db_path, NULL, 0);
+        fallback_path = gsettings_common_get_db_path ();
+        if (fallback_path != NULL)
+            g_ptr_array_add (desired_paths, fallback_path);
+    }
+
+    sync_file_monitors (desired_paths);
+
+    if (db_list != NULL && db_list->len > 0)
+    {
+        for (guint i = 0; i < db_list->len; i++)
+        {
+            DbListEntry *dbe = g_ptr_array_index (db_list, i);
+            load_entries_from_db (entries, dbe->path, dbe->name, i);
         }
+    }
+    else if (fallback_path != NULL)
+    {
+        load_entries_from_db (entries, fallback_path, NULL, 0);
     }
 
     return entries;
