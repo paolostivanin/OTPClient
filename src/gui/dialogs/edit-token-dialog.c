@@ -33,11 +33,11 @@ on_save_clicked (GtkButton       *button,
 
     const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
 
-    json_object_set (self->token_obj, "label", json_string (label_text));
-    json_object_set (self->token_obj, "issuer", json_string (issuer));
+    json_object_set_new (self->token_obj, "label", json_string (label_text));
+    json_object_set_new (self->token_obj, "issuer", json_string (issuer));
 
     if (group_text != NULL && group_text[0] != '\0')
-        json_object_set (self->token_obj, "group", json_string (group_text));
+        json_object_set_new (self->token_obj, "group", json_string (group_text));
     else
         json_object_del (self->token_obj, "group");
 

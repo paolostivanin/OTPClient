@@ -12,6 +12,7 @@ struct _KdfDialog
     GtkWidget *iter_spin;
     GtkWidget *memcost_spin;
     GtkWidget *parallelism_spin;
+    GtkWidget *apply_btn;
     GtkWidget *error_label;
 
     gboolean applying_preset;  /* re-entrancy guard */
@@ -115,6 +116,10 @@ on_apply_clicked (GtkButton *button,
         return;
     }
 
+    /* Argon2id derive runs synchronously on the UI thread; disable the button
+     * to block re-entry from a double-click while the re-encrypt is in flight. */
+    gtk_widget_set_sensitive (self->apply_btn, FALSE);
+
     self->db_data->argon2id_iter = new_iter;
     self->db_data->argon2id_memcost = new_mc;
     self->db_data->argon2id_parallelism = new_par;
@@ -129,6 +134,7 @@ on_apply_clicked (GtkButton *button,
         gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
         gtk_widget_set_visible (self->error_label, TRUE);
         g_clear_error (&err);
+        gtk_widget_set_sensitive (self->apply_btn, TRUE);
         return;
     }
 
@@ -257,13 +263,13 @@ kdf_dialog_new (DatabaseData *db_data)
     gtk_box_append (GTK_BOX (box), self->error_label);
 
     /* Apply button */
-    GtkWidget *apply_btn = gtk_button_new_with_label (_("Apply"));
-    gtk_widget_add_css_class (apply_btn, "suggested-action");
-    gtk_widget_add_css_class (apply_btn, "pill");
-    gtk_widget_set_halign (apply_btn, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top (apply_btn, 12);
-    g_signal_connect (apply_btn, "clicked", G_CALLBACK (on_apply_clicked), self);
-    gtk_box_append (GTK_BOX (box), apply_btn);
+    self->apply_btn = gtk_button_new_with_label (_("Apply"));
+    gtk_widget_add_css_class (self->apply_btn, "suggested-action");
+    gtk_widget_add_css_class (self->apply_btn, "pill");
+    gtk_widget_set_halign (self->apply_btn, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top (self->apply_btn, 12);
+    g_signal_connect (self->apply_btn, "clicked", G_CALLBACK (on_apply_clicked), self);
+    gtk_box_append (GTK_BOX (box), self->apply_btn);
 
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), clamp);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);

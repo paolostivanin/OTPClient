@@ -108,6 +108,9 @@ do_import (ImportDialog *self)
             gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
             gtk_widget_set_visible (self->error_label, TRUE);
             g_clear_error (&err);
+            g_slist_free (self->db_data->data_to_add);
+            self->db_data->data_to_add = NULL;
+            free_otps_gslist (otps, g_slist_length (otps));
             return;
         }
 
