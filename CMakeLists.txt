@@ -160,10 +160,22 @@ if(BUILD_CLI)
     install(TARGETS ${PROJECT_NAME}-cli DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES man/otpclient-cli.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
-    # Shell completions for otpclient-cli. Honour pkg-config's reported dirs
-    # when available; otherwise fall back to the conventional locations.
+    # Shell completions for otpclient-cli. Honour pkg-config's reported dir
+    # when it lives under our install prefix; otherwise fall back to the
+    # conventional relative location so DESTDIR/--prefix staging is respected
+    # and we never write outside the requested install tree.
     pkg_get_variable(BASH_COMPLETION_DIR bash-completion completionsdir)
-    if(NOT BASH_COMPLETION_DIR)
+    set(_bash_completion_safe FALSE)
+    if(BASH_COMPLETION_DIR AND IS_ABSOLUTE "${BASH_COMPLETION_DIR}")
+        file(RELATIVE_PATH _bash_rel "${CMAKE_INSTALL_PREFIX}" "${BASH_COMPLETION_DIR}")
+        if(NOT _bash_rel MATCHES "^\\.\\.")
+            set(BASH_COMPLETION_DIR "${_bash_rel}")
+            set(_bash_completion_safe TRUE)
+        endif()
+    elseif(BASH_COMPLETION_DIR)
+        set(_bash_completion_safe TRUE)
+    endif()
+    if(NOT _bash_completion_safe)
         set(BASH_COMPLETION_DIR "${CMAKE_INSTALL_DATADIR}/bash-completion/completions")
     endif()
     install(FILES data/completions/otpclient-cli.bash
