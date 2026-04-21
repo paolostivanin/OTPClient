@@ -28,6 +28,31 @@ GTK4/libadwaita application for managing TOTP and HOTP two-factor authentication
 - Decrypted content held in libgcrypt secure memory, never written to disk
 - Integration with the OS secret service via libsecret
 
+#### Security model
+What is protected:
+- **On-disk database**: encrypted with AES256-GCM; the key is derived from
+  your password with Argon2id (parameters configurable per database).
+- **Secrets in RAM**: derived keys, the decrypted token JSON, and per-token
+  secrets all live in libgcrypt secure memory. Those pages are `mlock`'d, so
+  they will not be paged to swap or written to a hibernation image.
+- **Crash dumps**: `PR_SET_DUMPABLE=0` and `RLIMIT_CORE=0` are set at startup,
+  so a crash with secrets in memory will not produce a core file.
+- **Clipboard hygiene**: copied OTPs are wiped after a configurable timeout
+  (default 30 s), on database lock (manual, idle auto-lock, or screensaver),
+  and on app exit (including SIGINT / SIGTERM / SIGHUP).
+
+What is **not** defended against:
+- A same-UID attacker with `ptrace` or `/proc/PID/mem` access can read live
+  secrets while the database is unlocked. Distro-default
+  `kernel.yama.ptrace_scope=1` mitigates this for unrelated processes.
+- A cold-boot or DMA attack against a running machine can recover secrets
+  from RAM regardless of whether the database is locked. Database lock
+  provides UI gating; it does not scrub secrets from process memory.
+
+The optional GNOME Shell / KRunner search provider runs as a separate
+daemon. It caches its own derived key and entry list with a 60 s TTL and
+per-database file-monitor invalidation, independent of the GUI's lock state.
+
 ## Installation
 OTPClient is available as a Flatpak and in several distro repositories. See the [packages list](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages) for details.
 

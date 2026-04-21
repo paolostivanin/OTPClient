@@ -89,6 +89,46 @@
   </content_rating>
 
   <releases>
+    <release version="4.99.92" date="2026-04-21">
+      <description>
+        <p>OTPClient 5.0.0-beta2 - Hardening, performance, and quality-of-life improvements</p>
+        <ul>
+          <li>NEW: backup-age banner reminds you to take periodic backups, with snooze and dismiss-on-export</li>
+          <li>NEW: empty-state page with Add/Import call-to-action</li>
+          <li>NEW: async unlock with spinner so the window no longer freezes during Argon2id</li>
+          <li>NEW: scriptable CLI output (table/json/csv) for --show, --list, --list-databases</li>
+          <li>NEW: refreshed manpages and bash/zsh/fish shell completions</li>
+          <li>NEW: import summary toast and per-format file-picker filters</li>
+          <li>NEW: paste-to-fill otpauth:// in manual-add; KDF presets (Standard/Strong/Paranoid/Custom)</li>
+          <li>NEW: technical-field tooltips in manual-add and KDF dialogs</li>
+          <li>NEW: AdwToast surfacing for previously silent failures</li>
+          <li>NEW: keyboard shortcut to snooze backup reminder via main menu</li>
+          <li>SECURITY: bounds-checked Argon2id parameters on database open</li>
+          <li>SECURITY: KRunner Match no longer leaks live OTP codes via subtitles</li>
+          <li>SECURITY: PR_SET_DUMPABLE=0 + RLIMIT_CORE=0 to prevent secret leaks via core dumps</li>
+          <li>SECURITY: O_NOFOLLOW + fstat on importer paths; refuses symlinks and non-regular files</li>
+          <li>SECURITY: backup files (.bak) created with 0600 mode regardless of umask</li>
+          <li>SECURITY: signal-safe clipboard wipe on SIGINT/SIGTERM/SIGHUP and shutdown</li>
+          <li>SECURITY: CLI --password-file refuses group/world-readable files</li>
+          <li>FIX: KDF byte-length bug — passwords with non-ASCII chars now derive the correct key (with one-shot legacy fallback + opportunistic re-encryption)</li>
+          <li>FIX: HOTP click no longer triggers a full re-encrypt; debounced flush coalesces bursts</li>
+          <li>FIX: search-provider monitors are diffed across reloads instead of torn down and re-armed</li>
+          <li>FIX: token move rolls back on partial failure; cross-DB move invalidates the target KDF cache</li>
+          <li>FIX: import dialog no longer leaks the parsed OTP list on update_db failure</li>
+          <li>FIX: edit-token-dialog JSON refcount leaks</li>
+          <li>FIX: backup-age banner handles clock skew correctly</li>
+          <li>FIX: empty-state CTAs disabled when no database is loaded</li>
+          <li>FIX: signal-quit explicitly flushes pending HOTP writes</li>
+          <li>PERF: KDF-derived key cached across saves; per-save random IV preserves AES-GCM nonce uniqueness</li>
+          <li>PERF: search filter uses pre-folded labels — one casefold per term per query instead of per-entry</li>
+          <li>PERF: search-provider cache TTL extended (5s → 60s) with per-DB GFileMonitor invalidation</li>
+          <li>PERF: pre-warm search-provider cache after bus ownership so first query avoids Argon2id cost</li>
+          <li>PERF: cross-DB OTP computation is lazy — computed on first row bind rather than upfront</li>
+          <li>BUILD: probes -fcf-protection=full, -fzero-call-used-regs, -fstrict-flex-arrays=2, -ftrivial-auto-var-init=zero</li>
+          <li>BUILD: defaults to Release with LTO when supported</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.99.2" date="2026-03-26">
       <description>
         <p>OTPClient 5.0.0-alpha2 - Multi-database support, UI improvements, and bug fixes</p>
