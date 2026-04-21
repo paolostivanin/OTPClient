@@ -31,8 +31,8 @@ _otpclient_cli() {
         '-n[also print the next OTP]'
     )
     io=(
-        '--type=[backup format identifier]:type:(aegis_plain aegis_enc authpro_plain authpro_enc twofas_plain twofas_enc freeotpplus_plain google_qr_file)'
-        '-t+[backup format identifier]:type:(aegis_plain aegis_enc authpro_plain authpro_enc twofas_plain twofas_enc freeotpplus_plain google_qr_file)'
+        '--type=[backup format identifier]:type:(aegis_plain aegis_encrypted authpro_plain authpro_encrypted twofas_plain twofas_encrypted freeotpplus_plain)'
+        '-t+[backup format identifier]:type:(aegis_plain aegis_encrypted authpro_plain authpro_encrypted twofas_plain twofas_encrypted freeotpplus_plain)'
         '--file=[backup or settings file]:file:_files'
         '-f+[backup or settings file]:file:_files'
         '--output-dir=[export destination directory]:dir:_files -/'

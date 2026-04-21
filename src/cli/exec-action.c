@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
@@ -50,26 +51,25 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return TRUE;
         }
         if (cmdline_opts->output_format == OUTPUT_FORMAT_CSV) {
-            g_print ("name,path\n");
+            GString *csv = g_string_new ("name,path\n");
             if (db_list != NULL) {
                 for (guint i = 0; i < db_list->len; i++) {
                     DbListEntry *entry = g_ptr_array_index (db_list, i);
-                    /* names/paths shouldn't normally contain commas, but escape just in case. */
-                    const gchar *n = entry->name ? entry->name : "";
-                    const gchar *p = entry->path ? entry->path : "";
-                    gboolean quote_n = strpbrk (n, ",\"\r\n") != NULL;
-                    gboolean quote_p = strpbrk (p, ",\"\r\n") != NULL;
-                    if (quote_n) g_print ("\"%s\",", n); else g_print ("%s,", n);
-                    if (quote_p) g_print ("\"%s\"\n", p); else g_print ("%s\n", p);
+                    csv_append_field (csv, entry->name);
+                    g_string_append_c (csv, ',');
+                    csv_append_field (csv, entry->path);
+                    g_string_append_c (csv, '\n');
                 }
             }
+            g_print ("%s", csv->str);
+            g_string_free (csv, TRUE);
             return TRUE;
         }
         if (db_list == NULL || db_list->len == 0) {
-            g_print ("No databases found in the configuration.\n");
+            g_print ("%s", _("No databases found in the configuration.\n"));
             return TRUE;
         }
-        g_print ("Known databases:\n");
+        g_print ("%s", _("Known databases:\n"));
         for (guint i = 0; i < db_list->len; i++) {
             DbListEntry *entry = g_ptr_array_index (db_list, i);
             g_print ("  %s  →  %s\n", entry->name, entry->path);
@@ -99,36 +99,34 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     gboolean use_secret_service = gsettings_common_get_use_secret_service ();
     int password_fd = STDIN_FILENO;
     if (cmdline_opts->password_file) {
-        if (g_file_test (cmdline_opts->password_file, G_FILE_TEST_IS_SYMLINK)) {
-            g_printerr ("Refusing to open password file '%s': it is a symbolic link.\n", cmdline_opts->password_file);
-            return FALSE;
-        }
-        GStatBuf st_before;
-        if (g_stat (cmdline_opts->password_file, &st_before) != 0) {
-            g_printerr ("Failed to stat password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
-            return FALSE;
-        }
-        password_fd = g_open (cmdline_opts->password_file, O_RDONLY, 0);
+        password_fd = g_open (cmdline_opts->password_file, O_RDONLY | O_NOFOLLOW | O_CLOEXEC, 0);
         if (password_fd < 0) {
-            g_printerr ("Failed to open password file '%s': %s\n", cmdline_opts->password_file, g_strerror (errno));
+            if (errno == ELOOP) {
+                g_printerr (_("Refusing to open password file '%s': it is a symbolic link.\n"), cmdline_opts->password_file);
+            } else {
+                g_printerr (_("Failed to open password file '%s': %s\n"), cmdline_opts->password_file, g_strerror (errno));
+            }
             return FALSE;
         }
-        GStatBuf st_after;
-        if (fstat (password_fd, &st_after) == 0) {
-            if (st_before.st_ino != st_after.st_ino || st_before.st_dev != st_after.st_dev) {
-                g_printerr ("Refusing to open password file '%s': file changed between check and open.\n", cmdline_opts->password_file);
-                close (password_fd);
-                return FALSE;
-            }
-            if ((st_after.st_mode & 077) != 0) {
-                g_printerr ("Refusing to open password file '%s': mode %04o is readable or writable by group/other. "
-                             "Run `chmod 600 %s` and retry.\n",
-                             cmdline_opts->password_file,
-                             (unsigned)(st_after.st_mode & 0777),
-                             cmdline_opts->password_file);
-                close (password_fd);
-                return FALSE;
-            }
+        GStatBuf st;
+        if (fstat (password_fd, &st) != 0) {
+            g_printerr (_("Failed to stat password file '%s': %s\n"), cmdline_opts->password_file, g_strerror (errno));
+            close (password_fd);
+            return FALSE;
+        }
+        if (!S_ISREG (st.st_mode)) {
+            g_printerr (_("Refusing to open password file '%s': not a regular file.\n"), cmdline_opts->password_file);
+            close (password_fd);
+            return FALSE;
+        }
+        if ((st.st_mode & 077) != 0) {
+            g_printerr (_("Refusing to open password file '%s': mode %04o is readable or writable by group/other. "
+                         "Run `chmod 600 %s` and retry.\n"),
+                         cmdline_opts->password_file,
+                         (unsigned)(st.st_mode & 0777),
+                         cmdline_opts->password_file);
+            close (password_fd);
+            return FALSE;
         }
     }
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
@@ -156,7 +154,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 
     GError *err = NULL;
     if (cmdline_opts->import && !g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-        g_print ("Database file does not exist. Creating a new database...\n");
+        g_print ("%s", _("Database file does not exist. Creating a new database...\n"));
         update_db (db_data, &err);
         if (err != NULL) {
             g_printerr (_("Error while creating new database: %s\n"), err->message);
@@ -164,8 +162,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
 
-        g_print ("Database '%s' created successfully.\n", db_data->db_path);
-        g_print ("\nATTENTION: if you want to use this database by default, you must update the config file accordingly.\n\n");
+        g_print (_("Database '%s' created successfully.\n"), db_data->db_path);
+        g_print ("%s", _("\nATTENTION: if you want to use this database by default, you must update the config file accordingly.\n\n"));
     } else {
         load_db (db_data, &err);
         if (err != NULL) {
@@ -208,10 +206,10 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 
         GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, json_dumpb (db_data->in_memory_json_data, NULL, 0, 0), &err);
         if (otps == NULL) {
-            const gchar *msg = "An error occurred while importing, so nothing has been added to the database.";
+            const gchar *msg = _("An error occurred while importing, so nothing has been added to the database.");
             gchar *msg_with_err = NULL;
             if (err != NULL) {
-                msg_with_err = g_strconcat (msg, " The error is: ", err->message, NULL);
+                msg_with_err = g_strconcat (msg, _(" The error is: "), err->message, NULL);
             }
             g_printerr ("%s\n", err == NULL ? msg : msg_with_err);
             if (err != NULL) {
@@ -229,19 +227,19 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 
         update_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-            g_printerr ("Error while updating the database: %s\n", err->message);
+            g_printerr (_("Error while updating the database: %s\n"), err->message);
             g_clear_error (&err);
             return FALSE;
         }
         g_clear_error (&err);
         reload_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-            g_printerr ("Error while reloading the database: %s\n", err->message);
+            g_printerr (_("Error while reloading the database: %s\n"), err->message);
             g_clear_error (&err);
             return FALSE;
         }
         g_clear_error (&err);
-        g_print ("Data successfully imported.\n");
+        g_print ("%s", _("Data successfully imported.\n"));
     }
 
     if (cmdline_opts->export) {
@@ -308,7 +306,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                     g_settings_set_int64 (settings, "last-export-time", (gint64) time (NULL));
                 }
             } else {
-                gchar *msg = g_strconcat ("Option not recognized: ", cmdline_opts->export_type, NULL);
+                gchar *msg = g_strconcat (_("Option not recognized: "), cmdline_opts->export_type, NULL);
                 g_print ("%s\n", msg);
                 g_free (msg);
                 return FALSE;
@@ -347,7 +345,7 @@ resolve_db_path (const gchar *database_arg)
     gchar *db_path = gsettings_common_get_db_path ();
     if (db_path != NULL && db_path[0] != '\0') {
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {
-            g_printerr ("Database file/location (%s) does not exist.\n", db_path);
+            g_printerr (_("Database file/location (%s) does not exist.\n"), db_path);
             g_free (db_path);
             return NULL;
         }
@@ -417,7 +415,7 @@ get_pwd (const gchar *pwd_msg,
     }
 
     if (len == BUFFER_SIZE - 1) {
-        g_printerr ("Warning: password was truncated at %zu bytes.\n", BUFFER_SIZE - 1);
+        g_printerr (_("Warning: password was truncated at %zu bytes.\n"), BUFFER_SIZE - 1);
     }
 
     if (len == 0) {

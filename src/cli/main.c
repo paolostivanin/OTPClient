@@ -38,39 +38,43 @@ gint
 main (gint    argc,
       gchar **argv)
 {
+    bindtextdomain (GETTEXT_PACKAGE, LOCALE_DIR);
+    bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
+    textdomain (GETTEXT_PACKAGE);
+
     g_autofree gchar *supported_types_str = format_supported_types ();
-    g_autofree gchar *type_msg = g_strconcat ("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: ",
+    g_autofree gchar *type_msg = g_strconcat (_("The import/export type for the database (to be used with --import/--export, mandatory). Must be either one of: "),
                                               supported_types_str,
                                               NULL);
 
     GOptionEntry entries[] =
             {
-                    { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) path to the database or name from --list-databases. Default value is taken from GSettings/otpclient.cfg", NULL },
-                    { "show", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show a token for a given account.", NULL },
-                    { "account", 'a', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Account name (to be used with --show, mandatory)", NULL},
-                    { "issuer", 'i', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Issuer (to be used with --show, optional)", NULL},
-                    { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Match exactly the provided account/issuer (to be used with --show, optional)", NULL},
-                    { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show also next OTP (to be used with --show, optional)", NULL},
-                    { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all accounts and issuers for a given database.", NULL },
-                    { "list-databases", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List all known databases from the configuration.", NULL },
-                    { "list-types", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "List supported import/export types.", NULL },
-                    { "import", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import a database.", NULL },
-                    { "export", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export a database.", NULL },
+                    { "database", 'd', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("(optional) path to the database or name from --list-databases. Default value is taken from GSettings/otpclient.cfg"), NULL },
+                    { "show", 's', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Show a token for a given account."), NULL },
+                    { "account", 'a', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("Account name (to be used with --show, mandatory)"), NULL},
+                    { "issuer", 'i', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("Issuer (to be used with --show, optional)"), NULL},
+                    { "match-exact", 'm', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Match exactly the provided account/issuer (to be used with --show, optional)"), NULL},
+                    { "show-next", 'n', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Show also next OTP (to be used with --show, optional)"), NULL},
+                    { "list", 'l', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("List all accounts and issuers for a given database."), NULL },
+                    { "list-databases", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("List all known databases from the configuration."), NULL },
+                    { "list-types", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("List supported import/export types."), NULL },
+                    { "import", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Import a database."), NULL },
+                    { "export", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Export a database."), NULL },
                     { "type", 't', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, type_msg, NULL },
-                    { "file", 'f', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "File to import (to be used with --import, mandatory).", NULL },
+                    { "file", 'f', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("File to import (to be used with --import, mandatory)."), NULL },
 #ifndef IS_FLATPAK
-                    { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "The output directory (defaults to the user's home. To be used with --export, optional)", NULL },
+                    { "output-dir", 'o', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("The output directory (defaults to the user's home. To be used with --export, optional)"), NULL },
 #endif
-                    { "password-file", 'p', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "(optional) Read database password from a file instead of stdin.", NULL },
-                    { "export-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Export application settings as JSON.", NULL },
-                    { "import-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Import application settings from a JSON file (requires --file).", NULL },
-                    { "output", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, "Output format for --show, --list, --list-databases: table (default), json, csv.", "FORMAT" },
-                    { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, "Show the program version.", NULL },
+                    { "password-file", 'p', G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("(optional) Read database password from a file instead of stdin."), NULL },
+                    { "export-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Export application settings as JSON."), NULL },
+                    { "import-settings", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Import application settings from a JSON file (requires --file)."), NULL },
+                    { "output", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_STRING, NULL, _("Output format for --show, --list, --list-databases: table (default), json, csv."), "FORMAT" },
+                    { "version", 'v', G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL, _("Show the program version."), NULL },
                     { NULL }
             };
 
 
-    const gchar *ctx_text = "- Highly secure and easy to use OTP client that supports both TOTP and HOTP";
+    const gchar *ctx_text = _("- Highly secure and easy to use OTP client that supports both TOTP and HOTP");
 
     GApplication *app = g_application_new ("com.github.paolostivanin.OTPClient", G_APPLICATION_HANDLES_COMMAND_LINE);
 
@@ -168,20 +172,20 @@ command_line (GApplication                *application __attribute__((unused)),
         GError *err = NULL;
         gchar *json = export_settings_to_json (&err);
         if (json == NULL) {
-            g_application_command_line_printerr (cmdline, "Error: %s\n", err->message);
+            g_application_command_line_printerr (cmdline, _("Error: %s\n"), err->message);
             g_clear_error (&err);
             g_free_cmdline_opts (cmdline_opts);
             return -1;
         }
         if (cmdline_opts->import_file != NULL) {
             if (!g_file_set_contents (cmdline_opts->import_file, json, -1, &err)) {
-                g_application_command_line_printerr (cmdline, "Error writing file: %s\n", err->message);
+                g_application_command_line_printerr (cmdline, _("Error writing file: %s\n"), err->message);
                 g_clear_error (&err);
                 gcry_free (json);
                 g_free_cmdline_opts (cmdline_opts);
                 return -1;
             }
-            g_application_command_line_print (cmdline, "Settings exported to: %s\n", cmdline_opts->import_file);
+            g_application_command_line_print (cmdline, _("Settings exported to: %s\n"), cmdline_opts->import_file);
         } else {
             g_application_command_line_print (cmdline, "%s\n", json);
         }
@@ -194,20 +198,20 @@ command_line (GApplication                *application __attribute__((unused)),
         GError *err = NULL;
         gchar *contents = NULL;
         if (!g_file_get_contents (cmdline_opts->import_file, &contents, NULL, &err)) {
-            g_application_command_line_printerr (cmdline, "Error reading file: %s\n", err->message);
+            g_application_command_line_printerr (cmdline, _("Error reading file: %s\n"), err->message);
             g_clear_error (&err);
             g_free_cmdline_opts (cmdline_opts);
             return -1;
         }
         if (!import_settings_from_json (contents, &err)) {
-            g_application_command_line_printerr (cmdline, "Error: %s\n", err->message);
+            g_application_command_line_printerr (cmdline, _("Error: %s\n"), err->message);
             g_clear_error (&err);
             g_free (contents);
             g_free_cmdline_opts (cmdline_opts);
             return -1;
         }
         g_free (contents);
-        g_application_command_line_print (cmdline, "Settings imported successfully.\n");
+        g_application_command_line_print (cmdline, "%s", _("Settings imported successfully.\n"));
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }
@@ -228,7 +232,7 @@ command_line (GApplication                *application __attribute__((unused)),
 
     gchar *init_msg = init_libs (db_data->max_file_size_from_memlock);
     if (init_msg != NULL) {
-        g_application_command_line_printerr (cmdline, "Error while initializing GCrypt: %s\n", init_msg);
+        g_application_command_line_printerr (cmdline, _("Error while initializing GCrypt: %s\n"), init_msg);
         g_free (init_msg);
         g_free (db_data);
         g_free_cmdline_opts (cmdline_opts);
@@ -274,23 +278,23 @@ parse_options (GApplicationCommandLine *cmdline,
         } else if (g_ascii_strcasecmp (cmdline_opts->output, "csv") == 0) {
             cmdline_opts->output_format = OUTPUT_FORMAT_CSV;
         } else {
-            g_application_command_line_print (cmdline, "Unknown --output value '%s'. Expected: table, json, csv.\n", cmdline_opts->output);
+            g_application_command_line_print (cmdline, _("Unknown --output value '%s'. Expected: table, json, csv.\n"), cmdline_opts->output);
             return FALSE;
         }
         if (!cmdline_opts->show && !cmdline_opts->list && !cmdline_opts->list_databases) {
-            g_application_command_line_print (cmdline, "The --output option only applies to --show, --list, or --list-databases.\n");
+            g_application_command_line_print (cmdline, "%s", _("The --output option only applies to --show, --list, or --list-databases.\n"));
             return FALSE;
         }
     }
 
     guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export + cmdline_opts->export_settings + cmdline_opts->import_settings;
     if (action_count == 0) {
-        g_application_command_line_print (cmdline, "Please provide one action (--show, --list, --list-databases, --import, --export, --export-settings, --import-settings, or --list-types).\n");
+        g_application_command_line_print (cmdline, "%s", _("Please provide one action (--show, --list, --list-databases, --import, --export, --export-settings, --import-settings, or --list-types).\n"));
         return FALSE;
     }
 
     if (action_count > 1) {
-        g_application_command_line_print (cmdline, "Please provide only one action at a time.\n");
+        g_application_command_line_print (cmdline, "%s", _("Please provide only one action at a time.\n"));
         return FALSE;
     }
 
@@ -298,7 +302,7 @@ parse_options (GApplicationCommandLine *cmdline,
         g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account);
         g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer);
         if (cmdline_opts->account == NULL && cmdline_opts->issuer == NULL) {
-            g_application_command_line_print (cmdline, "Please provide at least the account or issuer option.\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide at least the account or issuer option.\n"));
             return FALSE;
         }
         g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact);
@@ -308,14 +312,14 @@ parse_options (GApplicationCommandLine *cmdline,
             g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer) ||
             g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact) ||
             g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next)) {
-            g_application_command_line_print (cmdline, "The account/issuer filters and matching options can only be used with --show.\n");
+            g_application_command_line_print (cmdline, "%s", _("The account/issuer filters and matching options can only be used with --show.\n"));
             return FALSE;
         }
     }
 
     if (cmdline_opts->import_settings) {
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "Please provide a file to import settings from (--file).\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide a file to import settings from (--file).\n"));
             return FALSE;
         }
     }
@@ -327,26 +331,26 @@ parse_options (GApplicationCommandLine *cmdline,
 
     if (cmdline_opts->import) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
-            g_application_command_line_print (cmdline, "Please provide an import type.\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide an import type.\n"));
             return FALSE;
         }
         if (!is_valid_type (cmdline_opts->import_type)) {
-            g_application_command_line_print (cmdline, "Please provide a valid import type (see --help).\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide a valid import type (see --help).\n"));
             return FALSE;
         }
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "Please provide a file to import.\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide a file to import.\n"));
             return FALSE;
         }
     }
 
     if (cmdline_opts->export) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
-            g_application_command_line_print (cmdline, "Please provide an export type (see --help).\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide an export type (see --help).\n"));
             return FALSE;
         }
         if (!is_valid_type (cmdline_opts->export_type)) {
-            g_application_command_line_print (cmdline, "Please provide a valid export type.\n");
+            g_application_command_line_print (cmdline, "%s", _("Please provide a valid export type.\n"));
             return FALSE;
         }
 #ifndef IS_FLATPAK
@@ -357,18 +361,18 @@ parse_options (GApplicationCommandLine *cmdline,
     if (!cmdline_opts->import && !cmdline_opts->export) {
         gchar *unused_type = NULL;
         if (g_variant_dict_lookup (options, "type", "s", &unused_type)) {
-            g_application_command_line_print (cmdline, "The --type option can only be used with --import or --export.\n");
+            g_application_command_line_print (cmdline, "%s", _("The --type option can only be used with --import or --export.\n"));
             g_free (unused_type);
             return FALSE;
         }
         if (!cmdline_opts->import_settings && !cmdline_opts->export_settings &&
             g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "The --file option can only be used with --import, --import-settings, or --export-settings.\n");
+            g_application_command_line_print (cmdline, "%s", _("The --file option can only be used with --import, --import-settings, or --export-settings.\n"));
             return FALSE;
         }
 #ifndef IS_FLATPAK
         if (g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir)) {
-            g_application_command_line_print (cmdline, "The --output-dir option can only be used with --export.\n");
+            g_application_command_line_print (cmdline, "%s", _("The --output-dir option can only be used with --export.\n"));
             return FALSE;
         }
 #endif
@@ -400,7 +404,7 @@ static void
 print_supported_types (GApplicationCommandLine *cmdline)
 {
     g_autofree gchar *types_str = format_supported_types ();
-    g_application_command_line_print (cmdline, "Supported types: %s\n", types_str);
+    g_application_command_line_print (cmdline, _("Supported types: %s\n"), types_str);
 }
 
 

@@ -14,8 +14,8 @@ _otpclient_cli() {
           --output-dir -o --password-file -p --output \
           --export-settings --import-settings --database -d"
 
-    types="aegis_plain aegis_enc authpro_plain authpro_enc \
-           twofas_plain twofas_enc freeotpplus_plain google_qr_file"
+    types="aegis_plain aegis_encrypted authpro_plain authpro_encrypted \
+           twofas_plain twofas_encrypted freeotpplus_plain"
     formats="table json csv"
 
     case "$prev" in

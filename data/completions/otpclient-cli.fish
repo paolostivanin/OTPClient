@@ -1,7 +1,7 @@
 # fish completion for otpclient-cli
 # Install to /usr/share/fish/vendor_completions.d/otpclient-cli.fish
 
-set -l otpclient_types aegis_plain aegis_enc authpro_plain authpro_enc twofas_plain twofas_enc freeotpplus_plain google_qr_file
+set -l otpclient_types aegis_plain aegis_encrypted authpro_plain authpro_encrypted twofas_plain twofas_encrypted freeotpplus_plain
 set -l otpclient_formats table json csv
 
 # Actions

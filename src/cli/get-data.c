@@ -15,9 +15,6 @@ static void emit_token      (json_t         *obj,
                              OutputFormat    format,
                              json_t         *json_out_array);
 
-static void csv_append_field (GString *out, const gchar *value);
-
-
 gboolean
 show_token (DatabaseData *db_data,
             const gchar  *account,
@@ -37,7 +34,7 @@ show_token (DatabaseData *db_data,
     if (format == OUTPUT_FORMAT_JSON) {
         json_rows = json_array ();
     } else if (format == OUTPUT_FORMAT_CSV) {
-        csv = g_string_new ("type,account,issuer,current,validity_seconds,next\n");
+        csv = g_string_new ("type,account,issuer,current,validity_seconds,counter,next\n");
     }
 
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
@@ -74,6 +71,11 @@ show_token (DatabaseData *db_data,
             json_t *vs = json_object_get (row, "validity_seconds");
             if (json_is_integer (vs)) {
                 g_string_append_printf (csv, "%lld", (long long) json_integer_value (vs));
+            }
+            g_string_append_c (csv, ',');
+            json_t *ctr = json_object_get (row, "counter");
+            if (json_is_integer (ctr)) {
+                g_string_append_printf (csv, "%lld", (long long) json_integer_value (ctr));
             }
             g_string_append_c (csv, ',');
             csv_append_field (csv, json_string_value (json_object_get (row, "next")));
@@ -171,7 +173,7 @@ list_all_acc_iss (DatabaseData *db_data,
     }
 
     g_print ("=========================\n");
-    g_print ("Account | Issuer | Group\n");
+    g_print ("%s", _("Account | Issuer | Group\n"));
     g_print ("=========================\n");
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
@@ -283,7 +285,7 @@ emit_token (json_t       *obj,
                                 "Current TOTP (valid for %d more seconds): %s\n",
                                 token_validity),
                      token_validity, current_totp);
-            if (show_next_token) g_print ("Next TOTP: %s\n", next_totp);
+            if (show_next_token) g_print (_("Next TOTP: %s\n"), next_totp);
         } else if (row != NULL) {
             json_object_set_new (row, "current", json_string (current_totp));
             json_object_set_new (row, "validity_seconds", json_integer (token_validity));
@@ -330,7 +332,7 @@ emit_token (json_t       *obj,
 
 /* RFC 4180-style CSV escaping: wrap in quotes when the field contains
  * a comma, quote, CR, or LF; double any embedded quote. */
-static void
+void
 csv_append_field (GString *out, const gchar *value)
 {
     if (value == NULL || value[0] == '\0')

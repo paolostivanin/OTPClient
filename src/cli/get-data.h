@@ -15,4 +15,7 @@ gboolean show_token     (DatabaseData *db_data,
 void list_all_acc_iss   (DatabaseData *db_data,
                          OutputFormat  format);
 
+void csv_append_field   (GString      *out,
+                         const gchar  *value);
+
 G_END_DECLS
