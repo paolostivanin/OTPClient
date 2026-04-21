@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <time.h>
+#include <unistd.h>
 #include <glib/gi18n.h>
 
 #include "common.h"
@@ -15,6 +16,10 @@ get_freeotpplus_data (const gchar  *path,
                       gsize         db_size,
                       GError      **err)
 {
+    int safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
+        return NULL;
+    }
     if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -23,9 +28,13 @@ get_freeotpplus_data (const gchar  *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        close (safe_fd);
         return NULL;
     }
-    return get_otpauth_data (path, max_file_size, err);
+    g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+    GSList *otps = get_otpauth_data (fd_path, max_file_size, err);
+    close (safe_fd);
+    return otps;
 }
 
 

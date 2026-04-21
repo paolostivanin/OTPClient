@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include "gquarks.h"
 #include "db-common.h"
 #include "file-size.h"
@@ -710,13 +712,19 @@ perform_backup_restore (const gchar *path,
     GFile *src = g_file_new_for_path (src_path);
     GFile *dst = g_file_new_for_path (dst_path);
 
-    if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
+    /* Tighten umask so a freshly-created destination is born 0600 instead of
+     * exposing the encrypted blob (and Argon2id salt+params) for the duration
+     * of the copy. Restore immediately after. */
+    mode_t old_umask = umask (0077);
+    gboolean copied = g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err);
+    umask (old_umask);
+
+    if (!copied) {
         g_printerr ("Couldn't %s: %s\n", is_backup ? "create the backup" : "restore the backup", err->message);
         g_clear_error (&err);
     } else {
-        /* g_file_copy preserves the source's permissions, but on a fresh
-         * destination created via umask the result can be world-readable.
-         * Force 0600 so the backup is no more permissive than the live DB. */
+        /* Belt-and-braces: if the destination already existed with broader
+         * perms, g_file_copy preserves them. Force 0600 unconditionally. */
         if (g_chmod (dst_path, 0600) != 0) {
             g_warning ("Failed to chmod 0600 on %s: %s", dst_path, g_strerror (errno));
         }

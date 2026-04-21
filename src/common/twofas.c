@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <unistd.h>
 #include <glib/gi18n.h>
 
 #include "gquarks.h"
@@ -51,7 +52,8 @@ get_twofas_data (const gchar  *path,
                  gsize         db_size,
                  GError      **err)
 {
-    if (!path_is_safe_regular_file (path, err)) {
+    int safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
         return NULL;
     }
 
@@ -64,10 +66,15 @@ get_twofas_data (const gchar  *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        close (safe_fd);
         return NULL;
     }
 
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
+    g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+    GSList *otps = (password != NULL) ? get_otps_from_encrypted_backup (fd_path, password, err)
+                                       : get_otps_from_plain_backup (fd_path, err);
+    close (safe_fd);
+    return otps;
 }
 
 

@@ -1,6 +1,7 @@
 #include <glib.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
+#include <unistd.h>
 #include <glib/gi18n.h>
 
 #include "gquarks.h"
@@ -28,7 +29,8 @@ get_authpro_data (const gchar  *path,
                   gsize         db_size,
                   GError      **err)
 {
-    if (!path_is_safe_regular_file (path, err)) {
+    int safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
         return NULL;
     }
 
@@ -41,23 +43,29 @@ get_authpro_data (const gchar  *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        close (safe_fd);
         return NULL;
     }
 
-    GFile *in_file = g_file_new_for_path (path);
+    g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+    GFile *in_file = g_file_new_for_path (fd_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
     if (*err != NULL) {
         g_object_unref (in_file);
+        close (safe_fd);
         return NULL;
     }
 
+    GSList *otps;
     if (password != NULL) {
-        return get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err);
+        otps = get_otps_from_encrypted_backup (fd_path, password, max_file_size, in_file, in_stream, err);
     } else {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        return get_otps_from_plain_backup (path, err);
+        otps = get_otps_from_plain_backup (fd_path, err);
     }
+    close (safe_fd);
+    return otps;
 }
 
 

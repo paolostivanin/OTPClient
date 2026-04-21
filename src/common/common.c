@@ -519,20 +519,20 @@ is_secmem_available (gsize    required_size,
 }
 
 
-gboolean
-path_is_safe_regular_file (const gchar  *path,
-                           GError      **err)
+int
+path_open_safe_regular_file (const gchar  *path,
+                             GError      **err)
 {
     if (path == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "No path supplied.");
-        return FALSE;
+        return -1;
     }
     int fd = open (path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
     if (fd < 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Refusing to open '%s': %s", path,
                      errno == ELOOP ? "is a symlink" : g_strerror (errno));
-        return FALSE;
+        return -1;
     }
     struct stat st;
     if (fstat (fd, &st) < 0) {
@@ -540,13 +540,13 @@ path_is_safe_regular_file (const gchar  *path,
         close (fd);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Cannot stat '%s': %s", path, g_strerror (saved_errno));
-        return FALSE;
+        return -1;
     }
-    close (fd);
     if (!S_ISREG (st.st_mode)) {
+        close (fd);
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "'%s' is not a regular file.", path);
-        return FALSE;
+        return -1;
     }
-    return TRUE;
+    return fd;
 }

@@ -93,10 +93,12 @@ GKeyFile         *get_kf_ptr                     (void);
 gboolean          is_secmem_available            (gsize               required_size,
                                                   GError            **err);
 
-/* Validate that path refers to a regular file (not a symlink, directory, or
- * special file) using a single open(O_NOFOLLOW)+fstat. Narrows the TOCTOU
- * window vs g_file_test, and refuses to open through symlinks. */
-gboolean          path_is_safe_regular_file      (const gchar        *path,
+/* Open a path with O_NOFOLLOW, fstat to confirm it's a regular file (not a
+ * symlink, directory, or special file), and return the open fd. Caller is
+ * responsible for closing it. To eliminate the close-then-reopen TOCTOU,
+ * downstream readers should access the same inode via "/proc/self/fd/N"
+ * rather than opening `path` again. Returns -1 on error. */
+int               path_open_safe_regular_file    (const gchar        *path,
                                                   GError            **err);
 
 G_END_DECLS
