@@ -6,9 +6,9 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: OTPClient 4.99.1\n"
+"Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-03-16 10:16+0100\n"
+"POT-Creation-Date: 2026-04-21 15:20+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,8 +16,216 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/cli/exec-action.c:59
+#: ../src/cli/main.c:46
+msgid ""
+"The import/export type for the database (to be used with --import/--export, "
+"mandatory). Must be either one of: "
+msgstr ""
+
+#: ../src/cli/main.c:52
+msgid ""
+"(optional) path to the database or name from --list-databases. Default value "
+"is taken from GSettings/otpclient.cfg"
+msgstr ""
+
+#: ../src/cli/main.c:53
+msgid "Show a token for a given account."
+msgstr ""
+
+#: ../src/cli/main.c:54
+msgid "Account name (to be used with --show, mandatory)"
+msgstr ""
+
+#: ../src/cli/main.c:55
+msgid "Issuer (to be used with --show, optional)"
+msgstr ""
+
+#: ../src/cli/main.c:56
+msgid ""
+"Match exactly the provided account/issuer (to be used with --show, optional)"
+msgstr ""
+
+#: ../src/cli/main.c:57
+msgid "Show also next OTP (to be used with --show, optional)"
+msgstr ""
+
+#: ../src/cli/main.c:58
+msgid "List all accounts and issuers for a given database."
+msgstr ""
+
+#: ../src/cli/main.c:59
+msgid "List all known databases from the configuration."
+msgstr ""
+
+#: ../src/cli/main.c:60
+msgid "List supported import/export types."
+msgstr ""
+
+#: ../src/cli/main.c:61
+msgid "Import a database."
+msgstr ""
+
+#: ../src/cli/main.c:62
+msgid "Export a database."
+msgstr ""
+
+#: ../src/cli/main.c:64
+msgid "File to import (to be used with --import, mandatory)."
+msgstr ""
+
+#: ../src/cli/main.c:66
+msgid ""
+"The output directory (defaults to the user's home. To be used with --export, "
+"optional)"
+msgstr ""
+
+#: ../src/cli/main.c:68
+msgid "(optional) Read database password from a file instead of stdin."
+msgstr ""
+
+#: ../src/cli/main.c:69
+msgid "Export application settings as JSON."
+msgstr ""
+
+#: ../src/cli/main.c:70
+msgid "Import application settings from a JSON file (requires --file)."
+msgstr ""
+
+#: ../src/cli/main.c:71
+msgid ""
+"Output format for --show, --list, --list-databases: table (default), json, "
+"csv."
+msgstr ""
+
+#: ../src/cli/main.c:72
+msgid "Show the program version."
+msgstr ""
+
+#: ../src/cli/main.c:77
+msgid ""
+"- Highly secure and easy to use OTP client that supports both TOTP and HOTP"
+msgstr ""
+
+#: ../src/cli/main.c:175 ../src/cli/main.c:207
+#, c-format
+msgid "Error: %s\n"
+msgstr ""
+
+#: ../src/cli/main.c:182
+#, c-format
+msgid "Error writing file: %s\n"
+msgstr ""
+
+#: ../src/cli/main.c:188
+#, c-format
+msgid "Settings exported to: %s\n"
+msgstr ""
+
+#: ../src/cli/main.c:201
+#, c-format
+msgid "Error reading file: %s\n"
+msgstr ""
+
+#: ../src/cli/main.c:214
+msgid "Settings imported successfully.\n"
+msgstr ""
+
+#: ../src/cli/main.c:226
+msgid ""
+"Couldn't get the memlock value, therefore secure memory cannot be allocated. "
+"Please have a look at the following page before re-running OTPClient:https://"
+"github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"
+msgstr ""
+
+#: ../src/cli/main.c:235
+#, c-format
+msgid "Error while initializing GCrypt: %s\n"
+msgstr ""
+
+#: ../src/cli/main.c:281
+#, c-format
+msgid "Unknown --output value '%s'. Expected: table, json, csv.\n"
+msgstr ""
+
+#: ../src/cli/main.c:285
+msgid ""
+"The --output option only applies to --show, --list, or --list-databases.\n"
+msgstr ""
+
+#: ../src/cli/main.c:292
+msgid ""
+"Please provide one action (--show, --list, --list-databases, --import, --"
+"export, --export-settings, --import-settings, or --list-types).\n"
+msgstr ""
+
+#: ../src/cli/main.c:297
+msgid "Please provide only one action at a time.\n"
+msgstr ""
+
+#: ../src/cli/main.c:305
+msgid "Please provide at least the account or issuer option.\n"
+msgstr ""
+
+#: ../src/cli/main.c:315
+msgid ""
+"The account/issuer filters and matching options can only be used with --"
+"show.\n"
+msgstr ""
+
+#: ../src/cli/main.c:322
+msgid "Please provide a file to import settings from (--file).\n"
+msgstr ""
+
+#: ../src/cli/main.c:334
+msgid "Please provide an import type.\n"
+msgstr ""
+
+#: ../src/cli/main.c:338
+msgid "Please provide a valid import type (see --help).\n"
+msgstr ""
+
+#: ../src/cli/main.c:342
+msgid "Please provide a file to import.\n"
+msgstr ""
+
+#: ../src/cli/main.c:349
+msgid "Please provide an export type (see --help).\n"
+msgstr ""
+
+#: ../src/cli/main.c:353
+msgid "Please provide a valid export type.\n"
+msgstr ""
+
+#: ../src/cli/main.c:364
+msgid "The --type option can only be used with --import or --export.\n"
+msgstr ""
+
+#: ../src/cli/main.c:370
+msgid ""
+"The --file option can only be used with --import, --import-settings, or --"
+"export-settings.\n"
+msgstr ""
+
+#: ../src/cli/main.c:375
+msgid "The --output-dir option can only be used with --export.\n"
+msgstr ""
+
+#: ../src/cli/main.c:407
+#, c-format
+msgid "Supported types: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:69
+msgid "No databases found in the configuration.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:72
+msgid "Known databases:\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:88
 #, c-format
 msgid ""
 "Your system's secure memory limit (memlock: %d bytes) is not enough to "
@@ -29,96 +237,196 @@ msgid ""
 "OTPClient cannot change automatically."
 msgstr ""
 
-#: src/cli/exec-action.c:99
+#: ../src/cli/exec-action.c:105
+#, c-format
+msgid "Refusing to open password file '%s': it is a symbolic link.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:107
+#, c-format
+msgid "Failed to open password file '%s': %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:113
+#, c-format
+msgid "Failed to stat password file '%s': %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:118
+#, c-format
+msgid "Refusing to open password file '%s': not a regular file.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:123
+#, c-format
+msgid ""
+"Refusing to open password file '%s': mode %04o is readable or writable by "
+"group/other. Run `chmod 600 %s` and retry.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:142
 msgid "Type the DB decryption password: "
 msgstr ""
 
-#: src/cli/exec-action.c:117
+#: ../src/cli/exec-action.c:144
+msgid "No password provided, exiting."
+msgstr ""
+
+#: ../src/cli/exec-action.c:157
+msgid "Database file does not exist. Creating a new database...\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:160
 #, c-format
 msgid "Error while creating new database: %s\n"
 msgstr ""
 
-#: src/cli/exec-action.c:127
+#: ../src/cli/exec-action.c:165
+#, c-format
+msgid "Database '%s' created successfully.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:166
+msgid ""
+"\n"
+"ATTENTION: if you want to use this database by default, you must update the "
+"config file accordingly.\n"
+"\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:171
+msgid "Incorrect password."
+msgstr ""
+
+#: ../src/cli/exec-action.c:173
 msgid "Error while loading the database: "
 msgstr ""
 
-#: src/cli/exec-action.c:148
+#: ../src/cli/exec-action.c:198
 #, c-format
 msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#: src/cli/exec-action.c:152
+#: ../src/cli/exec-action.c:202
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: src/cli/exec-action.c:200
+#: ../src/cli/exec-action.c:209
+msgid ""
+"An error occurred while importing, so nothing has been added to the database."
+msgstr ""
+
+#: ../src/cli/exec-action.c:212
+msgid " The error is: "
+msgstr ""
+
+#: ../src/cli/exec-action.c:230
+#, c-format
+msgid "Error while updating the database: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:237
+#, c-format
+msgid "Error while reloading the database: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:242
+msgid "Data successfully imported.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:252
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: src/cli/exec-action.c:213 src/cli/exec-action.c:225
-#: src/cli/exec-action.c:237
+#: ../src/cli/exec-action.c:264 ../src/cli/exec-action.c:275
+#: ../src/cli/exec-action.c:286
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: src/cli/exec-action.c:248
+#: ../src/cli/exec-action.c:297
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: src/cli/exec-action.c:252
+#: ../src/cli/exec-action.c:301
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: src/cli/exec-action.c:294
+#: ../src/cli/exec-action.c:309
+msgid "Option not recognized: "
+msgstr ""
+
+#: ../src/cli/exec-action.c:340
+#, c-format
+msgid "Database '%s' not found in the known database list.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:348
+#, c-format
+msgid "Database file/location (%s) does not exist.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:357
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: src/cli/exec-action.c:297
+#: ../src/cli/exec-action.c:360
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: src/cli/exec-action.c:305
+#: ../src/cli/exec-action.c:367
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: src/cli/exec-action.c:367
+#: ../src/cli/exec-action.c:418
+#, c-format
+msgid "Warning: password was truncated at %zu bytes.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:422
 msgid "Empty password not allowed"
 msgstr ""
 
-#: src/cli/get-data.c:57
+#: ../src/cli/get-data.c:101
 msgid ""
 "Couldn't find the data. Either the given data is wrong or is not in the "
 "database."
 msgstr ""
 
-#: src/cli/get-data.c:60
+#. Translators: please do not translate 'account'
+#: ../src/cli/get-data.c:104
 #, c-format
 msgid "Given account: %s"
 msgstr ""
 
-#: src/cli/get-data.c:66
+#. Translators: please do not translate 'issuer'
+#: ../src/cli/get-data.c:110
 #, c-format
 msgid "Given issuer: %s"
 msgstr ""
 
-#: src/cli/get-data.c:126
-#, c-format
-msgid "Current TOTP (valid for %d more second(s)): %s\n"
+#: ../src/cli/get-data.c:176
+msgid "Account | Issuer | Group\n"
 msgstr ""
 
-#: src/cli/get-data.c:130
+#: ../src/cli/get-data.c:284
+#, c-format
+msgid "Current TOTP (valid for %d more second): %s\n"
+msgid_plural "Current TOTP (valid for %d more seconds): %s\n"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ../src/cli/get-data.c:288
+#, c-format
+msgid "Next TOTP: %s\n"
+msgstr ""
+
+#: ../src/cli/get-data.c:308
 #, c-format
 msgid "Current HOTP: %s\n"
-msgstr ""
-
-#: src/cli/main.c:153
-msgid ""
-"Couldn't get the memlock value, therefore secure memory cannot be allocated. "
-"Please have a look at the following page before re-running OTPClient:https://"
-"github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"
 msgstr ""

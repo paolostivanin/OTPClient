@@ -1,3 +1,48 @@
-Note for myself:
-$ xgettext -k_ -kN_ -o otpclient-cli.pot -L C -cTranslators ../src/cli/main.c  ../src/cli/help.c ../src/cli/get-data.c
-$ xgettext -k_ -kN_ -o otpclient.pot -L Glade ../src/ui/otpclient.ui
+Note for myself, run from the po/ directory.
+
+CLI:
+$ xgettext --keyword=_ --keyword=N_ --keyword=ngettext:1,2 --add-comments=Translators \
+    --package-name=OTPClient -L C -o otpclient-cli.pot \
+    ../src/cli/main.c ../src/cli/exec-action.c ../src/cli/get-data.c
+
+GUI (C sources first, then merge UI files via -j):
+$ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=ngettext:1,2 \
+    --add-comments=Translators --package-name=OTPClient -L C -o otpclient.pot \
+    ../src/gui/main.c \
+    ../src/gui/otpclient-application.c \
+    ../src/gui/otpclient-window.c \
+    ../src/gui/otp-entry.c \
+    ../src/gui/otp-button-row.c \
+    ../src/gui/database-sidebar.c \
+    ../src/gui/gui-misc.c \
+    ../src/gui/lock-app.c \
+    ../src/gui/qrcode-parser.c \
+    ../src/gui/tray.c \
+    ../src/gui/webcam-scanner.c \
+    ../src/gui/dialogs/db-info-dialog.c \
+    ../src/gui/dialogs/edit-token-dialog.c \
+    ../src/gui/dialogs/export-dialog.c \
+    ../src/gui/dialogs/import-dialog.c \
+    ../src/gui/dialogs/kdf-dialog.c \
+    ../src/gui/dialogs/manual-add-dialog.c \
+    ../src/gui/dialogs/password-dialog.c \
+    ../src/gui/dialogs/qr-display-dialog.c \
+    ../src/gui/dialogs/settings-dialog.c \
+    ../src/gui/dialogs/whats-new-dialog.c \
+    ../src/common/aegis.c \
+    ../src/common/authpro.c \
+    ../src/common/common.c \
+    ../src/common/db-common.c \
+    ../src/common/file-size.c \
+    ../src/common/freeotp.c \
+    ../src/common/gquarks.c \
+    ../src/common/gsettings-common.c \
+    ../src/common/import-export.c \
+    ../src/common/parse-uri.c \
+    ../src/common/secret-schema.c \
+    ../src/common/settings-import-export.c \
+    ../src/common/twofas.c
+
+$ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --add-comments=Translators \
+    --package-name=OTPClient -L Glade -j -o otpclient.pot \
+    ../src/gui/ui/window.ui ../src/gui/ui/context-menus.ui ../src/gui/ui/shortcuts-window.ui
