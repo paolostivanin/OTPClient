@@ -7,8 +7,12 @@ Only the versions listed below receive security updates.
 | Version | Status      |
 |---------|-------------|
 | 5.0.x   | Active      |
-| 4.4.x   | Maintenance |
-| < 4.4   | End of life |
+| 4.5.x   | Maintenance |
+| < 4.5   | End of life |
+
+- **Active** — current release line. Receives new features, bug fixes, and security patches.
+- **Maintenance** — previous release line. Receives security patches and critical bug fixes only; no new features.
+- **End of life** — no longer supported. No fixes of any kind; please upgrade.
 
 ## Reporting a Vulnerability
 
