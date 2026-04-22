@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <glib/gi18n.h>
@@ -28,12 +29,15 @@ get_authpro_data (const gchar  *path,
                   gsize         db_size,
                   GError      **err)
 {
-    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+    // Open via O_NOFOLLOW + fstat check so symlink/directory swaps cannot
+    // win the race between the test and the read.
+    gint safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
         return NULL;
     }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
 
-    goffset input_size = get_file_size (path);
+    goffset input_size = get_file_size (safe_path);
     if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -42,17 +46,30 @@ get_authpro_data (const gchar  *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
-    GFile *in_file = g_file_new_for_path (path);
+    // The plain-backup path doesn't need a GFile/GFileInputStream — only the
+    // encrypted path consumes them. Open lazily so we don't leak fds when no
+    // password is provided.
+    if (password == NULL) {
+        GSList *result = get_otps_from_plain_backup (safe_path, err);
+        g_close (safe_fd, NULL);
+        return result;
+    }
+
+    GFile *in_file = g_file_new_for_path (safe_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
     if (*err != NULL) {
         g_object_unref (in_file);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, in_file, in_stream, err) : get_otps_from_plain_backup (path, err);
+    GSList *result = get_otps_from_encrypted_backup (safe_path, password, max_file_size, in_file, in_stream, err);
+    g_close (safe_fd, NULL);
+    return result;
 }
 
 

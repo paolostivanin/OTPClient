@@ -89,6 +89,30 @@
   </content_rating>
 
   <releases>
+    <release version="4.5.0" date="2026-04-22">
+      <description>
+        <p>OTPClient 4.5.0 is the final 4.x release. It adds a search-provider trigger keyword and back-fills security and correctness fixes from the 5.x branch:</p>
+        <ul>
+          <li>ADDED: search-provider trigger keyword (default "otp") so OTP results are not buried under other KRunner / GNOME Shell runner output. Configurable in Settings → Integration. Empty keyword falls back to legacy unfiltered behaviour. Daemon restart required.</li>
+          <li>ADDED: auto-copy OTP to system clipboard on search-provider activation.</li>
+          <li>SECURITY: stop including the live OTP code in the KRunner Match subtitle. Any process on the session bus could previously poll Match and read codes without user action.</li>
+          <li>SECURITY: validate Argon2id parameters in the v2 database header against safe min/max bounds; refuse to open files that would cause memory-exhaustion or KDF-weakening DoS on unlock.</li>
+          <li>SECURITY: disable core dumps via prctl(PR_SET_DUMPABLE, 0) and RLIMIT_CORE so a crash with secrets in memory cannot leak them to disk.</li>
+          <li>SECURITY: fix KDF byte-length bug (passed character count instead of byte count to gcry_kdf_*); non-ASCII passwords previously derived a weakened key. Existing databases are migrated automatically on the next unlock.</li>
+          <li>SECURITY: open imports (Aegis, AuthPro, 2FAS, FreeOTP+) and the database itself with O_NOFOLLOW + fstat regular-file check; subsequent reads happen via /proc/self/fd to close the symlink-swap TOCTOU window.</li>
+          <li>SECURITY: chmod 0600 on database backups so a permissive umask cannot leave .bak files group/world-readable.</li>
+          <li>SECURITY: cap individual otpauth:// URI length at 4 KB to prevent multi-gigabyte allocations from malformed input.</li>
+          <li>SECURITY: refuse to open --password-file with group/world-readable permissions instead of merely warning.</li>
+          <li>SECURITY: clear the system clipboard on SIGINT/SIGTERM/SIGHUP and at app shutdown.</li>
+          <li>FIXED: 2FAS importer crashes / leaks on missing servicesEncrypted, malformed base64 splits, under-sized AEAD payload, wrong gpg_error variable in decrypt logging, leaked secure buffer on decrypt or tag-check failure (silently accepted unauthenticated plaintext).</li>
+          <li>FIXED: 2FAS exporter NULL-deref on missing algo / type fields.</li>
+          <li>FIXED: Aegis importer NULL-deref when header.slots is missing or the password slot lacks key_params.</li>
+          <li>FIXED: FreeOTP+ exporter unconditional unref of NULL out_stream when g_file_replace fails; correct byte length passed to write.</li>
+          <li>FIXED: AuthPro plain-backup path leaked the file handle opened for the encrypted path.</li>
+          <li>IMPROVED: get_algo_int_from_str now warns and defaults to SHA1 (RFC 6238) on unknown algorithm strings instead of silently using SHA512.</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.4.1" date="2026-03-03">
       <description>
         <p>OTPClient 4.4.1 includes the following fixes:</p>

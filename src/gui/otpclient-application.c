@@ -3,6 +3,7 @@
 #include <jansson.h>
 #include <libsecret/secret.h>
 #include <glib/gi18n.h>
+#include <glib-unix.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otpclient.h"
@@ -49,7 +50,13 @@ static void     init_db_defaults       (AppData            *app_data);
 
 static void     cleanup_app_data       (AppData            *app_data);
 
+static void     otpclient_application_startup  (GApplication *app);
+
 static void     otpclient_application_shutdown (GApplication *app);
+
+static void     clear_session_clipboard        (void);
+
+static gboolean dispatch_sighandler            (gpointer      user_data);
 
 static void     load_validity_colors   (GKeyFile           *kf,
                                         AppData            *app_data);
@@ -392,6 +399,7 @@ otpclient_application_class_init (OtpclientApplicationClass *klass)
     GApplicationClass *app_class   = G_APPLICATION_CLASS (klass);
 
     object_class->finalize = otpclient_application_finalize;
+    app_class->startup     = otpclient_application_startup;
     app_class->activate    = otpclient_application_activate;
     app_class->shutdown    = otpclient_application_shutdown;
 }
@@ -450,6 +458,15 @@ set_config_data (gint    *width,
                 g_key_file_get_boolean (kf, "config", "search_provider_enabled", NULL);
         } else {
             app_data->search_provider_enabled = TRUE;
+        }
+        g_free (app_data->search_provider_keyword);
+        if (g_key_file_has_key (kf, "config", "search_provider_keyword", NULL)) {
+            app_data->search_provider_keyword =
+                g_key_file_get_string (kf, "config", "search_provider_keyword", NULL);
+            if (app_data->search_provider_keyword == NULL)
+                app_data->search_provider_keyword = g_strdup ("otp");
+        } else {
+            app_data->search_provider_keyword = g_strdup ("otp");
         }
         load_validity_colors (kf, app_data);
         g_object_set (gtk_settings_get_default (),
@@ -553,6 +570,7 @@ init_app_defaults (AppData *app_data)
     app_data->is_reorder_active      = FALSE;
     app_data->use_tray               = FALSE;
     app_data->search_provider_enabled = TRUE;
+    app_data->search_provider_keyword = g_strdup ("otp");
     app_data->open_db_file_action    = GTK_FILE_CHOOSER_ACTION_SAVE;
     app_data->window_width           = 0;
     app_data->window_height          = 0;
@@ -611,13 +629,30 @@ cleanup_app_data (AppData *app_data)
         g_free (app_data->db_data);
     }
 
+    g_clear_pointer (&app_data->search_provider_keyword, g_free);
+
     g_free (app_data);
+}
+
+static void
+otpclient_application_startup (GApplication *app)
+{
+    G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (app);
+
+    /* Wipe any OTP we may have written to the system clipboard if the
+     * process is killed via SIGINT/SIGTERM/SIGHUP. Best-effort: failures
+     * here are non-fatal. */
+    g_unix_signal_add (SIGINT,  dispatch_sighandler, app);
+    g_unix_signal_add (SIGTERM, dispatch_sighandler, app);
+    g_unix_signal_add (SIGHUP,  dispatch_sighandler, app);
 }
 
 static void
 otpclient_application_shutdown (GApplication *app)
 {
     OtpclientApplication *self = OTPCLIENT_APPLICATION (app);
+
+    clear_session_clipboard ();
 
     if (self->app_data != NULL) {
         destroy_cb (NULL, self->app_data);
@@ -627,4 +662,26 @@ otpclient_application_shutdown (GApplication *app)
     }
 
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (app);
+}
+
+static void
+clear_session_clipboard (void)
+{
+    /* Best-effort: only do this if a default display exists. Headless
+     * processes (e.g. test runs) and processes that exit before any UI
+     * activates can trip on gtk_clipboard_get without one. */
+    if (gdk_display_get_default () == NULL) return;
+    GtkClipboard *cb = gtk_clipboard_get (GDK_SELECTION_CLIPBOARD);
+    if (cb != NULL) {
+        gtk_clipboard_set_text (cb, "", -1);
+    }
+}
+
+static gboolean
+dispatch_sighandler (gpointer user_data)
+{
+    GApplication *app = G_APPLICATION (user_data);
+    clear_session_clipboard ();
+    g_application_quit (app);
+    return G_SOURCE_REMOVE;
 }

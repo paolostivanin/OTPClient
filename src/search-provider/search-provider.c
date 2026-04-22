@@ -18,7 +18,17 @@
 #define GNOME_BUS "com.github.paolostivanin.OTPClient.SearchProvider"
 #define GNOME_PATH "/com/github/paolostivanin/OTPClient/SearchProvider"
 
+#define OTPCLIENT_SEARCH_KEYWORD_MAX_LEN 32
+
 static gint32 global_max_file_size = 0;
+
+/* Trigger keyword loaded once at startup. The daemon ignores any query whose
+ * first whitespace-separated token doesn't equal g_keyword (case-insensitive).
+ * An empty keyword disables the filter and falls back to plain substring
+ * matching. Changes to the config key only take effect after the daemon
+ * is restarted. */
+static gchar *g_keyword = NULL;
+static gchar *g_keyword_fold = NULL;
 
 typedef struct otp_search_entry_t {
     gchar *id;
@@ -37,6 +47,9 @@ static void copy_to_clipboard (const gchar *otp_value, gboolean is_kde);
 static gchar *get_db_path (void);
 static gboolean get_use_secret_service (void);
 static gboolean get_search_provider_enabled (void);
+static gchar *get_search_provider_keyword (void);
+static void load_keyword_config (void);
+static gboolean strip_keyword_or_skip (gchar **terms, gchar ***out_terms);
 
 /* --- Introspection XML --- */
 static const gchar *krunner_introspection_xml =
@@ -61,63 +74,108 @@ static const gchar *gnome_introspection_xml =
 
 /* --- Helpers Implementation --- */
 
-static gchar *get_db_path (void) {
-    gchar *db_path = NULL;
-    gchar *cfg_file_path = NULL;
-    GKeyFile *kf = g_key_file_new ();
+/* Returns a freshly-loaded GKeyFile from the user config, or NULL
+ * if the file is missing or unreadable. Caller must g_key_file_free(). */
+static GKeyFile *open_user_config (void) {
 #ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
+    g_autofree gchar *cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
 #else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
+    g_autofree gchar *cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
 #endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
-        }
+    if (!g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) return NULL;
+    GKeyFile *kf = g_key_file_new ();
+    if (!g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
+        g_key_file_free (kf);
+        return NULL;
     }
+    return kf;
+}
+
+static gchar *get_db_path (void) {
+    GKeyFile *kf = open_user_config ();
+    if (kf == NULL) return NULL;
+    gchar *db_path = g_key_file_get_string (kf, "config", "db_path", NULL);
     g_key_file_free (kf);
-    g_free (cfg_file_path);
     return db_path;
 }
 
 static gboolean get_use_secret_service (void) {
-    gboolean use_secret_service = TRUE;
-    GKeyFile *kf = g_key_file_new ();
-    gchar *cfg_file_path = NULL;
-#ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
-        }
-    }
+    GKeyFile *kf = open_user_config ();
+    if (kf == NULL) return TRUE;
+    gboolean use_secret_service = g_key_file_get_boolean (kf, "config", "use_secret_service", NULL);
     g_key_file_free (kf);
-    g_free (cfg_file_path);
     return use_secret_service;
 }
 
 static gboolean get_search_provider_enabled (void) {
-    gboolean enabled = TRUE;
-    gchar *cfg_file_path = NULL;
-    GKeyFile *kf = g_key_file_new ();
-#ifdef IS_FLATPAK
-    cfg_file_path = g_build_filename (g_get_user_data_dir (), "otpclient.cfg", NULL);
-#else
-    cfg_file_path = g_build_filename (g_get_user_config_dir (), "otpclient.cfg", NULL);
-#endif
-    if (g_file_test (cfg_file_path, G_FILE_TEST_EXISTS)) {
-        if (g_key_file_load_from_file (kf, cfg_file_path, G_KEY_FILE_NONE, NULL)) {
-            GError *err = NULL;
-            enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", &err);
-            if (err) { enabled = TRUE; g_error_free(err); }
-        }
-    }
+    GKeyFile *kf = open_user_config ();
+    if (kf == NULL) return TRUE;
+    GError *err = NULL;
+    gboolean enabled = g_key_file_get_boolean (kf, "config", "search_provider_enabled", &err);
+    if (err) { enabled = TRUE; g_clear_error (&err); }
     g_key_file_free (kf);
-    g_free (cfg_file_path);
     return enabled;
+}
+
+static gchar *get_search_provider_keyword (void) {
+    GKeyFile *kf = open_user_config ();
+    if (kf == NULL) return g_strdup ("otp");
+    gchar *keyword = g_key_file_get_string (kf, "config", "search_provider_keyword", NULL);
+    g_key_file_free (kf);
+    if (keyword == NULL) keyword = g_strdup ("otp");
+    return keyword;
+}
+
+static void load_keyword_config (void) {
+    g_free (g_keyword);
+    g_free (g_keyword_fold);
+    g_keyword = get_search_provider_keyword ();
+    if (g_keyword == NULL) g_keyword = g_strdup ("");
+    g_strstrip (g_keyword);
+    /* Defense in depth against arbitrary config edits: a runaway-length
+     * keyword would still get casefolded and compared on every query.
+     * Truncate by UTF-8 character count so we don't slice a multi-byte
+     * sequence. */
+    glong char_len = g_utf8_strlen (g_keyword, -1);
+    if (char_len > OTPCLIENT_SEARCH_KEYWORD_MAX_LEN) {
+        const gchar *cut = g_utf8_offset_to_pointer (g_keyword, OTPCLIENT_SEARCH_KEYWORD_MAX_LEN);
+        *((gchar *) cut) = '\0';
+    }
+    g_keyword_fold = g_utf8_casefold (g_keyword, -1);
+}
+
+/* Returns TRUE and writes the post-keyword tail into *out_terms (caller frees
+ * with g_strfreev) when the first non-empty term equals the configured
+ * keyword AND there is at least one further non-empty term. Returns FALSE and
+ * leaves *out_terms NULL otherwise. If the keyword is empty/disabled, behaves
+ * transparently: returns TRUE with the original terms duplicated. */
+static gboolean strip_keyword_or_skip (gchar **terms, gchar ***out_terms) {
+    *out_terms = NULL;
+    if (terms == NULL) return FALSE;
+
+    if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
+        *out_terms = g_strdupv (terms);
+        return TRUE;
+    }
+
+    gsize i = 0;
+    while (terms[i] != NULL && terms[i][0] == '\0') i++;
+    if (terms[i] == NULL) return FALSE;
+
+    g_autofree gchar *first_fold = g_utf8_casefold (terms[i], -1);
+    if (g_strcmp0 (first_fold, g_keyword_fold) != 0) return FALSE;
+
+    GPtrArray *tail = g_ptr_array_new ();
+    for (gsize j = i + 1; terms[j] != NULL; j++) {
+        if (terms[j][0] != '\0') g_ptr_array_add (tail, g_strdup (terms[j]));
+    }
+    if (tail->len == 0) {
+        g_ptr_array_free (tail, TRUE);
+        return FALSE;
+    }
+    g_ptr_array_add (tail, NULL);
+    *out_terms = (gchar **) g_ptr_array_free (tail, FALSE);
+    return TRUE;
 }
 
 static void otp_search_entry_free (OtpSearchEntry *entry) {
@@ -279,12 +337,16 @@ static void handle_gnome_call (GDBusConnection *conn, const gchar *sender, const
         }
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
-        GPtrArray *entries = load_entries ();
-        for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index (entries, i);
-            if (entry_matches_terms (e, terms, g_strv_length(terms))) g_variant_builder_add (&builder, "s", e->id);
+        g_auto(GStrv) stripped = NULL;
+        if (strip_keyword_or_skip (terms, &stripped)) {
+            GPtrArray *entries = load_entries ();
+            gsize stripped_len = g_strv_length (stripped);
+            for (guint i = 0; i < entries->len; i++) {
+                OtpSearchEntry *e = g_ptr_array_index (entries, i);
+                if (entry_matches_terms (e, stripped, stripped_len)) g_variant_builder_add (&builder, "s", e->id);
+            }
+            g_ptr_array_free (entries, TRUE);
         }
-        g_ptr_array_free (entries, TRUE);
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
         g_strfreev (terms);
     } else if (g_strcmp0 (method, "GetResultMetas") == 0) {
@@ -341,20 +403,27 @@ static void handle_krunner_call (GDBusConnection *conn, const gchar *sender, con
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(sssida{sv})"));
         if (query && *query) {
             g_auto(GStrv) terms = g_strsplit_set (query, " \t", -1);
-            gsize terms_len = g_strv_length (terms);
-            GPtrArray *entries = load_entries ();
-            for (guint i = 0; i < entries->len; i++) {
-                OtpSearchEntry *e = g_ptr_array_index (entries, i);
-                if (!entry_matches_terms (e, terms, terms_len)) continue;
-                if (!e->otp_value) continue;
-                GVariantBuilder props;
-                g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-                g_autofree gchar *sub = (e->issuer && *e->issuer) ? g_strdup_printf ("%s • %s", e->issuer, e->otp_value) : g_strdup (e->otp_value);
-                g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
-                g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
-                g_variant_builder_add (&builder, "(sssida{sv})", e->id, e->label, "com.github.paolostivanin.OTPClient", (gint32)0, (gdouble)1.0, &props);
+            g_auto(GStrv) stripped = NULL;
+            if (strip_keyword_or_skip (terms, &stripped)) {
+                gsize stripped_len = g_strv_length (stripped);
+                GPtrArray *entries = load_entries ();
+                for (guint i = 0; i < entries->len; i++) {
+                    OtpSearchEntry *e = g_ptr_array_index (entries, i);
+                    if (!entry_matches_terms (e, stripped, stripped_len)) continue;
+                    if (!e->otp_value) continue;
+                    GVariantBuilder props;
+                    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
+                    // Deliberately do NOT include the OTP in the subtitle:
+                    // any process on the session bus can poll Match. The code
+                    // is only delivered via Run, where the user sees the
+                    // notification.
+                    g_autofree gchar *sub = g_strdup (e->issuer ? e->issuer : "");
+                    g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
+                    g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
+                    g_variant_builder_add (&builder, "(sssida{sv})", e->id, e->label, "com.github.paolostivanin.OTPClient", (gint32)0, (gdouble)1.0, &props);
+                }
+                g_ptr_array_free (entries, TRUE);
             }
-            g_ptr_array_free (entries, TRUE);
         }
         GVariant *res = g_variant_builder_end (&builder);
         g_dbus_method_invocation_return_value (inv, g_variant_new_tuple (&res, 1));
@@ -411,6 +480,9 @@ int main (int argc, char **argv) {
         else if (g_strcmp0 (argv[i], "--gnome") == 0) force_gnome = TRUE;
     }
     if (!get_search_provider_enabled ()) return 0;
+
+    load_keyword_config ();
+
     if (!force_kde && !force_gnome) {
         const gchar *desktop = g_getenv ("XDG_CURRENT_DESKTOP");
         if (desktop) {
@@ -437,5 +509,7 @@ int main (int argc, char **argv) {
     if (force_gnome) g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE, on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
     g_main_loop_run (main_loop);
     g_main_loop_unref (main_loop);
+    g_clear_pointer (&g_keyword, g_free);
+    g_clear_pointer (&g_keyword_fold, g_free);
     return 0;
 }

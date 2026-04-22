@@ -90,4 +90,11 @@ GKeyFile         *get_kf_ptr                     (void);
 gboolean          is_secmem_available            (gsize               required_size,
                                                   GError            **err);
 
+// Opens `path` with O_RDONLY|O_NOFOLLOW|O_CLOEXEC and verifies via fstat that
+// it is a regular file. Returns the open fd on success, or -1 with **err set.
+// Caller must close(fd). Use /proc/self/fd/<fd> to feed a path to GIO APIs
+// while the underlying file descriptor stays bound to the original inode.
+gint              path_open_safe_regular_file    (const gchar        *path,
+                                                  GError            **err);
+
 G_END_DECLS

@@ -1,7 +1,18 @@
+// O_NOFOLLOW / O_CLOEXEC and prctl/setrlimit live behind POSIX (and Linux)
+// feature-test macros; opt in explicitly because CMAKE_C_EXTENSIONS=OFF
+// otherwise strips us back to strict ISO C11.
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <sys/resource.h>
+#include <sys/prctl.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
 #include <cotp.h>
 #include "gcrypt.h"
 #include "jansson.h"
@@ -33,6 +44,16 @@ set_memlock_value (gint32 *memlock_value)
 gchar *
 init_libs (gint32 max_file_size)
 {
+    // Prevent secrets from leaking into core dumps if the process crashes.
+    // Best-effort: a failure here is non-fatal but worth a warning.
+    if (prctl (PR_SET_DUMPABLE, 0, 0, 0, 0) != 0) {
+        g_warning ("Failed to disable core dumps via PR_SET_DUMPABLE; secrets may leak on crash.");
+    }
+    struct rlimit core_limit = { 0, 0 };
+    if (setrlimit (RLIMIT_CORE, &core_limit) != 0) {
+        g_warning ("Failed to set RLIMIT_CORE to 0; core dumps may still be produced on crash.");
+    }
+
     gcry_control(GCRYCTL_SET_PREFERRED_RNG_TYPE, GCRY_RNG_TYPE_SYSTEM);
     if (!gcry_check_version ("1.10.1")) {
         return g_strdup ("The required version of GCrypt is 1.10.1 or greater.");
@@ -52,16 +73,42 @@ init_libs (gint32 max_file_size)
 gint
 get_algo_int_from_str (const gchar *algo)
 {
-    gint algo_int;
-    if (g_strcmp0 (algo, "SHA1") == 0) {
-        algo_int = COTP_SHA1;
-    } else if (g_strcmp0 (algo, "SHA256") == 0) {
-        algo_int = COTP_SHA256;
-    } else {
-        algo_int = COTP_SHA512;
-    }
+    if (g_strcmp0 (algo, "SHA1") == 0)   return COTP_SHA1;
+    if (g_strcmp0 (algo, "SHA256") == 0) return COTP_SHA256;
+    if (g_strcmp0 (algo, "SHA512") == 0) return COTP_SHA512;
+    g_warning ("Unknown OTP algorithm '%s', defaulting to SHA1.", algo ? algo : "(null)");
+    return COTP_SHA1;
+}
 
-    return algo_int;
+
+gint
+path_open_safe_regular_file (const gchar  *path,
+                             GError      **err)
+{
+    if (path == NULL || path[0] == '\0') {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Empty file path.");
+        return -1;
+    }
+    int fd = open (path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Refusing to open '%s': %s", path, g_strerror (errno));
+        return -1;
+    }
+    struct stat st;
+    if (fstat (fd, &st) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to fstat '%s': %s", path, g_strerror (errno));
+        close (fd);
+        return -1;
+    }
+    if (!S_ISREG (st.st_mode)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Refusing to open '%s': not a regular file.", path);
+        close (fd);
+        return -1;
+    }
+    return fd;
 }
 
 
@@ -175,9 +222,10 @@ get_authpro_derived_key (const gchar *password,
     // taglen, iterations, memory_cost (65536=64MiB), parallelism
     const unsigned long params[4] = {32, 3, 65536, 4};
     gcry_kdf_hd_t hd;
+    // gcry_kdf_open expects the password length in BYTES, not Unicode characters.
     if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                        params, 4,
-                       password,  (gsize)g_utf8_strlen (password, -1),
+                       password, strlen (password),
                        salt, AUTHPRO_SALT_TAG,
                        NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
         g_printerr ("Error while opening the KDF handler\n");

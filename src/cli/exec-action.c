@@ -79,9 +79,10 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         GStatBuf st;
         if (g_stat (cmdline_opts->password_file, &st) == 0 && (st.st_mode & 077) != 0) {
-            g_printerr ("Warning: password file '%s' has group/world permissions (mode %04o). "
-                         "Consider restricting to owner-only (chmod 600).\n",
-                         cmdline_opts->password_file, (unsigned)(st.st_mode & 0777));
+            g_printerr ("Refusing to open password file '%s': it has group/world permissions (mode %04o). "
+                         "Restrict to owner-only with: chmod 600 '%s'\n",
+                         cmdline_opts->password_file, (unsigned)(st.st_mode & 0777), cmdline_opts->password_file);
+            return FALSE;
         }
         password_fd = g_open (cmdline_opts->password_file, O_RDONLY, 0);
         if (password_fd < 0) {

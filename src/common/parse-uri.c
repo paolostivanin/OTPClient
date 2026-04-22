@@ -1,7 +1,15 @@
+// strnlen is POSIX 2008; opt in explicitly because CMAKE_C_EXTENSIONS=OFF
+// otherwise strips us back to strict ISO C11.
+#define _POSIX_C_SOURCE 200809L
+
 #include <glib.h>
+#include <glib/gstdio.h>
+#include <string.h>
 #include "common.h"
 #include "file-size.h"
 #include "gquarks.h"
+
+#define MAX_OTPAUTH_URI_LEN 4096
 
 static void   parse_uri            (const gchar   *uri,
                                     GSList       **otps);
@@ -116,24 +124,38 @@ get_otpauth_data (const gchar  *path,
                   GError      **err)
 {
     GSList *otps = NULL;
-    goffset fs = get_file_size (path);
+
+    // Open via O_NOFOLLOW + fstat check so symlink/directory swaps cannot
+    // win the race between the test and the read. Subsequent file APIs
+    // operate on /proc/self/fd/<fd>.
+    gint safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
+        return NULL;
+    }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+
+    goffset fs = get_file_size (safe_path);
     if (fs < 10) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't get the file size (file doesn't exit or wrong file selected.");
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't get the file size (file doesn't exist or wrong file selected).");
+        g_close (safe_fd, NULL);
         return NULL;
     }
     if (fs > max_file_size) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
     gchar *file_buf = NULL;
-    if (!g_file_get_contents (path, &file_buf, NULL, err)) {
+    if (!g_file_get_contents (safe_path, &file_buf, NULL, err)) {
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
     set_otps_from_uris (file_buf, &otps);
 
     g_free (file_buf);
+    g_close (safe_fd, NULL);
 
     return otps;
 }
@@ -145,6 +167,12 @@ parse_uri (const gchar   *uri,
 {
     const gchar *uri_copy = uri;
     if (g_ascii_strncasecmp (uri_copy, "otpauth://", 10) != 0) {
+        return;
+    }
+    // Cap individual URI length to prevent multi-gigabyte allocations from
+    // pathologically-long tokens in attacker-supplied input.
+    if (strnlen (uri_copy, MAX_OTPAUTH_URI_LEN + 1) > MAX_OTPAUTH_URI_LEN) {
+        g_warning ("Skipping otpauth:// URI longer than %d bytes.", MAX_OTPAUTH_URI_LEN);
         return;
     }
     uri_copy += 10;

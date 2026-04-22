@@ -65,6 +65,8 @@ typedef struct app_data_t {
 
     gboolean search_provider_enabled;
 
+    gchar *search_provider_keyword;
+
     GtkWidget *diag_rcdb;
     GtkFileChooserAction open_db_file_action;
 

@@ -2431,10 +2431,30 @@ but not the number of digits and/or the period/counter.</property>
               </packing>
             </child>
             <child>
-              <placeholder/>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <property name="label" translatable="yes">Search provider keyword</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">11</property>
+              </packing>
             </child>
             <child>
-              <placeholder/>
+              <object class="GtkEntry" id="search_provider_keyword_entry_id">
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="halign">center</property>
+                <property name="valign">center</property>
+                <property name="max-length">32</property>
+                <property name="width-chars">12</property>
+                <property name="placeholder-text" translatable="yes">otp</property>
+              </object>
+              <packing>
+                <property name="left-attach">1</property>
+                <property name="top-attach">11</property>
+              </packing>
             </child>
             <child>
               <placeholder/>

@@ -1,7 +1,9 @@
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <jansson.h>
 #include <gcrypt.h>
+#include <string.h>
 #include <glib/gi18n.h>
 
 #include "gquarks.h"
@@ -50,12 +52,15 @@ get_twofas_data (const gchar  *path,
                  gsize         db_size,
                  GError      **err)
 {
-    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+    // Open via O_NOFOLLOW + fstat check so symlink/directory swaps cannot
+    // win the race between the test and the read.
+    gint safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
         return NULL;
     }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
 
-    goffset input_size = get_file_size (path);
+    goffset input_size = get_file_size (safe_path);
     if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -64,10 +69,13 @@ get_twofas_data (const gchar  *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, err) : get_otps_from_plain_backup (path, err);
+    GSList *result = (password != NULL) ? get_otps_from_encrypted_backup (safe_path, password, err) : get_otps_from_plain_backup (safe_path, err);
+    g_close (safe_fd, NULL);
+    return result;
 }
 
 
@@ -123,14 +131,16 @@ export_twofas (const gchar *export_path,
             json_object_set (otp_obj, "account", json_string (label));
         }
 
-        gchar *algo = g_ascii_strup (json_string_value (json_object_get (db_obj, "algo")), -1);
+        const gchar *algo_str = json_string_value (json_object_get (db_obj, "algo"));
+        gchar *algo = g_ascii_strup (algo_str ? algo_str : "SHA1", -1);
         json_object_set (otp_obj, "algorithm", json_string (algo));
         g_free (algo);
 
         json_object_set (otp_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (otp_obj, "source", json_string ("Manual"));
 
-        if (g_ascii_strcasecmp (json_string_value (json_object_get (db_obj, "type")), "TOTP") == 0) {
+        const gchar *type_str = json_string_value (json_object_get (db_obj, "type"));
+        if (type_str != NULL && g_ascii_strcasecmp (type_str, "TOTP") == 0) {
             json_object_set (otp_obj, "period", json_object_get (db_obj, "period"));
             json_object_set (otp_obj, "tokenType", json_string ("TOTP"));
         } else {
@@ -160,7 +170,8 @@ export_twofas (const gchar *export_path,
         guchar *iv = g_malloc0 (TWOFAS_IV);
         gcry_create_nonce (iv, TWOFAS_IV);
         guchar *derived_key = gcry_malloc_secure (32);
-        gpg_error_t g_err = gcry_kdf_derive (password, (gsize)g_utf8_strlen (password, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
+        // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+        gpg_error_t g_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                              salt, TWOFAS_SALT, TWOFAS_KDF_ITERS, 32, derived_key);
         if (g_err != GPG_ERR_NO_ERROR) {
             g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
@@ -259,7 +270,23 @@ get_otps_from_encrypted_backup (const gchar       *path,
     GSList *otps = NULL;
 
     json_t *root = get_json_root (path);
-    gchar **b64_encoded_data = g_strsplit (json_string_value (json_object_get (root, "servicesEncrypted")), ":", 3);
+    const gchar *enc_str = json_string_value (json_object_get (root, "servicesEncrypted"));
+    if (enc_str == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "2FAS backup is missing the 'servicesEncrypted' field.");
+        g_free (twofas_data);
+        json_decref (root);
+        return NULL;
+    }
+    gchar **b64_encoded_data = g_strsplit (enc_str, ":", 3);
+    if (g_strv_length (b64_encoded_data) < 3) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "2FAS backup 'servicesEncrypted' is malformed (expected 3 colon-separated fields).");
+        g_strfreev (b64_encoded_data);
+        g_free (twofas_data);
+        json_decref (root);
+        return NULL;
+    }
     decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
     if (twofas_data->json_data != NULL) {
         otps = parse_twofas_json_data (twofas_data->json_data, err);
@@ -318,10 +345,18 @@ decrypt_data (const gchar **b64_data,
               const gchar *pwd,
               TwofasData   *twofas_data)
 {
-    gsize enc_data_with_tag_size, salt_out_len, iv_out_len;
+    gsize enc_data_with_tag_size = 0, salt_out_len = 0, iv_out_len = 0;
     guchar *enc_data_with_tag = g_base64_decode (b64_data[0], &enc_data_with_tag_size);
     twofas_data->salt = g_base64_decode (b64_data[1], &salt_out_len);
     twofas_data->iv = g_base64_decode (b64_data[2], &iv_out_len);
+
+    // Defend against under-sized ciphertext: the tag occupies the last
+    // TWOFAS_TAG bytes, so anything shorter would underflow enc_buf_size.
+    if (enc_data_with_tag_size < TWOFAS_TAG) {
+        g_printerr ("2FAS encrypted payload is shorter than the AEAD tag.\n");
+        g_free (enc_data_with_tag);
+        return;
+    }
 
     guchar tag[TWOFAS_TAG];
     gsize enc_buf_size = enc_data_with_tag_size - TWOFAS_TAG;
@@ -331,7 +366,8 @@ decrypt_data (const gchar **b64_data,
     g_free (enc_data_with_tag);
 
     guchar *derived_key = gcry_malloc_secure (32);
-    gpg_error_t g_err = gcry_kdf_derive (pwd, (gsize)g_utf8_strlen (pwd, -1), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
+    // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+    gpg_error_t g_err = gcry_kdf_derive (pwd, strlen (pwd), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                          twofas_data->salt, salt_out_len, TWOFAS_KDF_ITERS, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
         g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
@@ -350,7 +386,9 @@ decrypt_data (const gchar **b64_data,
     twofas_data->json_data = gcry_calloc_secure (enc_buf_size, 1);
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
-        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+        gcry_free (twofas_data->json_data);
+        twofas_data->json_data = NULL;
         gcry_free (derived_key);
         g_free (enc_data);
         gcry_cipher_close (hd);
@@ -359,7 +397,11 @@ decrypt_data (const gchar **b64_data,
 
     gpg_err = gcry_cipher_checktag (hd, tag, TWOFAS_TAG);
     if (gpg_err) {
-        g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        // Tag mismatch: discard the decrypted plaintext so the caller
+        // (which only checks json_data != NULL) does not parse unauthenticated data.
+        g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+        gcry_free (twofas_data->json_data);
+        twofas_data->json_data = NULL;
     }
 
     gcry_cipher_close (hd);

@@ -1,8 +1,10 @@
 #include <glib.h>
 #include <glib/gi18n.h>
+#include <glib/gstdio.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <jansson.h>
+#include <string.h>
 #include <time.h>
 #include <uuid/uuid.h>
 #include "gquarks.h"
@@ -42,12 +44,17 @@ get_aegis_data (const gchar     *path,
                 gsize            db_size,
                 GError         **err)
 {
-    if (g_file_test (path, G_FILE_TEST_IS_SYMLINK | G_FILE_TEST_IS_DIR) ) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Selected file is either a symlink or a directory.");
+    // Open via O_NOFOLLOW + fstat check so symlink/directory swaps cannot
+    // win the race between the test and the read. Subsequent file APIs
+    // operate on /proc/self/fd/<fd>, which keeps reads bound to the same
+    // inode we just verified.
+    gint safe_fd = path_open_safe_regular_file (path, err);
+    if (safe_fd < 0) {
         return NULL;
     }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
 
-    goffset input_size = get_file_size (path);
+    goffset input_size = get_file_size (safe_path);
     if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -56,10 +63,13 @@ get_aegis_data (const gchar     *path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
-    return (password != NULL) ? get_otps_from_encrypted_backup (path, password, max_file_size, err) : get_otps_from_plain_backup (path, err);
+    GSList *result = (password != NULL) ? get_otps_from_encrypted_backup (safe_path, password, max_file_size, err) : get_otps_from_plain_backup (safe_path, err);
+    g_close (safe_fd, NULL);
+    return result;
 }
 
 
@@ -120,23 +130,50 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     json_t *arr = json_object_get (json_object_get(json, "header"), "slots");
-    gint index = 0;
-    for (; index < json_array_size(arr); index++) {
-        json_t *j_type = json_object_get (json_array_get(arr, index), "type");
-        json_int_t int_type = json_integer_value (j_type);
-        if (int_type == 1) break;
+    if (arr == NULL || !json_is_array (arr)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Aegis backup is missing or has malformed 'header.slots'.");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
     }
-    json_t *wanted_obj = json_array_get (arr, index);
+    gint index = 0;
+    json_t *wanted_obj = NULL;
+    for (; index < (gint)json_array_size(arr); index++) {
+        json_t *slot = json_array_get (arr, index);
+        if (slot == NULL) continue;
+        json_t *j_type = json_object_get (slot, "type");
+        json_int_t int_type = json_integer_value (j_type);
+        if (int_type == 1) {
+            wanted_obj = slot;
+            break;
+        }
+    }
+    if (wanted_obj == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Aegis backup contains no password-protected slot (type==1).");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
+    json_t *kp = json_object_get (wanted_obj, "key_params");
+    if (kp == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Aegis slot is missing 'key_params'.");
+        json_decref (json);
+        json_set_alloc_funcs (gcry_malloc_secure, gcry_free);
+        return NULL;
+    }
     gint n = (gint)json_integer_value (json_object_get (wanted_obj, "n"));
     gint p = (gint)json_integer_value (json_object_get (wanted_obj, "p"));
     guchar *salt = hexstr_to_bytes (json_string_value (json_object_get (wanted_obj, "salt")));
     guchar *enc_key = hexstr_to_bytes(json_string_value (json_object_get (wanted_obj, "key")));
-    json_t *kp = json_object_get (wanted_obj, "key_params");
     guchar *key_nonce = hexstr_to_bytes (json_string_value (json_object_get (kp, "nonce")));
     guchar *key_tag = hexstr_to_bytes (json_string_value (json_object_get (kp, "tag")));
     json_t *dbp = json_object_get(json_object_get(json, "header"), "params");
     guchar *keybuf = gcry_malloc (AEGIS_KEY_SIZE);
-    if (gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
+    // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+    if (gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE,  p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_printerr ("Error while deriving the key.\n");
         g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the Aegis decryption key.");
         g_free (salt);
@@ -310,7 +347,8 @@ export_aegis (const gchar   *export_path,
         gcry_create_nonce (key_nonce, AEGIS_NONCE_SIZE);
 
         derived_master_key = gcry_calloc_secure(AEGIS_KEY_SIZE, 1);
-        gpg_error_t gpg_err = gcry_kdf_derive (password, g_utf8_strlen (password, -1), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
+        // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
+        gpg_error_t gpg_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
         if (gpg_err) {
             g_printerr ("Error while deriving the key\n");
             gcry_free (derived_master_key);

@@ -25,6 +25,16 @@ G_BEGIN_DECLS
 #define ARGON2ID_DEFAULT_MC    131072  //128 MiB
 #define ARGON2ID_DEFAULT_PARAL      4
 
+// Bounds enforced when reading Argon2id parameters from a (potentially-tampered) DB header.
+// Below these floors the KDF would be cryptographically weak; above the ceilings
+// the open path is a denial-of-service vector (excessive memory / CPU).
+#define ARGON2ID_MIN_ITER           1
+#define ARGON2ID_MAX_ITER         100
+#define ARGON2ID_MIN_MC          8192   // 8 MiB
+#define ARGON2ID_MAX_MC       4194304   // 4 GiB
+#define ARGON2ID_MIN_PARAL          1
+#define ARGON2ID_MAX_PARAL         64
+
 
 typedef struct db_header_data_v1_t {
     guint8 iv[IV_SIZE];
@@ -66,6 +76,8 @@ typedef struct db_data_t {
     gint32 argon2id_iter;
     gint32 argon2id_memcost;
     gint32 argon2id_parallelism;
+
+    gboolean needs_legacy_kdf_migration;
 } DatabaseData;
 
 

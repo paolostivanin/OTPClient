@@ -19,6 +19,7 @@ typedef struct settings_data_t {
     GtkWidget *validity_color_btn;
     GtkWidget *validity_warning_color_btn;
     GtkWidget *search_provider_switch;
+    GtkWidget *search_provider_keyword_entry;
     AppData *app_data;
 } SettingsData;
 
@@ -43,6 +44,10 @@ static gboolean handle_tray_switch            (GtkSwitch   *sw,
                                                gpointer     user_data);
 
 static gboolean handle_validity_switch        (GtkSwitch   *sw,
+                                               gboolean     state,
+                                               gpointer     user_data);
+
+static gboolean handle_search_provider_switch (GtkSwitch   *sw,
                                                gboolean     state,
                                                gpointer     user_data);
 
@@ -82,6 +87,8 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
         g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
         g_key_file_set_boolean (kf, "config", "search_provider_enabled", app_data->search_provider_enabled);
+        g_key_file_set_string (kf, "config", "search_provider_keyword",
+                               app_data->search_provider_keyword ? app_data->search_provider_keyword : "otp");
         if (!g_key_file_save_to_file (kf, cfg_file_path, &err)) {
             gchar *msg = g_strconcat (_("Couldn't save default settings: "), err->message, NULL);
             show_message_dialog (app_data->main_window, msg, GTK_MESSAGE_WARNING);
@@ -118,6 +125,11 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
         if (search_err != NULL) {
             g_clear_error (&search_err);
         }
+        g_free (app_data->search_provider_keyword);
+        app_data->search_provider_keyword = g_key_file_get_string (kf, "config", "search_provider_keyword", NULL);
+        if (app_data->search_provider_keyword == NULL) {
+            app_data->search_provider_keyword = g_strdup ("otp");
+        }
         if (err != NULL && g_error_matches (err, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
             // if the key is not found, we set it to TRUE and save it to the config file.
             app_data->use_secret_service = TRUE;
@@ -142,6 +154,8 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     g_signal_connect (settings_data->dss_switch, "state-set", G_CALLBACK(handle_autolock), settings_data);
     settings_data->tray_switch = GTK_WIDGET(gtk_builder_get_object (builder, "tray_switch_id"));
     settings_data->search_provider_switch = GTK_WIDGET(gtk_builder_get_object (builder, "search_provider_switch_id"));
+    settings_data->search_provider_keyword_entry = GTK_WIDGET(gtk_builder_get_object (builder, "search_provider_keyword_entry_id"));
+    g_signal_connect (settings_data->search_provider_switch, "state-set", G_CALLBACK(handle_search_provider_switch), settings_data);
     #ifdef ENABLE_MINIMIZE_TO_TRAY
     g_signal_connect (settings_data->tray_switch, "state-set", G_CALLBACK(handle_tray_switch), settings_data);
     #else
@@ -162,6 +176,12 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
     gtk_switch_set_active (GTK_SWITCH(settings_data->dss_switch), app_data->use_secret_service);
     gtk_switch_set_active (GTK_SWITCH(settings_data->tray_switch), app_data->use_tray);
     gtk_switch_set_active (GTK_SWITCH(settings_data->search_provider_switch), app_data->search_provider_enabled);
+    if (settings_data->search_provider_keyword_entry != NULL) {
+        gtk_entry_set_max_length (GTK_ENTRY(settings_data->search_provider_keyword_entry), 32);
+        gtk_entry_set_text (GTK_ENTRY(settings_data->search_provider_keyword_entry),
+                            app_data->search_provider_keyword ? app_data->search_provider_keyword : "otp");
+        gtk_widget_set_sensitive (settings_data->search_provider_keyword_entry, app_data->search_provider_enabled);
+    }
     gchar *active_id_string = g_strdup_printf ("%d", app_data->inactivity_timeout);
     gtk_combo_box_set_active_id (GTK_COMBO_BOX(settings_data->inactivity_cb), active_id_string);
     g_free (active_id_string);
@@ -187,6 +207,13 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             app_data->use_secret_service = gtk_switch_get_active (GTK_SWITCH(settings_data->dss_switch));
             app_data->use_tray = gtk_switch_get_active (GTK_SWITCH(settings_data->tray_switch));
             app_data->search_provider_enabled = gtk_switch_get_active (GTK_SWITCH(settings_data->search_provider_switch));
+            if (settings_data->search_provider_keyword_entry != NULL) {
+                const gchar *kw_text = gtk_entry_get_text (GTK_ENTRY(settings_data->search_provider_keyword_entry));
+                gchar *trimmed = g_strdup (kw_text ? kw_text : "");
+                g_strstrip (trimmed);
+                g_free (app_data->search_provider_keyword);
+                app_data->search_provider_keyword = trimmed;
+            }
             g_key_file_set_boolean (kf, "config", "show_next_otp", app_data->show_next_otp);
             g_key_file_set_boolean (kf, "config", "notifications", app_data->disable_notifications);
             g_key_file_set_boolean (kf, "config", "show_validity_seconds", app_data->show_validity_seconds);
@@ -202,6 +229,8 @@ settings_dialog_cb (GSimpleAction *simple UNUSED,
             g_key_file_set_boolean (kf, "config", "use_secret_service", app_data->use_secret_service);
             g_key_file_set_boolean (kf, "config", "use_tray", app_data->use_tray);
             g_key_file_set_boolean (kf, "config", "search_provider_enabled", app_data->search_provider_enabled);
+            g_key_file_set_string (kf, "config", "search_provider_keyword",
+                                   app_data->search_provider_keyword ? app_data->search_provider_keyword : "");
             if (old_ss_value == TRUE && app_data->use_secret_service == FALSE) {
                 // secret service was just disabled, so we have to clear the password from the keyring
                 secret_password_clear (OTPCLIENT_SCHEMA, NULL, on_password_cleared, NULL, "string", "main_pwd", NULL);
@@ -367,6 +396,20 @@ handle_validity_switch (GtkSwitch *sw,
     CAST_USER_DATA(SettingsData, settings_data, user_data);
     gtk_widget_set_sensitive (settings_data->validity_color_btn, !state);
     gtk_widget_set_sensitive (settings_data->validity_warning_color_btn, !state);
+    gtk_switch_set_state (sw, state);
+
+    return TRUE;
+}
+
+static gboolean
+handle_search_provider_switch (GtkSwitch *sw,
+                               gboolean   state,
+                               gpointer   user_data)
+{
+    CAST_USER_DATA(SettingsData, settings_data, user_data);
+    if (settings_data->search_provider_keyword_entry != NULL) {
+        gtk_widget_set_sensitive (settings_data->search_provider_keyword_entry, state);
+    }
     gtk_switch_set_state (sw, state);
 
     return TRUE;

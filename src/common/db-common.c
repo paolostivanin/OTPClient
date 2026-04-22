@@ -15,6 +15,15 @@ static gint32    get_db_version     (const gchar      *db_path);
 static guchar   *get_db_derived_key (DatabaseData     *db_data,
                                      gint32            db_version,
                                      const guint8     *salt,
+                                     gboolean          use_legacy_length,
+                                     GError          **err);
+
+static gchar    *try_decrypt_v2     (DatabaseData     *db_data,
+                                     DbHeaderData_v2  *header_data,
+                                     guchar           *enc_buf,
+                                     gsize             enc_buf_size,
+                                     const guchar     *tag,
+                                     gboolean          use_legacy_length,
                                      GError          **err);
 
 static gchar    *decrypt_db         (DatabaseData     *db_data,
@@ -93,6 +102,14 @@ load_db (DatabaseData    *db_data,
     json_array_foreach (db_data->in_memory_json_data, index, obj) {
         guint32 hash = json_object_get_hash (obj);
         db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
+    }
+
+    // Opportunistic KDF byte-length migration: if decrypt only succeeded with
+    // the legacy g_utf8_strlen length, silently re-encrypt now with the
+    // corrected strlen length. encrypt_db clears the flag on success.
+    if (db_data->needs_legacy_kdf_migration) {
+        g_message ("Migrating database to corrected KDF password byte length.");
+        update_db (db_data, err);
     }
 }
 
@@ -190,11 +207,22 @@ static gint32
 get_db_version (const gchar *db_path)
 {
     GError *err = NULL;
-    GFile *in_file = g_file_new_for_path (db_path);
+    // Open through O_NOFOLLOW + fstat so a symlinked DB path can't be swapped
+    // for another file between the existence check and the read.
+    gint safe_fd = path_open_safe_regular_file (db_path, &err);
+    if (safe_fd < 0) {
+        g_printerr ("%s\n", err->message);
+        g_clear_error (&err);
+        return -1;
+    }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+
+    GFile *in_file = g_file_new_for_path (safe_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
     if (!in_stream) {
         g_printerr ("%s\n", err->message);
         cleanup_db_gfile (in_file, NULL, err);
+        g_close (safe_fd, NULL);
         return -1;
     }
 
@@ -203,11 +231,15 @@ get_db_version (const gchar *db_path)
         g_printerr ("%s\n", err->message);
         g_free (header_name);
         cleanup_db_gfile (in_file, in_stream, err);
+        g_close (safe_fd, NULL);
         return -1;
     }
 
     gint32 version = (g_strcmp0 (DB_HEADER_NAME, header_name) == 0) ? DB_VERSION : 1;
     g_free (header_name);
+    g_object_unref (in_stream);
+    g_object_unref (in_file);
+    g_close (safe_fd, NULL);
 
     return version;
 }
@@ -217,10 +249,25 @@ static guchar *
 get_db_derived_key (DatabaseData  *db_data,
                     gint32         db_version,
                     const guint8  *salt,
+                    gboolean       use_legacy_length,
                     GError       **err)
 {
+    // gcry_kdf_* expects the password length in BYTES, but historically this
+    // code passed g_utf8_strlen (CHARACTER count), truncating non-ASCII passwords
+    // mid-byte and weakening the KDF. strlen is correct; use_legacy_length=TRUE
+    // is only set on the retry path used to read databases written by older
+    // OTPClient versions (see try_decrypt_v2 / decrypt_db).
+    gsize pwd_len = use_legacy_length
+                    ? (gsize) g_utf8_strlen (db_data->key, -1)
+                    : strlen (db_data->key);
+
     guchar *derived_key = NULL;
     if (db_version < 2) {
+        // v1 (PBKDF2) databases were always written with the legacy length, so
+        // their decrypt path keeps the legacy behavior. After successful load
+        // the caller migrates the DB to v2 with the corrected length.
+        pwd_len = (gsize) g_utf8_strlen (db_data->key, -1);
+
         gsize key_len = gcry_cipher_get_algo_keylen (GCRY_CIPHER_AES256);
 
         derived_key = gcry_malloc_secure (key_len);
@@ -229,7 +276,7 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
 
-        if (gcry_kdf_derive (db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
+        if (gcry_kdf_derive (db_data->key, pwd_len,
                              GCRY_KDF_PBKDF2, GCRY_MD_SHA512,
                              salt, KDF_SALT_SIZE,
                              KDF_ITERATIONS, key_len, derived_key) != GPG_ERR_NO_ERROR) {
@@ -243,7 +290,7 @@ get_db_derived_key (DatabaseData  *db_data,
         gcry_kdf_hd_t hd;
         if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
                            params, 4,
-                           db_data->key, (gsize)g_utf8_strlen (db_data->key, -1),
+                           db_data->key, pwd_len,
                            salt, KDF_SALT_SIZE,
                            NULL, 0, NULL, 0) != GPG_ERR_NO_ERROR) {
             gcry_free (derived_key);
@@ -270,16 +317,83 @@ get_db_derived_key (DatabaseData  *db_data,
 
 
 static gchar *
+try_decrypt_v2 (DatabaseData    *db_data,
+                DbHeaderData_v2 *header_data,
+                guchar          *enc_buf,
+                gsize            enc_buf_size,
+                const guchar    *tag,
+                gboolean         use_legacy_length,
+                GError         **err)
+{
+    guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data->salt, use_legacy_length, err);
+    if (derived_key == NULL) {
+        return NULL;
+    }
+
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
+    if (!hd) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
+    if (!dec_buf) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the data.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+        gcry_cipher_close (hd);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    gcry_cipher_close (hd);
+    gcry_free (derived_key);
+    return dec_buf;
+}
+
+
+static gchar *
 decrypt_db (DatabaseData *db_data,
             GError      **err)
 {
     g_return_val_if_fail (err == NULL || *err == NULL, NULL);
 
-    GFile *in_file = g_file_new_for_path (db_data->db_path);
+    // Open through O_NOFOLLOW + fstat so a symlinked DB path can't be swapped
+    // for another file between get_db_version and decrypt_db.
+    gint safe_fd = path_open_safe_regular_file (db_data->db_path, err);
+    if (safe_fd < 0) {
+        return NULL;
+    }
+    g_autofree gchar *safe_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
+
+    GFile *in_file = g_file_new_for_path (safe_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, NULL);
     if (!in_stream) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the database file.");
         g_object_unref (in_file);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
@@ -304,16 +418,34 @@ decrypt_db (DatabaseData *db_data,
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the header data.");
         cleanup_db_gfile (in_file, in_stream, NULL);
         free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+        g_close (safe_fd, NULL);
         return NULL;
     }
 
-    goffset input_file_size = get_file_size (db_data->db_path);
+    if (db_data->current_db_version >= 2) {
+        if (db_data->argon2id_iter < ARGON2ID_MIN_ITER || db_data->argon2id_iter > ARGON2ID_MAX_ITER ||
+            db_data->argon2id_memcost < ARGON2ID_MIN_MC || db_data->argon2id_memcost > ARGON2ID_MAX_MC ||
+            db_data->argon2id_parallelism < ARGON2ID_MIN_PARAL || db_data->argon2id_parallelism > ARGON2ID_MAX_PARAL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Database header contains out-of-range Argon2id parameters "
+                         "(iter=%d, memcost=%d KiB, parallelism=%d). Refusing to open: the file may be tampered or corrupted.",
+                         db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism);
+            cleanup_db_gfile (in_file, in_stream, NULL);
+            free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+            g_close (safe_fd, NULL);
+            return NULL;
+        }
+    }
+
+    // Use safe_path so the size is bound to the same inode the fd is open on.
+    goffset input_file_size = get_file_size (safe_path);
     guchar tag[TAG_SIZE];
     if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, NULL) ||
         g_input_stream_read (G_INPUT_STREAM(in_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the stored tag.");
             cleanup_db_gfile (in_file, in_stream, NULL);
             free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+            g_close (safe_fd, NULL);
             return NULL;
     }
 
@@ -324,42 +456,53 @@ decrypt_db (DatabaseData *db_data,
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the encrypted data.");
             cleanup_db_gfile (in_file, in_stream, NULL);
             free_db_resources(NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
+            g_close (safe_fd, NULL);
             return NULL;
     }
 
     g_object_unref (in_stream);
     g_object_unref (in_file);
+    g_close (safe_fd, NULL);
 
-    guchar *derived_key = NULL;
     if (db_data->current_db_version >= 2) {
-        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v2->salt, err);
-    } else {
-        derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, err);
+        // Modern path: try the corrected (strlen) password length first.
+        gchar *dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, FALSE, err);
+
+        if (dec_buf == NULL && err != NULL && *err != NULL && (*err)->domain == bad_tag_gquark ()) {
+            // BAD_TAG with the corrected length: the DB may have been written
+            // by an older OTPClient that used g_utf8_strlen. Skip the retry
+            // for ASCII passwords where both lengths agree (no point in
+            // running Argon2id twice on every wrong-password attempt).
+            if (strlen (db_data->key) != (gsize) g_utf8_strlen (db_data->key, -1)) {
+                g_clear_error (err);
+                dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, TRUE, err);
+                if (dec_buf != NULL) {
+                    db_data->needs_legacy_kdf_migration = TRUE;
+                }
+            }
+        }
+
+        free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
+        return dec_buf;
     }
+
+    // v1 (PBKDF2) path: always written with the legacy length, so decrypt with
+    // that. The caller migrates v1 -> v2 right after, which is when the
+    // corrected length starts being used.
+    guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, FALSE, err);
     if (derived_key == NULL) {
         free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
     }
 
-    gcry_cipher_hd_t hd;
-    if (db_data->current_db_version >= 2) {
-        hd = open_cipher_and_set_data (derived_key, header_data_v2->iv, IV_SIZE);
-    } else {
-        hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
-    }
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
     if (!hd) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
         free_db_resources (NULL, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
     }
 
-    gpg_error_t gpg_err;
-    if (db_data->current_db_version >= 2) {
-        gpg_err = gcry_cipher_authenticate (hd, header_data_v2, header_data_size);
-    } else {
-        gpg_err = gcry_cipher_authenticate (hd, header_data_v1, header_data_size);
-    }
-    if (gpg_err != GPG_ERR_NO_ERROR) {
+    if (gcry_cipher_authenticate (hd, header_data_v1, header_data_size) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
         free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
         return NULL;
@@ -422,7 +565,10 @@ encrypt_db (DatabaseData *db_data,
         return;
     }
 
-    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, err);
+    // encrypt_db unconditionally uses the corrected (strlen) password byte length.
+    // The legacy g_utf8_strlen length is only used on the decrypt retry path
+    // when reading older databases (see decrypt_db / try_decrypt_v2).
+    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, FALSE, err);
     if (derived_key == NULL) {
         cleanup_db_gfile (out_file, out_stream, NULL);
         g_free (header_data);
@@ -481,6 +627,8 @@ encrypt_db (DatabaseData *db_data,
     cleanup_db_gfile (out_file, out_stream, NULL);
 
     db_data->current_db_version = DB_VERSION;
+    // The just-written file uses the corrected password byte length.
+    db_data->needs_legacy_kdf_migration = FALSE;
 }
 
 
@@ -503,16 +651,20 @@ perform_backup_restore (const gchar *path,
     GFile *src = g_file_new_for_path (src_path);
     GFile *dst = g_file_new_for_path (dst_path);
 
-    g_free (src_path);
-    g_free (dst_path);
-
     if (!g_file_copy (src, dst, G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS, NULL, NULL, NULL, &err)) {
         g_printerr ("Couldn't %s: %s\n", is_backup ? "create the backup" : "restore the backup", err->message);
         g_clear_error (&err);
     } else {
+        // Backup contains the same secrets as the main DB; force owner-only
+        // permissions so a permissive umask doesn't leave it group/world-readable.
+        if (g_chmod (dst_path, 0600) != 0) {
+            g_warning ("Failed to chmod 0600 on '%s'", dst_path);
+        }
         g_print("%s\n", is_backup ? _("Backup copy successfully created.") : _("Backup copy successfully restored."));
     }
 
+    g_free (src_path);
+    g_free (dst_path);
     g_object_unref (src);
     g_object_unref (dst);
 }
