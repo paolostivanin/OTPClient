@@ -49,6 +49,10 @@ gboolean              otpclient_application_get_search_provider_enabled (OTPClie
 void                  otpclient_application_set_search_provider_enabled (OTPClientApplication *self,
                                                                          gboolean              enabled);
 
+const gchar          *otpclient_application_get_search_provider_keyword (OTPClientApplication *self);
+void                  otpclient_application_set_search_provider_keyword (OTPClientApplication *self,
+                                                                         const gchar          *keyword);
+
 gboolean              otpclient_application_get_show_validity_seconds (OTPClientApplication *self);
 void                  otpclient_application_set_show_validity_seconds (OTPClientApplication *self,
                                                                        gboolean              show);

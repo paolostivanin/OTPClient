@@ -106,6 +106,17 @@ gsettings_common_get_search_provider_enabled (void)
 }
 
 
+gchar *
+gsettings_common_get_search_provider_keyword (void)
+{
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
+    if (settings != NULL)
+        return g_settings_get_string (settings, "search-provider-keyword");
+
+    return g_strdup ("otp");
+}
+
+
 GPtrArray *
 gsettings_common_get_db_list (void)
 {

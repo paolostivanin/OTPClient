@@ -39,6 +39,7 @@ struct _OTPClientApplication
     gboolean use_dark_theme;
 gboolean use_secret_service;
     gboolean search_provider_enabled;
+    gchar *search_provider_keyword;
     gboolean show_validity_seconds;
     gchar *validity_color;
     gchar *validity_warning_color;
@@ -672,6 +673,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
         self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
         self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
+        self->search_provider_keyword = g_settings_get_string (self->settings, "search-provider-keyword");
         self->show_validity_seconds = g_settings_get_boolean (self->settings, "show-validity-seconds");
         self->validity_color = g_settings_get_string (self->settings, "validity-color");
         self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
@@ -686,6 +688,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->use_dark_theme = FALSE;
         self->use_secret_service = FALSE;
         self->search_provider_enabled = TRUE;
+        self->search_provider_keyword = g_strdup ("otp");
         self->show_validity_seconds = FALSE;
         self->validity_color = g_strdup ("#008000");
         self->validity_warning_color = g_strdup ("#ffa500");
@@ -748,6 +751,7 @@ otpclient_application_dispose (GObject *object)
     self->window = NULL;
 
     g_clear_object (&self->settings);
+    g_clear_pointer (&self->search_provider_keyword, g_free);
     g_clear_pointer (&self->validity_color, g_free);
     g_clear_pointer (&self->validity_warning_color, g_free);
 
@@ -788,6 +792,7 @@ otpclient_application_init (OTPClientApplication *self)
     self->db_data = NULL;
     self->cancellable = g_cancellable_new ();
     self->settings = NULL;
+    self->search_provider_keyword = NULL;
     self->validity_color = NULL;
     self->validity_warning_color = NULL;
 }
@@ -933,6 +938,21 @@ void otpclient_application_set_search_provider_enabled (OTPClientApplication *se
         g_settings_set_boolean (self->settings, "search-provider-enabled", enabled);
 }
 
+const gchar *otpclient_application_get_search_provider_keyword (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), "otp");
+    return self->search_provider_keyword;
+}
+
+void otpclient_application_set_search_provider_keyword (OTPClientApplication *self, const gchar *keyword)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_free (self->search_provider_keyword);
+    self->search_provider_keyword = g_strdup (keyword ? keyword : "");
+    if (self->settings != NULL)
+        g_settings_set_string (self->settings, "search-provider-keyword", self->search_provider_keyword);
+}
+
 gboolean otpclient_application_get_show_validity_seconds (OTPClientApplication *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
@@ -1011,6 +1031,8 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
     self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
     self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
+    g_free (self->search_provider_keyword);
+    self->search_provider_keyword = g_settings_get_string (self->settings, "search-provider-keyword");
     self->show_validity_seconds = g_settings_get_boolean (self->settings, "show-validity-seconds");
     g_free (self->validity_color);
     self->validity_color = g_settings_get_string (self->settings, "validity-color");

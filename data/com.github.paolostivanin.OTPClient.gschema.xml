@@ -61,6 +61,11 @@
       <summary>Search Provider</summary>
       <description>Whether the D-Bus search provider (GNOME Shell / KDE KRunner) is enabled</description>
     </key>
+    <key name="search-provider-keyword" type="s">
+      <default>"otp"</default>
+      <summary>Search provider trigger keyword</summary>
+      <description>The first token of a desktop search query must equal this keyword for OTPClient to return any results (e.g. "otp github"). An empty string disables the keyword filter and falls back to plain substring matching against every query. Changes take effect after the search provider is restarted (typically by logging out and back in).</description>
+    </key>
     <key name="show-validity-seconds" type="b">
       <default>false</default>
       <summary>Show validity seconds</summary>

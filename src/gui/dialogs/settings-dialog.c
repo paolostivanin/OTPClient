@@ -2,6 +2,7 @@
 #include "settings-dialog.h"
 #include "gui-misc.h"
 #include "common.h"
+#include "gsettings-common.h"
 #include "settings-import-export.h"
 #include "otp-button-row.h"
 
@@ -21,6 +22,7 @@ struct _SettingsDialog
     GtkWidget *inactivity_combo;
     GtkWidget *secret_service_switch;
     GtkWidget *search_provider_switch;
+    GtkWidget *search_provider_keyword_entry;
     GtkWidget *clipboard_clear_combo;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
@@ -105,6 +107,20 @@ on_search_provider_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_search_provider_enabled (self->app, active);
+    if (self->search_provider_keyword_entry != NULL)
+        gtk_widget_set_sensitive (self->search_provider_keyword_entry, active);
+}
+
+static void
+on_search_provider_keyword_changed (GObject        *obj,
+                                    GParamSpec     *pspec,
+                                    SettingsDialog *self)
+{
+    (void) pspec;
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (obj));
+    g_autofree gchar *trimmed = g_strdup (text ? text : "");
+    g_strstrip (trimmed);
+    otpclient_application_set_search_provider_keyword (self->app, trimmed);
 }
 
 static void
@@ -458,15 +474,37 @@ settings_dialog_new (OTPClientApplication *app)
     /* Integration group */
     AdwPreferencesGroup *integration_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
     adw_preferences_group_set_title (integration_group, _("Integration"));
+    adw_preferences_group_set_description (integration_group,
+                                           _("Type the keyword followed by a space and your search to surface OTP results in GNOME Shell or KDE KRunner (e.g. \"otp github\"). Changes to the keyword take effect after logging out and back in."));
+
+    gboolean sp_enabled = otpclient_application_get_search_provider_enabled (app);
 
     self->search_provider_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->search_provider_switch),
                                     _("Search Provider"));
-    adw_switch_row_set_active (ADW_SWITCH_ROW (self->search_provider_switch),
-                               otpclient_application_get_search_provider_enabled (app));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->search_provider_switch), sp_enabled);
     g_signal_connect (self->search_provider_switch, "notify::active",
                       G_CALLBACK (on_search_provider_toggled), self);
     adw_preferences_group_add (integration_group, self->search_provider_switch);
+
+    self->search_provider_keyword_entry = adw_entry_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->search_provider_keyword_entry),
+                                    _("Search Provider Keyword"));
+    {
+        const gchar *kw = otpclient_application_get_search_provider_keyword (app);
+        gtk_editable_set_text (GTK_EDITABLE (self->search_provider_keyword_entry), kw ? kw : "");
+    }
+    /* AdwEntryRow proxies to an internal GtkText; setting max_length there gives
+     * us a hard typing cap that matches the daemon's defensive truncation. */
+    {
+        GtkEditable *delegate = gtk_editable_get_delegate (GTK_EDITABLE (self->search_provider_keyword_entry));
+        if (GTK_IS_TEXT (delegate))
+            gtk_text_set_max_length (GTK_TEXT (delegate), OTPCLIENT_SEARCH_KEYWORD_MAX_LEN);
+    }
+    gtk_widget_set_sensitive (self->search_provider_keyword_entry, sp_enabled);
+    g_signal_connect (self->search_provider_keyword_entry, "notify::text",
+                      G_CALLBACK (on_search_provider_keyword_changed), self);
+    adw_preferences_group_add (integration_group, self->search_provider_keyword_entry);
 
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     self->minimize_to_tray_switch = adw_switch_row_new ();

@@ -31,6 +31,14 @@ static gint64      cached_at = 0;
  * which writes would slip past the cache invalidator. */
 static GHashTable *file_monitors = NULL;
 
+/* Trigger keyword loaded once at startup. The daemon ignores any query whose
+ * first whitespace-separated token doesn't equal g_keyword (case-insensitive).
+ * An empty keyword disables the filter and falls back to plain substring
+ * matching. Changes to the GSettings key only take effect after the daemon
+ * is restarted. */
+static gchar *g_keyword = NULL;
+static gchar *g_keyword_fold = NULL;
+
 typedef struct otp_search_entry_t {
     gchar *id;
     gchar *label;
@@ -343,6 +351,64 @@ prewarm_cache (gpointer user_data G_GNUC_UNUSED)
 }
 
 
+static void
+load_keyword_config (void)
+{
+    g_free (g_keyword);
+    g_free (g_keyword_fold);
+    g_keyword = gsettings_common_get_search_provider_keyword ();
+    if (g_keyword == NULL) g_keyword = g_strdup ("");
+    g_strstrip (g_keyword);
+    /* Defense in depth against arbitrary dconf-edits: a runaway-length keyword
+     * would still get casefolded and compared on every query. Truncate by
+     * UTF-8 character count so we don't slice a multi-byte sequence. */
+    glong char_len = g_utf8_strlen (g_keyword, -1);
+    if (char_len > OTPCLIENT_SEARCH_KEYWORD_MAX_LEN) {
+        const gchar *cut = g_utf8_offset_to_pointer (g_keyword, OTPCLIENT_SEARCH_KEYWORD_MAX_LEN);
+        *((gchar *) cut) = '\0';
+    }
+    g_keyword_fold = g_utf8_casefold (g_keyword, -1);
+}
+
+
+/* Returns TRUE and writes the post-keyword tail into *out_terms (caller frees
+ * with g_strfreev) when the first non-empty term equals the configured
+ * keyword AND there is at least one further non-empty term. Returns FALSE and
+ * leaves *out_terms NULL otherwise. If the keyword is empty/disabled, behaves
+ * transparently: returns TRUE with the original terms duplicated. */
+static gboolean
+strip_keyword_or_skip (gchar  **terms,
+                       gchar ***out_terms)
+{
+    *out_terms = NULL;
+    if (terms == NULL) return FALSE;
+
+    if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
+        *out_terms = g_strdupv (terms);
+        return TRUE;
+    }
+
+    gsize i = 0;
+    while (terms[i] != NULL && terms[i][0] == '\0') i++;
+    if (terms[i] == NULL) return FALSE;
+
+    g_autofree gchar *first_fold = g_utf8_casefold (terms[i], -1);
+    if (g_strcmp0 (first_fold, g_keyword_fold) != 0) return FALSE;
+
+    GPtrArray *tail = g_ptr_array_new ();
+    for (gsize j = i + 1; terms[j] != NULL; j++) {
+        if (terms[j][0] != '\0') g_ptr_array_add (tail, g_strdup (terms[j]));
+    }
+    if (tail->len == 0) {
+        g_ptr_array_free (tail, TRUE);
+        return FALSE;
+    }
+    g_ptr_array_add (tail, NULL);
+    *out_terms = (gchar **) g_ptr_array_free (tail, FALSE);
+    return TRUE;
+}
+
+
 static gboolean
 entry_matches_terms (const OtpSearchEntry *entry,
                      gchar               **terms,
@@ -456,11 +522,15 @@ handle_gnome_call (GDBusConnection       *conn,
         }
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("as"));
-        GPtrArray *entries = get_entries ();
-        for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index (entries, i);
-            if (entry_matches_terms (e, terms, g_strv_length (terms)))
-                g_variant_builder_add (&builder, "s", e->id);
+        g_auto(GStrv) stripped = NULL;
+        if (strip_keyword_or_skip (terms, &stripped)) {
+            GPtrArray *entries = get_entries ();
+            gsize stripped_len = g_strv_length (stripped);
+            for (guint i = 0; i < entries->len; i++) {
+                OtpSearchEntry *e = g_ptr_array_index (entries, i);
+                if (entry_matches_terms (e, stripped, stripped_len))
+                    g_variant_builder_add (&builder, "s", e->id);
+            }
         }
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
         g_strfreev (terms);
@@ -533,29 +603,32 @@ handle_krunner_call (GDBusConnection       *conn,
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(sssida{sv})"));
         if (query && *query) {
             g_auto(GStrv) terms = g_strsplit_set (query, " \t", -1);
-            gsize terms_len = g_strv_length (terms);
-            GPtrArray *entries = get_entries ();
-            for (guint i = 0; i < entries->len; i++) {
-                OtpSearchEntry *e = g_ptr_array_index (entries, i);
-                if (!entry_matches_terms (e, terms, terms_len)) continue;
-                GVariantBuilder props;
-                g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-                // Deliberately do NOT include the OTP value in the subtitle:
-                // any process on the session bus can poll Match. The code is
-                // only handed out via Run, where the user sees a notification.
-                g_autofree gchar *sub = NULL;
-                if (e->db_name != NULL && e->db_name[0] != '\0')
-                    sub = (e->issuer && *e->issuer)
-                        ? g_strdup_printf ("%s — %s", e->db_name, e->issuer)
-                        : g_strdup (e->db_name);
-                else
-                    sub = g_strdup (e->issuer ? e->issuer : "");
-                g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
-                g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
-                g_variant_builder_add (&builder, "(sssida{sv})",
-                                       e->id, e->label,
-                                       "com.github.paolostivanin.OTPClient",
-                                       (gint32)0, (gdouble)1.0, &props);
+            g_auto(GStrv) stripped = NULL;
+            if (strip_keyword_or_skip (terms, &stripped)) {
+                gsize stripped_len = g_strv_length (stripped);
+                GPtrArray *entries = get_entries ();
+                for (guint i = 0; i < entries->len; i++) {
+                    OtpSearchEntry *e = g_ptr_array_index (entries, i);
+                    if (!entry_matches_terms (e, stripped, stripped_len)) continue;
+                    GVariantBuilder props;
+                    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
+                    // Deliberately do NOT include the OTP value in the subtitle:
+                    // any process on the session bus can poll Match. The code is
+                    // only handed out via Run, where the user sees a notification.
+                    g_autofree gchar *sub = NULL;
+                    if (e->db_name != NULL && e->db_name[0] != '\0')
+                        sub = (e->issuer && *e->issuer)
+                            ? g_strdup_printf ("%s — %s", e->db_name, e->issuer)
+                            : g_strdup (e->db_name);
+                    else
+                        sub = g_strdup (e->issuer ? e->issuer : "");
+                    g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
+                    g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
+                    g_variant_builder_add (&builder, "(sssida{sv})",
+                                           e->id, e->label,
+                                           "com.github.paolostivanin.OTPClient",
+                                           (gint32)0, (gdouble)1.0, &props);
+                }
             }
         }
         GVariant *res = g_variant_builder_end (&builder);
@@ -638,6 +711,8 @@ main (int    argc,
     if (!gsettings_common_get_search_provider_enabled ())
         return 0;
 
+    load_keyword_config ();
+
     if (!force_kde && !force_gnome) {
         const gchar *desktop = g_getenv ("XDG_CURRENT_DESKTOP");
         if (desktop) {
@@ -676,6 +751,8 @@ main (int    argc,
         g_ptr_array_free (cached_entries, TRUE);
         cached_entries = NULL;
     }
+    g_clear_pointer (&g_keyword, g_free);
+    g_clear_pointer (&g_keyword_fold, g_free);
     g_main_loop_unref (main_loop);
     return 0;
 }
