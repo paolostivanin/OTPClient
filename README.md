@@ -1,34 +1,57 @@
 # OTPClient
-GTK4/libadwaita application for managing TOTP and HOTP two-factor authentication tokens.
+A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-factor authentication tokens, with CLI and desktop-search integration.
 
 ## Features
 
 ### Supported standards
 - TOTP and HOTP
-- Custom digits (4–10) and custom period (10–120s)
+- Manual entry: digits 4–10, period 1–300 s
+- `otpauth://` URIs (import / display / QR): digits 6–8, period 1–300 s (per RFC 6238)
 - SHA1, SHA256, and SHA512 algorithms
 - Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 
-### Organization
-- Token grouping: assign tokens to groups (e.g. "Work", "Personal") for quick filtering
-- Header bar dropdown to filter by group, or use `group:<name>` / `#<name>` in the search bar
-- Groups can be assigned via the right-click context menu, the edit dialog, or when adding a token
-- Groups are preserved during Aegis, AuthenticatorPro, and 2FAS import/export
+### GUI
+- Token list with drag-and-drop reordering
+- Cross-database search (`group:<name>` / `#<name>` syntax for filtering)
+- Token grouping: assign tokens to groups (e.g. "Work", "Personal") via right-click,
+  the edit dialog, or when adding a token; groups are preserved during Aegis,
+  AuthenticatorPro, and 2FAS import/export
+- QR code display for any token (re-pairing or sharing across devices)
+- Idle and screensaver auto-lock with configurable timeout
+- Configurable clipboard wipe; clipboard is also cleared on lock and app exit
+- HOTP "next" button is debounced to prevent accidental double-increments
+- Optional minimize-to-tray (build-time opt-in)
 
-### Import & Export
+### Command-line interface (`otpclient-cli`)
+- `--show / --list` for scripting and shell integration
+- `--import / --export` against the same database the GUI uses
+- `--output={table,json,csv}` for machine-readable output
+- `--password-file` to read the master password from a file
+- `--export-settings / --import-settings` for GSettings backup/restore
+- Bash, zsh, and fish completions installed by default
+
+### Desktop search (`otpclient-search-provider`)
+A separate D-Bus daemon that integrates with **GNOME Shell Activities Search**
+and **KDE Plasma 6 KRunner**. Type the configurable trigger keyword (default
+`otp`) followed by a query — selecting a result computes the OTP and delivers
+it via system notification. The OTP value never appears in the search-result
+preview, so other processes on the session bus cannot poll for it.
+
+### Import & export
 - [Aegis](https://github.com/beemdevelopment/Aegis) (encrypted and plain)
 - [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) (encrypted and plain)
 - [2FAS](https://github.com/twofas) (encrypted and plain)
 - [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) (plain, key URI format)
 - Google migration QR codes (import only)
 
-### Security
+## Security
+
 - Local database encrypted with AES256-GCM
-- Key derived via Argon2id (default: 4 iterations, 128 MiB memory, parallelism 4)
+- Key derived via Argon2id (default: 4 iterations, 128 MiB memory, parallelism 4 — configurable per database)
 - Decrypted content held in libgcrypt secure memory, never written to disk
 - Integration with the OS secret service via libsecret
 
-#### Security model
+### Security model
 What is protected:
 - **On-disk database**: encrypted with AES256-GCM; the key is derived from
   your password with Argon2id (parameters configurable per database).
@@ -49,24 +72,40 @@ What is **not** defended against:
   from RAM regardless of whether the database is locked. Database lock
   provides UI gating; it does not scrub secrets from process memory.
 
-The optional GNOME Shell / KRunner search provider runs as a separate
-daemon. It caches its own derived key and entry list with a 60 s TTL and
-per-database file-monitor invalidation, independent of the GUI's lock state.
+The search-provider daemon caches its own derived key and entry list with a
+60 s TTL plus per-database file-monitor invalidation, independent of the
+GUI's lock state.
 
 ## Installation
-OTPClient is available as a Flatpak and in several distro repositories. See the [packages list](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages) for details.
+OTPClient is available as a Flatpak and in several distro repositories. See the
+[packages list](https://github.com/paolostivanin/OTPClient/wiki/Tested-OS-&-Packages#packages)
+for details.
 
 ### Building from source
 1. Install all the libraries listed under [requirements](#requirements).
-2. Clone and build:
-```
+2. Configure, build, and install:
+```sh
 git clone https://github.com/paolostivanin/OTPClient.git
 cd OTPClient
-mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX=/usr ..
-make
-sudo make install
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build
+sudo cmake --install build
 ```
+
+#### Build options
+All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
+
+| Option                     | Default | Description                                                          |
+|----------------------------|---------|----------------------------------------------------------------------|
+| `BUILD_GUI`                | `ON`    | Build the GTK4/libadwaita app (`otpclient`)                          |
+| `BUILD_CLI`                | `ON`    | Build the command-line interface (`otpclient-cli`) and completions   |
+| `BUILD_SEARCH_PROVIDER`    | `ON`    | Build the GNOME Shell / KRunner D-Bus daemon                         |
+| `IS_FLATPAK`               | `OFF`   | Use the flatpak app's config folder for the database                 |
+| `ENABLE_MINIMIZE_TO_TRAY`  | `OFF`   | Enable minimize-to-tray support in the GUI                           |
+
+`Release` builds enable LTO and additional hardening flags
+(`-fcf-protection=full`, `-fzero-call-used-regs`, `-fstrict-flex-arrays=2`,
+`-ftrivial-auto-var-init=zero`) when the toolchain supports them.
 
 ## Requirements
 | Name                                                | Min Version |
@@ -74,6 +113,7 @@ sudo make install
 | GTK                                                 | 4.10.0      |
 | libadwaita                                          | 1.5.0       |
 | Glib                                                | 2.74.0      |
+| GIO                                                 | 2.74.0      |
 | jansson                                             | 2.13        |
 | libgcrypt                                           | 1.10.1      |
 | libpng                                              | 1.6.0       |
@@ -84,10 +124,18 @@ sudo make install
 | libsecret                                           | 0.20        |
 | qrencode                                            | 4.0.0       |
 
-**Note:** The system memlock limit should be at least 64 MB. Lower values may cause issues when handling many tokens, especially when importing third-party backups. See the [wiki](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations) for how to check and adjust this.
+GTK, libadwaita, libpng, zbar, protobuf-c, and qrencode are only required
+when `BUILD_GUI=ON`.
+
+**Note:** The system memlock limit should be at least 64 MB. Lower values may
+cause issues when handling many tokens, especially when importing third-party
+backups. See the
+[wiki](https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations)
+for how to check and adjust this.
 
 ## Wiki
-For screenshots, roadmap, and usage guides, see the [project wiki](https://github.com/paolostivanin/OTPClient/wiki).
+For screenshots, roadmap, and usage guides, see the
+[project wiki](https://github.com/paolostivanin/OTPClient/wiki).
 
 ## License
 This software is released under the GPLv3 license. See the [LICENSE](LICENSE) file for details.
