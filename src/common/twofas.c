@@ -319,6 +319,14 @@ get_otps_from_encrypted_backup (const gchar       *path,
     }
 
     gchar **b64_encoded_data = g_strsplit (services_encrypted, ":", 3);
+    if (g_strv_length (b64_encoded_data) != 3) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed 2FAS backup: 'servicesEncrypted' must be three colon-separated base64 fields.");
+        g_strfreev (b64_encoded_data);
+        g_hash_table_destroy (group_map);
+        g_free (twofas_data);
+        json_decref (root);
+        return NULL;
+    }
     decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
     if (twofas_data->json_data != NULL) {
         otps = parse_twofas_json_data (twofas_data->json_data, group_map, err);
@@ -363,10 +371,18 @@ get_otps_from_plain_backup (const gchar  *path,
         }
     }
 
-    gchar *dumped_json = json_dumps (json_object_get (json, "services"), 0);
+    json_t *services_obj = json_object_get (json, "services");
+    if (services_obj == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed 2FAS backup: missing 'services' array.");
+        g_hash_table_destroy (group_map);
+        json_decref (json);
+        return NULL;
+    }
+    gchar *dumped_json = json_dumps (services_obj, 0);
     GSList *otps = parse_twofas_json_data (dumped_json, group_map, err);
     gcry_free (dumped_json);
     g_hash_table_destroy (group_map);
+    json_decref (json);
 
     return otps;
 }

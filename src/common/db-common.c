@@ -681,7 +681,9 @@ encrypt_db (DatabaseData *db_data,
     }
     int fd = g_open (db_data->db_path, O_RDONLY, 0);
     if (fd >= 0) {
-        fsync (fd);
+        if (fsync (fd) != 0) {
+            g_warning ("fsync(%s) failed: %s", db_data->db_path, g_strerror (errno));
+        }
         close (fd);
     }
 

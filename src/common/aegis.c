@@ -230,7 +230,12 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     gsize out_len;
-    b64decoded_db = g_base64_decode (json_string_value (json_object_get (json, "db")), &out_len);
+    const gchar *db_b64 = json_string_value (json_object_get (json, "db"));
+    if (db_b64 == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing or invalid 'db' field.");
+        goto cleanup;
+    }
+    b64decoded_db = g_base64_decode (db_b64, &out_len);
     if (out_len > (gsize)(max_file_size * SECMEM_SIZE_THRESHOLD_RATIO)) {
         g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         goto cleanup;
@@ -405,15 +410,20 @@ export_aegis (const gchar   *export_path,
     json_t *db_obj, *export_obj, *info_obj;
     gsize index;
     json_array_foreach (json_db_data, index, db_obj) {
+        const gchar *type_str = json_string_value (json_object_get (db_obj, "type"));
+        if (type_str == NULL) {
+            g_warning ("Skipping export of OTP entry without 'type' field");
+            continue;
+        }
+
         export_obj = json_object ();
         info_obj = json_object ();
-        json_t *otp_type = json_object_get (db_obj, "type");
 
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
             json_object_set (export_obj, "type", json_string ("steam"));
         } else {
-            gchar *type_lower = g_utf8_strdown (json_string_value (otp_type), -1);
+            gchar *type_lower = g_utf8_strdown (type_str, -1);
             json_object_set (export_obj, "type", json_string (type_lower));
             g_free (type_lower);
         }
@@ -437,7 +447,7 @@ export_aegis (const gchar   *export_path,
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
         json_object_set (info_obj, "algo", json_object_get (db_obj, "algo"));
-        if (g_ascii_strcasecmp (json_string_value (otp_type), "TOTP") == 0) {
+        if (g_ascii_strcasecmp (type_str, "TOTP") == 0) {
             json_object_set (info_obj, "period", json_object_get (db_obj, "period"));
         } else {
             json_object_set (info_obj, "counter", json_object_get (db_obj, "counter"));
@@ -455,6 +465,7 @@ export_aegis (const gchar   *export_path,
         }
         db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
         if (db_size == 0) {
+            gcry_cipher_close (hd);
             goto clean_and_return;
         }
         guchar *enc_db = g_malloc0 (db_size);
