@@ -1,5 +1,4 @@
 #include <glib/gi18n.h>
-#include <time.h>
 #include "export-dialog.h"
 #include "import-export.h"
 
@@ -20,7 +19,6 @@ struct _ExportDialog
 
 typedef enum
 {
-    EXPORT_FMT_NATIVE_ENC,
     EXPORT_FMT_FREEOTPPLUS,
     EXPORT_FMT_AEGIS_PLAIN,
     EXPORT_FMT_AEGIS_ENC,
@@ -88,13 +86,6 @@ on_file_dialog_save_complete (GObject      *source,
     gchar *error_msg = NULL;
     switch (fmt)
     {
-        case EXPORT_FMT_NATIVE_ENC:
-            /* Just clone the live encrypted DB file. The DB is already a
-             * self-contained, AES-GCM/Argon2id-encrypted blob, so a byte-for-byte
-             * copy IS the backup — no separate format needed, and restore is
-             * just pointing the app at the saved file. */
-            error_msg = db_copy_to (self->db_data->db_path, path);
-            break;
         case EXPORT_FMT_FREEOTPPLUS:
             error_msg = export_freeotpplus (path, self->db_data->in_memory_json_data);
             break;
@@ -135,12 +126,10 @@ on_file_dialog_save_complete (GObject      *source,
         return;
     }
 
-    /* Record this successful export so the main window can stop nagging
-     * the user about taking a backup (see otpclient_window_refresh_backup_banner). */
-    {
-        g_autoptr (GSettings) settings = g_settings_new ("com.github.paolostivanin.OTPClient");
-        g_settings_set_int64 (settings, "last-export-time", (gint64) time (NULL));
-    }
+    /* This dialog now only handles third-party migration formats, so a
+     * successful export does NOT count as a token-database backup — the
+     * banner stays nagging until the user uses Settings → Backup → "Back
+     * up tokens" (which bumps last-export-time itself). */
 
     adw_dialog_close (ADW_DIALOG (self));
 }
@@ -202,7 +191,6 @@ export_dialog_new (DatabaseData *db_data,
     GtkWidget *group = adw_preferences_group_new ();
 
     const char * const format_items[] = {
-        _("Native OTPClient backup (encrypted)"),
         "FreeOTP+ (Plain)",
         "Aegis (Plain JSON)",
         "Aegis (Encrypted)",
@@ -233,11 +221,11 @@ export_dialog_new (DatabaseData *db_data,
 
     gtk_box_append (GTK_BOX (box), group);
 
-    /* Warning banner — only revealed when a plaintext format is selected
-     * (see on_format_changed). Native backup is encrypted by construction
-     * since it copies the encrypted DB, so the banner starts hidden. */
+    /* Warning banner — revealed for the four plain formats and hidden for the
+     * three encrypted ones (see on_format_changed). The default selection is
+     * FreeOTP+ (Plain), which is plaintext, so we start with it visible. */
     self->plain_warning = adw_banner_new (_("Exporting unencrypted reveals all secrets!"));
-    adw_banner_set_revealed (ADW_BANNER (self->plain_warning), FALSE);
+    adw_banner_set_revealed (ADW_BANNER (self->plain_warning), TRUE);
     gtk_box_append (GTK_BOX (box), self->plain_warning);
 
     /* Error label */

@@ -71,8 +71,9 @@ static const PageInfo welcome_pages[] = {
         N_("Settings & Backup"),
         N_("All preferences are in the Settings dialog, including "
            "countdown colors and clipboard auto-clear.\n\n"
-           "Export and import your settings from Settings \u2192 Backup, "
-           "or via the CLI with --export-settings and --import-settings.")
+           "Back up and restore both your application preferences and your "
+           "token database from Settings \u2192 Backup, or via the CLI with "
+           "--export-settings and --import-settings.")
     },
 };
 
@@ -123,7 +124,8 @@ static const PageInfo whats_new_pages[] = {
         N_("Secret Service integration (keyring) is now disabled by default. "
            "You can enable it in Settings \u2192 Security.\n\n"
            "Settings have moved to GSettings (migrated automatically). "
-           "Export and import settings from Settings \u2192 Backup.")
+           "Back up and restore preferences and your token database from "
+           "Settings \u2192 Backup.")
     },
     {
         "starred-symbolic",

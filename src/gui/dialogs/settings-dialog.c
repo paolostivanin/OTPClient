@@ -300,6 +300,27 @@ on_import_settings_clicked (GtkWidget      *button __attribute__((unused)),
     g_object_unref (dialog);
 }
 
+/* The token rows just dispatch to window actions so the file-picker, password
+ * prompt, db_copy_to call, and last-export-time bump all live in one place
+ * (otpclient-window.c) and are shared with the backup-age banner. */
+static void
+on_backup_tokens_clicked (GtkWidget      *button __attribute__((unused)),
+                          SettingsDialog *self)
+{
+    GtkRoot *root = gtk_widget_get_root (GTK_WIDGET (self));
+    if (root != NULL)
+        gtk_widget_activate_action (GTK_WIDGET (root), "win.backup-tokens", NULL);
+}
+
+static void
+on_restore_tokens_clicked (GtkWidget      *button __attribute__((unused)),
+                           SettingsDialog *self)
+{
+    GtkRoot *root = gtk_widget_get_root (GTK_WIDGET (self));
+    if (root != NULL)
+        gtk_widget_activate_action (GTK_WIDGET (root), "win.restore-tokens", NULL);
+}
+
 static void
 settings_dialog_init (SettingsDialog *self)
 {
@@ -517,21 +538,37 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
 #endif
 
-    /* Backup group */
+    /* Backup group — covers both app preferences (GSettings JSON) and the
+     * encrypted token database. The token rows dispatch to window actions so
+     * the same code path also serves the backup-age banner button. */
     AdwPreferencesGroup *backup_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
     adw_preferences_group_set_title (backup_group, _("Backup"));
+    adw_preferences_group_set_description (backup_group,
+        _("Save and restore your application preferences and your token database."));
 
-    GtkWidget *export_row = otp_button_row_new ();
-    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (export_row), _("Export Settings"));
-    g_signal_connect (export_row, "activated",
+    GtkWidget *backup_settings_row = otp_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (backup_settings_row), _("Back up app settings"));
+    g_signal_connect (backup_settings_row, "activated",
                       G_CALLBACK (on_export_settings_clicked), self);
-    adw_preferences_group_add (backup_group, export_row);
+    adw_preferences_group_add (backup_group, backup_settings_row);
 
-    GtkWidget *import_row = otp_button_row_new ();
-    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (import_row), _("Import Settings"));
-    g_signal_connect (import_row, "activated",
+    GtkWidget *restore_settings_row = otp_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (restore_settings_row), _("Restore app settings"));
+    g_signal_connect (restore_settings_row, "activated",
                       G_CALLBACK (on_import_settings_clicked), self);
-    adw_preferences_group_add (backup_group, import_row);
+    adw_preferences_group_add (backup_group, restore_settings_row);
+
+    GtkWidget *backup_tokens_row = otp_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (backup_tokens_row), _("Back up tokens"));
+    g_signal_connect (backup_tokens_row, "activated",
+                      G_CALLBACK (on_backup_tokens_clicked), self);
+    adw_preferences_group_add (backup_group, backup_tokens_row);
+
+    GtkWidget *restore_tokens_row = otp_button_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (restore_tokens_row), _("Restore tokens"));
+    g_signal_connect (restore_tokens_row, "activated",
+                      G_CALLBACK (on_restore_tokens_clicked), self);
+    adw_preferences_group_add (backup_group, restore_tokens_row);
 
     /* Add page */
     AdwPreferencesPage *page = ADW_PREFERENCES_PAGE (adw_preferences_page_new ());

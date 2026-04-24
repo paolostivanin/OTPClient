@@ -38,11 +38,26 @@ it via system notification. The OTP value never appears in the search-result
 preview, so other processes on the session bus cannot poll for it.
 
 ### Import & export
+Migration to and from other authenticator apps:
 - [Aegis](https://github.com/beemdevelopment/Aegis) (encrypted and plain)
 - [AuthenticatorPro](https://github.com/jamie-mh/AuthenticatorPro) (encrypted and plain)
 - [2FAS](https://github.com/twofas) (encrypted and plain)
 - [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) (plain, key URI format)
 - Google migration QR codes (import only)
+
+### Backup & restore
+**Settings → Backup** has four buttons covering both your app preferences (saved
+as JSON) and your tokens (a byte-for-byte copy of the encrypted database, written
+with `0600` perms). *Restore tokens* opens the saved file as an additional
+database in the sidebar — the previously-active database stays on disk untouched,
+so restore is non-destructive.
+
+A reminder banner appears on the main window when no token backup has ever been
+taken, or when the last one is more than 30 days old. Its **Back up Now** button
+runs the same flow as *Settings → Backup → Back up tokens*. The reminder can be
+snoozed for 7 days from the primary menu (**Snooze Backup Reminder**), and it
+hides automatically once a backup completes. The Export menu (Ctrl+E) is for
+migration to other apps and does **not** count as a backup.
 
 ## Security
 

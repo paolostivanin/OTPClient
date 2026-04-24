@@ -67,8 +67,8 @@
             <child>
               <object class="AdwBanner" id="backup_age_banner">
                 <property name="revealed">False</property>
-                <property name="button-label" translatable="yes">Export Now</property>
-                <property name="action-name">win.export</property>
+                <property name="button-label" translatable="yes">Back up Now</property>
+                <property name="action-name">win.backup-tokens</property>
               </object>
             </child>
             <child>

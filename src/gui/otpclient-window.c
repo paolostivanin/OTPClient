@@ -2267,6 +2267,90 @@ action_export (GtkWidget  *widget,
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
+static void
+on_backup_tokens_save_complete (GObject      *source,
+                                GAsyncResult *result,
+                                gpointer      user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+
+    GError *err = NULL;
+    GFile *file = gtk_file_dialog_save_finish (dialog, result, &err);
+    if (file == NULL) {
+        g_clear_error (&err);
+        return;
+    }
+
+    g_autofree gchar *path = g_file_get_path (file);
+    g_object_unref (file);
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->db_path == NULL) {
+        show_error_toast (self, "%s", _("No database is currently open."));
+        return;
+    }
+
+    g_autofree gchar *error_msg = db_copy_to (db_data->db_path, path);
+    if (error_msg != NULL) {
+        show_error_toast (self, "%s", error_msg);
+        return;
+    }
+
+    /* Bump last-export-time so the backup-age banner hides immediately
+     * (refresh_backup_age_banner reads this on next refresh). */
+    if (self->settings != NULL)
+        g_settings_set_int64 (self->settings, "last-export-time",
+                              (gint64) g_get_real_time () / G_USEC_PER_SEC);
+
+    refresh_backup_age_banner (self);
+
+    AdwToast *toast = adw_toast_new (_("Token database backed up"));
+    adw_toast_set_timeout (toast, 5);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+}
+
+static void
+action_backup_tokens (GtkWidget  *widget,
+                      const char *action_name,
+                      GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->db_path == NULL) {
+        show_error_toast (self, "%s", _("No database is currently open."));
+        return;
+    }
+
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Back up tokens"));
+
+    /* Suggest <db-basename>.YYYYMMDD.bak so the user can keep generations
+     * side-by-side. */
+    g_autofree gchar *base = g_path_get_basename (db_data->db_path);
+    g_autoptr (GDateTime) now = g_date_time_new_now_local ();
+    g_autofree gchar *stamp = g_date_time_format (now, "%Y%m%d");
+    g_autofree gchar *suggested = g_strdup_printf ("%s.%s.bak", base, stamp);
+    gtk_file_dialog_set_initial_name (dialog, suggested);
+
+    gtk_file_dialog_save (dialog, GTK_WINDOW (self), NULL,
+                          on_backup_tokens_save_complete, self);
+    g_object_unref (dialog);
+}
+
 #define BACKUP_BANNER_SNOOZE_DAYS 7
 
 static void
@@ -3307,6 +3391,38 @@ open_db_button_clicked (GtkButton       *button,
     g_object_unref (dialog);
 }
 
+static void
+action_restore_tokens (GtkWidget  *widget,
+                       const char *action_name,
+                       GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+
+    /* Reuse the same picker → password → load_db → add-to-sidebar pipeline
+     * as the sidebar Open button. The previously active database is kept on
+     * disk; the restored file becomes the active DB and is appended to the
+     * sidebar so the user can switch between them. */
+    GtkFileDialog *dialog = gtk_file_dialog_new ();
+    gtk_file_dialog_set_title (dialog, _("Restore tokens"));
+
+    GtkFileFilter *filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (filter, _("OTPClient Database (*.enc, *.bak)"));
+    gtk_file_filter_add_pattern (filter, "*.enc");
+    gtk_file_filter_add_pattern (filter, "*.bak");
+    GListStore *filters = g_list_store_new (GTK_TYPE_FILE_FILTER);
+    g_list_store_append (filters, filter);
+    gtk_file_dialog_set_filters (dialog, G_LIST_MODEL (filters));
+    g_object_unref (filter);
+    g_object_unref (filters);
+
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
+                          on_open_db_file_selected, self);
+    g_object_unref (dialog);
+}
+
 static gboolean
 on_key_pressed_inactivity (GtkEventControllerKey *controller,
                             guint                  keyval,
@@ -3705,6 +3821,8 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.import", NULL, action_import);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_i, GDK_CONTROL_MASK, "win.import", NULL);
     gtk_widget_class_install_action (widget_class, "win.export", NULL, action_export);
+    gtk_widget_class_install_action (widget_class, "win.backup-tokens", NULL, action_backup_tokens);
+    gtk_widget_class_install_action (widget_class, "win.restore-tokens", NULL, action_restore_tokens);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_e, GDK_CONTROL_MASK, "win.export", NULL);
     gtk_widget_class_install_action (widget_class, "win.snooze-backup-banner", NULL, action_snooze_backup_banner);
     gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
