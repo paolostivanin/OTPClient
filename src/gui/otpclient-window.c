@@ -230,20 +230,17 @@ validity_tick (gpointer data)
         return G_SOURCE_REMOVE;
     }
 
-    if (widgets->remaining == 0)
+    /* Recompute from wallclock instead of decrementing a counter and
+     * giving up at 0. At rollover (now % period == 0), `remaining`
+     * becomes `period` automatically and the bar refills the moment the
+     * OTP rotates — otp_refresh_tick handles updating the OTP value in
+     * parallel. */
+    if (widgets->period > 0)
     {
-        widgets->timeout_id = 0;
-        return G_SOURCE_REMOVE;
+        gint64 now = g_get_real_time () / G_USEC_PER_SEC;
+        widgets->remaining = widgets->period - (guint32) (now % widgets->period);
     }
-
-    widgets->remaining--;
     validity_update_display (widgets);
-
-    if (widgets->remaining == 0)
-    {
-        widgets->timeout_id = 0;
-        return G_SOURCE_REMOVE;
-    }
 
     return G_SOURCE_CONTINUE;
 }
@@ -343,11 +340,13 @@ render_otp_value_label (GtkWidget *label,
     if (label == NULL || !GTK_IS_LABEL (label) || entry == NULL)
         return;
 
-    OTPClientApplication *app = NULL;
-    GtkWidget *toplevel = GTK_WIDGET (gtk_widget_get_root (label));
-    if (toplevel != NULL && OTPCLIENT_IS_WINDOW (toplevel))
-        app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (toplevel)));
-
+    /* Use g_application_get_default() rather than walking up from the label —
+     * during the very first row bind the label may not be parented yet, so
+     * gtk_widget_get_root returns NULL, app falls through to NULL, and `hide`
+     * defaults to FALSE → OTPs flash unmasked on startup. The app exists from
+     * GApplication startup, well before any column row binds. Same pattern as
+     * validity_update_display. */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
     gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
     gboolean masked = hide && !otp_entry_get_revealed (entry);
     guint32 digits = otp_entry_get_digits (entry);
@@ -1025,6 +1024,19 @@ update_empty_state (OTPClientWindow *self)
 {
     if (self->content_stack == NULL || self->otp_store == NULL)
         return;
+
+    /* Don't tell the user "No tokens yet" when the database simply isn't
+     * decrypted yet — at startup behind the password prompt, or after a
+     * lock — show the "Unlocking…" stack page instead. The backup banner
+     * is also pointless without a loaded DB. */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+    {
+        gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "loading");
+        return;
+    }
 
     guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
     gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack),
