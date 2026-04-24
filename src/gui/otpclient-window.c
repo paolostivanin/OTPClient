@@ -245,26 +245,28 @@ validity_tick (gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
+/* Decide whether the validity bar/seconds should be visible right now and
+ * (re)arm or stop the per-row timer accordingly. The bar only makes sense
+ * when the OTP is also visible — when "Hide OTPs by default" is on and the
+ * row is not currently revealed, the cell is blank and a countdown next to
+ * empty space is just visual noise. */
 static void
-validity_selected_changed (GtkListItem *list_item,
-                           GParamSpec  *pspec,
-                           gpointer     user_data)
+validity_apply_visibility (GtkListItem *list_item)
 {
-    (void) pspec;
-    (void) user_data;
-
-    ValidityWidgets *widgets;
-    gboolean selected;
-
     if (!GTK_IS_LIST_ITEM (list_item))
         return;
 
-    widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
-
+    ValidityWidgets *widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
     if (widgets == NULL)
         return;
 
-    selected = gtk_list_item_get_selected (list_item);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
+    OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (list_item));
+
+    gboolean selected = gtk_list_item_get_selected (list_item);
+    gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
+    gboolean revealed = entry != NULL && otp_entry_get_revealed (entry);
+    gboolean show_bar = selected && entry != NULL && (!hide || revealed);
 
     if (widgets->timeout_id != 0)
     {
@@ -272,16 +274,14 @@ validity_selected_changed (GtkListItem *list_item,
         widgets->timeout_id = 0;
     }
 
-    if (selected)
+    if (show_bar)
     {
-        OTPEntry *entry = gtk_list_item_get_item (list_item);
-        guint32 period = 30;
-        if (entry != NULL)
-            period = otp_entry_get_period (entry);
-
+        guint32 period = otp_entry_get_period (entry);
+        if (period == 0)
+            period = 30;
         gint64 now = g_get_real_time () / G_USEC_PER_SEC;
         widgets->period = period;
-        widgets->remaining = period - (guint32)(now % period);
+        widgets->remaining = period - (guint32) (now % period);
         validity_update_display (widgets);
         gtk_widget_set_visible (widgets->box, TRUE);
         widgets->timeout_id = g_timeout_add_seconds_full (G_PRIORITY_DEFAULT,
@@ -297,12 +297,37 @@ validity_selected_changed (GtkListItem *list_item,
 }
 
 static void
+validity_selected_changed (GtkListItem *list_item,
+                           GParamSpec  *pspec,
+                           gpointer     user_data)
+{
+    (void) pspec;
+    (void) user_data;
+    validity_apply_visibility (list_item);
+}
+
+static void
+on_validity_entry_revealed (OTPEntry   *entry,
+                            GParamSpec *pspec,
+                            gpointer    user_data)
+{
+    (void) entry;
+    (void) pspec;
+    validity_apply_visibility (GTK_LIST_ITEM (user_data));
+}
+
+static void
 validity_list_item_unbind (GtkSignalListItemFactory *factory,
                            GtkListItem              *list_item,
                            gpointer                  user_data)
 {
     (void) factory;
     (void) user_data;
+
+    OTPEntry *entry = g_object_get_data (G_OBJECT (list_item), "validity-bound-entry");
+    if (entry != NULL)
+        g_signal_handlers_disconnect_by_data (entry, list_item);
+    g_object_set_data (G_OBJECT (list_item), "validity-bound-entry", NULL);
 
     ValidityWidgets *widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
 
@@ -316,17 +341,6 @@ validity_list_item_unbind (GtkSignalListItemFactory *factory,
     }
 
     gtk_widget_set_visible (widgets->label, FALSE);
-}
-
-static gchar *
-make_bullet_string (guint count)
-{
-    if (count == 0)
-        count = 6;
-    GString *s = g_string_sized_new (count * 3);
-    for (guint i = 0; i < count; i++)
-        g_string_append (s, "•");
-    return g_string_free (s, FALSE);
 }
 
 /* Render the value-column label for a single entry, honoring both the
@@ -349,7 +363,17 @@ render_otp_value_label (GtkWidget *label,
     OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
     gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
     gboolean masked = hide && !otp_entry_get_revealed (entry);
-    guint32 digits = otp_entry_get_digits (entry);
+
+    /* When masked, the cell is left visually empty rather than a bullet
+     * placeholder — the row's other columns (account / issuer / validity)
+     * already make it obvious the entry exists, and a blank value reads as
+     * "click to reveal" without giving away the digit count. */
+    if (masked)
+    {
+        gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
+        gtk_label_set_text (GTK_LABEL (label), "");
+        return;
+    }
 
     const gchar *current = otp_entry_get_otp_value (entry);
     if (current == NULL || *current == '\0')
@@ -359,20 +383,12 @@ render_otp_value_label (GtkWidget *label,
         return;
     }
 
-    g_autofree gchar *current_display = masked
-        ? make_bullet_string (digits)
-        : g_strdup (current);
-
     if (app != NULL && otpclient_application_get_show_next_otp (app))
     {
         g_autofree gchar *next = otp_entry_get_next_otp (entry);
         if (next != NULL)
         {
-            g_autofree gchar *next_display = masked
-                ? make_bullet_string (digits)
-                : g_strdup (next);
-            g_autofree gchar *combined = g_strdup_printf ("%s  [%s]",
-                                                          current_display, next_display);
+            g_autofree gchar *combined = g_strdup_printf ("%s  [%s]", current, next);
             gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
             gtk_label_set_text (GTK_LABEL (label), combined);
             return;
@@ -380,7 +396,7 @@ render_otp_value_label (GtkWidget *label,
     }
 
     gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
-    gtk_label_set_text (GTK_LABEL (label), current_display);
+    gtk_label_set_text (GTK_LABEL (label), current);
 }
 
 static void
@@ -548,7 +564,21 @@ otp_validity_column_bind (GtkSignalListItemFactory *factory,
     (void) factory;
     (void) user_data;
 
-    validity_selected_changed (list_item, NULL, NULL);
+    /* Track the entry's reveal state so the bar can hide along with the
+     * OTP when the auto-hide timer fires. List items are recycled across
+     * scrolling, so disconnect from any prior entry first. */
+    OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (list_item));
+    OTPEntry *prev = g_object_get_data (G_OBJECT (list_item), "validity-bound-entry");
+    if (prev != NULL && prev != entry)
+        g_signal_handlers_disconnect_by_data (prev, list_item);
+    if (entry != NULL && prev != entry)
+    {
+        g_signal_connect (entry, "notify::revealed",
+                          G_CALLBACK (on_validity_entry_revealed), list_item);
+        g_object_set_data (G_OBJECT (list_item), "validity-bound-entry", entry);
+    }
+
+    validity_apply_visibility (list_item);
 }
 
 static void
