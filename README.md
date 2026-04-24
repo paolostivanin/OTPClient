@@ -12,6 +12,9 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### GUI
 - Token list with drag-and-drop reordering
+- OTPs are hidden by default (`••••••` mask); click a row to copy and briefly
+  reveal the code, then it re-hides automatically. Reveal duration and the
+  hide-by-default behavior are configurable in *Settings → Display*
 - Cross-database search (`group:<name>` / `#<name>` syntax for filtering)
 - Token grouping: assign tokens to groups (e.g. "Work", "Personal") via right-click,
   the edit dialog, or when adding a token; groups are preserved during Aegis,
