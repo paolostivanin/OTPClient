@@ -321,6 +321,78 @@ validity_list_item_unbind (GtkSignalListItemFactory *factory,
     gtk_widget_set_visible (widgets->label, FALSE);
 }
 
+static gchar *
+make_bullet_string (guint count)
+{
+    if (count == 0)
+        count = 6;
+    GString *s = g_string_sized_new (count * 3);
+    for (guint i = 0; i < count; i++)
+        g_string_append (s, "•");
+    return g_string_free (s, FALSE);
+}
+
+/* Render the value-column label for a single entry, honoring both the
+ * "Show Next OTP" toggle and the "Hide OTPs by default" mask. Called from
+ * the factory bind AND from notify::revealed / notify::otp-value handlers
+ * so a row can update in place without a full rebind. */
+static void
+render_otp_value_label (GtkWidget *label,
+                        OTPEntry  *entry)
+{
+    if (label == NULL || !GTK_IS_LABEL (label) || entry == NULL)
+        return;
+
+    OTPClientApplication *app = NULL;
+    GtkWidget *toplevel = GTK_WIDGET (gtk_widget_get_root (label));
+    if (toplevel != NULL && OTPCLIENT_IS_WINDOW (toplevel))
+        app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (toplevel)));
+
+    gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
+    gboolean masked = hide && !otp_entry_get_revealed (entry);
+    guint32 digits = otp_entry_get_digits (entry);
+
+    const gchar *current = otp_entry_get_otp_value (entry);
+    if (current == NULL || *current == '\0')
+    {
+        gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
+        gtk_label_set_text (GTK_LABEL (label), "");
+        return;
+    }
+
+    g_autofree gchar *current_display = masked
+        ? make_bullet_string (digits)
+        : g_strdup (current);
+
+    if (app != NULL && otpclient_application_get_show_next_otp (app))
+    {
+        g_autofree gchar *next = otp_entry_get_next_otp (entry);
+        if (next != NULL)
+        {
+            g_autofree gchar *next_display = masked
+                ? make_bullet_string (digits)
+                : g_strdup (next);
+            g_autofree gchar *combined = g_strdup_printf ("%s  [%s]",
+                                                          current_display, next_display);
+            gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
+            gtk_label_set_text (GTK_LABEL (label), combined);
+            return;
+        }
+    }
+
+    gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
+    gtk_label_set_text (GTK_LABEL (label), current_display);
+}
+
+static void
+on_otp_entry_notify_refresh (OTPEntry   *entry,
+                             GParamSpec *pspec,
+                             gpointer    user_data)
+{
+    (void) pspec;
+    render_otp_value_label (GTK_WIDGET (user_data), entry);
+}
+
 static void
 otp_text_column_setup (GtkSignalListItemFactory *factory,
                        GtkListItem              *list_item,
@@ -371,31 +443,27 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
                 if (cached == NULL || cached[0] == '\0')
                     otp_entry_update_otp (entry);
             }
-            text = otp_entry_get_otp_value (entry);
-            break;
-        default:
-            break;
-    }
-
-    if (column == OTP_COLUMN_VALUE)
-    {
-        GtkWidget *toplevel = GTK_WIDGET (gtk_widget_get_root (label));
-        if (toplevel != NULL && OTPCLIENT_IS_WINDOW (toplevel))
-        {
-            OTPClientApplication *app = OTPCLIENT_APPLICATION (
-                gtk_window_get_application (GTK_WINDOW (toplevel)));
-            if (app != NULL && otpclient_application_get_show_next_otp (app))
+            /* Drop any signal connections from a prior entry — labels are
+             * recycled across rows as the user scrolls. Then connect to the
+             * new entry so reveal/hide and HOTP/TOTP updates re-render in
+             * place. */
             {
-                g_autofree gchar *next_otp = otp_entry_get_next_otp (entry);
-                if (next_otp != NULL)
+                OTPEntry *prev = g_object_get_data (G_OBJECT (label), "value-bound-entry");
+                if (prev != NULL && prev != entry)
+                    g_signal_handlers_disconnect_by_data (prev, label);
+                if (prev != entry)
                 {
-                    g_autofree gchar *combined = g_strdup_printf ("%s  [%s]",
-                                                                   text ? text : "", next_otp);
-                    gtk_label_set_text (GTK_LABEL (label), combined);
-                    return;
+                    g_signal_connect (entry, "notify::revealed",
+                                      G_CALLBACK (on_otp_entry_notify_refresh), label);
+                    g_signal_connect (entry, "notify::otp-value",
+                                      G_CALLBACK (on_otp_entry_notify_refresh), label);
+                    g_object_set_data (G_OBJECT (label), "value-bound-entry", entry);
                 }
             }
-        }
+            render_otp_value_label (label, entry);
+            return;
+        default:
+            break;
     }
 
     /* Show DB name badge for cross-database entries in the Account column */
@@ -414,6 +482,26 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
 
     gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
     gtk_label_set_text (GTK_LABEL (label), text ? text : "");
+}
+
+static void
+otp_text_column_unbind (GtkSignalListItemFactory *factory,
+                        GtkListItem              *list_item,
+                        gpointer                  user_data)
+{
+    (void) factory;
+    OTPColumn column = GPOINTER_TO_INT (user_data);
+    if (column != OTP_COLUMN_VALUE)
+        return;
+
+    GtkWidget *label = gtk_list_item_get_child (list_item);
+    if (label == NULL)
+        return;
+
+    OTPEntry *entry = g_object_get_data (G_OBJECT (label), "value-bound-entry");
+    if (entry != NULL)
+        g_signal_handlers_disconnect_by_data (entry, label);
+    g_object_set_data (G_OBJECT (label), "value-bound-entry", NULL);
 }
 
 static void
@@ -474,6 +562,7 @@ add_text_column (GtkColumnView *view,
 
     g_signal_connect (factory, "setup", G_CALLBACK (otp_text_column_setup), NULL);
     g_signal_connect (factory, "bind", G_CALLBACK (otp_text_column_bind), GINT_TO_POINTER (column));
+    g_signal_connect (factory, "unbind", G_CALLBACK (otp_text_column_unbind), GINT_TO_POINTER (column));
 
     gtk_column_view_column_set_expand (view_column, TRUE);
     gtk_column_view_column_set_resizable (view_column, TRUE);
@@ -1405,6 +1494,12 @@ on_otp_selection_changed (GtkSingleSelection *selection,
 
     GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
     gdk_clipboard_set_text (clipboard, otp_value);
+
+    /* Briefly reveal the value the user just copied so they can verify it
+     * on screen before the auto-hide kicks back in. No-op when the user
+     * has disabled hide-by-default. */
+    if (app != NULL && otpclient_application_get_hide_otps (app))
+        otp_entry_reveal_for (entry, otpclient_application_get_otp_reveal_timeout (app));
 
     /* Schedule clipboard clear */
     if (self->clipboard_clear_timer_id != 0)

@@ -23,6 +23,13 @@ struct _OTPEntry
     gchar *account_lower;
     gchar *issuer_lower;
     gchar *group_lower;
+
+    /* Reveal state: when FALSE the value column renders bullets instead of
+     * the live OTP. reveal_timeout_id is the GSource that flips it back to
+     * FALSE; 0 means no timer is armed (either no auto-hide or manually
+     * persistent). */
+    gboolean revealed;
+    guint    reveal_timeout_id;
 };
 
 static gchar *
@@ -45,6 +52,7 @@ enum
     PROP_SECRET,
     PROP_DB_NAME,
     PROP_GROUP,
+    PROP_REVEALED,
     N_PROPS
 };
 
@@ -66,6 +74,12 @@ static void
 otp_entry_finalize (GObject *object)
 {
     OTPEntry *self = OTP_ENTRY (object);
+
+    if (self->reveal_timeout_id != 0)
+    {
+        g_source_remove (self->reveal_timeout_id);
+        self->reveal_timeout_id = 0;
+    }
 
     g_clear_pointer (&self->account, g_free);
     g_clear_pointer (&self->issuer, g_free);
@@ -131,6 +145,9 @@ otp_entry_get_property (GObject    *object,
             break;
         case PROP_GROUP:
             g_value_set_string (value, self->group);
+            break;
+        case PROP_REVEALED:
+            g_value_set_boolean (value, self->revealed);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -206,6 +223,9 @@ otp_entry_set_property (GObject      *object,
             g_free (self->group_lower);
             self->group_lower = strdown_or_empty (self->group);
             break;
+        case PROP_REVEALED:
+            otp_entry_set_revealed (self, g_value_get_boolean (value));
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -253,6 +273,9 @@ otp_entry_class_init (OTPEntryClass *klass)
     properties[PROP_GROUP] =
         g_param_spec_string ("group", NULL, NULL, NULL,
                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+    properties[PROP_REVEALED] =
+        g_param_spec_boolean ("revealed", NULL, NULL, FALSE,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
     g_object_class_install_properties (object_class, N_PROPS, properties);
 }
@@ -469,6 +492,69 @@ otp_entry_get_next_otp (OTPEntry *self)
 
     g_free (otp);
     return NULL;
+}
+
+gboolean
+otp_entry_get_revealed (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), FALSE);
+    return self->revealed;
+}
+
+void
+otp_entry_set_revealed (OTPEntry *self,
+                        gboolean  revealed)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+
+    revealed = !!revealed;
+    if (self->revealed == revealed)
+        return;
+
+    /* If we're hiding (revealed=FALSE), cancel any pending auto-hide timer
+     * since we just got there manually. If we're showing, leave any prior
+     * timer to run — reveal_for() resets it explicitly when re-arming. */
+    if (!revealed && self->reveal_timeout_id != 0)
+    {
+        g_source_remove (self->reveal_timeout_id);
+        self->reveal_timeout_id = 0;
+    }
+
+    self->revealed = revealed;
+    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_REVEALED]);
+}
+
+static gboolean
+on_reveal_timeout (gpointer user_data)
+{
+    OTPEntry *self = OTP_ENTRY (user_data);
+    self->reveal_timeout_id = 0;
+    otp_entry_set_revealed (self, FALSE);
+    return G_SOURCE_REMOVE;
+}
+
+void
+otp_entry_reveal_for (OTPEntry *self,
+                      guint     seconds)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+
+    /* Reset any in-flight auto-hide so successive reveals don't snap shut
+     * the moment the older timer expires. */
+    if (self->reveal_timeout_id != 0)
+    {
+        g_source_remove (self->reveal_timeout_id);
+        self->reveal_timeout_id = 0;
+    }
+
+    if (!self->revealed)
+    {
+        self->revealed = TRUE;
+        g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_REVEALED]);
+    }
+
+    if (seconds > 0)
+        self->reveal_timeout_id = g_timeout_add_seconds (seconds, on_reveal_timeout, self);
 }
 
 const gchar *

@@ -111,6 +111,16 @@
       <summary>Backup-age banner snooze deadline</summary>
       <description>Unix timestamp until which the backup-age banner is suppressed. Set when the user explicitly snoozes the reminder.</description>
     </key>
+    <key name="hide-otps" type="b">
+      <default>true</default>
+      <summary>Hide OTPs by default</summary>
+      <description>When enabled, OTP codes are masked with bullets in the list and only revealed when a row is clicked. Reveals are temporary; see otp-reveal-timeout. Disabling this restores the legacy always-visible behavior.</description>
+    </key>
+    <key name="otp-reveal-timeout" type="u">
+      <default>10</default>
+      <summary>OTP reveal timeout</summary>
+      <description>Seconds to keep an OTP visible after it is revealed by clicking. Ignored when hide-otps is disabled. Reasonable values are 5–60.</description>
+    </key>
   </schema>
 </schemalist>
 

@@ -53,4 +53,17 @@ void         otp_entry_update_otp   (OTPEntry *self);
 
 gchar       *otp_entry_get_next_otp (OTPEntry *self);
 
+/* Reveal/hide state controls whether the OTP value column shows the live
+ * code or a bullet mask. The state belongs to the entry (not the row widget)
+ * so it survives scroll-driven rebinds. notify::revealed fires on change so
+ * the bound label can re-render. */
+gboolean     otp_entry_get_revealed (OTPEntry *self);
+void         otp_entry_set_revealed (OTPEntry    *self,
+                                     gboolean     revealed);
+
+/* Convenience: set revealed=TRUE and arm an auto-hide timer. seconds=0 means
+ * "reveal until explicitly hidden / lock". Calling again resets the timer. */
+void         otp_entry_reveal_for   (OTPEntry    *self,
+                                     guint        seconds);
+
 G_END_DECLS

@@ -24,6 +24,8 @@ struct _SettingsDialog
     GtkWidget *search_provider_switch;
     GtkWidget *search_provider_keyword_entry;
     GtkWidget *clipboard_clear_combo;
+    GtkWidget *hide_otps_switch;
+    GtkWidget *otp_reveal_timeout_combo;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
 #endif
@@ -39,6 +41,30 @@ on_show_next_otp_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_show_next_otp (self->app, active);
+}
+
+static void
+on_hide_otps_toggled (GObject        *obj,
+                      GParamSpec     *pspec,
+                      SettingsDialog *self)
+{
+    (void) pspec;
+    gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+    otpclient_application_set_hide_otps (self->app, active);
+    if (self->otp_reveal_timeout_combo != NULL)
+        gtk_widget_set_sensitive (self->otp_reveal_timeout_combo, active);
+}
+
+static void
+on_otp_reveal_timeout_changed (AdwComboRow    *combo,
+                                GParamSpec     *pspec,
+                                SettingsDialog *self)
+{
+    (void) pspec;
+    static const guint reveal_values[] = { 5, 10, 15, 30, 60 };
+    guint selected = adw_combo_row_get_selected (combo);
+    if (selected < G_N_ELEMENTS (reveal_values))
+        otpclient_application_set_otp_reveal_timeout (self->app, reveal_values[selected]);
 }
 
 static void
@@ -350,6 +376,43 @@ settings_dialog_new (OTPClientApplication *app)
     g_signal_connect (self->show_next_otp_switch, "notify::active",
                       G_CALLBACK (on_show_next_otp_toggled), self);
     adw_preferences_group_add (display_group, self->show_next_otp_switch);
+
+    /* Hide OTPs by default — masks values with bullets in the list and
+     * temporarily reveals the row when clicked (timeout below). */
+    gboolean hide_active = otpclient_application_get_hide_otps (app);
+    self->hide_otps_switch = adw_switch_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->hide_otps_switch), _("Hide OTPs by Default"));
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->hide_otps_switch),
+                                  _("Mask OTP codes in the list and reveal a row temporarily when clicked"));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->hide_otps_switch), hide_active);
+    g_signal_connect (self->hide_otps_switch, "notify::active",
+                      G_CALLBACK (on_hide_otps_toggled), self);
+    adw_preferences_group_add (display_group, self->hide_otps_switch);
+
+    const char * const reveal_items[] = {
+        N_("5 seconds"), N_("10 seconds"), N_("15 seconds"), N_("30 seconds"), N_("1 minute"), NULL
+    };
+    static const guint reveal_values[] = { 5, 10, 15, 30, 60 };
+    const char *reveal_translated[G_N_ELEMENTS (reveal_values) + 1];
+    for (guint i = 0; i < G_N_ELEMENTS (reveal_values); i++)
+        reveal_translated[i] = _(reveal_items[i]);
+    reveal_translated[G_N_ELEMENTS (reveal_values)] = NULL;
+    GtkStringList *reveal_model = gtk_string_list_new (reveal_translated);
+    self->otp_reveal_timeout_combo = adw_combo_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->otp_reveal_timeout_combo),
+                                    _("Reveal OTP For"));
+    adw_combo_row_set_model (ADW_COMBO_ROW (self->otp_reveal_timeout_combo), G_LIST_MODEL (reveal_model));
+    guint current_reveal = otpclient_application_get_otp_reveal_timeout (app);
+    for (guint i = 0; i < G_N_ELEMENTS (reveal_values); i++) {
+        if (reveal_values[i] == current_reveal) {
+            adw_combo_row_set_selected (ADW_COMBO_ROW (self->otp_reveal_timeout_combo), i);
+            break;
+        }
+    }
+    gtk_widget_set_sensitive (self->otp_reveal_timeout_combo, hide_active);
+    g_signal_connect (self->otp_reveal_timeout_combo, "notify::selected",
+                      G_CALLBACK (on_otp_reveal_timeout_changed), self);
+    adw_preferences_group_add (display_group, self->otp_reveal_timeout_combo);
 
     self->show_validity_seconds_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->show_validity_seconds_switch),
