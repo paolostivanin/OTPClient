@@ -15,10 +15,12 @@ struct _ExportDialog
     GtkWidget *password_confirm_row;
     GtkWidget *export_button;
     GtkWidget *error_label;
+    GtkWidget *plain_warning;
 };
 
 typedef enum
 {
+    EXPORT_FMT_NATIVE_ENC,
     EXPORT_FMT_FREEOTPPLUS,
     EXPORT_FMT_AEGIS_PLAIN,
     EXPORT_FMT_AEGIS_ENC,
@@ -38,11 +40,16 @@ on_format_changed (AdwComboRow  *combo_row,
 {
     (void) pspec;
     guint selected = adw_combo_row_get_selected (combo_row);
+    gboolean is_plain = (selected == EXPORT_FMT_FREEOTPPLUS ||
+                         selected == EXPORT_FMT_AEGIS_PLAIN ||
+                         selected == EXPORT_FMT_AUTHPRO_PLAIN ||
+                         selected == EXPORT_FMT_TWOFAS_PLAIN);
     gboolean needs_password = (selected == EXPORT_FMT_AEGIS_ENC ||
                                 selected == EXPORT_FMT_AUTHPRO_ENC ||
                                 selected == EXPORT_FMT_TWOFAS_ENC);
     gtk_widget_set_visible (self->password_row, needs_password);
     gtk_widget_set_visible (self->password_confirm_row, needs_password);
+    adw_banner_set_revealed (ADW_BANNER (self->plain_warning), is_plain);
 }
 
 static void
@@ -81,6 +88,13 @@ on_file_dialog_save_complete (GObject      *source,
     gchar *error_msg = NULL;
     switch (fmt)
     {
+        case EXPORT_FMT_NATIVE_ENC:
+            /* Just clone the live encrypted DB file. The DB is already a
+             * self-contained, AES-GCM/Argon2id-encrypted blob, so a byte-for-byte
+             * copy IS the backup — no separate format needed, and restore is
+             * just pointing the app at the saved file. */
+            error_msg = db_copy_to (self->db_data->db_path, path);
+            break;
         case EXPORT_FMT_FREEOTPPLUS:
             error_msg = export_freeotpplus (path, self->db_data->in_memory_json_data);
             break;
@@ -188,6 +202,7 @@ export_dialog_new (DatabaseData *db_data,
     GtkWidget *group = adw_preferences_group_new ();
 
     const char * const format_items[] = {
+        _("Native OTPClient backup (encrypted)"),
         "FreeOTP+ (Plain)",
         "Aegis (Plain JSON)",
         "Aegis (Encrypted)",
@@ -218,10 +233,12 @@ export_dialog_new (DatabaseData *db_data,
 
     gtk_box_append (GTK_BOX (box), group);
 
-    /* Warning banner */
-    GtkWidget *warning = adw_banner_new (_("Exporting unencrypted reveals all secrets!"));
-    adw_banner_set_revealed (ADW_BANNER (warning), TRUE);
-    gtk_box_append (GTK_BOX (box), warning);
+    /* Warning banner — only revealed when a plaintext format is selected
+     * (see on_format_changed). Native backup is encrypted by construction
+     * since it copies the encrypted DB, so the banner starts hidden. */
+    self->plain_warning = adw_banner_new (_("Exporting unencrypted reveals all secrets!"));
+    adw_banner_set_revealed (ADW_BANNER (self->plain_warning), FALSE);
+    gtk_box_append (GTK_BOX (box), self->plain_warning);
 
     /* Error label */
     self->error_label = gtk_label_new (NULL);

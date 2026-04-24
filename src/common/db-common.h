@@ -119,4 +119,12 @@ gint    check_duplicate    (gconstpointer   data,
 
 void    db_invalidate_kdf_cache (DatabaseData *db_data);
 
+/* Copies an encrypted database file to dst_path with 0600 perms. The source
+ * is not followed if it is a symlink, and the destination is forced 0600
+ * regardless of any pre-existing perms — same hardening used for the .bak
+ * sibling created on every successful save. Returns NULL on success, or a
+ * newly-allocated, translated error message the caller frees with g_free. */
+gchar  *db_copy_to              (const gchar  *src_path,
+                                 const gchar  *dst_path);
+
 G_END_DECLS

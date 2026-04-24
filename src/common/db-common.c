@@ -748,6 +748,39 @@ backup_db (const gchar *path)
 }
 
 
+gchar *
+db_copy_to (const gchar *src_path,
+            const gchar *dst_path)
+{
+    g_return_val_if_fail (src_path != NULL, g_strdup (_("Source path is NULL")));
+    g_return_val_if_fail (dst_path != NULL, g_strdup (_("Destination path is NULL")));
+
+    GFile *src = g_file_new_for_path (src_path);
+    GFile *dst = g_file_new_for_path (dst_path);
+
+    GError *err = NULL;
+    mode_t old_umask = umask (0077);
+    gboolean copied = g_file_copy (src, dst,
+                                   G_FILE_COPY_OVERWRITE | G_FILE_COPY_NOFOLLOW_SYMLINKS,
+                                   NULL, NULL, NULL, &err);
+    umask (old_umask);
+
+    gchar *error_msg = NULL;
+    if (!copied) {
+        error_msg = g_strdup_printf (_("Couldn't copy database: %s"), err->message);
+        g_clear_error (&err);
+    } else if (g_chmod (dst_path, 0600) != 0) {
+        error_msg = g_strdup_printf (_("Failed to chmod 0600 on %s: %s"),
+                                     dst_path, g_strerror (errno));
+    }
+
+    g_object_unref (src);
+    g_object_unref (dst);
+
+    return error_msg;
+}
+
+
 static void
 restore_db (const gchar *path)
 {

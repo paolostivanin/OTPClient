@@ -905,7 +905,7 @@ refresh_backup_age_banner (OTPClientWindow *self)
     if (last_export == 0)
     {
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner),
-                              _("You haven't exported a backup yet — keep a copy somewhere safe."));
+                              _("You haven't saved a backup of your encrypted database yet — keep a copy somewhere safe."));
         reveal = TRUE;
     }
     else if (last_export > now)
@@ -917,8 +917,8 @@ refresh_backup_age_banner (OTPClientWindow *self)
     {
         gint days = (gint) ((now - last_export) / (60 * 60 * 24));
         g_autofree gchar *msg = g_strdup_printf (
-            ngettext ("Your last backup is %d day old.",
-                      "Your last backup is %d days old.",
+            ngettext ("Your last database backup is %d day old.",
+                      "Your last database backup is %d days old.",
                       days),
             days);
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner), msg);

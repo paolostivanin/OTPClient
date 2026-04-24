@@ -711,6 +711,11 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
 
     gtk_window_set_default_icon_name (APPLICATION_ID);
     self->window = OTPCLIENT_WINDOW(otpclient_window_new (self));
+    /* GTK owns the window; we just hold an observer pointer. The weak ref
+     * gets self->window cleared to NULL on finalize, so signal_quit() and
+     * shutdown() (which both call flush_pending_writes via this pointer)
+     * don't dereference a dangling object after an X-button close. */
+    g_object_add_weak_pointer (G_OBJECT (self->window), (gpointer *) &self->window);
 
     lock_app_init_dbus_watchers (self);
 
