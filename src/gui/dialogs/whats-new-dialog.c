@@ -37,7 +37,7 @@ static const PageInfo welcome_pages[] = {
     {
         "view-conceal-symbolic",
         N_("OTPs Are Hidden by Default"),
-        N_("Codes are masked with bullets in the list to prevent "
+        N_("Codes are hidden in the list to prevent "
            "shoulder-surfing and accidental screenshot leaks.\n\n"
            "Click a row to copy the OTP — it will briefly appear "
            "so you can verify what was copied, then re-hide. "
@@ -101,8 +101,8 @@ static const PageInfo whats_new_pages[] = {
     {
         "view-conceal-symbolic",
         N_("OTPs Are Now Hidden by Default"),
-        N_("Codes used to be visible at all times. They are now masked "
-           "with bullets so a glance at your screen, a screenshot, or "
+        N_("Codes used to be visible at all times. They are now hidden "
+           "so a glance at your screen, a screenshot, or "
            "an Alt+Tab thumbnail no longer leaks them.\n\n"
            "Click a row to copy the OTP — it briefly appears so you "
            "can verify what was copied, then re-hides. To restore the "

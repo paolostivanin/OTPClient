@@ -377,13 +377,13 @@ settings_dialog_new (OTPClientApplication *app)
                       G_CALLBACK (on_show_next_otp_toggled), self);
     adw_preferences_group_add (display_group, self->show_next_otp_switch);
 
-    /* Hide OTPs by default — masks values with bullets in the list and
+    /* Hide OTPs by default — leaves the cell blank in the list and
      * temporarily reveals the row when clicked (timeout below). */
     gboolean hide_active = otpclient_application_get_hide_otps (app);
     self->hide_otps_switch = adw_switch_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->hide_otps_switch), _("Hide OTPs by Default"));
     adw_action_row_set_subtitle (ADW_ACTION_ROW (self->hide_otps_switch),
-                                  _("Mask OTP codes in the list and reveal a row temporarily when clicked"));
+                                  _("Hide OTP codes in the list and reveal a row temporarily when clicked"));
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->hide_otps_switch), hide_active);
     g_signal_connect (self->hide_otps_switch, "notify::active",
                       G_CALLBACK (on_hide_otps_toggled), self);

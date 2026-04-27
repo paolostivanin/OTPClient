@@ -12,7 +12,7 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### GUI
 - Token list with drag-and-drop reordering
-- OTPs are hidden by default (`••••••` mask); click a row to copy and briefly
+- OTPs are hidden by default (cell stays blank); click a row to copy and briefly
   reveal the code, then it re-hides automatically. Reveal duration and the
   hide-by-default behavior are configurable in *Settings → Display*
 - Cross-database search (`group:<name>` / `#<name>` syntax for filtering)

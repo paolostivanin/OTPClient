@@ -100,7 +100,7 @@
           <li>NEW: search-provider requires a trigger keyword (default "otp") to surface results above runner clutter</li>
           <li>FIX: AdwSpinner template crash on libadwaita 1.5</li>
           <li>FIX: hide-OTP startup race that left the validity bar frozen</li>
-          <li>FIX: masked OTP cell is now blank instead of showing partial digits; validity bar hides with the OTP</li>
+          <li>FIX: hidden OTP cell is now blank instead of showing partial digits; validity bar hides with the OTP</li>
           <li>FIX: Add and Import are enabled immediately after first-run create-or-open</li>
           <li>FIX: "Unlocking…" no longer flashes on fresh install with no database</li>
           <li>FIX: graceful recovery when the database file is missing on disk (e.g. removed externally)</li>

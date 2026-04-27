@@ -114,7 +114,7 @@
     <key name="hide-otps" type="b">
       <default>true</default>
       <summary>Hide OTPs by default</summary>
-      <description>When enabled, OTP codes are masked with bullets in the list and only revealed when a row is clicked. Reveals are temporary; see otp-reveal-timeout. Disabling this restores the legacy always-visible behavior.</description>
+      <description>When enabled, OTP codes are hidden in the list and only revealed when a row is clicked. Reveals are temporary; see otp-reveal-timeout. Disabling this restores the legacy always-visible behavior.</description>
     </key>
     <key name="otp-reveal-timeout" type="u">
       <default>10</default>
