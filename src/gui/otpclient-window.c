@@ -1056,14 +1056,16 @@ update_empty_state (OTPClientWindow *self)
     if (self->content_stack == NULL || self->otp_store == NULL)
         return;
 
-    /* Don't tell the user "No tokens yet" when the database simply isn't
-     * decrypted yet — at startup behind the password prompt, or after a
-     * lock — show the "Unlocking…" stack page instead. The backup banner
-     * is also pointless without a loaded DB. */
+    /* Show the "Unlocking…" page only while an existing DB is being decrypted
+     * (db_data exists but its in_memory_json_data isn't populated yet — at
+     * startup behind the password prompt, or right after a manual lock).
+     * On a fresh install db_data is NULL: fall through to the empty/list
+     * branch so the user lands on the "No tokens yet" CTA page rather than
+     * a phantom "Unlocking…" message. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
-    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+    if (db_data != NULL && db_data->in_memory_json_data == NULL)
     {
         gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "loading");
         return;
