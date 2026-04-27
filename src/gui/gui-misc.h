@@ -24,6 +24,8 @@ void     gui_misc_rename_db_in_list      (GListStore  *db_store,
                                           guint        index,
                                           const gchar *new_name);
 
+void     gui_misc_validate_databases     (GListStore  *db_store);
+
 gchar   *gui_misc_derive_db_display_name (const gchar *path);
 
 void     gui_misc_send_notification      (GApplication *app,

@@ -1353,6 +1353,27 @@ on_db_entry_primary_changed (DatabaseEntry *entry,
     gtk_widget_set_visible (icon, database_entry_get_primary (entry));
 }
 
+static void
+on_db_entry_missing_icon_changed (DatabaseEntry *entry,
+                                  GParamSpec    *pspec,
+                                  GtkWidget     *icon)
+{
+    (void) pspec;
+    gtk_widget_set_visible (icon, database_entry_get_missing (entry));
+}
+
+static void
+on_db_entry_missing_row_changed (DatabaseEntry *entry,
+                                 GParamSpec    *pspec,
+                                 GtkWidget     *row)
+{
+    (void) pspec;
+    if (database_entry_get_missing (entry))
+        gtk_widget_add_css_class (row, "dim-label");
+    else
+        gtk_widget_remove_css_class (row, "dim-label");
+}
+
 static GtkWidget *
 create_database_row (gpointer item,
                      gpointer user_data)
@@ -1372,8 +1393,23 @@ create_database_row (gpointer item,
     gtk_widget_set_visible (check_icon, database_entry_get_primary (entry));
     adw_action_row_add_suffix (row, check_icon);
 
+    GtkWidget *warning_icon = gtk_image_new_from_icon_name ("dialog-warning-symbolic");
+    gtk_widget_set_valign (warning_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_tooltip_text (warning_icon, _("Database file not found"));
+    gtk_widget_set_visible (warning_icon, database_entry_get_missing (entry));
+    adw_action_row_add_suffix (row, warning_icon);
+
+    if (database_entry_get_missing (entry))
+        gtk_widget_add_css_class (GTK_WIDGET (row), "dim-label");
+
     g_signal_connect_object (entry, "notify::primary",
                              G_CALLBACK (on_db_entry_primary_changed), check_icon, 0);
+
+    g_signal_connect_object (entry, "notify::missing",
+                             G_CALLBACK (on_db_entry_missing_icon_changed), warning_icon, 0);
+
+    g_signal_connect_object (entry, "notify::missing",
+                             G_CALLBACK (on_db_entry_missing_row_changed), row, 0);
 
     g_signal_connect_object (entry, "notify::name",
                              G_CALLBACK (on_db_entry_name_changed), row, 0);

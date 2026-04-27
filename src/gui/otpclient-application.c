@@ -383,6 +383,31 @@ otpclient_application_activate (GApplication *application)
 static void on_password_received (const gchar *password, gpointer user_data);
 
 static void
+present_db_missing_dialog (OTPClientWindow *win,
+                           const gchar     *db_name,
+                           const gchar     *db_path)
+{
+    if (win == NULL)
+        return;
+
+    g_autofree gchar *body = g_strdup_printf (
+        _("“%s” could not be found at:\n%s\n\n"
+          "The file may have been moved or deleted. "
+          "Use the sidebar to switch to a different database, "
+          "or right-click the missing entry to remove it from the list."),
+        db_name != NULL ? db_name : "",
+        db_path != NULL ? db_path : "");
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Database File Not Found"), body));
+    adw_alert_dialog_add_response (dialog, "ok", _("OK"));
+    adw_alert_dialog_set_default_response (dialog, "ok");
+    adw_alert_dialog_set_close_response (dialog, "ok");
+
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (win));
+}
+
+static void
 unlock_db_thread (GTask        *task,
                   gpointer      source_object,
                   gpointer      task_data,
@@ -415,6 +440,46 @@ on_unlock_done (GObject      *source_object,
 
         if (self->window != NULL)
             otpclient_window_hide_loading (self->window);
+
+        /* Race: file vanished between init_database()'s validation and the
+         * unlock thread reading it. Mark the sidebar entry, drop db_data so
+         * update_empty_state() routes to "no-db", and surface the same
+         * dialog as the startup path. */
+        if (g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE))
+        {
+            g_autofree gchar *missing_path = self->db_data != NULL
+                ? g_strdup (self->db_data->db_path) : NULL;
+            g_autofree gchar *missing_name = NULL;
+
+            if (self->window != NULL && missing_path != NULL)
+            {
+                GListStore *store = otpclient_window_get_db_store (self->window);
+                guint n = g_list_model_get_n_items (G_LIST_MODEL (store));
+                for (guint i = 0; i < n; i++)
+                {
+                    g_autoptr (DatabaseEntry) e = g_list_model_get_item (
+                        G_LIST_MODEL (store), i);
+                    if (g_strcmp0 (database_entry_get_path (e), missing_path) == 0)
+                    {
+                        if (missing_name == NULL)
+                            missing_name = g_strdup (database_entry_get_name (e));
+                        database_entry_set_missing (e, TRUE);
+                        break;
+                    }
+                }
+            }
+
+            otpclient_application_set_db_data (self, NULL);
+
+            if (self->window != NULL)
+            {
+                present_db_missing_dialog (self->window, missing_name, missing_path);
+                otpclient_window_hide_loading (self->window);
+            }
+
+            g_clear_error (&err);
+            return;
+        }
 
         /* Show password dialog again on wrong password */
         if (err->code == BAD_TAG_ERRCODE)
@@ -578,6 +643,23 @@ init_database (OTPClientApplication *self)
         }
     }
     otpclient_window_select_database (self->window, primary_index);
+
+    /* Validate every entry against the filesystem so missing files surface
+     * in the sidebar (warning icon + dim style). The sidebar's db_store
+     * holds different DatabaseEntry objects than db_list — check the
+     * sidebar's copy of the primary entry below. */
+    GListStore *sidebar_store = otpclient_window_get_db_store (self->window);
+    gui_misc_validate_databases (sidebar_store);
+
+    g_autoptr (DatabaseEntry) primary_sidebar_entry = g_list_model_get_item (
+        G_LIST_MODEL (sidebar_store), (guint)primary_index);
+    if (primary_sidebar_entry != NULL && database_entry_get_missing (primary_sidebar_entry))
+    {
+        present_db_missing_dialog (self->window,
+                                   database_entry_get_name (primary_sidebar_entry),
+                                   database_entry_get_path (primary_sidebar_entry));
+        return;
+    }
 
     /* Set up the primary database for decryption */
     DatabaseEntry *primary_entry = g_ptr_array_index (db_list, primary_index);

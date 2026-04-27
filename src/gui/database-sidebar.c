@@ -6,6 +6,7 @@ struct _DatabaseEntry
     gchar *name;
     gchar *path;
     gboolean is_primary;
+    gboolean missing;
 };
 
 enum
@@ -14,6 +15,7 @@ enum
     DB_PROP_NAME,
     DB_PROP_PATH,
     DB_PROP_PRIMARY,
+    DB_PROP_MISSING,
     DB_N_PROPS
 };
 
@@ -49,6 +51,9 @@ database_entry_get_property (GObject    *object,
         case DB_PROP_PRIMARY:
             g_value_set_boolean (value, self->is_primary);
             break;
+        case DB_PROP_MISSING:
+            g_value_set_boolean (value, self->missing);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -75,6 +80,9 @@ database_entry_set_property (GObject      *object,
         case DB_PROP_PRIMARY:
             self->is_primary = g_value_get_boolean (value);
             break;
+        case DB_PROP_MISSING:
+            self->missing = g_value_get_boolean (value);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -97,6 +105,9 @@ database_entry_class_init (DatabaseEntryClass *klass)
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     db_properties[DB_PROP_PRIMARY] =
         g_param_spec_boolean ("primary", NULL, NULL, FALSE,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+    db_properties[DB_PROP_MISSING] =
+        g_param_spec_boolean ("missing", NULL, NULL, FALSE,
                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
     g_object_class_install_properties (object_class, DB_N_PROPS, db_properties);
@@ -164,4 +175,24 @@ database_entry_set_primary (DatabaseEntry *self,
 
     self->is_primary = is_primary;
     g_object_notify_by_pspec (G_OBJECT (self), db_properties[DB_PROP_PRIMARY]);
+}
+
+gboolean
+database_entry_get_missing (DatabaseEntry *self)
+{
+    g_return_val_if_fail (DATABASE_IS_ENTRY (self), FALSE);
+    return self->missing;
+}
+
+void
+database_entry_set_missing (DatabaseEntry *self,
+                            gboolean       missing)
+{
+    g_return_if_fail (DATABASE_IS_ENTRY (self));
+
+    if (self->missing == missing)
+        return;
+
+    self->missing = missing;
+    g_object_notify_by_pspec (G_OBJECT (self), db_properties[DB_PROP_MISSING]);
 }

@@ -22,4 +22,8 @@ gboolean        database_entry_get_primary   (DatabaseEntry *self);
 void            database_entry_set_primary   (DatabaseEntry *self,
                                               gboolean       is_primary);
 
+gboolean        database_entry_get_missing   (DatabaseEntry *self);
+void            database_entry_set_missing   (DatabaseEntry *self,
+                                              gboolean       missing);
+
 G_END_DECLS

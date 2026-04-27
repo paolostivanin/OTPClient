@@ -187,6 +187,20 @@ gui_misc_rename_db_in_list (GListStore  *db_store,
 }
 
 void
+gui_misc_validate_databases (GListStore *db_store)
+{
+    g_return_if_fail (G_IS_LIST_STORE (db_store));
+
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (db_store));
+    for (guint i = 0; i < n; i++) {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (db_store), i);
+        const gchar *path = database_entry_get_path (entry);
+        gboolean exists = path != NULL && g_file_test (path, G_FILE_TEST_EXISTS);
+        database_entry_set_missing (entry, !exists);
+    }
+}
+
+void
 gui_misc_send_notification (GApplication *app,
                             const gchar  *title,
                             const gchar  *body)
