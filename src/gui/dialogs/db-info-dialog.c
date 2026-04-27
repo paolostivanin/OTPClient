@@ -35,8 +35,8 @@ db_info_dialog_new (DatabaseData *db_data)
 {
     DbInfoDialog *self = g_object_new (DB_INFO_TYPE_DIALOG,
                                         "title", _("Database Info"),
-                                        "content-width", 360,
-                                        "content-height", -1,
+                                        "content-width", 440,
+                                        "content-height", 440,
                                         NULL);
 
     GtkWidget *toolbar_view = adw_toolbar_view_new ();

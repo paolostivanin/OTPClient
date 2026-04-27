@@ -226,8 +226,8 @@ import_dialog_new (DatabaseData   *db_data,
 {
     ImportDialog *self = g_object_new (IMPORT_TYPE_DIALOG,
                                        "title", _("Import Tokens"),
-                                       "content-width", 360,
-                                       "content-height", -1,
+                                       "content-width", 440,
+                                       "content-height", 360,
                                        NULL);
 
     self->db_data = db_data;

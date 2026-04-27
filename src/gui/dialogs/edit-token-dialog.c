@@ -98,8 +98,8 @@ edit_token_dialog_new (json_t            *token_obj,
 {
     EditTokenDialog *self = g_object_new (EDIT_TOKEN_TYPE_DIALOG,
                                           "title", _("Edit Token"),
-                                          "content-width", 360,
-                                          "content-height", -1,
+                                          "content-width", 440,
+                                          "content-height", 500,
                                           NULL);
 
     self->token_obj = token_obj;

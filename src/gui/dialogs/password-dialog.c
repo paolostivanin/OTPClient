@@ -143,8 +143,8 @@ password_dialog_new (PasswordDialogMode     mode,
 {
     PasswordDialog *self = g_object_new (PASSWORD_TYPE_DIALOG,
                                          "title", "",
-                                         "content-width", 360,
-                                         "content-height", -1,
+                                         "content-width", 440,
+                                         "content-height", 480,
                                          NULL);
 
     self->mode = mode;

@@ -248,8 +248,8 @@ manual_add_dialog_new (DatabaseData      *db_data,
 {
     ManualAddDialog *self = g_object_new (MANUAL_ADD_TYPE_DIALOG,
                                           "title", _("Add Token"),
-                                          "content-width", 400,
-                                          "content-height", -1,
+                                          "content-width", 480,
+                                          "content-height", 700,
                                           NULL);
 
     self->db_data = db_data;

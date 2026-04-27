@@ -167,8 +167,8 @@ export_dialog_new (DatabaseData *db_data,
 {
     ExportDialog *self = g_object_new (EXPORT_TYPE_DIALOG,
                                        "title", _("Export Tokens"),
-                                       "content-width", 360,
-                                       "content-height", -1,
+                                       "content-width", 440,
+                                       "content-height", 440,
                                        NULL);
 
     self->db_data = db_data;
