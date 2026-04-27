@@ -369,7 +369,13 @@ manual_add_dialog_new (DatabaseData      *db_data,
     g_signal_connect (self->add_button, "clicked", G_CALLBACK (on_add_clicked), self);
     gtk_box_append (GTK_BOX (box), self->add_button);
 
-    adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), clamp);
+    GtkWidget *scrolled = gtk_scrolled_window_new ();
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled),
+                                    GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (scrolled), TRUE);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), clamp);
+    gtk_widget_set_vexpand (scrolled, TRUE);
+    adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), scrolled);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
     return self;

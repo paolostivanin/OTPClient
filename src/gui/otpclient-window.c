@@ -3399,6 +3399,9 @@ on_new_db_password_received (const gchar *password,
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
+
+    if (db_data->in_memory_json_data != NULL)
+        otpclient_window_set_db_actions_enabled (self, TRUE);
 }
 
 static void
@@ -3510,6 +3513,9 @@ on_open_db_password_received (const gchar *password,
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
+
+    if (db_data->in_memory_json_data != NULL)
+        otpclient_window_set_db_actions_enabled (self, TRUE);
 }
 
 static void
