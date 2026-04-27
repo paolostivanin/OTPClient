@@ -207,6 +207,44 @@
                         </property>
                       </object>
                     </child>
+                    <child>
+                      <object class="GtkStackPage">
+                        <property name="name">no-db</property>
+                        <property name="child">
+                          <object class="AdwStatusPage" id="no_db_status_page">
+                            <property name="icon-name">com.github.paolostivanin.OTPClient-symbolic</property>
+                            <property name="title" translatable="yes">No database yet</property>
+                            <property name="description" translatable="yes">Create a new encrypted database, or open an existing one to get started.</property>
+                            <property name="vexpand">True</property>
+                            <property name="hexpand">True</property>
+                            <child>
+                              <object class="GtkBox">
+                                <property name="orientation">horizontal</property>
+                                <property name="halign">center</property>
+                                <property name="spacing">12</property>
+                                <child>
+                                  <object class="GtkButton" id="no_db_create_button">
+                                    <property name="label" translatable="yes">Create Database</property>
+                                    <style>
+                                      <class name="suggested-action"/>
+                                      <class name="pill"/>
+                                    </style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton" id="no_db_open_button">
+                                    <property name="label" translatable="yes">Open Database</property>
+                                    <style>
+                                      <class name="pill"/>
+                                    </style>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </property>
+                      </object>
+                    </child>
                   </object>
                 </property>
               </object>

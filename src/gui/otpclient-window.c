@@ -38,6 +38,8 @@ struct _OTPClientWindow
     GtkWidget *database_list;
     GtkWidget *new_db_button;
     GtkWidget *open_db_button;
+    GtkWidget *no_db_create_button;
+    GtkWidget *no_db_open_button;
     GtkWidget *otp_list;
     GtkWidget *content_stack;
     GtkWidget *loading_status_page;
@@ -1056,16 +1058,18 @@ update_empty_state (OTPClientWindow *self)
     if (self->content_stack == NULL || self->otp_store == NULL)
         return;
 
-    /* Show the "Unlocking…" page only while an existing DB is being decrypted
-     * (db_data exists but its in_memory_json_data isn't populated yet — at
-     * startup behind the password prompt, or right after a manual lock).
-     * On a fresh install db_data is NULL: fall through to the empty/list
-     * branch so the user lands on the "No tokens yet" CTA page rather than
-     * a phantom "Unlocking…" message. */
+    /* Three pre-list states: no DB at all (fresh install) → "no-db" CTA;
+     * an existing DB is being decrypted → "Unlocking…"; the loaded list is
+     * either populated or empty-but-unlocked, handled below. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
-    if (db_data != NULL && db_data->in_memory_json_data == NULL)
+    if (db_data == NULL)
+    {
+        gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "no-db");
+        return;
+    }
+    if (db_data->in_memory_json_data == NULL)
     {
         gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "loading");
         return;
@@ -3907,6 +3911,8 @@ otpclient_window_init (OTPClientWindow *self)
 g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
     g_signal_connect (self->new_db_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
     g_signal_connect (self->open_db_button, "clicked", G_CALLBACK (open_db_button_clicked), self);
+    g_signal_connect (self->no_db_create_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
+    g_signal_connect (self->no_db_open_button,   "clicked", G_CALLBACK (open_db_button_clicked), self);
 
     setup_dnd (self);
 
@@ -3953,6 +3959,8 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, database_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, new_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_create_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_open_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, loading_status_page);
