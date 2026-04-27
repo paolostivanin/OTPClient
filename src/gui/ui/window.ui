@@ -163,14 +163,6 @@
                             <property name="description" translatable="yes">Deriving the encryption key.</property>
                             <property name="vexpand">True</property>
                             <property name="hexpand">True</property>
-                            <child>
-                              <object class="AdwSpinner">
-                                <property name="halign">center</property>
-                                <property name="valign">center</property>
-                                <property name="width-request">48</property>
-                                <property name="height-request">48</property>
-                              </object>
-                            </child>
                           </object>
                         </property>
                       </object>

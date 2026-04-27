@@ -40,6 +40,7 @@ struct _OTPClientWindow
     GtkWidget *open_db_button;
     GtkWidget *otp_list;
     GtkWidget *content_stack;
+    GtkWidget *loading_status_page;
     GListStore *otp_store;
     GtkFilterListModel *filter_model;
     GtkCustomFilter *search_filter;
@@ -3835,6 +3836,18 @@ otpclient_window_init (OTPClientWindow *self)
 
     gtk_widget_init_template (GTK_WIDGET(self));
 
+    GtkWidget *spinner;
+#if ADW_CHECK_VERSION(1, 6, 0)
+    spinner = adw_spinner_new ();
+#else
+    spinner = gtk_spinner_new ();
+    gtk_spinner_start (GTK_SPINNER (spinner));
+#endif
+    gtk_widget_set_halign (spinner, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign (spinner, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request (spinner, 48, 48);
+    adw_status_page_set_child (ADW_STATUS_PAGE (self->loading_status_page), spinner);
+
     schema_source = g_settings_schema_source_get_default ();
     if (schema_source != NULL)
         schema = g_settings_schema_source_lookup (schema_source, "com.github.paolostivanin.OTPClient", TRUE);
@@ -3940,6 +3953,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, loading_status_page);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
 
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);
