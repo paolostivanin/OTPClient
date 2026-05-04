@@ -81,6 +81,12 @@ do_import (ImportDialog *self)
     }
 
     goffset file_size = get_file_size (self->selected_file);
+    if (file_size <= 0) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Selected file is empty or no longer exists."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
 
     GError *err = NULL;
     GSList *otps = get_data_from_provider (import_formats[fmt_idx].action_name,

@@ -374,8 +374,15 @@ load_keyword_config (void)
 /* Returns TRUE and writes the post-keyword tail into *out_terms (caller frees
  * with g_strfreev) when the first non-empty term equals the configured
  * keyword AND there is at least one further non-empty term. Returns FALSE and
- * leaves *out_terms NULL otherwise. If the keyword is empty/disabled, behaves
- * transparently: returns TRUE with the original terms duplicated. */
+ * leaves *out_terms NULL otherwise.
+ *
+ * Threat model: we share the session bus with browser extensions, Electron
+ * apps, and arbitrary user-installed software. Without a keyword filter, any
+ * such process can poll for OTP entries and (via Run/ActivateResult) trigger
+ * a notification carrying the live code. Treat an empty/unset keyword as
+ * "search provider disabled" rather than "no filter": users opting in to the
+ * provider have to set a keyword explicitly. The notification surfacing the
+ * code is still user-visible; the keyword is the gate, not a complete defense. */
 static gboolean
 strip_keyword_or_skip (gchar  **terms,
                        gchar ***out_terms)
@@ -383,9 +390,11 @@ strip_keyword_or_skip (gchar  **terms,
     *out_terms = NULL;
     if (terms == NULL) return FALSE;
 
+    /* H3: refuse all queries when keyword is empty. Previously this branch
+     * fell through to substring matching, exposing every account to any local
+     * D-Bus client by default. */
     if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
-        *out_terms = g_strdupv (terms);
-        return TRUE;
+        return FALSE;
     }
 
     gsize i = 0;
@@ -563,6 +572,13 @@ handle_gnome_call (GDBusConnection       *conn,
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(aa{sv})", &builder));
         g_strfreev (ids);
     } else if (g_strcmp0 (method, "ActivateResult") == 0) {
+        // Refuse activation entirely when the keyword gate is disabled, so a
+        // caller who guesses an id can't trigger OTP delivery without ever
+        // having satisfied the keyword filter.
+        if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
+            g_dbus_method_invocation_return_value (inv, NULL);
+            return;
+        }
         const gchar *id;
         g_variant_get (params, "(&s^as u)", &id, NULL, NULL);
         g_autofree gchar *otp = NULL;
@@ -634,6 +650,12 @@ handle_krunner_call (GDBusConnection       *conn,
         GVariant *res = g_variant_builder_end (&builder);
         g_dbus_method_invocation_return_value (inv, g_variant_new_tuple (&res, 1));
     } else if (g_strcmp0 (method, "Run") == 0) {
+        // Same gate as the GNOME ActivateResult path: no keyword set means
+        // the provider refuses to deliver codes, even via id lookup.
+        if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
+            g_dbus_method_invocation_return_value (inv, NULL);
+            return;
+        }
         const gchar *id;
         g_variant_get (params, "(&s&s)", &id, NULL);
         g_autofree gchar *otp = NULL;

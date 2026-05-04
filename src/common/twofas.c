@@ -1,3 +1,6 @@
+#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
+#include <string.h>
 #include <glib.h>
 #include <gio/gio.h>
 #include <jansson.h>
@@ -84,6 +87,22 @@ export_twofas (const gchar *export_path,
                json_t      *json_db_data)
 {
     GError *err = NULL;
+    json_t *root = NULL;
+    json_t *enc_root = NULL;
+    json_t *services_array = NULL;
+    json_t *groups_array = NULL;
+    GFile *out_gfile = NULL;
+    GFileOutputStream *out_stream = NULL;
+    gchar *json_data = NULL;
+    gchar *json_enc_data = NULL;
+    gchar *encoded_data = NULL;
+    gchar *encoded_ref_data = NULL;
+    guchar *salt = NULL, *iv = NULL;
+    guchar *derived_key = NULL;
+    guchar *enc_buf = NULL;
+    guchar *enc_data_with_tag = NULL;
+    gcry_cipher_hd_t hd = NULL;
+
     gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
     if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
@@ -92,18 +111,22 @@ export_twofas (const gchar *export_path,
             "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
+        g_clear_error (&err);
         g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
-        return NULL;
+        return g_strdup (err->message);
     }
 
     gint64 epoch_time = g_get_real_time();
 
-    json_t *root = json_object ();
-    json_t *services_array = json_array ();
+    root = json_object ();
+    services_array = json_array ();
     json_object_set (root, "services", services_array);
+    /* services_array deliberately kept with refcount=2 (1 local + 1 root):
+     * we json_dump it standalone for the encrypted branch below, then decref
+     * our local handle in the cleanup. */
 
     /* Build groups array and group name → UUID map */
-    json_t *groups_array = json_array ();
+    groups_array = json_array ();
     GHashTable *group_id_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     {
         gsize idx;
@@ -115,172 +138,191 @@ export_twofas (const gchar *export_path,
                 g_autofree gchar *grp_id = g_strdup_printf ("grp-%u", grp_counter++);
                 g_hash_table_insert (group_id_map, g_strdup (group), g_strdup (grp_id));
                 json_t *grp_obj = json_object ();
-                json_object_set (grp_obj, "id", json_string (grp_id));
-                json_object_set (grp_obj, "name", json_string (group));
+                json_object_set_new (grp_obj, "id", json_string (grp_id));
+                json_object_set_new (grp_obj, "name", json_string (group));
                 json_array_append_new (groups_array, grp_obj);
             }
         }
     }
+    /* Same as services_array: refcount=2 so we can reuse it under enc_root
+     * in the encrypted branch without it being prematurely freed. */
     json_object_set (root, "groups", groups_array);
-    json_object_set (root, "updatedAt", json_integer (epoch_time));
-    json_object_set (root, "schemaVersion", json_integer (4));
+    json_object_set_new (root, "updatedAt", json_integer (epoch_time));
+    json_object_set_new (root, "schemaVersion", json_integer (4));
 
-    json_t *db_obj, *export_obj, *otp_obj, *order_obj;
+    json_t *db_obj;
     gsize index;
     json_array_foreach (json_db_data, index, db_obj) {
-        export_obj = json_object ();
-        otp_obj = json_object ();
-        order_obj = json_object ();
+        json_t *export_obj = json_object ();
+        json_t *otp_obj = json_object ();
+        json_t *order_obj = json_object ();
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer != NULL) {
             if (g_ascii_strcasecmp (issuer, "steam") == 0) {
-                json_object_set (export_obj, "name", json_string ("Steam"));
-                json_object_set (otp_obj, "issuer", json_string ("Steam"));
-                json_object_set (otp_obj, "tokenType", json_string ("STEAM"));
+                json_object_set_new (export_obj, "name", json_string ("Steam"));
+                json_object_set_new (otp_obj, "issuer", json_string ("Steam"));
+                json_object_set_new (otp_obj, "tokenType", json_string ("STEAM"));
             } else {
-                json_object_set(export_obj, "name", json_string (issuer));
-                json_object_set (otp_obj, "issuer", json_string (issuer));
+                json_object_set_new (export_obj, "name", json_string (issuer));
+                json_object_set_new (otp_obj, "issuer", json_string (issuer));
             }
         }
-        json_object_set (export_obj, "updatedAt", json_integer (epoch_time));
+        json_object_set_new (export_obj, "updatedAt", json_integer (epoch_time));
         json_object_set (export_obj, "secret", json_object_get (db_obj, "secret"));
         const gchar *label = json_string_value (json_object_get (db_obj, "label"));
         if (label != NULL) {
-            json_object_set (otp_obj, "label", json_string (label));
-            json_object_set (otp_obj, "account", json_string (label));
+            json_object_set_new (otp_obj, "label", json_string (label));
+            json_object_set_new (otp_obj, "account", json_string (label));
         }
 
         const gchar *algo_raw = json_string_value (json_object_get (db_obj, "algo"));
         if (algo_raw == NULL) algo_raw = "SHA1";
         gchar *algo = g_ascii_strup (algo_raw, -1);
-        json_object_set (otp_obj, "algorithm", json_string (algo));
+        json_object_set_new (otp_obj, "algorithm", json_string (algo));
         g_free (algo);
 
         json_object_set (otp_obj, "digits", json_object_get (db_obj, "digits"));
-        json_object_set (otp_obj, "source", json_string ("Manual"));
+        json_object_set_new (otp_obj, "source", json_string ("Manual"));
 
         const gchar *type_raw = json_string_value (json_object_get (db_obj, "type"));
         if (type_raw == NULL) type_raw = "TOTP";
         if (g_ascii_strcasecmp (type_raw, "TOTP") == 0) {
             json_object_set (otp_obj, "period", json_object_get (db_obj, "period"));
-            json_object_set (otp_obj, "tokenType", json_string ("TOTP"));
+            json_object_set_new (otp_obj, "tokenType", json_string ("TOTP"));
         } else {
             json_object_set (otp_obj, "counter", json_object_get (db_obj, "counter"));
-            json_object_set (otp_obj, "tokenType", json_string ("HOTP"));
+            json_object_set_new (otp_obj, "tokenType", json_string ("HOTP"));
         }
 
-        json_object_set (order_obj, "position", json_integer ((json_int_t)index));
-        json_object_set (export_obj, "otp", otp_obj);
-        json_object_set (export_obj, "order", order_obj);
+        json_object_set_new (order_obj, "position", json_integer ((json_int_t)index));
+        json_object_set_new (export_obj, "otp", otp_obj);
+        json_object_set_new (export_obj, "order", order_obj);
 
         const gchar *group = json_string_value (json_object_get (db_obj, "group"));
         if (group != NULL && group[0] != '\0') {
             const gchar *grp_id = g_hash_table_lookup (group_id_map, group);
             if (grp_id != NULL)
-                json_object_set (export_obj, "groupId", json_string (grp_id));
+                json_object_set_new (export_obj, "groupId", json_string (grp_id));
         }
 
-        json_array_append (services_array, export_obj);
+        json_array_append_new (services_array, export_obj);
     }
     g_hash_table_destroy (group_id_map);
 
-    gchar *json_data = json_dumps ((password == NULL) ? root : services_array, JSON_COMPACT);
+    json_data = json_dumps ((password == NULL) ? root : services_array, JSON_COMPACT);
     if (json_data == NULL) {
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't dump json data");
         goto end;
     }
     gsize json_data_size = strlen (json_data);
 
-    GFile *out_gfile = g_file_new_for_path (export_path);
-    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+    out_gfile = g_file_new_for_path (export_path);
+    out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+    if (out_stream == NULL) {
+        // C1: g_file_replace already populated err; previously the code blindly
+        // proceeded into the password branch and crashed on disk-full / R-O.
+        goto end;
+    }
+
     if (password != NULL) {
-        guchar *salt = g_malloc0 (TWOFAS_SALT);
+        salt = g_malloc0 (TWOFAS_SALT);
         gcry_create_nonce (salt, TWOFAS_SALT);
-        guchar *iv = g_malloc0 (TWOFAS_IV);
+        iv = g_malloc0 (TWOFAS_IV);
         gcry_create_nonce (iv, TWOFAS_IV);
-        guchar *derived_key = gcry_malloc_secure (32);
+        derived_key = gcry_malloc_secure (32);
+        if (derived_key == NULL) {
+            g_set_error (&err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                         "Couldn't allocate secure memory for the derived key.");
+            goto end;
+        }
         // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
         gpg_error_t g_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                              salt, TWOFAS_SALT, TWOFAS_KDF_ITERS, 32, derived_key);
         if (g_err != GPG_ERR_NO_ERROR) {
-            g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
-            g_set_error (&err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the key.");
-            gcry_free (derived_key);
-            g_free (salt);
-            g_free (iv);
+            g_set_error (&err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE,
+                         "Error while deriving the key: %s/%s",
+                         gcry_strsource (g_err), gcry_strerror (g_err));
             goto end;
         }
-        gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, TWOFAS_IV);
+        hd = open_cipher_and_set_data (derived_key, iv, TWOFAS_IV);
         if (hd == NULL) {
-            gcry_free (derived_key);
-            g_free (salt);
-            g_free (iv);
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening the cipher.");
             goto end;
         }
-        guchar *enc_buf = g_malloc0 (json_data_size);
+        enc_buf = g_malloc0 (json_data_size);
         gpg_error_t gpg_err = gcry_cipher_encrypt (hd, enc_buf, json_data_size, json_data, json_data_size);
         if (gpg_err != GPG_ERR_NO_ERROR) {
-            g_printerr ("Failed to encrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to encrypt data.");
-            gcry_free (derived_key);
-            g_free (enc_buf);
-            g_free (iv);
-            g_free (salt);
-            gcry_cipher_close (hd);
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to encrypt data: %s/%s",
+                         gcry_strsource (gpg_err), gcry_strerror (gpg_err));
             goto end;
         }
         guchar tag[TWOFAS_TAG];
         gcry_cipher_gettag (hd, tag, TWOFAS_TAG);
         gcry_cipher_close (hd);
+        hd = NULL;
 
-        guchar *enc_data_with_tag = g_malloc0 (json_data_size + TWOFAS_TAG);
+        enc_data_with_tag = g_malloc0 (json_data_size + TWOFAS_TAG);
         memcpy (enc_data_with_tag, enc_buf, json_data_size);
-        memcpy (enc_data_with_tag+json_data_size, tag, TWOFAS_TAG);
-        g_free (enc_buf);
+        memcpy (enc_data_with_tag + json_data_size, tag, TWOFAS_TAG);
+        explicit_bzero (tag, TWOFAS_TAG);
+        gcry_free (enc_buf);
+        enc_buf = NULL;
 
-        json_t *enc_root = json_object ();
-        json_object_set (enc_root, "services", json_array ());
-        json_object_set (enc_root, "groups", json_incref (groups_array));
-        json_object_set (enc_root, "schemaVersion", json_integer (4));
-        gchar *encoded_data = get_encoded_data (enc_data_with_tag, json_data_size + TWOFAS_TAG, salt, iv);
-        json_object_set (enc_root, "servicesEncrypted", json_string (encoded_data));
-        gchar *encoded_ref_data = get_reference_data (derived_key, salt);
+        enc_root = json_object ();
+        json_object_set_new (enc_root, "services", json_array ());
+        // groups_array is already owned by `root` (refcount=2 from earlier).
+        // Adding it under enc_root needs an explicit incref so refcount=3 keeps
+        // both parents whole; cleanup decrefs both parents then our local handle.
+        json_object_set (enc_root, "groups", groups_array);
+        json_object_set_new (enc_root, "schemaVersion", json_integer (4));
+        encoded_data = get_encoded_data (enc_data_with_tag, json_data_size + TWOFAS_TAG, salt, iv);
+        json_object_set_new (enc_root, "servicesEncrypted", json_string (encoded_data));
+        encoded_ref_data = get_reference_data (derived_key, salt);
         if (encoded_ref_data == NULL) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't encrypt the reference data.");
-            goto enc_end;
+            goto end;
         }
-        json_object_set (enc_root, "reference", json_string (encoded_ref_data));
-        gchar *json_enc_data = json_dumps (enc_root, JSON_COMPACT);
+        json_object_set_new (enc_root, "reference", json_string (encoded_ref_data));
+        encoded_ref_data = NULL;  // ownership transferred via json_string
+
+        json_enc_data = json_dumps (enc_root, JSON_COMPACT);
         if (json_enc_data == NULL) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't dump json data");
-            goto enc_end;
+            goto end;
         }
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_enc_data, strlen (json_enc_data), NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write the json data to file");
+            // err is set by g_output_stream_write.
+            goto end;
         }
-        gcry_free (json_enc_data);
-
-        enc_end:
-        g_free (enc_data_with_tag);
-        gcry_free (derived_key);
-        g_free (iv);
-        g_free (salt);
-        g_free (encoded_data);
-        json_decref (enc_root);
     } else {
         // write the plain json to disk
         if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't write the json data to file");
+            // err is set by g_output_stream_write.
+            goto end;
         }
     }
-    g_object_unref (out_stream);
-    g_object_unref (out_gfile);
 
-    end:
-    gcry_free (json_data);
-    json_decref (services_array);
-    json_decref (root);
+end:
+    if (hd != NULL) gcry_cipher_close (hd);
+    if (derived_key != NULL) {
+        explicit_bzero (derived_key, 32);
+        gcry_free (derived_key);
+    }
+    if (enc_buf != NULL) gcry_free (enc_buf);
+    g_free (enc_data_with_tag);
+    g_free (encoded_data);
+    g_free (encoded_ref_data);
+    g_free (iv);
+    g_free (salt);
+    if (json_enc_data != NULL) gcry_free (json_enc_data);
+    if (json_data != NULL) gcry_free (json_data);
+    if (enc_root != NULL) json_decref (enc_root);
+    if (services_array != NULL) json_decref (services_array);
+    if (groups_array != NULL) json_decref (groups_array);
+    if (root != NULL) json_decref (root);
+    if (out_stream != NULL) g_object_unref (out_stream);
+    if (out_gfile != NULL) g_object_unref (out_gfile);
 
     return (err != NULL ? g_strdup (err->message) : NULL);
 }
@@ -439,11 +481,17 @@ decrypt_data (const gchar **b64_data,
     g_free (enc_data_with_tag);
 
     guchar *derived_key = gcry_malloc_secure (32);
+    if (derived_key == NULL) {
+        g_printerr ("Couldn't allocate secure memory for the derived key.\n");
+        g_free (enc_data);
+        return;
+    }
     // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
     gpg_error_t g_err = gcry_kdf_derive (pwd, strlen (pwd), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                          twofas_data->salt, salt_out_len, TWOFAS_KDF_ITERS, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
         g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
         return;
@@ -451,17 +499,27 @@ decrypt_data (const gchar **b64_data,
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, twofas_data->iv, iv_out_len);
     if (hd == NULL) {
+        explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
         return;
     }
 
     twofas_data->json_data = gcry_calloc_secure (enc_buf_size, 1);
+    if (twofas_data->json_data == NULL) {
+        g_printerr ("Couldn't allocate secure memory for the decrypted database.\n");
+        explicit_bzero (derived_key, 32);
+        gcry_free (derived_key);
+        g_free (enc_data);
+        gcry_cipher_close (hd);
+        return;
+    }
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
         g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
         gcry_free (twofas_data->json_data);
         twofas_data->json_data = NULL;
+        explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
         gcry_cipher_close (hd);
@@ -476,6 +534,7 @@ decrypt_data (const gchar **b64_data,
     }
 
     gcry_cipher_close (hd);
+    explicit_bzero (derived_key, 32);
     gcry_free (derived_key);
     g_free (enc_data);
 }

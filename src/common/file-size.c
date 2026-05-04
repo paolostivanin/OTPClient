@@ -1,11 +1,14 @@
 #include <gio/gio.h>
 
-// Returns -1 on error, 0 if file doesn't exist, or the file size on success.
+/* Returns -1 on every error (NULL path, missing file, query failure). On
+ * success returns the actual file size, which may legitimately be 0 for an
+ * empty file — callers can distinguish "missing" from "empty" by checking
+ * for -1 instead of 0. */
 goffset
 get_file_size (const gchar *file_path)
 {
     if (file_path == NULL || !g_file_test (file_path, G_FILE_TEST_EXISTS)) {
-        return 0;
+        return -1;
     }
 
     GError *error = NULL;

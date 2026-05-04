@@ -64,7 +64,7 @@
     <key name="search-provider-keyword" type="s">
       <default>"otp"</default>
       <summary>Search provider trigger keyword</summary>
-      <description>The first token of a desktop search query must equal this keyword for OTPClient to return any results (e.g. "otp github"). An empty string disables the keyword filter and falls back to plain substring matching against every query. Changes take effect after the search provider is restarted (typically by logging out and back in).</description>
+      <description>The first token of a desktop search query must equal this keyword for OTPClient to return any results (e.g. "otp github"). An empty string disables the search provider entirely: every query is refused. This is a security gate — without it, any process on the session bus could enumerate accounts and trigger OTP delivery via notification. Changes take effect after the search provider is restarted (typically by logging out and back in).</description>
     </key>
     <key name="show-validity-seconds" type="b">
       <default>false</default>

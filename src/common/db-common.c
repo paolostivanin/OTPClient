@@ -83,8 +83,15 @@ load_db (DatabaseData    *db_data,
 
     db_data->current_db_version = get_db_version (db_data->db_path);
 
+    /* Bail-on-error pattern: decrypt_db / update_db return NULL or set *err on
+     * failure. Previously we used g_return_if_fail (err == NULL || *err == NULL)
+     * here, but that logs a CRITICAL every time the condition is false — i.e.
+     * on every legitimate failure (wrong password, truncated file, etc.) — and
+     * that noise made real bugs harder to spot in the journal. A plain early
+     * return preserves the original control flow without the misuse. */
     gchar *in_memory_json = decrypt_db (db_data, err);
-    g_return_if_fail (err == NULL || *err == NULL);
+    if (in_memory_json == NULL)
+        return;
 
     json_error_t jerr;
     db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
@@ -97,7 +104,8 @@ load_db (DatabaseData    *db_data,
 
     if (db_data->current_db_version < 2) {
         update_db (db_data, err);
-        g_return_if_fail (err == NULL || *err == NULL);
+        if (err != NULL && *err != NULL)
+            return;
 
         if (db_data->in_memory_json_data != NULL) {
             json_decref (db_data->in_memory_json_data);
@@ -106,7 +114,8 @@ load_db (DatabaseData    *db_data,
         db_data->objects_hash = NULL;
 
         in_memory_json = decrypt_db (db_data, err);
-        g_return_if_fail (err == NULL || *err == NULL);
+        if (in_memory_json == NULL)
+            return;
 
         db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
         gcry_free (in_memory_json);
@@ -191,6 +200,30 @@ reload_db (DatabaseData  *db_data,
 }
 
 
+/* True when `obj` is byte-equal (per Jansson's json_equal) to any token already
+ * present either on disk or staged for the next save. Used to break ties when
+ * two distinct OTP tokens share a 32-bit jenkins hash — without this fallback
+ * the second token would be silently skipped as a "duplicate". */
+static gboolean
+otp_object_already_present (DatabaseData *db_data,
+                            json_t       *obj)
+{
+    if (db_data->in_memory_json_data != NULL) {
+        gsize idx;
+        json_t *existing;
+        json_array_foreach (db_data->in_memory_json_data, idx, existing) {
+            if (json_equal (existing, obj))
+                return TRUE;
+        }
+    }
+    for (GSList *l = db_data->data_to_add; l != NULL; l = l->next) {
+        if (json_equal ((json_t *) l->data, obj))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+
 void
 add_otps_to_db_ex (GSList       *otps,
                    DatabaseData *db_data,
@@ -204,11 +237,20 @@ add_otps_to_db_ex (GSList       *otps,
         otp_t *otp = g_slist_nth_data (otps, i);
         obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
         guint32 hash = json_object_get_hash (obj);
-        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) == NULL) {
+        gboolean is_duplicate = FALSE;
+        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
+            // Hash hit: confirm with a real content comparison before skipping.
+            // jenkins is 32-bit and the hashed string is bounded; collisions
+            // between distinct tokens are realistic and silent skipping causes
+            // user-visible data loss on import.
+            is_duplicate = otp_object_already_present (db_data, obj);
+        }
+        if (!is_duplicate) {
             db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
             db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
             added++;
         } else {
+            json_decref (obj);
             skipped++;
         }
     }
@@ -380,6 +422,7 @@ try_decrypt_v2 (DatabaseData    *db_data,
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
     if (!hd) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return NULL;
     }
@@ -387,6 +430,7 @@ try_decrypt_v2 (DatabaseData    *db_data,
     if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
         gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return NULL;
     }
@@ -395,6 +439,7 @@ try_decrypt_v2 (DatabaseData    *db_data,
     if (!dec_buf) {
         g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
         gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return NULL;
     }
@@ -402,20 +447,33 @@ try_decrypt_v2 (DatabaseData    *db_data,
     if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the data.");
         gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         gcry_free (dec_buf);
         return NULL;
     }
 
-    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+    // Catch every tag-verification failure, not just CHECKSUM. A non-CHECKSUM
+    // error (INV_LENGTH, NO_KEY, ...) would otherwise let unverified plaintext
+    // be returned as if the tag had matched.
+    gpg_error_t tag_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    if (tag_err != GPG_ERR_NO_ERROR) {
+        if (gcry_err_code (tag_err) == GPG_ERR_CHECKSUM) {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+        } else {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                         "Tag verification failed: %s/%s",
+                         gcry_strsource (tag_err), gcry_strerror (tag_err));
+        }
         gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         gcry_free (dec_buf);
         return NULL;
     }
 
     gcry_cipher_close (hd);
+    explicit_bzero (derived_key, ARGON2ID_KEYLEN);
     gcry_free (derived_key);
     return dec_buf;
 }
@@ -474,6 +532,19 @@ decrypt_db (DatabaseData *db_data,
     }
 
     goffset input_file_size = get_file_size (db_data->db_path);
+    // Validate sizes in signed math BEFORE casting/subtracting into gsize. A
+    // truncated or tampered DB with input_file_size < header_data_size+TAG_SIZE
+    // would otherwise produce a huge unsigned enc_buf_size and either OOM or
+    // crash inside g_malloc0. Reject the file cleanly instead.
+    goffset min_db_size = header_data_size + TAG_SIZE;
+    if (input_file_size < min_db_size) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database file is too small (got %" G_GOFFSET_FORMAT " bytes, need at least %" G_GOFFSET_FORMAT "). The file may be truncated or corrupted.",
+                     input_file_size, min_db_size);
+        cleanup_db_gfile (in_file, in_stream, NULL);
+        free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+        return NULL;
+    }
     guchar tag[TAG_SIZE];
     if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, NULL) ||
         g_input_stream_read (G_INPUT_STREAM(in_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
@@ -483,7 +554,7 @@ decrypt_db (DatabaseData *db_data,
             return NULL;
     }
 
-    gsize enc_buf_size = input_file_size - header_data_size - TAG_SIZE;
+    gsize enc_buf_size = (gsize) (input_file_size - header_data_size - TAG_SIZE);
     guchar *enc_buf = g_malloc0 (enc_buf_size);
     if (!g_seekable_seek (G_SEEKABLE(in_stream), header_data_size, G_SEEK_SET, NULL, NULL) ||
         g_input_stream_read (G_INPUT_STREAM(in_stream), enc_buf, enc_buf_size, NULL, NULL) == -1) {
@@ -556,8 +627,15 @@ decrypt_db (DatabaseData *db_data,
         return NULL;
     }
 
-    if (gcry_err_code (gcry_cipher_checktag (hd, tag, TAG_SIZE)) == GPG_ERR_CHECKSUM) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+    gpg_error_t v1_tag_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    if (v1_tag_err != GPG_ERR_NO_ERROR) {
+        if (gcry_err_code (v1_tag_err) == GPG_ERR_CHECKSUM) {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
+        } else {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                         "Tag verification failed: %s/%s",
+                         gcry_strsource (v1_tag_err), gcry_strerror (v1_tag_err));
+        }
         free_db_resources (hd, derived_key, enc_buf, dec_buf, header_data_v1, header_data_v2);
         return NULL;
     }
@@ -622,6 +700,7 @@ encrypt_db (DatabaseData *db_data,
     if (in_memory_dumped_data == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
         cleanup_db_gfile (out_file, out_stream, NULL);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         g_free (header_data);
         return;
@@ -629,10 +708,14 @@ encrypt_db (DatabaseData *db_data,
     gsize input_data_len = strlen (in_memory_dumped_data) + 1;
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
+    // C3 fix: in_memory_dumped_data holds the plaintext database (every secret).
+    // Every error path below MUST free it; previously only the success path did,
+    // leaving plaintext in secure memory until process exit on encrypt failures.
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
     if (hd == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to open the cipher and set the data.");
         cleanup_db_gfile (out_file, out_stream, NULL);
+        gcry_free (in_memory_dumped_data);
         free_db_resources (NULL, derived_key, enc_buffer, NULL, NULL, header_data);
         return;
     }
@@ -640,6 +723,7 @@ encrypt_db (DatabaseData *db_data,
     if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data");
         cleanup_db_gfile (out_file, out_stream, NULL);
+        gcry_free (in_memory_dumped_data);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
         return;
     }
@@ -647,6 +731,7 @@ encrypt_db (DatabaseData *db_data,
     if (gcry_cipher_encrypt (hd, enc_buffer, input_data_len, in_memory_dumped_data, input_data_len) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the data.");
         cleanup_db_gfile (out_file, out_stream, NULL);
+        gcry_free (in_memory_dumped_data);
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
         return;
     }
@@ -672,6 +757,11 @@ encrypt_db (DatabaseData *db_data,
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
         return;
     }
+
+    // Wipe the just-written tag from the stack: not strictly secret in AES-GCM,
+    // but defense-in-depth — an inspection of the freed stack page won't recover
+    // the value-commitment.
+    explicit_bzero (tag, TAG_SIZE);
 
     free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
 
@@ -699,7 +789,10 @@ static void
 add_to_json (gpointer list_elem,
              gpointer json_array)
 {
-    json_array_append (json_array, json_deep_copy (list_elem));
+    // append_new (not append) for the freshly-created deep copy: append would
+    // bump the deep-copy's refcount to 2 with no local handle to decref, so
+    // the copy would persist indefinitely after the parent array is freed.
+    json_array_append_new (json_array, json_deep_copy (list_elem));
 }
 
 
@@ -815,8 +908,13 @@ free_db_resources (gcry_cipher_hd_t  hd,
 
     if (hd != NULL)
         gcry_cipher_close (hd);
-    if (derived_key != NULL)
+    // explicit_bzero before gcry_free as belt-and-braces: gcry_free is
+    // documented to wipe, but failing closed against any future regression
+    // in libgcrypt is cheap insurance for the master key.
+    if (derived_key != NULL) {
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
+    }
     if (dec_buf != NULL)
         gcry_free (dec_buf);
 }

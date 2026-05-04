@@ -311,16 +311,25 @@ emit_token (json_t       *obj,
             json_object_set_new (row, "counter", json_integer (counter + 1));
         }
         free (hotp);
-        // counter must be updated every time it is accessed
-        json_object_set (obj, "counter", json_integer (counter + 1));
+        // M5: increment the counter, attempt the save, then roll back the
+        // in-memory state if the save failed. Without the rollback, a failed
+        // update_db left the counter advanced in memory but not on disk —
+        // the next CLI invocation would increment again from the wrong base
+        // and produce a code the server has no chance of accepting.
+        json_int_t prev_counter = counter;
+        // set_new for fresh literal: avoids leaking the json_integer.
+        json_object_set_new (obj, "counter", json_integer (counter + 1));
         GError *err = NULL;
         update_db (db_data, &err);
         if (err != NULL) {
             g_printerr ("[ERROR] %s\n", err->message);
+            json_object_set_new (obj, "counter", json_integer (prev_counter));
+            g_clear_error (&err);
         } else {
             reload_db (db_data, &err);
             if (err != NULL) {
                 g_printerr ("[ERROR] %s\n", err->message);
+                g_clear_error (&err);
             }
         }
     }

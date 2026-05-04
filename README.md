@@ -22,7 +22,9 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - QR code display for any token (re-pairing or sharing across devices)
 - Idle and screensaver auto-lock with configurable timeout
 - Configurable clipboard wipe; clipboard is also cleared on lock and app exit
-- HOTP "next" button is debounced to prevent accidental double-increments
+- HOTP counter writes are coalesced: clicking an HOTP row advances the counter
+  in memory immediately, but the encrypted re-save is deferred up to 5 seconds
+  so a burst of clicks costs one disk write instead of N
 - Optional minimize-to-tray (build-time opt-in)
 
 ### Command-line interface (`otpclient-cli`)
@@ -38,7 +40,10 @@ A separate D-Bus daemon that integrates with **GNOME Shell Activities Search**
 and **KDE Plasma 6 KRunner**. Type the configurable trigger keyword (default
 `otp`) followed by a query — selecting a result computes the OTP and delivers
 it via system notification. The OTP value never appears in the search-result
-preview, so other processes on the session bus cannot poll for it.
+preview, so other processes on the session bus cannot poll for it. Setting the
+keyword to an empty string disables the provider entirely: every query is
+refused, since the keyword is the only gate against arbitrary local D-Bus
+clients enumerating accounts.
 
 ### Import & export
 Migration to and from other authenticator apps:

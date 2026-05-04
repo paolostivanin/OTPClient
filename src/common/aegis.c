@@ -1,3 +1,6 @@
+#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
+#include <string.h>
 #include <glib.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
@@ -162,7 +165,10 @@ get_otps_from_encrypted_backup (const gchar          *path,
     gint slot_index = 0;
     for (; slot_index < (gint)json_array_size (arr); slot_index++) {
         json_t *j_type = json_object_get (json_array_get (arr, slot_index), "type");
-        if (json_integer_value (j_type) == 1) break;
+        // Be explicit: json_integer_value(NULL) returns 0 which silently fails
+        // to match here, but rely on the type check rather than the magic 0
+        // sentinel so future Aegis schema changes don't regress.
+        if (j_type != NULL && json_is_integer (j_type) && json_integer_value (j_type) == 1) break;
     }
     if (slot_index >= (gint)json_array_size (arr)) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "No password slot found in the Aegis backup.");
@@ -190,6 +196,11 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     keybuf = gcry_malloc (AEGIS_KEY_SIZE);
+    if (keybuf == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Couldn't allocate secure memory for the Aegis KDF output.");
+        goto cleanup;
+    }
     // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
     if (gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, n, salt, AEGIS_SALT_SIZE, p, AEGIS_KEY_SIZE, keybuf) != 0) {
         g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE, "Error while deriving the Aegis decryption key.");
@@ -203,6 +214,11 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
+    if (master_key == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Couldn't allocate secure memory for the Aegis master key.");
+        goto cleanup;
+    }
     if (gcry_cipher_decrypt (hd, master_key, AEGIS_KEY_SIZE, enc_key, AEGIS_KEY_SIZE) != 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the Aegis master key.");
         goto cleanup;
@@ -250,6 +266,12 @@ get_otps_from_encrypted_backup (const gchar          *path,
     using_g_alloc = FALSE;
 
     decrypted_db = gcry_calloc_secure (out_len, 1);
+    if (decrypted_db == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Couldn't allocate %" G_GSIZE_FORMAT " bytes of secure memory for the Aegis database.",
+                     out_len);
+        goto cleanup;
+    }
     if (gcry_cipher_decrypt (hd, decrypted_db, out_len, b64decoded_db, out_len) != 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the Aegis database.");
         goto cleanup;
@@ -296,6 +318,21 @@ export_aegis (const gchar   *export_path,
               json_t        *json_db_data)
 {
     GError *err = NULL;
+    json_t *root = NULL;
+    json_t *aegis_header_obj = NULL;
+    json_t *aegis_db_obj = NULL;
+    json_t *array = NULL;
+    GFile *out_gfile = NULL;
+    GFileOutputStream *out_stream = NULL;
+    guchar *salt = NULL, *key_nonce = NULL, *key_tag = NULL;
+    guchar *db_nonce = NULL, *db_tag = NULL;
+    guchar *derived_master_key = NULL, *enc_master_key = NULL;
+    guchar *enc_db = NULL;
+    gchar *dumped_db = NULL;
+    gchar *b64enc_db = NULL;
+    gchar *jbuf = NULL;
+    gcry_cipher_hd_t hd = NULL;
+
     gsize db_size = json_dumpb (json_db_data, NULL, 0, 0);
     if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, &err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
@@ -304,30 +341,31 @@ export_aegis (const gchar   *export_path,
             "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
+        g_clear_error (&err);
         g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
-        return NULL;
+        return g_strdup (err->message);
     }
 
-    json_t *root = json_object ();
-    json_object_set (root, "version", json_integer (1));
+    // set_new for fresh literals throughout: it transfers ownership to the
+    // parent so the cleanup at the bottom only needs to decref `root`.
+    root = json_object ();
+    json_object_set_new (root, "version", json_integer (1));
 
-    gcry_cipher_hd_t hd;
-    guchar *derived_master_key = NULL, *enc_master_key = NULL, *key_nonce = NULL, *key_tag = NULL, *db_nonce = NULL, *db_tag = NULL, *salt = NULL;
-    json_t *aegis_header_obj = json_object ();
+    aegis_header_obj = json_object ();
     if (password == NULL) {
-        json_object_set (aegis_header_obj, "slots", json_null ());
-        json_object_set (aegis_header_obj, "params", json_null ());
+        json_object_set_new (aegis_header_obj, "slots", json_null ());
+        json_object_set_new (aegis_header_obj, "params", json_null ());
     } else {
-        json_t *slots_arr = json_array();
-        json_t *slot_1 = json_object();
-        json_array_append (slots_arr, slot_1);
-        json_object_set (slot_1, "type", json_integer (1));
+        json_t *slots_arr = json_array ();
+        json_t *slot_1 = json_object ();
+        json_array_append_new (slots_arr, slot_1);
+        json_object_set_new (slot_1, "type", json_integer (1));
 
         uuid_t binuuid;
         uuid_generate_random (binuuid);
         gchar *uuid = g_malloc0 (37);
         uuid_unparse_lower (binuuid, uuid);
-        json_object_set (slot_1, "uuid", json_string (uuid));
+        json_object_set_new (slot_1, "uuid", json_string (uuid));
         g_free (uuid);
 
         salt = g_malloc0 (AEGIS_SALT_SIZE);
@@ -336,78 +374,95 @@ export_aegis (const gchar   *export_path,
         key_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
         gcry_create_nonce (key_nonce, AEGIS_NONCE_SIZE);
 
-        derived_master_key = gcry_calloc_secure(AEGIS_KEY_SIZE, 1);
+        derived_master_key = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
+        if (derived_master_key == NULL) {
+            json_decref (slots_arr);
+            g_set_error (&err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                         "Couldn't allocate secure memory for the derived master key.");
+            goto cleanup_and_exit;
+        }
         // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
         gpg_error_t gpg_err = gcry_kdf_derive (password, strlen (password), GCRY_KDF_SCRYPT, 32768, salt, AEGIS_SALT_SIZE,  1, AEGIS_KEY_SIZE, derived_master_key);
         if (gpg_err) {
-            g_printerr ("Error while deriving the key\n");
-            gcry_free (derived_master_key);
-            return NULL;
+            json_decref (slots_arr);
+            g_set_error (&err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE,
+                         "Error while deriving the master key: %s/%s",
+                         gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+            goto cleanup_and_exit;
         }
 
         hd = open_cipher_and_set_data (derived_master_key, key_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
-            gcry_free (derived_master_key);
-            g_free (key_nonce);
-            g_free (salt);
-            return NULL;
+            json_decref (slots_arr);
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Couldn't open cipher for master key encryption.");
+            goto cleanup_and_exit;
         }
 
         enc_master_key = gcry_malloc (AEGIS_KEY_SIZE);
-        if (gcry_cipher_encrypt (hd, enc_master_key, AEGIS_KEY_SIZE, derived_master_key, AEGIS_KEY_SIZE)) {
-            g_printerr ("Error while encrypting the master key.\n");
-            gcry_free (derived_master_key);
-            gcry_free (enc_master_key);
-            g_free (key_nonce);
-            g_free (salt);
+        if (enc_master_key == NULL) {
+            json_decref (slots_arr);
             gcry_cipher_close (hd);
-            return NULL;
+            hd = NULL;
+            g_set_error (&err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                         "Couldn't allocate secure memory for the encrypted master key.");
+            goto cleanup_and_exit;
+        }
+        if (gcry_cipher_encrypt (hd, enc_master_key, AEGIS_KEY_SIZE, derived_master_key, AEGIS_KEY_SIZE)) {
+            json_decref (slots_arr);
+            gcry_cipher_close (hd);
+            hd = NULL;
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the master key.");
+            goto cleanup_and_exit;
         }
 
         key_tag = g_malloc0 (AEGIS_TAG_SIZE);
         gcry_cipher_gettag (hd, key_tag, AEGIS_TAG_SIZE);
         gchar *hex_tmp = bytes_to_hexstr (enc_master_key, AEGIS_KEY_SIZE);
-        json_object_set (slot_1, "key", json_string (hex_tmp));
+        json_object_set_new (slot_1, "key", json_string (hex_tmp));
         g_free (hex_tmp);
         gcry_cipher_close (hd);
+        hd = NULL;
 
-        json_t *kp = json_object();
+        json_t *kp = json_object ();
         hex_tmp = bytes_to_hexstr (key_nonce, AEGIS_NONCE_SIZE);
-        json_object_set (kp, "nonce", json_string (hex_tmp));
+        json_object_set_new (kp, "nonce", json_string (hex_tmp));
         g_free (hex_tmp);
         hex_tmp = bytes_to_hexstr (key_tag, AEGIS_TAG_SIZE);
-        json_object_set (kp, "tag", json_string (hex_tmp));
+        json_object_set_new (kp, "tag", json_string (hex_tmp));
         g_free (hex_tmp);
-        json_object_set (slot_1, "key_params", kp);
-        json_object_set (slot_1, "n", json_integer (32768));
-        json_object_set (slot_1, "r", json_integer (8));
-        json_object_set (slot_1, "p", json_integer (1));
+        json_object_set_new (slot_1, "key_params", kp);
+        json_object_set_new (slot_1, "n", json_integer (32768));
+        json_object_set_new (slot_1, "r", json_integer (8));
+        json_object_set_new (slot_1, "p", json_integer (1));
         hex_tmp = bytes_to_hexstr (salt, AEGIS_SALT_SIZE);
-        json_object_set (slot_1, "salt", json_string (hex_tmp));
+        json_object_set_new (slot_1, "salt", json_string (hex_tmp));
         g_free (hex_tmp);
-        json_object_set (aegis_header_obj, "slots", slots_arr);
+        json_object_set_new (aegis_header_obj, "slots", slots_arr);
 
-        json_t *db_params_obj = json_object();
+        json_t *db_params_obj = json_object ();
         db_nonce = g_malloc0 (AEGIS_NONCE_SIZE);
         gcry_create_nonce (db_nonce, AEGIS_NONCE_SIZE);
         hex_tmp = bytes_to_hexstr (db_nonce, AEGIS_NONCE_SIZE);
-        json_object_set (db_params_obj, "nonce", json_string (hex_tmp));
+        json_object_set_new (db_params_obj, "nonce", json_string (hex_tmp));
         g_free (hex_tmp);
 
         db_tag = g_malloc0 (AEGIS_TAG_SIZE);
         // tag is computed after encryption, so we just put a placeholder here
-        json_object_set (db_params_obj, "tag", json_null ());
-        json_object_set (aegis_header_obj, "params", db_params_obj);
+        json_object_set_new (db_params_obj, "tag", json_null ());
+        json_object_set_new (aegis_header_obj, "params", db_params_obj);
     }
-    json_object_set (root, "header", aegis_header_obj);
+    json_object_set_new (root, "header", aegis_header_obj);
+    aegis_header_obj = NULL;  // ownership transferred to root
 
-    json_t *aegis_db_obj = json_object ();
-    json_t *array = json_array ();
-    json_object_set (aegis_db_obj, "version", json_integer (2));
-    json_object_set (aegis_db_obj, "entries", array);
-    json_object_set (root, "db", aegis_db_obj);
+    aegis_db_obj = json_object ();
+    array = json_array ();
+    json_object_set_new (aegis_db_obj, "version", json_integer (2));
+    json_object_set_new (aegis_db_obj, "entries", array);
+    /* `array` is now owned by aegis_db_obj; keep the local handle so we can
+     * append, but DO NOT decref it. */
 
-    json_t *db_obj, *export_obj, *info_obj;
+    json_t *db_obj;
     gsize index;
     json_array_foreach (json_db_data, index, db_obj) {
         const gchar *type_str = json_string_value (json_object_get (db_obj, "type"));
@@ -416,33 +471,35 @@ export_aegis (const gchar   *export_path,
             continue;
         }
 
-        export_obj = json_object ();
-        info_obj = json_object ();
+        json_t *export_obj = json_object ();
+        json_t *info_obj = json_object ();
 
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
-            json_object_set (export_obj, "type", json_string ("steam"));
+            json_object_set_new (export_obj, "type", json_string ("steam"));
         } else {
             gchar *type_lower = g_utf8_strdown (type_str, -1);
-            json_object_set (export_obj, "type", json_string (type_lower));
+            json_object_set_new (export_obj, "type", json_string (type_lower));
             g_free (type_lower);
         }
 
+        // json_object_get returns a borrowed ref; use plain set (not set_new)
+        // to bump the refcount of the value we don't own.
         json_object_set (export_obj, "name", json_object_get (db_obj, "label"));
         const gchar *issuer_from_db = json_string_value (json_object_get (db_obj, "issuer"));
         if (issuer_from_db != NULL && g_utf8_strlen (issuer_from_db, -1) > 0) {
-            json_object_set (export_obj, "issuer", json_string (issuer_from_db));
+            json_object_set_new (export_obj, "issuer", json_string (issuer_from_db));
         } else {
-            json_object_set (export_obj, "issuer", json_null ());
+            json_object_set_new (export_obj, "issuer", json_null ());
         }
 
-        json_object_set (export_obj, "icon", json_null ());
+        json_object_set_new (export_obj, "icon", json_null ());
 
         const gchar *group = json_string_value (json_object_get (db_obj, "group"));
         if (group != NULL)
-            json_object_set (export_obj, "group", json_string (group));
+            json_object_set_new (export_obj, "group", json_string (group));
         else
-            json_object_set (export_obj, "group", json_null ());
+            json_object_set_new (export_obj, "group", json_null ());
 
         json_object_set (info_obj, "secret", json_object_get (db_obj, "secret"));
         json_object_set (info_obj, "digits", json_object_get (db_obj, "digits"));
@@ -453,95 +510,101 @@ export_aegis (const gchar   *export_path,
             json_object_set (info_obj, "counter", json_object_get (db_obj, "counter"));
         }
 
-        json_object_set (export_obj, "info", info_obj);
+        json_object_set_new (export_obj, "info", info_obj);
 
-        json_array_append (array, export_obj);
+        json_array_append_new (array, export_obj);
     }
 
     if (password != NULL) {
         hd = open_cipher_and_set_data (derived_master_key, db_nonce, AEGIS_NONCE_SIZE);
         if (hd == NULL) {
-            goto clean_and_return;
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Couldn't open cipher for database encryption.");
+            goto cleanup_and_exit;
         }
         db_size = json_dumpb (aegis_db_obj, NULL, 0, 0);
         if (db_size == 0) {
-            gcry_cipher_close (hd);
-            goto clean_and_return;
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Couldn't determine serialized database size.");
+            goto cleanup_and_exit;
         }
-        guchar *enc_db = g_malloc0 (db_size);
-        gchar *dumped_db = g_malloc0 (db_size);
+        enc_db = g_malloc0 (db_size);
+        // M3: dumped_db holds plaintext OTP secrets — keep it in secure memory
+        // so it can't be paged to swap.
+        dumped_db = gcry_calloc_secure (db_size, 1);
+        if (dumped_db == NULL) {
+            g_set_error (&err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                         "Couldn't allocate secure memory for the serialized database.");
+            goto cleanup_and_exit;
+        }
         json_dumpb (aegis_db_obj, dumped_db, db_size, 0);
         if (gcry_cipher_encrypt (hd, enc_db, db_size, dumped_db, db_size)) {
-            g_printerr ("Error while encrypting the db.\n");
-            g_free (enc_db);
-            g_free (dumped_db);
-            gcry_cipher_close (hd);
-            clean_and_return:
-            g_free (key_nonce);
-            g_free (key_tag);
-            g_free (db_nonce);
-            g_free (db_tag);
-            g_free (salt);
-            gcry_free (derived_master_key);
-            gcry_free (enc_master_key);
-            json_decref (aegis_db_obj);
-            json_decref (aegis_header_obj);
-            json_decref (root);
-            return NULL;
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the database.");
+            goto cleanup_and_exit;
         }
         gcry_cipher_gettag (hd, db_tag, AEGIS_TAG_SIZE);
-        json_t *db_params = json_object_get (aegis_header_obj, "params");
+        // root owns aegis_header_obj at this point; reach in via root.
+        json_t *db_params = json_object_get (json_object_get (root, "header"), "params");
         gchar *tag_hex = bytes_to_hexstr (db_tag, AEGIS_TAG_SIZE);
-        json_object_set (db_params, "tag", json_string (tag_hex));
+        json_object_set_new (db_params, "tag", json_string (tag_hex));
         g_free (tag_hex);
-        g_free (dumped_db);
-        gchar *b64enc_db = g_base64_encode (enc_db, db_size);
-        json_object_set (root, "db", json_string (b64enc_db));
-
-        g_free (b64enc_db);
-        g_free (enc_db);
-        g_free (key_nonce);
-        g_free (key_tag);
-        g_free (db_nonce);
-        g_free (db_tag);
-        g_free (salt);
-        gcry_free (derived_master_key);
-        gcry_free (enc_master_key);
-        gcry_cipher_close (hd);
-    }
-
-    GFile *out_gfile = g_file_new_for_path (export_path);
-    GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
-    if (err == NULL) {
-        gsize jbuf_size = json_dumpb (root, NULL, 0, 0);
-        if (jbuf_size == 0) {
-            goto cleanup_and_exit;
-        }
-        gchar *jbuf = g_malloc0 (jbuf_size);
-        if (json_dumpb (root, jbuf, jbuf_size, JSON_COMPACT) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to buffer");
-            g_free (jbuf);
-            goto cleanup_and_exit;
-        }
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
-            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to file");
-            g_free (jbuf);
-            goto cleanup_and_exit;
-        }
-        g_free (jbuf);
+        b64enc_db = g_base64_encode (enc_db, db_size);
+        json_object_set_new (root, "db", json_string (b64enc_db));
+        // aegis_db_obj has now been replaced under root["db"]; the parent
+        // dropped its reference, so our local handle is the only one left and
+        // it'll be decref'd at cleanup_and_exit.
     } else {
-        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't create the file object");
+        json_object_set_new (root, "db", aegis_db_obj);
+        aegis_db_obj = NULL;  // ownership transferred
     }
 
-    cleanup_and_exit:
-    json_array_clear (array);
-    json_decref (aegis_db_obj);
-    json_decref (aegis_header_obj);
-    json_decref (root);
-    if (out_stream != NULL) {
-        g_object_unref (out_stream);
+    out_gfile = g_file_new_for_path (export_path);
+    out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
+    if (out_stream == NULL) {
+        // err is set by g_file_replace; nothing to add.
+        goto cleanup_and_exit;
     }
-    g_object_unref (out_gfile);
+
+    gsize jbuf_size = json_dumpb (root, NULL, 0, 0);
+    if (jbuf_size == 0) {
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Couldn't determine serialized root size.");
+        goto cleanup_and_exit;
+    }
+    jbuf = g_malloc0 (jbuf_size);
+    if (json_dumpb (root, jbuf, jbuf_size, JSON_COMPACT) == -1) {
+        g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to buffer");
+        goto cleanup_and_exit;
+    }
+    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), jbuf, jbuf_size, NULL, &err) == -1) {
+        // err is set by g_output_stream_write.
+        goto cleanup_and_exit;
+    }
+
+cleanup_and_exit:
+    g_free (jbuf);
+    g_free (b64enc_db);
+    g_free (enc_db);
+    if (dumped_db != NULL) {
+        explicit_bzero (dumped_db, db_size);
+        gcry_free (dumped_db);
+    }
+    if (hd != NULL) gcry_cipher_close (hd);
+    if (derived_master_key != NULL) {
+        explicit_bzero (derived_master_key, AEGIS_KEY_SIZE);
+        gcry_free (derived_master_key);
+    }
+    if (enc_master_key != NULL) gcry_free (enc_master_key);
+    g_free (key_nonce);
+    g_free (key_tag);
+    g_free (db_nonce);
+    g_free (db_tag);
+    g_free (salt);
+    if (aegis_db_obj != NULL) json_decref (aegis_db_obj);  // only when not transferred
+    if (aegis_header_obj != NULL) json_decref (aegis_header_obj);
+    if (root != NULL) json_decref (root);
+    if (out_stream != NULL) g_object_unref (out_stream);
+    if (out_gfile != NULL) g_object_unref (out_gfile);
 
     return (err != NULL ? g_strdup (err->message) : NULL);
 }

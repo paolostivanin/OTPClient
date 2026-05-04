@@ -52,6 +52,23 @@ load_png_image (const gchar  *filepath,
 
     *width = png_get_image_width (png, info);
     *height = png_get_image_height (png, info);
+    /* Real-world QR code images for OTP enrollment are at most a few hundred
+     * pixels per side. Cap the dimensions before any allocation: a malicious
+     * PNG with width=height=65535 (libpng's maximum) would otherwise request
+     * ~17 GB across the row pointer array, the per-row buffers, and the
+     * grayscale buffer below. g_malloc aborts on huge allocations, which
+     * crashes the application — DoS via a single QR import. */
+    #define MAX_QR_IMAGE_DIM 4096u
+    if (*width == 0 || *height == 0 ||
+        *width > MAX_QR_IMAGE_DIM || *height > MAX_QR_IMAGE_DIM)
+    {
+        png_destroy_read_struct (&png, &info, NULL);
+        fclose (fp);
+        g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Image dimensions out of range (%ux%u, max %ux%u).",
+                     *width, *height, MAX_QR_IMAGE_DIM, MAX_QR_IMAGE_DIM);
+        return FALSE;
+    }
     png_byte color_type = png_get_color_type (png, info);
     png_byte bit_depth = png_get_bit_depth (png, info);
 
@@ -72,6 +89,20 @@ load_png_image (const gchar  *filepath,
         png_set_gray_to_rgb (png);
 
     png_read_update_info (png, info);
+
+    /* After the transformations above, every pixel is RGBA = 4 bytes. If
+     * libpng disagrees (e.g. an unusual PNG that bypassed the filters),
+     * bail out rather than indexing past the row at line `&row_pointers[y][x*4]`. */
+    size_t expected_rowbytes = (size_t) (*width) * 4;
+    if (png_get_rowbytes (png, info) < expected_rowbytes)
+    {
+        png_destroy_read_struct (&png, &info, NULL);
+        fclose (fp);
+        g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Unexpected PNG row layout (got %zu bytes/row, expected at least %zu).",
+                     (size_t) png_get_rowbytes (png, info), expected_rowbytes);
+        return FALSE;
+    }
 
     png_bytep *row_pointers = g_malloc (*height * sizeof (png_bytep));
     for (guint y = 0; y < *height; y++)

@@ -248,7 +248,11 @@ parse_parameters (const gchar   *modified_uri,
         } else if (g_ascii_strncasecmp (tokens[i], "counter=", 8) == 0) {
             tokens[i] += 8;
             gint64 counter_val = g_ascii_strtoll (tokens[i], NULL, 10);
-            if (counter_val >= 0) {
+            // Bound the HOTP counter at 2^48: comfortably above any realistic
+            // usage but far below int64 max so subsequent increments can't
+            // wrap. RFC 4226 doesn't mandate a cap; this is a sanity guard
+            // against malformed/malicious URIs.
+            if (counter_val >= 0 && counter_val <= (gint64) (1ULL << 48)) {
                 otp->counter = (guint64) counter_val;
             }
             tokens[i] -= 8;

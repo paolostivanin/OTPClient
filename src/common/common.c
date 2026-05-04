@@ -133,6 +133,10 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
 {
     gchar hex_str[]= "0123456789abcdef";
 
+    if (data == NULL && datalen > 0) {
+        return NULL;
+    }
+
     gchar *result = g_malloc0(datalen * 2 + 1);
     if (result == NULL) {
         g_printerr ("Error while allocating memory for bytes_to_hexstr.\n");
@@ -250,6 +254,36 @@ get_data_from_encrypted_backup (const gchar       *path,
     }
 
     goffset input_file_size = get_file_size (path);
+    gint32 offset = 0;
+    switch (provider) {
+        case AUTHPRO:
+            // 16 is the size of the header
+            offset = 16;
+            break;
+    }
+    // Validate size in signed math BEFORE casting to gsize. A truncated or
+    // tampered backup with input_file_size < (offset+salt+iv+tag+1) would
+    // otherwise produce a huge unsigned enc_buf_size that bypasses the
+    // "non-encrypted" check and either OOM-aborts g_malloc0 or produces a
+    // misleading "file too big" error.
+    goffset min_size = (goffset) offset + salt_size + iv_size + tag_size + 1;
+    if (input_file_size < min_size) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Selected file is too small to be a valid encrypted backup (got %" G_GOFFSET_FORMAT " bytes, need at least %" G_GOFFSET_FORMAT ").",
+                     input_file_size, min_size);
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        return NULL;
+    }
+    goffset payload_size = input_file_size - offset - salt_size - iv_size - tag_size;
+    if (payload_size > max_file_size) {
+        g_object_unref (in_stream);
+        g_object_unref (in_file);
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        return NULL;
+    }
+    gsize enc_buf_size = (gsize) payload_size;
+
     if (!g_seekable_seek (G_SEEKABLE (in_stream), input_file_size - tag_size, G_SEEK_SET, NULL, err)) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
@@ -259,27 +293,6 @@ get_data_from_encrypted_backup (const gchar       *path,
     if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, tag_size, NULL, err) == -1) {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        return NULL;
-    }
-
-    gsize enc_buf_size;
-    gint32 offset = 0;
-    switch (provider) {
-        case AUTHPRO:
-            // 16 is the size of the header
-            offset = 16;
-            break;
-    }
-    enc_buf_size = (gsize)(input_file_size - offset - salt_size - iv_size - tag_size);
-    if (enc_buf_size < 1) {
-        g_printerr ("A non-encrypted file has been selected\n");
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        return NULL;
-    } else if (enc_buf_size > max_file_size) {
-        g_object_unref (in_stream);
-        g_object_unref (in_file);
-        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
         return NULL;
     }
 
@@ -319,16 +332,36 @@ get_data_from_encrypted_backup (const gchar       *path,
     }
 
     gchar *decrypted_data = gcry_calloc_secure (enc_buf_size, 1);
+    if (decrypted_data == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Couldn't allocate %" G_GSIZE_FORMAT " bytes of secure memory for decryption.",
+                     enc_buf_size);
+        gcry_cipher_close (hd);
+        g_free (enc_buf);
+        gcry_free (derived_key);
+        return NULL;
+    }
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, decrypted_data, enc_buf_size, enc_buf, enc_buf_size);
     if (gpg_err) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Decryption failed: %s/%s", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
         g_free (enc_buf);
         gcry_free (derived_key);
         gcry_free (decrypted_data);
         gcry_cipher_close (hd);
         return NULL;
     }
-    if (gcry_err_code (gcry_cipher_checktag (hd, tag, tag_size)) == GPG_ERR_CHECKSUM) {
-        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
+    // Check for any tag-verification error, not just CHECKSUM. A non-CHECKSUM
+    // failure (INV_LENGTH, NO_KEY, ...) would otherwise fall through and we'd
+    // return unverified plaintext as if it were authentic.
+    gpg_error_t tag_err = gcry_cipher_checktag (hd, tag, tag_size);
+    if (tag_err != GPG_ERR_NO_ERROR) {
+        if (gcry_err_code (tag_err) == GPG_ERR_CHECKSUM) {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "Either the file is corrupted or the password is wrong");
+        } else {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                         "Tag verification failed: %s/%s", gcry_strsource (tag_err), gcry_strerror (tag_err));
+        }
         gcry_cipher_close (hd);
         g_free (enc_buf);
         gcry_free (derived_key);
@@ -364,32 +397,35 @@ jenkins_one_at_a_time_hash (const gchar *key, gsize len)
 guint32
 json_object_get_hash (json_t *obj)
 {
+    // GString grows as needed, so a long label/issuer no longer gets truncated
+    // and inflates the collision rate of the 32-bit jenkins hash. The hash is
+    // still only used as a fast first-pass filter — add_otps_to_db_ex breaks
+    // ties with json_equal so a colliding-but-distinct entry isn't silently
+    // dropped as a "duplicate".
+    GString *tmp_string = g_string_new (NULL);
     const gchar *key;
     json_t *value;
-    const gsize buf_size = 256;
-    gchar *tmp_string = gcry_calloc_secure (buf_size, 1);
     json_object_foreach (obj, key, value) {
         if (g_strcmp0 (key, "group") == 0)
             continue;
         if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
-            gsize cur_len = strlen (tmp_string);
-            if (cur_len < buf_size - 1) {
-                g_snprintf (tmp_string + cur_len, buf_size - cur_len, "%" G_GINT64_FORMAT, (gint64) v);
-            }
+            g_string_append_printf (tmp_string, "%" G_GINT64_FORMAT, (gint64) v);
         } else {
             const gchar *str_val = json_string_value (value);
-            if (str_val != NULL) {
-                if (g_strlcat (tmp_string, str_val, buf_size) >= buf_size) {
-                    g_printerr ("%s\n", _("Truncation occurred."));
-                }
-            }
+            if (str_val != NULL)
+                g_string_append (tmp_string, str_val);
         }
     }
 
-    guint32 hash = jenkins_one_at_a_time_hash (tmp_string, strlen (tmp_string) + 1);
+    guint32 hash = jenkins_one_at_a_time_hash (tmp_string->str, tmp_string->len + 1);
 
-    gcry_free (tmp_string);
+    // Wipe before free: tmp_string holds the OTP secret as part of the hashed
+    // material. GString uses regular g_malloc, so explicit_bzero is needed to
+    // avoid leaving secret bytes on the freed heap page.
+    if (tmp_string->str != NULL && tmp_string->allocated_len > 0)
+        explicit_bzero (tmp_string->str, tmp_string->allocated_len);
+    g_string_free (tmp_string, TRUE);
 
     return hash;
 }
@@ -424,23 +460,26 @@ build_json_obj (const gchar *type,
                 guint64      ctr,
                 const gchar *group)
 {
+    // set_new (not set) for fresh literals: set increments the refcount, but
+    // these literals have no local handle to decref afterwards, so the extra
+    // reference would leak when the parent object is eventually freed.
     json_t *obj = json_object ();
-    json_object_set (obj, "type", json_string (type));
-    json_object_set (obj, "label", json_string (acc_label));
-    json_object_set (obj, "issuer", json_string (acc_iss));
-    json_object_set (obj, "digits", json_integer (digits));
-    json_object_set (obj, "algo", json_string (algo));
+    json_object_set_new (obj, "type", json_string (type));
+    json_object_set_new (obj, "label", json_string (acc_label));
+    json_object_set_new (obj, "issuer", json_string (acc_iss));
+    json_object_set_new (obj, "digits", json_integer (digits));
+    json_object_set_new (obj, "algo", json_string (algo));
 
-    json_object_set (obj, "secret", json_string (acc_key));
+    json_object_set_new (obj, "secret", json_string (acc_key));
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
-        json_object_set (obj, "period", json_integer (period));
+        json_object_set_new (obj, "period", json_integer (period));
     } else {
-        json_object_set (obj, "counter", json_integer ((json_int_t)ctr));
+        json_object_set_new (obj, "counter", json_integer ((json_int_t)ctr));
     }
 
     if (group != NULL && group[0] != '\0')
-        json_object_set (obj, "group", json_string (group));
+        json_object_set_new (obj, "group", json_string (group));
 
     return obj;
 }

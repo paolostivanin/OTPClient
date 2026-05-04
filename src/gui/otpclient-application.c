@@ -231,7 +231,7 @@ on_change_password_received (const gchar *password,
                                self->db_data->key,
                                NULL,
                                on_password_stored,
-                               NULL,
+                               self,
                                "string", self->db_data->db_path,
                                NULL);
     }
@@ -523,7 +523,7 @@ on_unlock_done (GObject      *source_object,
                                self->db_data->key,
                                NULL,
                                on_password_stored,
-                               NULL,
+                               self,
                                "string", self->db_data->db_path,
                                NULL);
     }

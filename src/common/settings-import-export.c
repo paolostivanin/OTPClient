@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+#include <string.h>
 #include <jansson.h>
 #include <glib/gi18n.h>
 #include "settings-import-export.h"
@@ -86,6 +88,22 @@ gboolean
 import_settings_from_json (const gchar *json_str,
                            GError     **err)
 {
+    /* M6: every setting in `exportable_settings` is a small primitive (bool,
+     * int, string), so a real backup is well under 1 KiB. Cap input at 1 MiB
+     * so a malicious or accidental multi-gigabyte file can't drag jansson
+     * through unbounded allocations before erroring out. */
+    #define MAX_SETTINGS_JSON_BYTES (1u << 20)
+    if (json_str == NULL) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                             "Settings JSON is NULL.");
+        return FALSE;
+    }
+    if (strnlen (json_str, MAX_SETTINGS_JSON_BYTES + 1) > MAX_SETTINGS_JSON_BYTES) {
+        g_set_error (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                     "Settings JSON exceeds %u bytes; refusing to import.",
+                     MAX_SETTINGS_JSON_BYTES);
+        return FALSE;
+    }
     json_error_t jerr;
     json_t *root = json_loads (json_str, 0, &jerr);
     if (root == NULL) {

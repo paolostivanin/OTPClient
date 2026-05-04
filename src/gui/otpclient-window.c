@@ -1498,8 +1498,15 @@ static gboolean
 clipboard_clear_cb (gpointer user_data)
 {
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
-    gdk_clipboard_set_text (clipboard, "");
+    /* M1: gdk_display_get_default() can return NULL during shutdown / Wayland
+     * compositor restart. Mirror the NULL-safety from clear_clipboard_now
+     * so the timer firing in those windows doesn't crash. */
+    GdkDisplay *display = gdk_display_get_default ();
+    if (display != NULL) {
+        GdkClipboard *clipboard = gdk_display_get_clipboard (display);
+        if (clipboard != NULL)
+            gdk_clipboard_set_text (clipboard, "");
+    }
     self->clipboard_clear_timer_id = 0;
     return G_SOURCE_REMOVE;
 }
@@ -1936,11 +1943,10 @@ otpclient_window_dispose (GObject *object)
         win->deleted_token = NULL;
     }
 
-    if (win->clipboard_clear_timer_id != 0)
-    {
-        g_source_remove (win->clipboard_clear_timer_id);
-        win->clipboard_clear_timer_id = 0;
-    }
+    /* M2: actively clear the clipboard on dispose, not just stop the timer.
+     * Without this, an OTP copied just before window close (or app lock) sits
+     * in the system clipboard until the user's next copy. */
+    otpclient_window_clear_clipboard_now (win);
 
     if (win->otp_refresh_timer_id != 0)
     {
@@ -1967,9 +1973,14 @@ otpclient_window_dispose (GObject *object)
 
     if (win->dnd_css_provider != NULL)
     {
-        gtk_style_context_remove_provider_for_display (
-            gtk_widget_get_display (GTK_WIDGET (win)),
-            GTK_STYLE_PROVIDER (win->dnd_css_provider));
+        /* L4: gtk_widget_get_display can return NULL during dispose if the
+         * widget is already detached (Wayland session teardown). Skip the
+         * remove rather than crashing in gtk_style_context_remove_provider_for_display. */
+        GdkDisplay *display = gtk_widget_get_display (GTK_WIDGET (win));
+        if (display != NULL)
+            gtk_style_context_remove_provider_for_display (
+                display,
+                GTK_STYLE_PROVIDER (win->dnd_css_provider));
         g_clear_object (&win->dnd_css_provider);
     }
 

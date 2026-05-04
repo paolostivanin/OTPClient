@@ -12,6 +12,11 @@ typedef struct {
     gchar *path;
 } DbListEntry;
 
+/* Caller owns the returned GSettings (free with g_object_unref), the
+ * returned gchar pointers (free with g_free), and the returned GPtrArray
+ * (free with g_ptr_array_unref). NULL is returned when the GSettings schema
+ * is unavailable; the *_string getters also return NULL when no value is
+ * configured anywhere (settings + key file). */
 GSettings  *gsettings_common_get_settings                (void);
 
 gchar      *gsettings_common_get_db_path                 (void);
