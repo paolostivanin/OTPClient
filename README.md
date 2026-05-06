@@ -38,12 +38,15 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 ### Desktop search (`otpclient-search-provider`)
 A separate D-Bus daemon that integrates with **GNOME Shell Activities Search**
 and **KDE Plasma 6 KRunner**. Type the configurable trigger keyword (default
-`otp`) followed by a query — selecting a result computes the OTP and delivers
-it via system notification. The OTP value never appears in the search-result
-preview, so other processes on the session bus cannot poll for it. Setting the
-keyword to an empty string disables the provider entirely: every query is
-refused, since the keyword is the only gate against arbitrary local D-Bus
-clients enumerating accounts.
+`otp`) followed by a query — selecting a result computes the OTP, delivers it
+via system notification, and copies it to the clipboard (via Klipper's D-Bus
+interface on KDE Plasma; via `wl-copy` on Wayland or `xclip` / `xsel` on X11
+elsewhere — those tools must be installed for the clipboard step to work
+outside KDE). The OTP value never appears in the search-result preview, so
+other processes on the session bus cannot poll for it. Setting the keyword to
+an empty string disables the provider entirely: every query is refused, since
+the keyword is the only gate against arbitrary local D-Bus clients enumerating
+accounts.
 
 ### Import & export
 Migration to and from other authenticator apps:
@@ -83,9 +86,12 @@ What is protected:
   they will not be paged to swap or written to a hibernation image.
 - **Crash dumps**: `PR_SET_DUMPABLE=0` and `RLIMIT_CORE=0` are set at startup,
   so a crash with secrets in memory will not produce a core file.
-- **Clipboard hygiene**: copied OTPs are wiped after a configurable timeout
-  (default 30 s), on database lock (manual, idle auto-lock, or screensaver),
-  and on app exit (including SIGINT / SIGTERM / SIGHUP).
+- **Clipboard hygiene**: in the GUI, copied OTPs are wiped after a configurable
+  timeout (default 30 s), on database lock (manual, idle auto-lock, or
+  screensaver), and on app exit (including SIGINT / SIGTERM / SIGHUP). The
+  search-provider daemon does **not** auto-clear: on KDE the OTP would remain
+  in Klipper's history regardless (its D-Bus API has no per-entry history
+  removal), so a clear timer would give a misleading sense of protection.
 
 What is **not** defended against:
 - A same-UID attacker with `ptrace` or `/proc/PID/mem` access can read live

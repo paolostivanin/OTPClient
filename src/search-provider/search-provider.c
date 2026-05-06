@@ -4,6 +4,7 @@
 #include <libsecret/secret.h>
 #include <gcrypt.h>
 #include <cotp.h>
+#include <string.h>
 #include <time.h>
 
 #include "../common/common.h"
@@ -58,6 +59,7 @@ static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms,
 static gchar *get_entry_otp_value (json_t *obj);
 static gchar *compute_otp_for_entry (const OtpSearchEntry *entry);
 static void send_notification (const gchar *label, const gchar *otp_value);
+static void copy_to_clipboard (const gchar *text, gboolean is_kde);
 static void clear_file_monitors (void);
 static void sync_file_monitors (GPtrArray *desired_paths);
 static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
@@ -478,6 +480,70 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
 }
 
 
+static gboolean
+copy_via_klipper (const gchar *text)
+{
+    g_autoptr (GDBusConnection) conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+    if (conn == NULL) return FALSE;
+    g_autoptr (GVariant) result = g_dbus_connection_call_sync (conn,
+            "org.kde.klipper", "/klipper", "org.kde.klipper.klipper",
+            "setClipboardContents", g_variant_new ("(s)", text),
+            NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
+    return result != NULL;
+}
+
+
+static gboolean
+copy_via_subprocess (const gchar *text)
+{
+    /* On Wayland the X selection tools either fail outright or only address
+     * XWayland's own selection — wl-copy is the only thing that talks to the
+     * compositor's data device. On X11 (or unknown sessions) try xclip first
+     * and fall back to xsel since distros ship one or the other by default. */
+    const gchar *session = g_getenv ("XDG_SESSION_TYPE");
+    gboolean is_wayland = (session != NULL && g_ascii_strcasecmp (session, "wayland") == 0);
+    const gchar *argv_wl[]    = { "wl-copy", NULL };
+    const gchar *argv_xclip[] = { "xclip", "-selection", "clipboard", NULL };
+    const gchar *argv_xsel[]  = { "xsel", "--clipboard", "--input", NULL };
+    const gchar **candidates[2] = { NULL, NULL };
+    int n_candidates = 0;
+    if (is_wayland) {
+        candidates[n_candidates++] = argv_wl;
+    } else {
+        candidates[n_candidates++] = argv_xclip;
+        candidates[n_candidates++] = argv_xsel;
+    }
+    for (int i = 0; i < n_candidates; i++) {
+        g_autoptr (GSubprocess) proc = g_subprocess_newv (candidates[i],
+                G_SUBPROCESS_FLAGS_STDIN_PIPE |
+                G_SUBPROCESS_FLAGS_STDOUT_SILENCE |
+                G_SUBPROCESS_FLAGS_STDERR_SILENCE,
+                NULL);
+        if (proc == NULL) continue;          /* binary not on PATH; try the next one */
+        g_autoptr (GBytes) input = g_bytes_new (text, strlen (text));
+        if (g_subprocess_communicate (proc, input, NULL, NULL, NULL, NULL))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+
+/* Best-effort clipboard copy on Activate/Run. We deliberately do NOT schedule
+ * an auto-clear: on KDE the dominant path goes through Klipper, whose history
+ * retains the OTP regardless of any setClipboardContents("") we issue (there
+ * is no per-entry history removal in its D-Bus API), so a clear timer would
+ * give a misleading sense of protection. Users who want the OTP to disappear
+ * sooner should configure Klipper's history retention or clear it manually. */
+static void
+copy_to_clipboard (const gchar *text,
+                   gboolean     is_kde)
+{
+    if (text == NULL || text[0] == '\0') return;
+    if (is_kde && copy_via_klipper (text)) return;
+    copy_via_subprocess (text);
+}
+
+
 static void
 send_notification (const gchar *label,
                    const gchar *otp_value)
@@ -592,6 +658,7 @@ handle_gnome_call (GDBusConnection       *conn,
                 break;
             }
         }
+        copy_to_clipboard (otp, FALSE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else {
@@ -669,6 +736,7 @@ handle_krunner_call (GDBusConnection       *conn,
                 break;
             }
         }
+        copy_to_clipboard (otp, TRUE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else if (g_strcmp0 (method, "Actions") == 0) {

@@ -530,7 +530,7 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->clipboard_clear_combo),
                                     _("Clear Clipboard After"));
     adw_action_row_set_subtitle (ADW_ACTION_ROW (self->clipboard_clear_combo),
-                                  _("Automatically clear the clipboard after copying an OTP code"));
+                                  _("Automatically clear the clipboard after copying an OTP code from this window"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->clipboard_clear_combo), G_LIST_MODEL (clip_timeout_model));
     /* Select current value */
     guint current_clip_timeout = otpclient_application_get_clipboard_clear_timeout (app);
