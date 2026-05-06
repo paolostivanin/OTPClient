@@ -126,7 +126,7 @@ otpclient_application_show_about (GSimpleAction *simple,
             NULL
     };
 
-    static const gchar *designers[] = {
+    static const gchar *artists[] = {
             "Tobias Bernard (bertob) https://tobiasbernard.com",
             NULL
     };
@@ -144,7 +144,7 @@ otpclient_application_show_about (GSimpleAction *simple,
                   "website", "https://github.com/paolostivanin/OTPClient",
                   "license-type", GTK_LICENSE_GPL_3_0,
                   "developers", developers,
-                  "designers", designers,
+                  "artists", artists,
                   NULL);
     adw_dialog_present (dialog, GTK_WIDGET (self->window));
 }
