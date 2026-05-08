@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-21 15:32+0200\n"
+"POT-Creation-Date: 2026-05-08 13:53+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,285 +18,327 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ../src/gui/otpclient-application.c:438 ../src/gui/otpclient-window.c:3249
+#: ../src/gui/otpclient-application.c:394
+#, c-format
+msgid ""
+"“%s” could not be found at:\n"
+"%s\n"
+"\n"
+"The file may have been moved or deleted. Use the sidebar to switch to a "
+"different database, or right-click the missing entry to remove it from the "
+"list."
+msgstr ""
+
+#: ../src/gui/otpclient-application.c:402
+msgid "Database File Not Found"
+msgstr ""
+
+#: ../src/gui/otpclient-application.c:403 ../src/gui/otpclient-window.c:2950
+#: ../src/gui/dialogs/settings-dialog.c:239
+#: ../src/gui/dialogs/settings-dialog.c:247
+#: ../src/gui/dialogs/settings-dialog.c:293
+#: ../src/gui/dialogs/settings-dialog.c:301
+msgid "OK"
+msgstr ""
+
+#: ../src/gui/otpclient-application.c:506 ../src/gui/otpclient-window.c:3543
 #, c-format
 msgid "Could not open database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:506
+#: ../src/gui/otpclient-window.c:627
 msgid "Validity"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:908
-msgid "You haven't exported a backup yet — keep a copy somewhere safe."
+#: ../src/gui/otpclient-window.c:1029
+msgid ""
+"You haven't saved a backup of your encrypted database yet — keep a copy "
+"somewhere safe."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:920
+#: ../src/gui/otpclient-window.c:1041
 #, c-format
-msgid "Your last backup is %d day old."
-msgid_plural "Your last backup is %d days old."
+msgid "Your last database backup is %d day old."
+msgid_plural "Your last database backup is %d days old."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:995
+#: ../src/gui/otpclient-window.c:1133
 msgid "Database is locked"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:998 ../src/gui/ui/window.ui:45
+#: ../src/gui/otpclient-window.c:1136 ../src/gui/ui/window.ui:45
 msgid "Lock database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1031
+#: ../src/gui/otpclient-window.c:1169
 msgid "Account"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1032
+#: ../src/gui/otpclient-window.c:1170
 #: ../src/gui/dialogs/edit-token-dialog.c:137
 #: ../src/gui/dialogs/manual-add-dialog.c:283
 msgid "Issuer"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1033
+#: ../src/gui/otpclient-window.c:1171
 msgid "OTP Value"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1407
+#: ../src/gui/otpclient-window.c:1398
+msgid "Database file not found"
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:1610
 #, c-format
 msgid "OTP for %s copied to clipboard"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1649
+#: ../src/gui/otpclient-window.c:1852
 #, c-format
 msgid "Failed to save reordered tokens: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1888 ../src/gui/otpclient-window.c:3609
+#: ../src/gui/otpclient-window.c:2095 ../src/gui/otpclient-window.c:3950
 msgid "All"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1891 ../src/gui/otpclient-window.c:1905
-#: ../src/gui/otpclient-window.c:3610
+#: ../src/gui/otpclient-window.c:2098 ../src/gui/otpclient-window.c:2112
+#: ../src/gui/otpclient-window.c:3951
 msgid "Ungrouped"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2039
+#: ../src/gui/otpclient-window.c:2246
 msgid "No tokens were imported."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2041
+#: ../src/gui/otpclient-window.c:2248
 #, c-format
 msgid "Imported %u token."
 msgid_plural "Imported %u tokens."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2045
+#: ../src/gui/otpclient-window.c:2252
 #, c-format
 msgid "Skipped %u duplicate."
 msgid_plural "Skipped %u duplicates."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2049
+#: ../src/gui/otpclient-window.c:2256
 #, c-format
 msgid "Imported %u, skipped %u duplicate."
 msgid_plural "Imported %u, skipped %u duplicates."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2100
+#: ../src/gui/otpclient-window.c:2307
 #, c-format
 msgid "Could not read QR code: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2100 ../src/gui/otpclient-window.c:2185
+#: ../src/gui/otpclient-window.c:2307 ../src/gui/otpclient-window.c:2392
 msgid "unknown error"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2127 ../src/gui/otpclient-window.c:2199
+#: ../src/gui/otpclient-window.c:2334 ../src/gui/otpclient-window.c:2406
 #, c-format
 msgid "Failed to add scanned token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2147
+#: ../src/gui/otpclient-window.c:2354
 msgid "Select QR Code Image"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2150
+#: ../src/gui/otpclient-window.c:2357
 msgid "Image Files"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2185
+#: ../src/gui/otpclient-window.c:2392
 #, c-format
 msgid "Webcam scan failed: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2357
+#: ../src/gui/otpclient-window.c:2486 ../src/gui/otpclient-window.c:2525
+msgid "No database is currently open."
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:2504
+msgid "Token database backed up"
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:2530 ../src/gui/dialogs/settings-dialog.c:625
+msgid "Back up tokens"
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:2648
 #, c-format
 msgid "Failed to restore deleted token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2400
+#: ../src/gui/otpclient-window.c:2691
 #, c-format
 msgid "Failed to delete token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2410
+#: ../src/gui/otpclient-window.c:2701
 msgid "Token deleted"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2411
+#: ../src/gui/otpclient-window.c:2702
 msgid "Undo"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2436
+#: ../src/gui/otpclient-window.c:2727
 msgid "Delete Token?"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2437
+#: ../src/gui/otpclient-window.c:2728
 msgid "This action cannot be undone."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2440 ../src/gui/otpclient-window.c:2679
-#: ../src/gui/otpclient-window.c:2897 ../src/gui/otpclient-window.c:3423
-#: ../src/gui/otpclient-window.c:3539
+#: ../src/gui/otpclient-window.c:2731 ../src/gui/otpclient-window.c:2970
+#: ../src/gui/otpclient-window.c:3188 ../src/gui/otpclient-window.c:3752
+#: ../src/gui/otpclient-window.c:3868
 msgid "Cancel"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2441 ../src/gui/ui/context-menus.ui:20
+#: ../src/gui/otpclient-window.c:2732 ../src/gui/ui/context-menus.ui:20
 msgid "Delete"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2544
+#: ../src/gui/otpclient-window.c:2835
 #, c-format
 msgid "Could not open target database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2562
+#: ../src/gui/otpclient-window.c:2853
 #, c-format
 msgid "Could not write token to target database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2581
+#: ../src/gui/otpclient-window.c:2872
 #, c-format
 msgid ""
 "Could not remove the token from the source database: %s. The token now "
 "exists in both databases; please remove the duplicate manually."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2657 ../src/gui/otpclient-window.c:2678
+#: ../src/gui/otpclient-window.c:2948 ../src/gui/otpclient-window.c:2969
 msgid "Move Token"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2658
+#: ../src/gui/otpclient-window.c:2949
 msgid "No other databases available. Open or create another database first."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2659 ../src/gui/dialogs/settings-dialog.c:197
-#: ../src/gui/dialogs/settings-dialog.c:205
-#: ../src/gui/dialogs/settings-dialog.c:251
-#: ../src/gui/dialogs/settings-dialog.c:259
-msgid "OK"
-msgstr ""
-
-#: ../src/gui/otpclient-window.c:2674
+#: ../src/gui/otpclient-window.c:2965
 #, c-format
 msgid "Select the database to move \"%s\" to:"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2675
+#: ../src/gui/otpclient-window.c:2966
 msgid "token"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2758
+#: ../src/gui/otpclient-window.c:3049
 #, c-format
 msgid "Failed to change group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2804
+#: ../src/gui/otpclient-window.c:3095
 #, c-format
 msgid "Failed to remove token from group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2862
+#: ../src/gui/otpclient-window.c:3153
 #, c-format
 msgid "Failed to assign group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2896
+#: ../src/gui/otpclient-window.c:3187
 msgid "New Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2896
+#: ../src/gui/otpclient-window.c:3187
 msgid "Enter a name for the new group:"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2897
+#: ../src/gui/otpclient-window.c:3188
 msgid "Add"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2902
+#: ../src/gui/otpclient-window.c:3193
 msgid "Group name"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3017
+#: ../src/gui/otpclient-window.c:3308
 msgid "New Group…"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3018
+#: ../src/gui/otpclient-window.c:3309
 msgid "Remove from Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3024
+#: ../src/gui/otpclient-window.c:3315
 msgid "Set Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3130
+#: ../src/gui/otpclient-window.c:3421
 #, c-format
 msgid "Could not create database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3143
+#: ../src/gui/otpclient-window.c:3434
 #, c-format
 msgid "Created database but could not reload it: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3167
+#: ../src/gui/otpclient-window.c:3461
 msgid "Create New Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3278
+#: ../src/gui/otpclient-window.c:3575 ../src/gui/ui/window.ui:236
 msgid "Open Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3281
+#: ../src/gui/otpclient-window.c:3578
 msgid "OTPClient Database (*.enc)"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3422
+#: ../src/gui/otpclient-window.c:3606 ../src/gui/dialogs/settings-dialog.c:631
+msgid "Restore tokens"
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:3609
+msgid "OTPClient Database (*.enc, *.bak)"
+msgstr ""
+
+#: ../src/gui/otpclient-window.c:3751
 msgid "Rename Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3424 ../src/gui/ui/context-menus.ui:28
+#: ../src/gui/otpclient-window.c:3753 ../src/gui/ui/context-menus.ui:28
 msgid "Rename"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3534
+#: ../src/gui/otpclient-window.c:3863
 #, c-format
 msgid ""
 "Remove \"%s\" from the database list?\n"
 "The database file will not be deleted."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3538
+#: ../src/gui/otpclient-window.c:3867
 msgid "Remove Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3540
+#: ../src/gui/otpclient-window.c:3869
 msgid "Remove"
 msgstr ""
 
-#: ../src/gui/otp-entry.c:444
+#: ../src/gui/otp-entry.c:467
 msgid "Error"
 msgstr ""
 
@@ -320,7 +362,7 @@ msgstr ""
 msgid "No QR code found in webcam scan"
 msgstr ""
 
-#: ../src/gui/dialogs/db-info-dialog.c:37 ../src/gui/ui/window.ui:266
+#: ../src/gui/dialogs/db-info-dialog.c:37 ../src/gui/ui/window.ui:296
 msgid "Database Info"
 msgstr ""
 
@@ -396,56 +438,60 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:75
+#: ../src/gui/dialogs/export-dialog.c:80
 #: ../src/gui/dialogs/password-dialog.c:67
 msgid "Passwords do not match"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:141
+#: ../src/gui/dialogs/export-dialog.c:144
 msgid "Export tokens"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:166
+#: ../src/gui/dialogs/export-dialog.c:169
 msgid "Export Tokens"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:203
-#: ../src/gui/dialogs/import-dialog.c:262
+#: ../src/gui/dialogs/export-dialog.c:206
+#: ../src/gui/dialogs/import-dialog.c:268
 msgid "Format"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:210
-#: ../src/gui/dialogs/import-dialog.c:269
+#: ../src/gui/dialogs/export-dialog.c:213
+#: ../src/gui/dialogs/import-dialog.c:275
 msgid "Encryption Password"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:215
+#: ../src/gui/dialogs/export-dialog.c:218
 #: ../src/gui/dialogs/password-dialog.c:215
 msgid "Confirm Password"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:222
+#: ../src/gui/dialogs/export-dialog.c:227
 msgid "Exporting unencrypted reveals all secrets!"
 msgstr ""
 
-#: ../src/gui/dialogs/export-dialog.c:233 ../src/gui/ui/window.ui:250
+#: ../src/gui/dialogs/export-dialog.c:238 ../src/gui/ui/window.ui:280
 #: ../src/gui/ui/shortcuts-window.ui:76
 msgid "Export"
 msgstr ""
 
-#: ../src/gui/dialogs/import-dialog.c:167
+#: ../src/gui/dialogs/import-dialog.c:86
+msgid "Selected file is empty or no longer exists."
+msgstr ""
+
+#: ../src/gui/dialogs/import-dialog.c:173
 msgid "Select file to import"
 msgstr ""
 
-#: ../src/gui/dialogs/import-dialog.c:180
+#: ../src/gui/dialogs/import-dialog.c:186
 msgid "All files"
 msgstr ""
 
-#: ../src/gui/dialogs/import-dialog.c:228
+#: ../src/gui/dialogs/import-dialog.c:234
 msgid "Import Tokens"
 msgstr ""
 
-#: ../src/gui/dialogs/import-dialog.c:282
+#: ../src/gui/dialogs/import-dialog.c:288
 msgid "Select File & Import"
 msgstr ""
 
@@ -453,7 +499,7 @@ msgstr ""
 msgid "Invalid parameters: iterations ≥ 2, memory ≥ 64 MiB, parallelism ≥ 1"
 msgstr ""
 
-#: ../src/gui/dialogs/kdf-dialog.c:148 ../src/gui/ui/window.ui:270
+#: ../src/gui/dialogs/kdf-dialog.c:148 ../src/gui/ui/window.ui:300
 msgid "KDF Parameters"
 msgstr ""
 
@@ -526,7 +572,7 @@ msgid "This token already exists"
 msgstr ""
 
 #: ../src/gui/dialogs/manual-add-dialog.c:250
-#: ../src/gui/dialogs/manual-add-dialog.c:364 ../src/gui/ui/window.ui:195
+#: ../src/gui/dialogs/manual-add-dialog.c:364 ../src/gui/ui/window.ui:187
 msgid "Add Token"
 msgstr ""
 
@@ -595,7 +641,7 @@ msgid "Choose a password for your new database"
 msgstr ""
 
 #: ../src/gui/dialogs/password-dialog.c:186
-#: ../src/gui/dialogs/password-dialog.c:236 ../src/gui/ui/window.ui:262
+#: ../src/gui/dialogs/password-dialog.c:236 ../src/gui/ui/window.ui:292
 msgid "Change Password"
 msgstr ""
 
@@ -631,153 +677,195 @@ msgstr ""
 msgid "Failed to generate QR code"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:196
-#: ../src/gui/dialogs/settings-dialog.c:204
+#: ../src/gui/dialogs/settings-dialog.c:238
+#: ../src/gui/dialogs/settings-dialog.c:246
 msgid "Export Failed"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:218
-#: ../src/gui/dialogs/settings-dialog.c:487
+#: ../src/gui/dialogs/settings-dialog.c:260
 msgid "Export Settings"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:250
-#: ../src/gui/dialogs/settings-dialog.c:258
+#: ../src/gui/dialogs/settings-dialog.c:292
+#: ../src/gui/dialogs/settings-dialog.c:300
 msgid "Import Failed"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:278
-#: ../src/gui/dialogs/settings-dialog.c:493
+#: ../src/gui/dialogs/settings-dialog.c:320
 msgid "Import Settings"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:307
+#: ../src/gui/dialogs/settings-dialog.c:370
 msgid "Display"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:310
+#: ../src/gui/dialogs/settings-dialog.c:373
 msgid "Show Next OTP"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:319
-msgid "Show Validity in seconds"
+#: ../src/gui/dialogs/settings-dialog.c:384
+msgid "Hide OTPs by Default"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:337
-msgid "Countdown Color"
+#: ../src/gui/dialogs/settings-dialog.c:386
+msgid "Hide OTP codes in the list and reveal a row temporarily when clicked"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:352
-msgid "Countdown Warning Color"
+#: ../src/gui/dialogs/settings-dialog.c:393
+msgid "5 seconds"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:358
-msgid "Dark Theme"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:367
-msgid "Notifications"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:371
-msgid "Disable Notifications"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:380
-#: ../src/gui/dialogs/whats-new-dialog.c:63
-msgid "Security"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:383
-msgid "Auto-Lock"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:391
-#: ../src/gui/dialogs/settings-dialog.c:421
-msgid "1 minute"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:391
-#: ../src/gui/dialogs/settings-dialog.c:421
-msgid "2 minutes"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:391
-msgid "5 minutes"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:391
-msgid "10 minutes"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:392
-msgid "15 minutes"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:392
-msgid "30 minutes"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:392
-msgid "1 hour"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:402
-msgid "Inactivity Timeout"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:420
-msgid "Never"
-msgstr ""
-
-#: ../src/gui/dialogs/settings-dialog.c:420
+#: ../src/gui/dialogs/settings-dialog.c:393
+#: ../src/gui/dialogs/settings-dialog.c:520
 msgid "10 seconds"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:420
+#: ../src/gui/dialogs/settings-dialog.c:393
+#: ../src/gui/dialogs/settings-dialog.c:520
 msgid "15 seconds"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:420
+#: ../src/gui/dialogs/settings-dialog.c:393
+#: ../src/gui/dialogs/settings-dialog.c:520
 msgid "30 seconds"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:431
+#: ../src/gui/dialogs/settings-dialog.c:393
+#: ../src/gui/dialogs/settings-dialog.c:491
+#: ../src/gui/dialogs/settings-dialog.c:521
+msgid "1 minute"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:403
+msgid "Reveal OTP For"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:419
+msgid "Show Validity in seconds"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:437
+msgid "Countdown Color"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:452
+msgid "Countdown Warning Color"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:458
+msgid "Dark Theme"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:467
+msgid "Notifications"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:471
+msgid "Disable Notifications"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:480
+#: ../src/gui/dialogs/whats-new-dialog.c:73
+msgid "Security"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:483
+msgid "Auto-Lock"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:491
+#: ../src/gui/dialogs/settings-dialog.c:521
+msgid "2 minutes"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:491
+msgid "5 minutes"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:491
+msgid "10 minutes"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:492
+msgid "15 minutes"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:492
+msgid "30 minutes"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:492
+msgid "1 hour"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:502
+msgid "Inactivity Timeout"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:520
+msgid "Never"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:531
 msgid "Clear Clipboard After"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:433
-msgid "Automatically clear the clipboard after copying an OTP code"
+#: ../src/gui/dialogs/settings-dialog.c:533
+msgid ""
+"Automatically clear the clipboard after copying an OTP code from this window"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:449
+#: ../src/gui/dialogs/settings-dialog.c:549
 msgid "Use Secret Service"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:451
+#: ../src/gui/dialogs/settings-dialog.c:551
 msgid ""
 "Store the database password in the system keyring so the app unlocks "
 "automatically after login. Also enables searching across all databases at "
 "once"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:460
+#: ../src/gui/dialogs/settings-dialog.c:560
 msgid "Integration"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:464
+#: ../src/gui/dialogs/settings-dialog.c:562
+msgid ""
+"Type the keyword followed by a space and your search to surface OTP results "
+"in GNOME Shell or KDE KRunner (e.g. \"otp github\"). Changes to the keyword "
+"take effect after logging out and back in."
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:568
 msgid "Search Provider"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:474
+#: ../src/gui/dialogs/settings-dialog.c:576
+msgid "Search Provider Keyword"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:596
 msgid "Minimize to Tray"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:484
+#: ../src/gui/dialogs/settings-dialog.c:608
 msgid "Backup"
 msgstr ""
 
-#: ../src/gui/dialogs/settings-dialog.c:500 ../src/gui/ui/window.ui:258
+#: ../src/gui/dialogs/settings-dialog.c:610
+msgid "Save and restore your application preferences and your token database."
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:613
+msgid "Back up app settings"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:619
+msgid "Restore app settings"
+msgstr ""
+
+#: ../src/gui/dialogs/settings-dialog.c:638 ../src/gui/ui/window.ui:288
 #: ../src/gui/ui/shortcuts-window.ui:87
 msgid "Settings"
 msgstr ""
@@ -794,11 +882,25 @@ msgid ""
 msgstr ""
 
 #: ../src/gui/dialogs/whats-new-dialog.c:39
-#: ../src/gui/dialogs/whats-new-dialog.c:100
-msgid "Multiple Databases"
+msgid "OTPs Are Hidden by Default"
 msgstr ""
 
 #: ../src/gui/dialogs/whats-new-dialog.c:40
+msgid ""
+"Codes are hidden in the list to prevent shoulder-surfing and accidental "
+"screenshot leaks.\n"
+"\n"
+"Click a row to copy the OTP — it will briefly appear so you can verify what "
+"was copied, then re-hide. Adjust the reveal duration or turn this off "
+"entirely in Settings → Display."
+msgstr ""
+
+#: ../src/gui/dialogs/whats-new-dialog.c:49
+#: ../src/gui/dialogs/whats-new-dialog.c:122
+msgid "Multiple Databases"
+msgstr ""
+
+#: ../src/gui/dialogs/whats-new-dialog.c:50
 msgid ""
 "You can create and manage multiple encrypted databases.\n"
 "\n"
@@ -808,11 +910,11 @@ msgid ""
 "The primary database is loaded automatically on startup."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:47
+#: ../src/gui/dialogs/whats-new-dialog.c:57
 msgid "Organize with Groups"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:48
+#: ../src/gui/dialogs/whats-new-dialog.c:58
 msgid ""
 "Organize your tokens into groups for quick filtering.\n"
 "\n"
@@ -820,11 +922,11 @@ msgid ""
 "“group:” prefix. Assign groups by right-clicking a token."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:55
+#: ../src/gui/dialogs/whats-new-dialog.c:65
 msgid "Keyboard Shortcuts & Search"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:56
+#: ../src/gui/dialogs/whats-new-dialog.c:66
 msgid ""
 "Use Ctrl+N to add a token, Ctrl+F to search, F2 to edit, and Ctrl+? to see "
 "all shortcuts.\n"
@@ -833,7 +935,7 @@ msgid ""
 "opening the app."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:64
+#: ../src/gui/dialogs/whats-new-dialog.c:74
 msgid ""
 "Secret Service integration can store your database password in the system "
 "keyring so the app unlocks automatically after login. It is disabled by "
@@ -842,24 +944,25 @@ msgid ""
 "You can enable it and configure auto-lock in Settings → Security."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:71
+#: ../src/gui/dialogs/whats-new-dialog.c:81
 msgid "Settings & Backup"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:72
+#: ../src/gui/dialogs/whats-new-dialog.c:82
 msgid ""
 "All preferences are in the Settings dialog, including countdown colors and "
 "clipboard auto-clear.\n"
 "\n"
-"Export and import your settings from Settings → Backup, or via the CLI with "
-"--export-settings and --import-settings."
+"Back up and restore both your application preferences and your token "
+"database from Settings → Backup, or via the CLI with --export-settings and --"
+"import-settings."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:84
+#: ../src/gui/dialogs/whats-new-dialog.c:95
 msgid "A Brand New Look"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:85
+#: ../src/gui/dialogs/whats-new-dialog.c:96
 msgid ""
 "OTPClient has been completely redesigned with GTK4 and libadwaita.\n"
 "\n"
@@ -867,11 +970,25 @@ msgid ""
 "light and dark themes natively."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:92
+#: ../src/gui/dialogs/whats-new-dialog.c:103
+msgid "OTPs Are Now Hidden by Default"
+msgstr ""
+
+#: ../src/gui/dialogs/whats-new-dialog.c:104
+msgid ""
+"Codes used to be visible at all times. They are now hidden so a glance at "
+"your screen, a screenshot, or an Alt+Tab thumbnail no longer leaks them.\n"
+"\n"
+"Click a row to copy the OTP — it briefly appears so you can verify what was "
+"copied, then re-hides. To restore the previous always-visible behavior, "
+"toggle Hide OTPs by Default off in Settings → Display."
+msgstr ""
+
+#: ../src/gui/dialogs/whats-new-dialog.c:114
 msgid "Token Groups"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:93
+#: ../src/gui/dialogs/whats-new-dialog.c:115
 msgid ""
 "Organize your tokens into groups for quick access.\n"
 "\n"
@@ -879,7 +996,7 @@ msgid ""
 "to assign it, or search with the “group:” prefix."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:101
+#: ../src/gui/dialogs/whats-new-dialog.c:123
 msgid ""
 "You can now manage multiple encrypted databases from the sidebar.\n"
 "\n"
@@ -887,12 +1004,12 @@ msgid ""
 "the list. The primary database loads on startup."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:107 ../src/gui/ui/window.ui:280
+#: ../src/gui/dialogs/whats-new-dialog.c:129 ../src/gui/ui/window.ui:310
 #: ../src/gui/ui/shortcuts-window.ui:4 ../src/gui/ui/shortcuts-window.ui:121
 msgid "Keyboard Shortcuts"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:108
+#: ../src/gui/dialogs/whats-new-dialog.c:130
 msgid ""
 "Common actions now have keyboard shortcuts: Ctrl+N to add, Ctrl+F to search, "
 "F2 to edit, and more.\n"
@@ -900,11 +1017,11 @@ msgid ""
 "Press Ctrl+? to see all available shortcuts."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:114
+#: ../src/gui/dialogs/whats-new-dialog.c:136
 msgid "Desktop Search"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:115
+#: ../src/gui/dialogs/whats-new-dialog.c:137
 msgid ""
 "Search from GNOME or KDE to find tokens across all your databases.\n"
 "\n"
@@ -912,24 +1029,24 @@ msgid ""
 "database name and are read-only."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:122
+#: ../src/gui/dialogs/whats-new-dialog.c:144
 msgid "Security & Settings"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:123
+#: ../src/gui/dialogs/whats-new-dialog.c:145
 msgid ""
 "Secret Service integration (keyring) is now disabled by default. You can "
 "enable it in Settings → Security.\n"
 "\n"
-"Settings have moved to GSettings (migrated automatically). Export and import "
-"settings from Settings → Backup."
+"Settings have moved to GSettings (migrated automatically). Back up and "
+"restore preferences and your token database from Settings → Backup."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:130
+#: ../src/gui/dialogs/whats-new-dialog.c:153
 msgid "And More"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:131
+#: ../src/gui/dialogs/whats-new-dialog.c:154
 msgid ""
 "Customize countdown colors in Settings. Drag and drop to reorder tokens. "
 "Undo accidental deletions with a toast notification.\n"
@@ -937,49 +1054,21 @@ msgid ""
 "Import encrypted backups directly in the app with inline password fields."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:145
+#: ../src/gui/dialogs/whats-new-dialog.c:168
 msgid "Done"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:147
-#: ../src/gui/dialogs/whats-new-dialog.c:271
+#: ../src/gui/dialogs/whats-new-dialog.c:170
+#: ../src/gui/dialogs/whats-new-dialog.c:294
 msgid "Next"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:256
+#: ../src/gui/dialogs/whats-new-dialog.c:279
 msgid "Back"
 msgstr ""
 
-#: ../src/common/common.c:162
-msgid "Error while opening the cipher handle."
-msgstr ""
-
-#: ../src/common/common.c:168
-msgid "Error while setting the cipher key."
-msgstr ""
-
-#: ../src/common/common.c:175
-msgid "Error while setting the cipher iv."
-msgstr ""
-
-#: ../src/common/common.c:384
-msgid "Truncation occurred."
-msgstr ""
-
-#: ../src/common/db-common.c:168
-msgid "Error while unlinking the file."
-msgstr ""
-
-#: ../src/common/db-common.c:731
-msgid "Backup copy successfully created."
-msgstr ""
-
-#: ../src/common/db-common.c:731
-msgid "Backup copy successfully restored."
-msgstr ""
-
-#: ../src/common/aegis.c:54 ../src/common/authpro.c:40
-#: ../src/common/twofas.c:63 ../src/common/freeotp.c:25
+#: ../src/common/aegis.c:57 ../src/common/authpro.c:43
+#: ../src/common/freeotp.c:25 ../src/common/twofas.c:66
 msgid ""
 "Your system's secure memory limit is not enough to securely import the "
 "data.\n"
@@ -990,8 +1079,8 @@ msgid ""
 "OTPClient cannot change automatically."
 msgstr ""
 
-#: ../src/common/aegis.c:297 ../src/common/authpro.c:81
-#: ../src/common/twofas.c:90 ../src/common/freeotp.c:48
+#: ../src/common/aegis.c:339 ../src/common/authpro.c:93
+#: ../src/common/freeotp.c:48 ../src/common/twofas.c:109
 msgid ""
 "Your system's secure memory limit is not enough to securely export the "
 "database.\n"
@@ -1000,6 +1089,48 @@ msgid ""
 "wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
 "This requires administrator privileges and is a system-wide setting that "
 "OTPClient cannot change automatically."
+msgstr ""
+
+#: ../src/common/common.c:166
+msgid "Error while opening the cipher handle."
+msgstr ""
+
+#: ../src/common/common.c:172
+msgid "Error while setting the cipher key."
+msgstr ""
+
+#: ../src/common/common.c:179
+msgid "Error while setting the cipher iv."
+msgstr ""
+
+#: ../src/common/db-common.c:177
+msgid "Error while unlinking the file."
+msgstr ""
+
+#: ../src/common/db-common.c:826
+msgid "Backup copy successfully created."
+msgstr ""
+
+#: ../src/common/db-common.c:826
+msgid "Backup copy successfully restored."
+msgstr ""
+
+#: ../src/common/db-common.c:848
+msgid "Source path is NULL"
+msgstr ""
+
+#: ../src/common/db-common.c:849
+msgid "Destination path is NULL"
+msgstr ""
+
+#: ../src/common/db-common.c:863
+#, c-format
+msgid "Couldn't copy database: %s"
+msgstr ""
+
+#: ../src/common/db-common.c:866
+#, c-format
+msgid "Failed to chmod 0600 on %s: %s"
 msgstr ""
 
 #: ../src/gui/ui/window.ui:21
@@ -1019,7 +1150,7 @@ msgid "Main menu"
 msgstr ""
 
 #: ../src/gui/ui/window.ui:70
-msgid "Export Now"
+msgid "Back up Now"
 msgstr ""
 
 #: ../src/gui/ui/window.ui:78
@@ -1050,42 +1181,55 @@ msgstr ""
 msgid "Deriving the encryption key."
 msgstr ""
 
-#: ../src/gui/ui/window.ui:184
+#: ../src/gui/ui/window.ui:176
 msgid "No tokens yet"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:185
+#: ../src/gui/ui/window.ui:177
 msgid ""
 "Add a token manually, scan a QR code, or import an existing backup to get "
 "started."
 msgstr ""
 
-#: ../src/gui/ui/window.ui:205 ../src/gui/ui/window.ui:246
+#: ../src/gui/ui/window.ui:197 ../src/gui/ui/window.ui:276
 #: ../src/gui/ui/shortcuts-window.ui:65
 msgid "Import"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:232 ../src/gui/ui/shortcuts-window.ui:54
+#: ../src/gui/ui/window.ui:216
+msgid "No database yet"
+msgstr ""
+
+#: ../src/gui/ui/window.ui:217
+msgid ""
+"Create a new encrypted database, or open an existing one to get started."
+msgstr ""
+
+#: ../src/gui/ui/window.ui:227
+msgid "Create Database"
+msgstr ""
+
+#: ../src/gui/ui/window.ui:262 ../src/gui/ui/shortcuts-window.ui:54
 msgid "Add Manually"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:236
+#: ../src/gui/ui/window.ui:266
 msgid "Scan QR from File"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:240
+#: ../src/gui/ui/window.ui:270
 msgid "Scan QR from Webcam"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:274
+#: ../src/gui/ui/window.ui:304
 msgid "Snooze Backup Reminder"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:284
+#: ../src/gui/ui/window.ui:314
 msgid "What's New"
 msgstr ""
 
-#: ../src/gui/ui/window.ui:288
+#: ../src/gui/ui/window.ui:318
 msgid "About"
 msgstr ""
 

@@ -19,19 +19,20 @@
   </keywords>
 
   <description>
-    <p>Highly secure and easy to use OTP client written in C/GTK4 that supports both TOTP and HOTP and has the following features:</p>
+    <p>OTPClient is a secure and easy-to-use desktop client for TOTP and HOTP one-time passwords, built with GTK4 and libadwaita. Features:</p>
     <ul>
-      <li>integration with the OS' secret service provider via libsecret</li>
-      <li>support both TOTP and HOTP</li>
-      <li>support setting custom digits (between 4 and 10 inclusive)</li>
-      <li>support setting a custom period (between 10 and 120 seconds inclusive)</li>
-      <li>support SHA1, SHA256 and SHA512 algorithms</li>
-      <li>support for Steam codes</li>
-      <li>import and export encrypted/plain andOTP backup</li>
-      <li>import and export encrypted/plain Aegis backup</li>
-      <li>import and export plain FreeOTPPlus backup (key URI format only)</li>
-      <li>import of Google's migration QR codes</li>
-      <li>local database is encrypted using AES256-GCM (Argon2id key derivation) and, while decrypted, it's stored in a secure memory area allocated by GCrypt.</li>
+      <li>multiple databases with sidebar management and cross-database search</li>
+      <li>token grouping with quick filtering</li>
+      <li>desktop search provider for GNOME Shell and KDE KRunner (opt-in trigger keyword)</li>
+      <li>command-line companion (otpclient-cli) with scriptable table/JSON/CSV output</li>
+      <li>support for TOTP, HOTP, and Steam codes</li>
+      <li>configurable digits (4 to 10), period (10 to 120 seconds), and algorithm (SHA1, SHA256, SHA512)</li>
+      <li>import and export of encrypted/plain Aegis backups</li>
+      <li>import and export of encrypted/plain Authenticator Pro and 2FAS backups</li>
+      <li>import and export of plain FreeOTP+ backups (key URI format)</li>
+      <li>import of Google Authenticator migration QR codes (file, screen, webcam, clipboard)</li>
+      <li>integration with the OS secret service provider via libsecret (opt-in)</li>
+      <li>local database encrypted with AES-256-GCM and Argon2id key derivation; plaintext lives only in libgcrypt secure memory while unlocked</li>
     </ul>
   </description>
 
@@ -89,6 +90,39 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.0" date="2026-05-08">
+      <description>
+        <p>OTPClient 5.0.0 — first stable release of the GTK4 / libadwaita rewrite, with multi-database support, token grouping, an opt-in trigger keyword for the desktop search provider, and a sweeping crypto and import-path hardening pass. Existing v2 databases unlock and migrate automatically.</p>
+        <ul>
+          <li>NEW: complete GUI rewrite on GTK4 + libadwaita</li>
+          <li>NEW: persistent multi-database support with sidebar and right-click "Move to…" between databases</li>
+          <li>NEW: token grouping with header-bar dropdown and "group:" / "#" search prefix; groups round-trip through Aegis / AuthPro / 2FAS</li>
+          <li>NEW: cross-database search with auto-select-and-copy on a single result</li>
+          <li>NEW: hidden-by-default OTPs with click-to-reveal and auto-hide</li>
+          <li>NEW: async unlock with KDF spinner</li>
+          <li>NEW: search-provider trigger keyword (default "otp"); KRunner subtitle no longer leaks live codes; activation copies the OTP</li>
+          <li>NEW: Settings → Backup is the unified entry point for native (encrypted) backup and restore; format-specific export becomes migration-only with a plaintext warning</li>
+          <li>NEW: settings import/export, Welcome and What's New dialogs, KDF presets, paste-to-fill otpauth:// URI, backup-age banner, lock-time clipboard wipe</li>
+          <li>NEW: scriptable CLI output (--output=table|json|csv), translated CLI strings, --list-databases, HOTP counter in CSV, bash/zsh/fish completions</li>
+          <li>NEW: native StatusNotifierItem tray (libayatana-appindicator dependency removed)</li>
+          <li>SECURITY: Argon2id header validation refuses out-of-bounds parameters on unlock</li>
+          <li>SECURITY: KDF byte-length fix — gcry_kdf_* was passed character count instead of byte count, weakening keys for non-ASCII passwords; transparent retry plus opportunistic re-encryption on the next write</li>
+          <li>SECURITY: O_NOFOLLOW + fstat S_ISREG on every importer and database read site, closing the symlink-swap TOCTOU window</li>
+          <li>SECURITY: 0600 mode on backup files; PR_SET_DUMPABLE=0 + RLIMIT_CORE=0 to suppress core dumps</li>
+          <li>SECURITY: AEAD validation tightened across decrypt paths; 2FAS no longer accepts plaintext on tag mismatch</li>
+          <li>SECURITY: search provider refuses every D-Bus method when the keyword is empty (closes arbitrary local enumeration of accounts)</li>
+          <li>SECURITY: otpauth:// URI capped at 4 KB, HOTP counter capped at 2^48, PNG QR capped at 4096×4096, settings import capped at 1 MiB</li>
+          <li>SECURITY: signal-safe clipboard wipe on SIGINT/SIGTERM/SIGHUP; CLI --password-file refuses group/world-readable files; secret service disabled by default</li>
+          <li>SECURITY: HOTP counter increment is transactional (rolled back if save fails)</li>
+          <li>FIX: NULL-deref crashes across Aegis, AuthPro, 2FAS, FreeOTP+, and otpauth importers on malformed input</li>
+          <li>FIX: use-after-free in async secret lookup; double-free of filter_model in window dispose; DBus assertion on exit</li>
+          <li>FIX: notification spam during store rebuilds and search-bar close</li>
+          <li>FIX: window size and group dropdown restored across sessions; schema and icon cache updated on install</li>
+          <li>PERF: KDF-derived key cache, lazy cross-DB OTP, deferred HOTP writes, pre-folded labels in search provider</li>
+          <li>BREAKING: GTK 4.18+ and libadwaita 1.5+ required; configuration migrated to GSettings (GKeyFile not migrated automatically)</li>
+        </ul>
+      </description>
+    </release>
     <release version="4.99.93" date="2026-04-27">
       <description>
         <p>OTPClient 5.0.0-beta3 - Hide-by-default OTPs, unified backup flow, and fresh-install polish</p>
