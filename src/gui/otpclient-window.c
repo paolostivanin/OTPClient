@@ -2401,6 +2401,8 @@ on_qr_file_selected (GObject      *source,
             show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
             g_clear_error (&err);
         } else {
+            g_slist_free (db_data->data_to_add);
+            db_data->data_to_add = NULL;
             reload_db (db_data, &err);
             g_clear_error (&err);
         }
@@ -2473,6 +2475,8 @@ action_add_qr_webcam (GtkWidget  *widget,
             show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
             g_clear_error (&err);
         } else {
+            g_slist_free (db_data->data_to_add);
+            db_data->data_to_add = NULL;
             reload_db (db_data, &err);
             g_clear_error (&err);
         }
