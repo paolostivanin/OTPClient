@@ -3025,12 +3025,8 @@ action_set_group (GtkWidget  *widget,
     (void) action_name;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3075,12 +3071,8 @@ action_remove_from_group (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3181,12 +3173,8 @@ action_new_group (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     NewGroupContext *ctx = g_new0 (NewGroupContext, 1);
