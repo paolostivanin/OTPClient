@@ -1311,6 +1311,8 @@ static void on_otp_selection_changed (GtkSingleSelection *selection,
                                       GParamSpec         *pspec,
                                       OTPClientWindow    *self);
 
+static guint find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry);
+
 static void
 search_entry_activate (GtkEntry        *entry,
                        OTPClientWindow *self)
@@ -1557,19 +1559,25 @@ on_otp_selection_changed (GtkSingleSelection *selection,
         DatabaseData *db_data = otpclient_application_get_db_data (app);
         if (db_data != NULL && db_data->in_memory_json_data != NULL)
         {
-            guint64 new_counter = otp_entry_get_counter (entry) + 1;
-            otp_entry_set_counter (entry, new_counter);
-            otp_entry_update_otp (entry);
-
-            json_t *token_obj = json_array_get (db_data->in_memory_json_data, pos);
-            if (token_obj != NULL)
+            /* `pos` above is the position in the filter+sort view, not the
+             * JSON. Translate via the entry's identity in the store. */
+            guint json_pos = find_store_pos_for_entry (self, entry);
+            if (json_pos != GTK_INVALID_LIST_POSITION)
             {
-                json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
-                /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up.
-                 * Also arm a debounced timer so a hard crash within HOTP_FLUSH_DEBOUNCE_SECONDS
-                 * (rather than a clean shutdown) still persists the new counter. */
-                self->hotp_counter_dirty = TRUE;
-                schedule_hotp_flush (self);
+                guint64 new_counter = otp_entry_get_counter (entry) + 1;
+                otp_entry_set_counter (entry, new_counter);
+                otp_entry_update_otp (entry);
+
+                json_t *token_obj = json_array_get (db_data->in_memory_json_data, json_pos);
+                if (token_obj != NULL)
+                {
+                    json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
+                    /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up.
+                     * Also arm a debounced timer so a hard crash within HOTP_FLUSH_DEBOUNCE_SECONDS
+                     * (rather than a clean shutdown) still persists the new counter. */
+                    self->hotp_counter_dirty = TRUE;
+                    schedule_hotp_flush (self);
+                }
             }
         }
     }
@@ -1628,6 +1636,29 @@ find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
             return i;
     }
     return GTK_INVALID_LIST_POSITION;
+}
+
+/* Resolve the current selection to a JSON-array index.
+ *
+ * The selection wraps sort+filter+store, so the bare selection position
+ * reflects the filtered+sorted view — not the underlying store or the
+ * JSON. on_db_modified() rebuilds otp_store from the JSON array in
+ * order, so the store position equals the JSON index. Look up the
+ * selected item itself rather than trusting the selection position.
+ *
+ * Returns GTK_INVALID_LIST_POSITION when nothing is selected, the
+ * selection is a cross-DB (read-only) result, or the entry no longer
+ * exists in the store.
+ */
+static guint
+selected_writable_json_index (OTPClientWindow *self)
+{
+    OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
+    if (entry == NULL)
+        return GTK_INVALID_LIST_POSITION;
+    if (otp_entry_get_db_name (entry) != NULL)
+        return GTK_INVALID_LIST_POSITION;
+    return find_store_pos_for_entry (self, entry);
 }
 
 /*
@@ -2589,13 +2620,8 @@ action_edit_token (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    /* Cannot edit cross-DB entries */
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -2664,7 +2690,7 @@ on_delete_response (AdwAlertDialog *dialog,
     if (g_strcmp0 (response, "delete") != 0)
         return;
 
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
         return;
 
@@ -2714,13 +2740,7 @@ action_delete_token (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
-    if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    /* Cannot delete cross-DB entries */
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
+    if (selected_writable_json_index (self) == GTK_INVALID_LIST_POSITION)
         return;
 
     AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
@@ -2747,13 +2767,8 @@ action_show_qr (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    /* Cannot show QR for cross-DB entries */
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -2922,13 +2937,8 @@ action_move_token (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
+    guint pos = selected_writable_json_index (self);
     if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    /* Cannot move cross-DB entries */
-    OTPEntry *sel_entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
-    if (sel_entry != NULL && otp_entry_get_db_name (sel_entry) != NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
