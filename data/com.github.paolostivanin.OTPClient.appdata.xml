@@ -90,6 +90,17 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.1" date="2026-05-12">
+      <description>
+        <p>Bug-fix release for 5.0.0. Importing a QR code into a database that already contained tokens left the previously-imported entries duplicated in the array; the duplicates also caused delete and group actions to appear to target the wrong row. Existing 5.0.0 databases that were corrupted by repeated QR imports can be cleaned up by removing the duplicate entries.</p>
+        <ul>
+          <li>FIX: QR import no longer duplicates pre-existing tokens (#435)</li>
+          <li>FIX: Set Group / Remove from Group / New Group act on the right token when a group filter or column sort is active (#437)</li>
+          <li>FIX: token actions (delete, edit, show QR, move to database) act on the right token when a filter or column sort is active</li>
+          <li>FIX: clicking a database in the sidebar now actually loads it (#436)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.0" date="2026-05-08">
       <description>
         <p>OTPClient 5.0.0 — first stable release of the GTK4 / libadwaita rewrite, with multi-database support, token grouping, an opt-in trigger keyword for the desktop search provider, and a sweeping crypto and import-path hardening pass. Existing v2 databases unlock and migrate automatically.</p>
