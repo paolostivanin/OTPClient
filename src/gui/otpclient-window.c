@@ -1334,12 +1334,48 @@ database_row_selected (GtkListBox      *box,
                        OTPClientWindow *self)
 {
     (void) box;
-    (void) self;
 
     if (row == NULL)
         return;
 
-    /* The application handles DB switching via the selected row's DatabaseEntry */
+    gint index = gtk_list_box_row_get_index (row);
+    if (index < 0)
+        return;
+
+    g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+        G_LIST_MODEL (self->db_store), (guint) index);
+    if (entry == NULL)
+        return;
+
+    if (database_entry_get_missing (entry))
+        return;
+
+    const gchar *path = database_entry_get_path (entry);
+    if (path == NULL || path[0] == '\0')
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return;
+
+    /* Suppress redundant switches:
+     *  - Same DB already loaded → nothing to do.
+     *  - Cold start: init_database() calls select_database() before it
+     *    sets db_data, so this fires once with current == NULL. If the
+     *    row matches the path init_database is about to load, let that
+     *    flow run; otherwise we'd stack a second password dialog. */
+    DatabaseData *current = otpclient_application_get_db_data (app);
+    if (current != NULL && g_strcmp0 (current->db_path, path) == 0)
+        return;
+    if (current == NULL)
+    {
+        g_autofree gchar *cfg_path = gui_misc_get_db_path_from_cfg ();
+        if (g_strcmp0 (cfg_path, path) == 0)
+            return;
+    }
+
+    otpclient_application_switch_to_db (app, path);
 }
 
 static void on_db_entry_name_changed (DatabaseEntry *entry,

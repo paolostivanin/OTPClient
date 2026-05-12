@@ -921,6 +921,58 @@ otpclient_application_set_db_data (OTPClientApplication *self,
     self->db_data = db_data;
 }
 
+void
+otpclient_application_switch_to_db (OTPClientApplication *self,
+                                    const gchar          *db_path)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_return_if_fail (db_path != NULL && db_path[0] != '\0');
+
+    if (self->db_data != NULL && g_strcmp0 (self->db_data->db_path, db_path) == 0)
+        return;
+
+    /* Persist any deferred HOTP writes from the outgoing DB while the
+     * key is still in memory, then tear the window state down. */
+    if (self->window != NULL)
+    {
+        otpclient_window_flush_pending_writes (self->window);
+        otpclient_window_stop_otp_timer (self->window);
+        otpclient_window_clear_clipboard_now (self->window);
+        otpclient_window_invalidate_cross_db (self->window);
+
+        GListStore *store = otpclient_window_get_otp_store (self->window);
+        if (store != NULL)
+            g_list_store_remove_all (store);
+        otpclient_window_set_db_actions_enabled (self->window, FALSE);
+    }
+
+    otpclient_application_set_db_data (self, NULL);
+
+    gint32 memlock_value = 0;
+    if (set_memlock_value (&memlock_value) == MEMLOCK_ERR)
+        memlock_value = DEFAULT_MEMLOCK_VALUE;
+
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->db_path = g_strdup (db_path);
+    db_data->max_file_size_from_memlock = memlock_value;
+    self->db_data = db_data;
+
+    if (self->use_secret_service)
+    {
+        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
+                                on_secret_lookup_done, self,
+                                "string", db_path,
+                                NULL);
+    }
+    else if (self->window != NULL)
+    {
+        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                   on_password_received,
+                                                   self);
+        adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+    }
+}
+
 gboolean otpclient_application_get_show_next_otp (OTPClientApplication *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);

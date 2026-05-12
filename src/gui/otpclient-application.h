@@ -17,6 +17,9 @@ DatabaseData         *otpclient_application_get_db_data (OTPClientApplication *s
 void                  otpclient_application_set_db_data (OTPClientApplication *self,
                                                          DatabaseData         *db_data);
 
+void                  otpclient_application_switch_to_db (OTPClientApplication *self,
+                                                          const gchar          *db_path);
+
 gboolean              otpclient_application_get_show_next_otp (OTPClientApplication *self);
 void                  otpclient_application_set_show_next_otp (OTPClientApplication *self,
                                                                gboolean              show);
