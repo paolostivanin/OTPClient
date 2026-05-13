@@ -1553,8 +1553,12 @@ otpclient_window_add_database (OTPClientWindow *self,
     if (!gui_misc_add_db_to_list (self->db_store, name, path))
         return;
 
-    /* If this is the first database, set it as primary */
-    if (g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) == 1)
+    /* If no primary is set yet, this is the first DB the user has — make
+     * it the default. Don't gate on store size: at startup the sidebar is
+     * repopulated entry by entry, and the first one would otherwise
+     * clobber whatever the user explicitly chose as primary. */
+    g_autofree gchar *current_primary = gui_misc_get_db_path_from_cfg ();
+    if (current_primary == NULL || current_primary[0] == '\0')
         gui_misc_save_db_path_to_cfg (path);
 
     sync_primary_flags (self);
