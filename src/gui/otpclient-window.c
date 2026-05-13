@@ -1476,8 +1476,28 @@ create_database_row (gpointer item,
 }
 
 static void
+ensure_sidebar_css_provider (void)
+{
+    static gsize loaded = 0;
+    if (g_once_init_enter (&loaded))
+    {
+        GtkCssProvider *provider = gtk_css_provider_new ();
+        gtk_css_provider_load_from_string (provider,
+            "row.active-database .title { font-weight: bold; }");
+        gtk_style_context_add_provider_for_display (
+            gdk_display_get_default (),
+            GTK_STYLE_PROVIDER (provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+        g_object_unref (provider);
+        g_once_init_leave (&loaded, 1);
+    }
+}
+
+static void
 setup_database_list (OTPClientWindow *self)
 {
+    ensure_sidebar_css_provider ();
+
     self->db_store = g_list_store_new (DATABASE_TYPE_ENTRY);
 
     gtk_list_box_bind_model (GTK_LIST_BOX (self->database_list),
@@ -3523,6 +3543,8 @@ on_new_db_password_received (const gchar *password,
     g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
     otpclient_window_add_database (self, display_name, db_path);
     otpclient_window_sync_active_flag (self);
+    otpclient_window_select_database (self,
+        (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -3637,6 +3659,8 @@ on_open_db_password_received (const gchar *password,
     g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
     otpclient_window_add_database (self, display_name, db_path);
     otpclient_window_sync_active_flag (self);
+    otpclient_window_select_database (self,
+        (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);

@@ -14,7 +14,3 @@ row.button-row:hover {
 row.button-row:active {
   background-color: alpha(currentColor, 0.16);
 }
-
-row.active-database .title {
-  font-weight: bold;
-}
