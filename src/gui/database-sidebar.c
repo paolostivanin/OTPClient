@@ -7,6 +7,7 @@ struct _DatabaseEntry
     gchar *path;
     gboolean is_primary;
     gboolean missing;
+    gboolean is_active;
 };
 
 enum
@@ -16,6 +17,7 @@ enum
     DB_PROP_PATH,
     DB_PROP_PRIMARY,
     DB_PROP_MISSING,
+    DB_PROP_ACTIVE,
     DB_N_PROPS
 };
 
@@ -54,6 +56,9 @@ database_entry_get_property (GObject    *object,
         case DB_PROP_MISSING:
             g_value_set_boolean (value, self->missing);
             break;
+        case DB_PROP_ACTIVE:
+            g_value_set_boolean (value, self->is_active);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -83,6 +88,9 @@ database_entry_set_property (GObject      *object,
         case DB_PROP_MISSING:
             self->missing = g_value_get_boolean (value);
             break;
+        case DB_PROP_ACTIVE:
+            self->is_active = g_value_get_boolean (value);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -108,6 +116,9 @@ database_entry_class_init (DatabaseEntryClass *klass)
                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
     db_properties[DB_PROP_MISSING] =
         g_param_spec_boolean ("missing", NULL, NULL, FALSE,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+    db_properties[DB_PROP_ACTIVE] =
+        g_param_spec_boolean ("active", NULL, NULL, FALSE,
                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
 
     g_object_class_install_properties (object_class, DB_N_PROPS, db_properties);
@@ -195,4 +206,24 @@ database_entry_set_missing (DatabaseEntry *self,
 
     self->missing = missing;
     g_object_notify_by_pspec (G_OBJECT (self), db_properties[DB_PROP_MISSING]);
+}
+
+gboolean
+database_entry_get_active (DatabaseEntry *self)
+{
+    g_return_val_if_fail (DATABASE_IS_ENTRY (self), FALSE);
+    return self->is_active;
+}
+
+void
+database_entry_set_active (DatabaseEntry *self,
+                           gboolean       active)
+{
+    g_return_if_fail (DATABASE_IS_ENTRY (self));
+
+    if (self->is_active == active)
+        return;
+
+    self->is_active = active;
+    g_object_notify_by_pspec (G_OBJECT (self), db_properties[DB_PROP_ACTIVE]);
 }

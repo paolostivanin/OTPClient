@@ -535,6 +535,7 @@ on_unlock_done (GObject      *source_object,
     {
         otpclient_window_hide_loading (self->window);
         otpclient_window_start_otp_timer (self->window);
+        otpclient_window_sync_active_flag (self->window);
     }
 }
 

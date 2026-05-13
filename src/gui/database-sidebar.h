@@ -26,4 +26,8 @@ gboolean        database_entry_get_missing   (DatabaseEntry *self);
 void            database_entry_set_missing   (DatabaseEntry *self,
                                               gboolean       missing);
 
+gboolean        database_entry_get_active    (DatabaseEntry *self);
+void            database_entry_set_active    (DatabaseEntry *self,
+                                              gboolean       active);
+
 G_END_DECLS

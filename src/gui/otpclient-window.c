@@ -1376,6 +1376,7 @@ database_row_selected (GtkListBox      *box,
     }
 
     otpclient_application_switch_to_db (app, path);
+    otpclient_window_sync_active_flag (self);
 }
 
 static void on_db_entry_name_changed (DatabaseEntry *entry,
@@ -1412,6 +1413,18 @@ on_db_entry_missing_row_changed (DatabaseEntry *entry,
         gtk_widget_remove_css_class (row, "dim-label");
 }
 
+static void
+on_db_entry_active_changed (DatabaseEntry *entry,
+                            GParamSpec    *pspec,
+                            GtkWidget     *row)
+{
+    (void) pspec;
+    if (database_entry_get_active (entry))
+        gtk_widget_add_css_class (row, "active-database");
+    else
+        gtk_widget_remove_css_class (row, "active-database");
+}
+
 static GtkWidget *
 create_database_row (gpointer item,
                      gpointer user_data)
@@ -1426,8 +1439,9 @@ create_database_row (gpointer item,
     if (path != NULL)
         g_object_set (row, "subtitle", path, NULL);
 
-    GtkWidget *check_icon = gtk_image_new_from_icon_name ("object-select-symbolic");
+    GtkWidget *check_icon = gtk_image_new_from_icon_name ("starred-symbolic");
     gtk_widget_set_valign (check_icon, GTK_ALIGN_CENTER);
+    gtk_widget_set_tooltip_text (check_icon, _("Default database (loaded on startup)"));
     gtk_widget_set_visible (check_icon, database_entry_get_primary (entry));
     adw_action_row_add_suffix (row, check_icon);
 
@@ -1440,6 +1454,9 @@ create_database_row (gpointer item,
     if (database_entry_get_missing (entry))
         gtk_widget_add_css_class (GTK_WIDGET (row), "dim-label");
 
+    if (database_entry_get_active (entry))
+        gtk_widget_add_css_class (GTK_WIDGET (row), "active-database");
+
     g_signal_connect_object (entry, "notify::primary",
                              G_CALLBACK (on_db_entry_primary_changed), check_icon, 0);
 
@@ -1448,6 +1465,9 @@ create_database_row (gpointer item,
 
     g_signal_connect_object (entry, "notify::missing",
                              G_CALLBACK (on_db_entry_missing_row_changed), row, 0);
+
+    g_signal_connect_object (entry, "notify::active",
+                             G_CALLBACK (on_db_entry_active_changed), row, 0);
 
     g_signal_connect_object (entry, "notify::name",
                              G_CALLBACK (on_db_entry_name_changed), row, 0);
@@ -1478,6 +1498,28 @@ sync_primary_flags (OTPClientWindow *self)
         g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->db_store), i);
         gboolean is_primary = g_strcmp0 (database_entry_get_path (entry), primary_path) == 0;
         database_entry_set_primary (entry, is_primary);
+    }
+}
+
+void
+otpclient_window_sync_active_flag (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = (app != NULL)
+        ? otpclient_application_get_db_data (app) : NULL;
+    const gchar *active_path = (db_data != NULL) ? db_data->db_path : NULL;
+
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+            G_LIST_MODEL (self->db_store), i);
+        gboolean is_active = active_path != NULL
+            && g_strcmp0 (database_entry_get_path (entry), active_path) == 0;
+        database_entry_set_active (entry, is_active);
     }
 }
 
@@ -3475,12 +3517,12 @@ on_new_db_password_received (const gchar *password,
 
     otpclient_application_set_db_data (app, db_data);
 
-    /* Save path to config */
-    gui_misc_save_db_path_to_cfg (db_path);
-
-    /* Add to sidebar */
+    /* Add to sidebar. The first DB ever added is auto-set as primary by
+     * otpclient_window_add_database; subsequent creations leave the
+     * existing primary alone — only an explicit "Set as Primary" changes it. */
     g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
     otpclient_window_add_database (self, display_name, db_path);
+    otpclient_window_sync_active_flag (self);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -3589,12 +3631,12 @@ on_open_db_password_received (const gchar *password,
 
     otpclient_application_set_db_data (app, db_data);
 
-    /* Save path to config */
-    gui_misc_save_db_path_to_cfg (db_path);
-
-    /* Add to sidebar */
+    /* Add to sidebar. The first DB ever added is auto-set as primary by
+     * otpclient_window_add_database; opening an existing DB while one is
+     * already in the list does not change the default. */
     g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
     otpclient_window_add_database (self, display_name, db_path);
+    otpclient_window_sync_active_flag (self);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -3877,6 +3919,8 @@ on_remove_dialog_response (AdwAlertDialog  *dialog,
             g_list_store_remove_all (self->otp_store);
         }
     }
+
+    otpclient_window_sync_active_flag (self);
 }
 
 static void

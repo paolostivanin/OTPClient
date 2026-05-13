@@ -46,4 +46,6 @@ void                otpclient_window_flush_pending_writes (OTPClientWindow *self
 
 void                otpclient_window_clear_clipboard_now (OTPClientWindow *self);
 
+void                otpclient_window_sync_active_flag (OTPClientWindow *self);
+
 G_END_DECLS

@@ -47,10 +47,13 @@ static const PageInfo welcome_pages[] = {
     {
         "drive-harddisk-symbolic",
         N_("Multiple Databases"),
-        N_("You can create and manage multiple encrypted databases.\n\n"
-           "Use the sidebar to switch between them. Right-click a database "
-           "to rename it, set it as primary, or remove it from the list.\n\n"
-           "The primary database is loaded automatically on startup.")
+        N_("You can create and manage multiple encrypted databases from "
+           "the sidebar.\n\n"
+           "The first database you create becomes the default — it loads "
+           "automatically on startup and is marked with a star. The "
+           "currently open database is shown in bold.\n\n"
+           "Right-click a database to rename it, set it as the default, "
+           "or remove it from the list.")
     },
     {
         "folder-symbolic",
@@ -120,9 +123,12 @@ static const PageInfo whats_new_pages[] = {
     {
         "drive-harddisk-symbolic",
         N_("Multiple Databases"),
-        N_("You can now manage multiple encrypted databases from the sidebar.\n\n"
-           "Right-click a database to rename it, set it as primary, "
-           "or remove it from the list. The primary database loads on startup.")
+        N_("You can now manage multiple encrypted databases from the "
+           "sidebar.\n\n"
+           "The first database you create is the default — it loads on "
+           "startup and is marked with a star. The currently open database "
+           "is shown in bold. Right-click a database to rename it, set it "
+           "as the default, or remove it from the list.")
     },
     {
         "preferences-desktop-keyboard-symbolic",
