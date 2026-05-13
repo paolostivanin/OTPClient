@@ -98,6 +98,8 @@
           <li>FIX: Set Group / Remove from Group / New Group act on the right token when a group filter or column sort is active (#437)</li>
           <li>FIX: token actions (delete, edit, show QR, move to database) act on the right token when a filter or column sort is active</li>
           <li>FIX: clicking a database in the sidebar now actually loads it (#436)</li>
+          <li>NEW: sidebar marks the default database (loaded on startup) with a star and the currently open one in bold</li>
+          <li>NEW: creating or opening additional databases no longer changes which one loads on startup — only right-click "Set as Primary" does, and that choice now persists across restarts</li>
         </ul>
       </description>
     </release>
