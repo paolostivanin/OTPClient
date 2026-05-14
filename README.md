@@ -24,6 +24,7 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - Token grouping: assign tokens to groups (e.g. "Work", "Personal") via right-click,
   the edit dialog, or when adding a token; groups are preserved during Aegis,
   AuthenticatorPro, and 2FAS import/export
+- Add tokens by scanning a QR code from an image file, the webcam, or the clipboard, or by entering the secret manually
 - QR code display for any token (re-pairing or sharing across devices)
 - Idle and screensaver auto-lock with configurable timeout
 - Configurable clipboard wipe; clipboard is also cleared on lock and app exit
