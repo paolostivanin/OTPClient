@@ -4,6 +4,53 @@
 #include "qrcode-parser.h"
 #include "gquarks.h"
 
+/* Real-world QR code images for OTP enrollment are at most a few hundred
+ * pixels per side. Cap the dimensions before any allocation: a malicious
+ * source (PNG file, oversized clipboard texture) with width=height=65535
+ * would otherwise request ~17 GB across the row pointer array, the per-row
+ * buffers, and the grayscale buffer. g_malloc aborts on huge allocations,
+ * which crashes the application — DoS via a single QR import. */
+#define MAX_QR_IMAGE_DIM 4096u
+
+static gchar *
+scan_grayscale_buffer (const guchar  *gray,
+                       guint          width,
+                       guint          height,
+                       GError       **error)
+{
+    zbar_image_scanner_t *scanner = zbar_image_scanner_create ();
+    zbar_image_scanner_set_config (scanner, 0, ZBAR_CFG_ENABLE, 1);
+
+    zbar_image_t *image = zbar_image_create ();
+    zbar_image_set_format (image, zbar_fourcc ('Y', '8', '0', '0'));
+    zbar_image_set_size (image, width, height);
+    zbar_image_set_data (image, gray, width * height, NULL);
+
+    gint n = zbar_scan_image (scanner, image);
+    gchar *result = NULL;
+
+    if (n > 0)
+    {
+        const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
+        if (symbol != NULL)
+        {
+            const gchar *data = zbar_symbol_get_data (symbol);
+            if (data != NULL)
+                result = g_strdup (data);
+        }
+    }
+    else
+    {
+        g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
+                     "No QR code found in the image");
+    }
+
+    zbar_image_destroy (image);
+    zbar_image_scanner_destroy (scanner);
+
+    return result;
+}
+
 static gboolean
 load_png_image (const gchar  *filepath,
                 guchar      **raw_data,
@@ -52,13 +99,6 @@ load_png_image (const gchar  *filepath,
 
     *width = png_get_image_width (png, info);
     *height = png_get_image_height (png, info);
-    /* Real-world QR code images for OTP enrollment are at most a few hundred
-     * pixels per side. Cap the dimensions before any allocation: a malicious
-     * PNG with width=height=65535 (libpng's maximum) would otherwise request
-     * ~17 GB across the row pointer array, the per-row buffers, and the
-     * grayscale buffer below. g_malloc aborts on huge allocations, which
-     * crashes the application — DoS via a single QR import. */
-    #define MAX_QR_IMAGE_DIM 4096u
     if (*width == 0 || *height == 0 ||
         *width > MAX_QR_IMAGE_DIM || *height > MAX_QR_IMAGE_DIM)
     {
@@ -139,36 +179,48 @@ qrcode_parse_image_file (const gchar  *filepath,
     if (!load_png_image (filepath, &raw_data, &width, &height, error))
         return NULL;
 
-    zbar_image_scanner_t *scanner = zbar_image_scanner_create ();
-    zbar_image_scanner_set_config (scanner, 0, ZBAR_CFG_ENABLE, 1);
+    gchar *result = scan_grayscale_buffer (raw_data, width, height, error);
+    g_free (raw_data);
 
-    zbar_image_t *image = zbar_image_create ();
-    zbar_image_set_format (image, zbar_fourcc ('Y', '8', '0', '0'));
-    zbar_image_set_size (image, width, height);
-    zbar_image_set_data (image, raw_data, width * height, NULL);
+    return result;
+}
 
-    gint n = zbar_scan_image (scanner, image);
-    gchar *result = NULL;
+gchar *
+qrcode_parse_texture (GdkTexture  *texture,
+                      GError     **error)
+{
+    g_return_val_if_fail (texture != NULL, NULL);
 
-    if (n > 0)
-    {
-        const zbar_symbol_t *symbol = zbar_image_first_symbol (image);
-        if (symbol != NULL)
-        {
-            const gchar *data = zbar_symbol_get_data (symbol);
-            if (data != NULL)
-                result = g_strdup (data);
-        }
-    }
-    else
+    int w = gdk_texture_get_width (texture);
+    int h = gdk_texture_get_height (texture);
+    if (w <= 0 || h <= 0 ||
+        (guint) w > MAX_QR_IMAGE_DIM || (guint) h > MAX_QR_IMAGE_DIM)
     {
         g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
-                     "No QR code found in the image");
+                     "Image dimensions out of range (%dx%d, max %ux%u).",
+                     w, h, MAX_QR_IMAGE_DIM, MAX_QR_IMAGE_DIM);
+        return NULL;
     }
 
-    zbar_image_destroy (image);
-    zbar_image_scanner_destroy (scanner);
-    g_free (raw_data);
+    gsize stride = (gsize) w * 4;
+    guchar *rgba = g_malloc ((gsize) h * stride);
+    /* gdk_texture_download() always emits BGRA in the host byte order. */
+    gdk_texture_download (texture, rgba, stride);
+
+    guchar *gray = g_malloc ((gsize) w * (gsize) h);
+    for (int y = 0; y < h; y++)
+    {
+        for (int x = 0; x < w; x++)
+        {
+            const guchar *px = &rgba[y * stride + x * 4];
+            /* Channel order is B,G,R,A (cairo / GdkMemoryFormat default). */
+            gray[y * w + x] = (guchar)(0.299 * px[2] + 0.587 * px[1] + 0.114 * px[0]);
+        }
+    }
+    g_free (rgba);
+
+    gchar *result = scan_grayscale_buffer (gray, (guint) w, (guint) h, error);
+    g_free (gray);
 
     return result;
 }
