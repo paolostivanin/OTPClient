@@ -90,6 +90,15 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.2" date="2026-05-14">
+      <description>
+        <p>Restores the "Scan QR from Clipboard" workflow that existed in 4.5.0 and was dropped in the GTK4 rewrite. Reads an image directly from the clipboard via the GTK4 clipboard API and feeds it into the existing zbar pipeline, sidestepping the file-roundtrip needed for browser-copied or screenshot-captured QR codes.</p>
+        <ul>
+          <li>NEW: Add → Scan QR from Clipboard (#438)</li>
+          <li>FIX: scanning a QR that does not encode an otpauth:// URI now surfaces a toast instead of silently doing nothing (applies to file and webcam scans too)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.1" date="2026-05-12">
       <description>
         <p>Bug-fix release for 5.0.0. Importing a QR code into a database that already contained tokens left the previously-imported entries duplicated in the array; the duplicates also caused delete and group actions to appear to target the wrong row. Existing 5.0.0 databases that were corrupted by repeated QR imports can be cleaned up by removing the duplicate entries.</p>

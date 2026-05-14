@@ -2419,6 +2419,50 @@ action_add_manual (GtkWidget  *widget,
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
+/* Shared tail for the "Scan QR from File / Webcam / Clipboard" actions.
+ * Takes ownership of @otpauth_uri (frees it before returning). */
+static void
+add_token_from_otpauth_uri (OTPClientWindow *self,
+                            gchar           *otpauth_uri)
+{
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL) {
+        g_free (otpauth_uri);
+        return;
+    }
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL) {
+        g_free (otpauth_uri);
+        return;
+    }
+
+    GSList *otps = NULL;
+    set_otps_from_uris (otpauth_uri, &otps);
+    g_free (otpauth_uri);
+
+    if (otps == NULL) {
+        show_error_toast (self, _("QR code is not an OTP URI"));
+        return;
+    }
+
+    GError *err = NULL;
+    add_otps_to_db (otps, db_data);
+    free_otps_gslist (otps, g_slist_length (otps));
+    update_db (db_data, &err);
+    if (err != NULL) {
+        show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
+        g_clear_error (&err);
+    } else {
+        g_slist_free (db_data->data_to_add);
+        db_data->data_to_add = NULL;
+        reload_db (db_data, &err);
+        g_clear_error (&err);
+    }
+    on_db_modified (self);
+}
+
 static void
 on_qr_file_selected (GObject      *source,
                      GAsyncResult *result,
@@ -2442,38 +2486,7 @@ on_qr_file_selected (GObject      *source,
         return;
     }
 
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL) {
-        g_free (otpauth_uri);
-        return;
-    }
-
-    DatabaseData *db_data = otpclient_application_get_db_data (app);
-    if (db_data == NULL) {
-        g_free (otpauth_uri);
-        return;
-    }
-
-    GSList *otps = NULL;
-    set_otps_from_uris (otpauth_uri, &otps);
-    g_free (otpauth_uri);
-
-    if (otps != NULL) {
-        add_otps_to_db (otps, db_data);
-        free_otps_gslist (otps, g_slist_length (otps));
-        update_db (db_data, &err);
-        if (err != NULL) {
-            show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
-            g_clear_error (&err);
-        } else {
-            g_slist_free (db_data->data_to_add);
-            db_data->data_to_add = NULL;
-            reload_db (db_data, &err);
-            g_clear_error (&err);
-        }
-        on_db_modified (self);
-    }
+    add_token_from_otpauth_uri (self, otpauth_uri);
 }
 
 static void
@@ -2512,14 +2525,6 @@ action_add_qr_webcam (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL)
-        return;
-
-    DatabaseData *db_data = otpclient_application_get_db_data (app);
-    if (db_data == NULL)
-        return;
 
     GError *err = NULL;
     gchar *otpauth_uri = webcam_scan_qrcode (&err);
@@ -2529,25 +2534,59 @@ action_add_qr_webcam (GtkWidget  *widget,
         return;
     }
 
-    GSList *otps = NULL;
-    set_otps_from_uris (otpauth_uri, &otps);
-    g_free (otpauth_uri);
+    add_token_from_otpauth_uri (self, otpauth_uri);
+}
 
-    if (otps != NULL) {
-        add_otps_to_db (otps, db_data);
-        free_otps_gslist (otps, g_slist_length (otps));
-        update_db (db_data, &err);
-        if (err != NULL) {
-            show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
-            g_clear_error (&err);
-        } else {
-            g_slist_free (db_data->data_to_add);
-            db_data->data_to_add = NULL;
-            reload_db (db_data, &err);
-            g_clear_error (&err);
-        }
-        on_db_modified (self);
+static void
+on_clipboard_texture_received (GObject      *source,
+                               GAsyncResult *result,
+                               gpointer      user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    GError *err = NULL;
+    g_autoptr (GdkTexture) texture =
+        gdk_clipboard_read_texture_finish (GDK_CLIPBOARD (source), result, &err);
+    if (texture == NULL) {
+        show_error_toast (self, _("No image on clipboard: %s"),
+                          err ? err->message : _("unknown error"));
+        g_clear_error (&err);
+        return;
     }
+
+    gchar *otpauth_uri = qrcode_parse_texture (texture, &err);
+    if (otpauth_uri == NULL) {
+        show_error_toast (self, _("Could not read QR code: %s"),
+                          err ? err->message : _("unknown error"));
+        g_clear_error (&err);
+        return;
+    }
+
+    add_token_from_otpauth_uri (self, otpauth_uri);
+}
+
+static void
+action_add_qr_clipboard (GtkWidget  *widget,
+                         const char *action_name,
+                         GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    GdkDisplay *display = gtk_widget_get_display (widget);
+    if (display == NULL) {
+        show_error_toast (self, _("No display available"));
+        return;
+    }
+
+    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
+    if (clipboard == NULL) {
+        show_error_toast (self, _("Clipboard is not available"));
+        return;
+    }
+
+    gdk_clipboard_read_texture_async (clipboard, NULL,
+                                      on_clipboard_texture_received, self);
 }
 
 static void
@@ -4142,6 +4181,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_n, GDK_CONTROL_MASK, "win.add-manual", NULL);
     gtk_widget_class_install_action (widget_class, "win.add-qr-file", NULL, action_add_qr_file);
     gtk_widget_class_install_action (widget_class, "win.add-qr-webcam", NULL, action_add_qr_webcam);
+    gtk_widget_class_install_action (widget_class, "win.add-qr-clipboard", NULL, action_add_qr_clipboard);
     gtk_widget_class_install_action (widget_class, "win.import", NULL, action_import);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_i, GDK_CONTROL_MASK, "win.import", NULL);
     gtk_widget_class_install_action (widget_class, "win.export", NULL, action_export);

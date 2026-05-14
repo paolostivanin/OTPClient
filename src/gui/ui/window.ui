@@ -270,6 +270,10 @@
         <attribute name="label" translatable="yes">Scan QR from Webcam</attribute>
         <attribute name="action">win.add-qr-webcam</attribute>
       </item>
+      <item>
+        <attribute name="label" translatable="yes">Scan QR from Clipboard</attribute>
+        <attribute name="action">win.add-qr-clipboard</attribute>
+      </item>
     </section>
     <section>
       <item>
