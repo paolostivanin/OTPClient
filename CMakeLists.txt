@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(OTPClient VERSION "5.0.2" LANGUAGES "C")
+project(OTPClient VERSION "5.0.3" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")

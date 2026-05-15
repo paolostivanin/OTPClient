@@ -90,6 +90,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.3" date="2026-05-15">
+      <description>
+        <p>Small bug-fix release in the 5.0.x line. Fixes a startup crash on systems where the XDG portal cannot auto-report a color scheme (typically XFCE) and the user has the dark-theme GSetting enabled. The dark-theme preference was being applied before AdwApplication's startup chain ran, so adw_style_manager_get_default() reached into an uninitialized GDK display and aborted.</p>
+        <ul>
+          <li>FIX: startup crash "gdk_display_manager_get() was called before gtk_init()" when use-dark-theme is enabled on environments without a portal-reported color scheme (#440)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.2" date="2026-05-14">
       <description>
         <p>Restores the "Scan QR from Clipboard" workflow that existed in 4.5.0 and was dropped in the GTK4 rewrite. Reads an image directly from the clipboard via the GTK4 clipboard API and feeds it into the existing zbar pipeline, sidestepping the file-roundtrip needed for browser-copied or screenshot-captured QR codes.</p>
