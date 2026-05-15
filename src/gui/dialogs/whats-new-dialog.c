@@ -234,8 +234,8 @@ whats_new_dialog_new (gboolean is_welcome)
 {
     WhatsNewDialog *self = g_object_new (WHATS_NEW_TYPE_DIALOG,
                                          "title", "",
-                                         "content-width", 500,
-                                         "content-height", 420,
+                                         "content-width", 560,
+                                         "content-height", 560,
                                          NULL);
 
     if (is_welcome) {
@@ -251,8 +251,6 @@ whats_new_dialog_new (gboolean is_welcome)
     GtkWidget *toolbar_view = adw_toolbar_view_new ();
     GtkWidget *header = adw_header_bar_new ();
     adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (toolbar_view), header);
-
-    GtkWidget *outer_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
 
     /* Stack with pages */
     self->stack = gtk_stack_new ();
@@ -273,8 +271,6 @@ whats_new_dialog_new (gboolean is_welcome)
         g_autofree gchar *page_name = g_strdup_printf ("page-%d", i);
         gtk_stack_add_named (GTK_STACK (self->stack), status_page, page_name);
     }
-
-    gtk_box_append (GTK_BOX (outer_box), self->stack);
 
     /* Bottom navigation bar */
     GtkWidget *nav_bar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
@@ -307,9 +303,8 @@ whats_new_dialog_new (gboolean is_welcome)
     gtk_box_append (GTK_BOX (nav_bar), self->dot_box);
     gtk_box_append (GTK_BOX (nav_bar), self->next_button);
 
-    gtk_box_append (GTK_BOX (outer_box), nav_bar);
-
-    adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), outer_box);
+    adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), self->stack);
+    adw_toolbar_view_add_bottom_bar (ADW_TOOLBAR_VIEW (toolbar_view), nav_bar);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
     return self;
