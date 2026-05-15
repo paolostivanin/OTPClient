@@ -785,12 +785,14 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->otp_reveal_timeout = 10;
     }
 
-    /* Apply dark theme preference */
+    G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
+
+    /* Apply dark theme preference. Must run after the parent startup chain so
+     * that GTK/GDK has been initialized; otherwise adw_style_manager_ensure()
+     * calls gdk_display_manager_get() before gtk_init() and aborts (issue #440). */
     if (self->use_dark_theme)
         adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
                                             ADW_COLOR_SCHEME_FORCE_DARK);
-
-    G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
 
     /* Clear the clipboard and exit cleanly on signal-driven termination so
      * we don't leave a copied OTP behind when the user kills the process. */
