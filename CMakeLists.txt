@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(OTPClient VERSION "5.0.3" LANGUAGES "C")
+project(OTPClient VERSION "5.0.4" LANGUAGES "C")
 include(GNUInstallDirs)
 
 configure_file("src/common/version.h.in" "version.h")
@@ -214,7 +214,5 @@ endif()
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 install(FILES data/com.github.paolostivanin.OTPClient.gschema.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)
 
-if(NOT IS_FLATPAK)
-    install(CODE "execute_process(COMMAND glib-compile-schemas \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)")
-    install(CODE "execute_process(COMMAND gtk4-update-icon-cache -t -f \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/icons/hicolor)")
-endif()
+install(CODE "execute_process(COMMAND glib-compile-schemas \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)")
+install(CODE "execute_process(COMMAND gtk4-update-icon-cache -t -f \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/icons/hicolor)")

@@ -90,6 +90,15 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.4" date="2026-05-19">
+      <description>
+        <p>Small bug-fix release in the 5.0.x line. The headline fix is a Flatpak-only data-loss-prevention hotfix: the GSettings schema XML was installed but never compiled into gschemas.compiled, so the schema lookup failed at runtime and every GSettings write was a silent no-op. As a result, the sidebar appeared empty on each launch (db-list never persisted) and preference changes did not stick. Existing databases were never lost — the .enc files remained on disk and the last-used path was still being written to otpclient.cfg via the GKeyFile fallback. On first launch after upgrading to 5.0.4, the v4 migration path rebuilds the sidebar from that fallback automatically. Non-Flatpak builds are unaffected by the schema fix.</p>
+        <ul>
+          <li>FIX: Flatpak GSettings schema not compiled at install time, causing the sidebar to appear empty and preferences to reset on every restart (#442)</li>
+          <li>FIX: Welcome dialog Back/Next/page-indicator row got pushed below the visible area when the page's status description was tall enough to overflow; now pinned via AdwToolbarView's bottom bar (#441)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.3" date="2026-05-15">
       <description>
         <p>Small bug-fix release in the 5.0.x line. Fixes a startup crash on systems where the XDG portal cannot auto-report a color scheme (typically XFCE) and the user has the dark-theme GSetting enabled. The dark-theme preference was being applied before AdwApplication's startup chain ran, so adw_style_manager_get_default() reached into an uninitialized GDK display and aborted.</p>
