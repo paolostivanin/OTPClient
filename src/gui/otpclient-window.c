@@ -40,6 +40,7 @@ struct _OTPClientWindow
     GtkWidget *open_db_button;
     GtkWidget *no_db_create_button;
     GtkWidget *no_db_open_button;
+    GtkWidget *empty_state_add_button;
     GtkWidget *otp_list;
     GtkWidget *content_stack;
     GtkWidget *loading_status_page;
@@ -1064,20 +1065,39 @@ update_empty_state (OTPClientWindow *self)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    const gchar *target_page;
     if (db_data == NULL)
+        target_page = "no-db";
+    else if (db_data->in_memory_json_data == NULL)
+        target_page = "loading";
+    else
+        target_page = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store)) > 0
+                          ? "list" : "empty";
+
+    const gchar *current_page = gtk_stack_get_visible_child_name (GTK_STACK (self->content_stack));
+    gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), target_page);
+
+    /* Move focus onto the page's primary widget when it first becomes
+     * visible, so the obvious next action (consume a token, add the first
+     * token, create the first DB) is one keystroke away rather than buried
+     * past the toolbar (issue #445). "loading" is transient — leave focus
+     * alone so it doesn't flicker. */
+    if (g_strcmp0 (target_page, current_page) != 0)
     {
-        gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "no-db");
-        return;
-    }
-    if (db_data->in_memory_json_data == NULL)
-    {
-        gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), "loading");
-        return;
+        GtkWidget *focus_target = NULL;
+        if (g_strcmp0 (target_page, "list") == 0)
+            focus_target = self->otp_list;
+        else if (g_strcmp0 (target_page, "empty") == 0)
+            focus_target = self->empty_state_add_button;
+        else if (g_strcmp0 (target_page, "no-db") == 0)
+            focus_target = self->no_db_create_button;
+
+        if (focus_target != NULL)
+            gtk_widget_grab_focus (focus_target);
     }
 
-    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
-    gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack),
-                                      n_items > 0 ? "list" : "empty");
+    if (g_strcmp0 (target_page, "list") != 0 && g_strcmp0 (target_page, "empty") != 0)
+        return;
 
     refresh_backup_age_banner (self);
 }
@@ -4163,6 +4183,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, open_db_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_create_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_open_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, empty_state_add_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, loading_status_page);
