@@ -129,8 +129,24 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
     }
+    /* Issue #446: if the registered Secret Service provider is broken, the
+     * sync lookup fails with err != NULL. Treat that as "fall back to the
+     * interactive prompt" instead of looping. Don't persist secret-service=
+     * false in GSettings here — a scripted CLI run through a transiently
+     * broken D-Bus session shouldn't flip the user's GUI setting. */
+    gboolean secret_service_runtime_ok = TRUE;
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL, "string", db_data->db_path, NULL);
+        GError *ss_err = NULL;
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
+                                                  "string", db_data->db_path, NULL);
+        if (ss_err != NULL) {
+            g_printerr (_("Warning: secret service lookup failed: %s\n"
+                          "Falling back to interactive password prompt.\n"),
+                        ss_err->message);
+            g_clear_error (&ss_err);
+            secret_service_runtime_ok = FALSE;
+            goto get_pwd;
+        }
         if (pwd == NULL) {
             goto get_pwd;
         }
@@ -179,7 +195,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
     }
 
-    if (use_secret_service == TRUE && db_data->key_stored == FALSE) {
+    if (use_secret_service == TRUE && db_data->key_stored == FALSE && secret_service_runtime_ok) {
         secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "OTPClient database password", db_data->key, NULL, on_password_stored, NULL, "string", db_data->db_path, NULL);
     }
 

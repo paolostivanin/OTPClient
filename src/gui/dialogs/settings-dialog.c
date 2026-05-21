@@ -3,6 +3,7 @@
 #include "gui-misc.h"
 #include "common.h"
 #include "gsettings-common.h"
+#include "secret-schema.h"
 #include "settings-import-export.h"
 #include "otp-button-row.h"
 
@@ -116,13 +117,54 @@ on_inactivity_changed (AdwComboRow    *combo,
 }
 
 static void
+present_secret_service_unavailable_dialog (SettingsDialog *self,
+                                            const gchar    *err_msg)
+{
+    g_autofree gchar *body = g_strdup_printf (
+        _("OTPClient could not access your system keyring (KWallet, GNOME Keyring, etc.). "
+          "The setting has been left disabled. Enable your keyring in the system settings, "
+          "then try again.\n\nError: %s"),
+        err_msg != NULL ? err_msg : _("unknown error"));
+
+    AdwAlertDialog *alert = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Couldn't enable Secret Service"), body));
+    adw_alert_dialog_add_response (alert, "ok", _("OK"));
+    adw_alert_dialog_set_default_response (alert, "ok");
+    adw_alert_dialog_set_close_response (alert, "ok");
+    adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+}
+
+static void
 on_secret_service_toggled (GObject        *obj,
                            GParamSpec     *pspec,
                            SettingsDialog *self)
 {
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
-    otpclient_application_set_use_secret_service (self->app, active);
+
+    if (!active) {
+        otpclient_application_set_use_secret_service (self->app, FALSE);
+        return;
+    }
+
+    /* Pre-flight: refuse to enable on a broken keyring rather than letting
+     * the user discover later via failed lookups and stored-password loops
+     * (issue #446). Sync calls are fine here — the user just clicked the
+     * toggle and expects immediate feedback. */
+    GError *err = NULL;
+    if (otpclient_secret_service_probe (&err)) {
+        otpclient_application_set_use_secret_service (self->app, TRUE);
+        return;
+    }
+
+    /* Revert the switch without re-entering this handler. */
+    g_signal_handlers_block_by_func (obj, on_secret_service_toggled, self);
+    adw_switch_row_set_active (ADW_SWITCH_ROW (obj), FALSE);
+    g_signal_handlers_unblock_by_func (obj, on_secret_service_toggled, self);
+
+    otpclient_application_set_use_secret_service (self->app, FALSE);
+    present_secret_service_unavailable_dialog (self, err != NULL ? err->message : NULL);
+    g_clear_error (&err);
 }
 
 static void

@@ -193,6 +193,46 @@ otpclient_application_shortcuts (GSimpleAction *simple,
     g_object_unref (builder);
 }
 
+/* Issue #446: when a libsecret call fails at runtime with a real error
+ * (i.e. not "no password stored"), the registered Secret Service provider
+ * is broken in some way we can't recover from in-process — libsecret has
+ * no fallback to a different keyring. Flip the setting OFF so we don't
+ * loop on the failure every launch, and surface one notification so the
+ * user knows what happened and how to re-enable it later. */
+static void
+application_disable_secret_service_runtime (OTPClientApplication *self,
+                                             const gchar          *libsecret_err_msg)
+{
+    if (!self->use_secret_service)
+        return;
+
+    otpclient_application_set_use_secret_service (self, FALSE);
+
+    g_autofree gchar *body = g_strdup_printf (
+        _("OTPClient's system-keyring integration was disabled because the keyring "
+          "rejected the request. Re-enable it in Settings once your keyring is available."
+          "\n\nError: %s"),
+        libsecret_err_msg != NULL ? libsecret_err_msg : _("unknown error"));
+
+    gui_misc_send_notification (G_APPLICATION (self),
+                                _("Secret Service disabled"),
+                                body);
+}
+
+static void
+on_password_stored_gui (GObject      *source         __attribute__((unused)),
+                        GAsyncResult *result,
+                        gpointer      user_data)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    GError *err = NULL;
+    secret_password_store_finish (result, &err);
+    if (err != NULL) {
+        application_disable_secret_service_runtime (self, err->message);
+        g_error_free (err);
+    }
+}
+
 static void
 on_change_password_received (const gchar *password,
                               gpointer     user_data)
@@ -230,7 +270,7 @@ on_change_password_received (const gchar *password,
                                "OTPClient database password",
                                self->db_data->key,
                                NULL,
-                               on_password_stored,
+                               on_password_stored_gui,
                                self,
                                "string", self->db_data->db_path,
                                NULL);
@@ -523,7 +563,7 @@ on_unlock_done (GObject      *source_object,
                                "OTPClient database password",
                                self->db_data->key,
                                NULL,
-                               on_password_stored,
+                               on_password_stored_gui,
                                self,
                                "string", self->db_data->db_path,
                                NULL);
@@ -582,18 +622,29 @@ on_secret_lookup_done (GObject      *source,
     {
         on_password_received (password, self);
         secret_password_free (password);
+        g_clear_error (&err);
+        return;
     }
-    else if (self->window != NULL)
+
+    /* password == NULL: distinguish "not stored" (err == NULL, normal) from
+     * "keyring is broken" (err != NULL). For the broken case, disable the
+     * setting so we don't keep hitting the same failure on every launch
+     * (issue #446). In both cases, fall through to the password dialog so
+     * the user can still unlock. */
+    if (err != NULL)
     {
-        /* No stored password — show the password dialog */
+        application_disable_secret_service_runtime (self, err->message);
+        g_clear_error (&err);
+    }
+
+    if (self->window != NULL)
+    {
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                    on_password_received,
                                                    self);
         adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
         adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
     }
-
-    g_clear_error (&err);
 }
 
 static void

@@ -1,5 +1,11 @@
 #include <libsecret/secret.h>
 #include <gio/gio.h>
+#include <string.h>
+#include "secret-schema.h"
+
+/* Sentinel value used as the "string" attribute for the keyring probe.
+ * Real db_paths are absolute filesystem paths, so they cannot match this. */
+#define OTPCLIENT_SECRET_PROBE_ATTR "__otpclient_probe__"
 
 const SecretSchema *
 otpclient_get_schema (void)
@@ -76,4 +82,61 @@ on_password_cleared (GObject *source         __attribute__((unused)),
     if (removed == TRUE) {
         g_message ("Password successfully removed from the secret service.");
     }
+}
+
+
+gboolean
+otpclient_secret_service_probe (GError **error)
+{
+    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+    /* Fresh random payload each call: a stale probe value left behind by a
+     * previously crashed run cannot produce a false positive — the verify
+     * step compares against this run's uuid. */
+    g_autofree gchar *expected = g_uuid_string_random ();
+
+    GError *probe_err = NULL;
+    gchar  *retrieved  = NULL;
+    gboolean ok = FALSE;
+
+    if (!secret_password_store_sync (OTPCLIENT_SCHEMA,
+                                     SECRET_COLLECTION_DEFAULT,
+                                     "OTPClient keyring probe",
+                                     expected,
+                                     NULL,
+                                     &probe_err,
+                                     "string", OTPCLIENT_SECRET_PROBE_ATTR,
+                                     NULL))
+    {
+        goto cleanup;
+    }
+
+    retrieved = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &probe_err,
+                                             "string", OTPCLIENT_SECRET_PROBE_ATTR,
+                                             NULL);
+    if (probe_err != NULL)
+        goto cleanup;
+
+    if (retrieved == NULL || strcmp (retrieved, expected) != 0)
+    {
+        g_set_error_literal (&probe_err, G_IO_ERROR, G_IO_ERROR_FAILED,
+                             "keyring round-trip returned different data than was written");
+        goto cleanup;
+    }
+
+    ok = TRUE;
+
+cleanup:
+    /* Always attempt cleanup; ignore errors so we don't mask the original
+     * failure (or, on success, leave a stray probe value behind). */
+    secret_password_clear_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+                                "string", OTPCLIENT_SECRET_PROBE_ATTR,
+                                NULL);
+    if (retrieved != NULL)
+        secret_password_free (retrieved);
+
+    if (probe_err != NULL)
+        g_propagate_error (error, probe_err);
+
+    return ok;
 }

@@ -146,8 +146,18 @@ load_entries_from_db (GPtrArray   *entries,
     if (!gsettings_common_get_use_secret_service ())
         return;
 
-    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+    /* Issue #446: surface broken-keyring errors via a warning instead of
+     * silently returning. Don't mutate GSettings here — the search provider
+     * is a passive consumer; the GUI app owns the setting. */
+    GError *ss_err = NULL;
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
                                                "string", db_path, NULL);
+    if (ss_err != NULL) {
+        g_warning ("Search provider: secret service lookup failed for %s: %s",
+                   db_path, ss_err->message);
+        g_clear_error (&ss_err);
+        return;
+    }
     if (pwd == NULL)
         return;
 
@@ -449,8 +459,14 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
     if (entry == NULL || entry->db_path == NULL) return NULL;
     if (!gsettings_common_get_use_secret_service ()) return NULL;
 
-    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+    GError *ss_err = NULL;
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
                                                "string", entry->db_path, NULL);
+    if (ss_err != NULL) {
+        g_warning ("Search provider: secret service lookup failed: %s", ss_err->message);
+        g_clear_error (&ss_err);
+        return NULL;
+    }
     if (pwd == NULL) return NULL;
 
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
