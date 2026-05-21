@@ -245,6 +245,30 @@
                         </property>
                       </object>
                     </child>
+                    <child>
+                      <object class="GtkStackPage">
+                        <property name="name">locked</property>
+                        <property name="child">
+                          <object class="AdwStatusPage" id="locked_status_page">
+                            <property name="icon-name">changes-prevent-symbolic</property>
+                            <property name="title" translatable="yes">Database Locked</property>
+                            <property name="description" translatable="yes">Enter your password to unlock.</property>
+                            <property name="vexpand">True</property>
+                            <property name="hexpand">True</property>
+                            <child>
+                              <object class="GtkButton" id="locked_unlock_button">
+                                <property name="label" translatable="yes">Unlock</property>
+                                <property name="halign">center</property>
+                                <style>
+                                  <class name="suggested-action"/>
+                                  <class name="pill"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </property>
+                      </object>
+                    </child>
                   </object>
                 </property>
               </object>

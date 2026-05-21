@@ -44,6 +44,8 @@ struct _OTPClientWindow
     GtkWidget *otp_list;
     GtkWidget *content_stack;
     GtkWidget *loading_status_page;
+    GtkWidget *locked_status_page;
+    GtkWidget *locked_unlock_button;
     GListStore *otp_store;
     GtkFilterListModel *filter_model;
     GtkCustomFilter *search_filter;
@@ -111,6 +113,14 @@ typedef struct
 } ValidityWidgets;
 
 static void schedule_hotp_flush (OTPClientWindow *self);
+
+static inline gboolean
+window_is_locked (OTPClientWindow *self)
+{
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    return app != NULL && otpclient_application_get_app_locked (app);
+}
 
 static void
 validity_widgets_free (ValidityWidgets *widgets)
@@ -1059,14 +1069,18 @@ update_empty_state (OTPClientWindow *self)
     if (self->content_stack == NULL || self->otp_store == NULL)
         return;
 
-    /* Three pre-list states: no DB at all (fresh install) → "no-db" CTA;
-     * an existing DB is being decrypted → "Unlocking…"; the loaded list is
-     * either populated or empty-but-unlocked, handled below. */
+    /* Pre-list states: locked supersedes everything (don't show the token
+     * list, or even the "empty"/"loading" pages, while locked). No DB at all
+     * (fresh install) → "no-db" CTA; an existing DB is being decrypted →
+     * "Unlocking…"; the loaded list is either populated or empty-but-unlocked,
+     * handled below. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
     const gchar *target_page;
-    if (db_data == NULL)
+    if (app != NULL && otpclient_application_get_app_locked (app))
+        target_page = "locked";
+    else if (db_data == NULL)
         target_page = "no-db";
     else if (db_data->in_memory_json_data == NULL)
         target_page = "loading";
@@ -1091,6 +1105,8 @@ update_empty_state (OTPClientWindow *self)
             focus_target = self->empty_state_add_button;
         else if (g_strcmp0 (target_page, "no-db") == 0)
             focus_target = self->no_db_create_button;
+        else if (g_strcmp0 (target_page, "locked") == 0)
+            focus_target = self->locked_unlock_button;
 
         if (focus_target != NULL)
             gtk_widget_grab_focus (focus_target);
@@ -1163,16 +1179,57 @@ otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
 
+    /* Every action that reads or mutates token data must be gated by the lock
+     * state. win.show-qr in particular renders the secret as a scannable QR. */
     static const gchar * const db_actions[] = {
         "win.add-manual",
         "win.add-qr-file",
         "win.add-qr-webcam",
+        "win.add-qr-clipboard",
         "win.import",
         "win.export",
+        "win.edit-token",
+        "win.delete-token",
+        "win.show-qr",
+        "win.move-token",
+        "win.set-group",
+        "win.new-group",
+        "win.remove-from-group",
+        "win.rename-db",
+        "win.set-primary-db",
+        "win.remove-db",
+        "win.backup-tokens",
+        "win.restore-tokens",
     };
 
     for (gsize i = 0; i < G_N_ELEMENTS (db_actions); i++)
         gtk_widget_action_set_enabled (GTK_WIDGET (self), db_actions[i], enabled);
+}
+
+void
+otpclient_window_clear_displayed_otps (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    if (self->otp_store == NULL)
+        return;
+
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    for (guint i = 0; i < n; i++)
+    {
+        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+        if (entry != NULL)
+            otp_entry_set_otp_value (entry, "");
+    }
+
+    if (self->otp_selection != NULL)
+        gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
+}
+
+void
+otpclient_window_refresh_content_page (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    update_empty_state (self);
 }
 
 static void
@@ -1211,19 +1268,7 @@ action_hide_and_unselect (GtkWidget  *widget,
     (void) action_name;
     (void) parameter;
 
-    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
-
-    /* Clear all displayed OTP values */
-    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
-    for (guint i = 0; i < n; i++)
-    {
-        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
-        if (entry != NULL)
-            otp_entry_set_otp_value (entry, "");
-    }
-
-    /* Unselect all rows */
-    gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
+    otpclient_window_clear_displayed_otps (OTPCLIENT_WINDOW (widget));
 }
 
 static void
@@ -1658,6 +1703,13 @@ on_otp_selection_changed (GtkSingleSelection *selection,
 {
     (void) pspec;
 
+    /* Refuse to reveal or copy any OTP while the database is locked. The
+     * locked-page swap normally hides the list, but a stray selection signal
+     * during the lock transition could still fire — bail before reading the
+     * cached OTP value. */
+    if (window_is_locked (self))
+        return;
+
     guint pos = gtk_single_selection_get_selected (selection);
     if (pos == GTK_INVALID_LIST_POSITION)
         return;
@@ -1854,6 +1906,9 @@ on_drag_prepare (GtkDragSource *source,
     (void) y;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    if (window_is_locked (self))
+        return NULL;
 
     /* Disable DnD while search filter is active */
     const gchar *search_text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
@@ -3175,6 +3230,18 @@ lock_button_clicked (GtkButton       *button,
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 
+static void
+locked_unlock_button_clicked (GtkButton       *button,
+                              OTPClientWindow *self)
+{
+    (void) button;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+        lock_app_present_unlock_dialog (app);
+}
+
 static gboolean
 on_db_modified_idle (gpointer user_data)
 {
@@ -3376,6 +3443,9 @@ on_token_right_click (GtkGestureClick *gesture,
      * "Broken accounting of active state" warnings */
     gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
     gtk_event_controller_reset (GTK_EVENT_CONTROLLER (gesture));
+
+    if (window_is_locked (self))
+        return;
 
     /* Select the row under the cursor so a right-click alone is enough. */
     OTPEntry *picked = pick_entry_at (self, x, y, NULL);
@@ -4135,6 +4205,7 @@ g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked)
     g_signal_connect (self->open_db_button, "clicked", G_CALLBACK (open_db_button_clicked), self);
     g_signal_connect (self->no_db_create_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
     g_signal_connect (self->no_db_open_button,   "clicked", G_CALLBACK (open_db_button_clicked), self);
+    g_signal_connect (self->locked_unlock_button, "clicked", G_CALLBACK (locked_unlock_button_clicked), self);
 
     setup_dnd (self);
 
@@ -4187,6 +4258,8 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, loading_status_page);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, locked_status_page);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, locked_unlock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
 
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);

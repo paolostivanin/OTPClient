@@ -42,6 +42,10 @@ void                otpclient_window_set_locked_indicator (OTPClientWindow *self
 void                otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
                                                              gboolean         enabled);
 
+void                otpclient_window_clear_displayed_otps (OTPClientWindow *self);
+
+void                otpclient_window_refresh_content_page (OTPClientWindow *self);
+
 void                otpclient_window_flush_pending_writes (OTPClientWindow *self);
 
 void                otpclient_window_clear_clipboard_now (OTPClientWindow *self);

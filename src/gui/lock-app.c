@@ -17,6 +17,45 @@ typedef struct
 
 static LockData *lock_data = NULL;
 
+static void on_unlock_password (const gchar *password, gpointer user_data);
+
+static void
+on_unlock_dialog_closed (AdwDialog *dialog,
+                         gpointer   user_data)
+{
+    (void) dialog;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
+
+    /* set_can_close(FALSE) blocks user-initiated dismissal, but the dialog can
+     * still close on parent-window teardown or programmatic close. If the app
+     * is still locked when that happens, re-present a fresh dialog so the user
+     * can't end up with the locked indicator on and no way to unlock. */
+    if (otpclient_application_get_app_locked (app))
+        lock_app_present_unlock_dialog (app);
+}
+
+static void
+present_unlock_dialog (OTPClientApplication *app)
+{
+    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    if (win == NULL)
+        return;
+
+    PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                               on_unlock_password,
+                                               app);
+    adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+    g_signal_connect (dlg, "closed", G_CALLBACK (on_unlock_dialog_closed), app);
+    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
+}
+
+void
+lock_app_present_unlock_dialog (OTPClientApplication *app)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (app));
+    present_unlock_dialog (app);
+}
+
 static void
 on_unlock_password (const gchar *password,
                     gpointer     user_data)
@@ -34,19 +73,10 @@ on_unlock_password (const gchar *password,
     for (gsize i = 0; i < cmp_len; i++)
         result |= ((const volatile guchar *)password)[i] ^ ((const volatile guchar *)db_data->key)[i];
     if (result == 0)
-    {
         lock_app_unlock (app);
-    }
-    else
-    {
-        /* Wrong password, show dialog again */
-        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                   on_unlock_password,
-                                                   app);
-        GtkWindow *active_win = gtk_application_get_active_window (GTK_APPLICATION (app));
-        if (active_win != NULL)
-            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (active_win));
-    }
+    /* On wrong password, the "closed" signal handler re-presents the dialog
+     * once the old one finishes closing. Calling present_unlock_dialog() here
+     * would race with that and pop two dialogs. */
 }
 
 void
@@ -66,15 +96,13 @@ lock_app_lock (OTPClientApplication *app)
         /* Persist any deferred HOTP counter advances while we still hold the key. */
         otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win));
         otpclient_window_clear_clipboard_now (OTPCLIENT_WINDOW (win));
+        otpclient_window_clear_displayed_otps (OTPCLIENT_WINDOW (win));
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
         otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), FALSE);
+        otpclient_window_refresh_content_page (OTPCLIENT_WINDOW (win));
     }
 
-    /* Show password dialog to unlock */
-    PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                               on_unlock_password,
-                                               app);
-    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
+    present_unlock_dialog (app);
 }
 
 void
@@ -87,6 +115,7 @@ lock_app_unlock (OTPClientApplication *app)
     {
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), FALSE);
         otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), TRUE);
+        otpclient_window_refresh_content_page (OTPCLIENT_WINDOW (win));
     }
 
     if (lock_data != NULL)

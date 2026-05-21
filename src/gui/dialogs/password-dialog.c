@@ -88,10 +88,16 @@ on_unlock_clicked (GtkButton      *button,
     if (self->current_password_row != NULL)
         gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
 
-    adw_dialog_close (ADW_DIALOG (self));
-
+    /* Order matters: lock-state callers attach a "closed" handler that
+     * re-presents this dialog if the app is still locked when it fires. Run
+     * the callback first so it can flip app_locked to FALSE before the close
+     * triggers that handler — otherwise a successful unlock would race with a
+     * stale re-present. force_close bypasses can-close=FALSE (set by callers
+     * that want to block user-initiated dismissal). */
     if (self->callback != NULL)
         self->callback (secure_pwd, self->callback_data);
+
+    adw_dialog_force_close (ADW_DIALOG (self));
 
     gcry_free (secure_pwd);
 }
