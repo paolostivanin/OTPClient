@@ -13,6 +13,10 @@ struct _OtpButtonRow
 
     gchar *start_icon_name;
     gchar *end_icon_name;
+
+    /* The enclosing GtkListBox we're currently relaying row-activated from.
+     * NULL when unparented or when the parent is not a GtkListBox. */
+    GtkWidget *previous_parent;
 };
 
 enum
@@ -79,10 +83,49 @@ update_end_icon (OtpButtonRow *self)
     }
 }
 
+/* GtkListBoxRow::activate is NOT called by GtkListBox on user click — it's an
+ * action signal a caller can fire to simulate activation. To re-emit our
+ * "activated" signal on a real click, we mirror AdwButtonRow 1.6: listen for
+ * notify::parent, connect_swapped to the parent GtkListBox's "row-activated",
+ * and emit when the activated row is us. */
 static void
-otp_button_row_activate_impl (GtkListBoxRow *row)
+row_activated_cb (OtpButtonRow  *self,
+                  GtkListBoxRow *row)
 {
-    g_signal_emit (row, signals[SIGNAL_ACTIVATED], 0);
+    if ((GtkListBoxRow *) self == row)
+        g_signal_emit (self, signals[SIGNAL_ACTIVATED], 0);
+}
+
+static void
+parent_cb (OtpButtonRow *self)
+{
+    GtkWidget *parent = gtk_widget_get_parent (GTK_WIDGET (self));
+
+    if (self->previous_parent != NULL) {
+        g_signal_handlers_disconnect_by_func (self->previous_parent,
+                                              G_CALLBACK (row_activated_cb), self);
+        self->previous_parent = NULL;
+    }
+
+    if (parent == NULL || !GTK_IS_LIST_BOX (parent))
+        return;
+
+    self->previous_parent = parent;
+    g_signal_connect_swapped (parent, "row-activated", G_CALLBACK (row_activated_cb), self);
+}
+
+static void
+otp_button_row_dispose (GObject *object)
+{
+    OtpButtonRow *self = OTP_BUTTON_ROW (object);
+
+    if (self->previous_parent != NULL) {
+        g_signal_handlers_disconnect_by_func (self->previous_parent,
+                                              G_CALLBACK (row_activated_cb), self);
+        self->previous_parent = NULL;
+    }
+
+    G_OBJECT_CLASS (otp_button_row_parent_class)->dispose (object);
 }
 
 static void
@@ -141,14 +184,12 @@ otp_button_row_set_property (GObject      *object,
 static void
 otp_button_row_class_init (OtpButtonRowClass *klass)
 {
-    GObjectClass       *object_class = G_OBJECT_CLASS (klass);
-    GtkListBoxRowClass *row_class    = GTK_LIST_BOX_ROW_CLASS (klass);
+    GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+    object_class->dispose      = otp_button_row_dispose;
     object_class->finalize     = otp_button_row_finalize;
     object_class->get_property = otp_button_row_get_property;
     object_class->set_property = otp_button_row_set_property;
-
-    row_class->activate = otp_button_row_activate_impl;
 
     properties[PROP_START_ICON_NAME] =
         g_param_spec_string ("start-icon-name", NULL, NULL, NULL,
@@ -197,6 +238,8 @@ otp_button_row_init (OtpButtonRow *self)
     g_object_bind_property (self, "title",
                             self->label, "label",
                             G_BINDING_SYNC_CREATE);
+
+    g_signal_connect (self, "notify::parent", G_CALLBACK (parent_cb), NULL);
 }
 
 GtkWidget *
