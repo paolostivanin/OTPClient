@@ -517,6 +517,10 @@ decrypt_db (DatabaseData *db_data,
         return NULL;
     }
 
+    g_debug ("decrypt_db: db_version=%d argon2id_iter=%d argon2id_memcost=%d argon2id_parallelism=%d",
+             db_data->current_db_version,
+             db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism);
+
     if (db_data->current_db_version >= 2) {
         if (db_data->argon2id_iter < ARGON2ID_MIN_ITER || db_data->argon2id_iter > ARGON2ID_MAX_ITER ||
             db_data->argon2id_memcost < ARGON2ID_MIN_MC || db_data->argon2id_memcost > ARGON2ID_MAX_MC ||
@@ -569,6 +573,7 @@ decrypt_db (DatabaseData *db_data,
 
     if (db_data->current_db_version >= 2) {
         // Modern path: try the corrected (strlen) password length first.
+        g_debug ("decrypt_db: v2 attempt with corrected length (use_legacy_length=FALSE)");
         gchar *dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, FALSE, err);
 
         if (dec_buf == NULL && err != NULL && *err != NULL && (*err)->domain == bad_tag_gquark ()) {
@@ -579,18 +584,30 @@ decrypt_db (DatabaseData *db_data,
             // ~150-300ms Argon2id derivation on a guaranteed-identical result.
             gsize byte_len = strlen (db_data->key);
             gsize char_len = (gsize) g_utf8_strlen (db_data->key, -1);
+            g_debug ("decrypt_db: v2 BAD_TAG with corrected length; password ascii_only=%s (byte_len==char_len)",
+                     (byte_len == char_len) ? "TRUE" : "FALSE");
             if (byte_len != char_len) {
                 g_clear_error (err);
+                g_debug ("decrypt_db: v2 retry with legacy length (use_legacy_length=TRUE)");
                 dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, TRUE, err);
                 if (dec_buf != NULL) {
                     db_data->needs_legacy_kdf_migration = TRUE;
+                    g_debug ("decrypt_db: v2 legacy-length retry SUCCEEDED, scheduling KDF migration");
+                } else {
+                    g_debug ("decrypt_db: v2 legacy-length retry also FAILED");
                 }
+            } else {
+                g_debug ("decrypt_db: v2 retry skipped (password is ASCII-only); rejecting as BAD_TAG");
             }
+        } else if (dec_buf != NULL) {
+            g_debug ("decrypt_db: v2 SUCCESS with corrected length");
         }
 
         free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
         return dec_buf;
     }
+
+    g_debug ("decrypt_db: v1 (PBKDF2) path with legacy length");
 
     // v1 (PBKDF2) path: always written with the legacy length, so decrypt with
     // that. The caller migrates v1 -> v2 right after, which is when the
