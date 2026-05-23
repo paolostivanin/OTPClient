@@ -113,6 +113,9 @@ typedef struct
 } ValidityWidgets;
 
 static void schedule_hotp_flush (OTPClientWindow *self);
+static void refresh_otp_value_cells (OTPClientWindow *self);
+static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
+static void otpclient_window_constructed (GObject *object);
 
 static inline gboolean
 window_is_locked (OTPClientWindow *self)
@@ -1696,35 +1699,20 @@ otpclient_window_clear_clipboard_now (OTPClientWindow *self)
         gdk_clipboard_set_text (clipboard, "");
 }
 
+/* Body of the OTP-activate action: HOTP counter advance, clipboard copy,
+ * reveal-on-hide, clipboard-clear schedule, and notification. Factored out
+ * of on_otp_selection_changed so a primary-click on the already-selected
+ * row can re-trigger it (notify::selected only fires on actual change). */
 static void
-on_otp_selection_changed (GtkSingleSelection *selection,
-                          GParamSpec         *pspec,
-                          OTPClientWindow    *self)
+trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
 {
-    (void) pspec;
-
-    /* Refuse to reveal or copy any OTP while the database is locked. The
-     * locked-page swap normally hides the list, but a stray selection signal
-     * during the lock transition could still fire — bail before reading the
-     * cached OTP value. */
-    if (window_is_locked (self))
-        return;
-
-    guint pos = gtk_single_selection_get_selected (selection);
-    if (pos == GTK_INVALID_LIST_POSITION)
-        return;
-
-    if (self->suppress_selection_action)
-        return;
-
-    OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (selection));
     if (entry == NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
 
-    /* For HOTP tokens, increment counter and regenerate OTP on each selection.
+    /* For HOTP tokens, increment counter and regenerate OTP on each activation.
      * Skip for cross-DB entries since their database is not actively loaded. */
     const gchar *type = otp_entry_get_otp_type (entry);
     if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0
@@ -1733,8 +1721,6 @@ on_otp_selection_changed (GtkSingleSelection *selection,
         DatabaseData *db_data = otpclient_application_get_db_data (app);
         if (db_data != NULL && db_data->in_memory_json_data != NULL)
         {
-            /* `pos` above is the position in the filter+sort view, not the
-             * JSON. Translate via the entry's identity in the store. */
             guint json_pos = find_store_pos_for_entry (self, entry);
             if (json_pos != GTK_INVALID_LIST_POSITION)
             {
@@ -1795,6 +1781,31 @@ on_otp_selection_changed (GtkSingleSelection *selection,
         g_notification_set_body (notification, body);
         g_application_send_notification (G_APPLICATION (app), "otp-copied", notification);
     }
+}
+
+static void
+on_otp_selection_changed (GtkSingleSelection *selection,
+                          GParamSpec         *pspec,
+                          OTPClientWindow    *self)
+{
+    (void) pspec;
+
+    /* Refuse to reveal or copy any OTP while the database is locked. The
+     * locked-page swap normally hides the list, but a stray selection signal
+     * during the lock transition could still fire — bail before reading the
+     * cached OTP value. */
+    if (window_is_locked (self))
+        return;
+
+    guint pos = gtk_single_selection_get_selected (selection);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+
+    if (self->suppress_selection_action)
+        return;
+
+    OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (selection));
+    trigger_otp_action_for_entry (self, entry);
 }
 
 /* ── Drag-and-drop helpers ─────────────────────────────────────────── */
@@ -1882,6 +1893,39 @@ pick_entry_at (OTPClientWindow *self, double x, double y, GtkWidget **row_out)
         *row_out = row;
 
     return entry;
+}
+
+/* GtkSingleSelection::notify::selected only fires when the selected index
+ * changes. Re-clicking the already-selected row doesn't change the index,
+ * so on_otp_selection_changed never runs and the user gets no copy /
+ * HOTP-advance. Use a capture-phase primary-click gesture to detect the
+ * re-click case before built-in selection logic runs, then fire the same
+ * action helper directly. */
+static void
+on_otp_list_primary_pressed (GtkGestureClick *gesture,
+                             gint             n_press,
+                             double           x,
+                             double           y,
+                             gpointer         user_data)
+{
+    (void) gesture;
+    (void) n_press;
+
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    if (window_is_locked (self))
+        return;
+
+    OTPEntry *picked = pick_entry_at (self, x, y, NULL);
+    if (picked == NULL)
+        return;
+
+    OTPEntry *selected = OTP_ENTRY (
+        gtk_single_selection_get_selected_item (self->otp_selection));
+    if (selected != picked)
+        return;  /* selection will change; notify::selected handles it */
+
+    trigger_otp_action_for_entry (self, picked);
 }
 
 static void
@@ -4126,6 +4170,64 @@ on_db_entry_name_changed (DatabaseEntry *entry,
                                    database_entry_get_name (entry));
 }
 
+/* Live-refresh the OTP-value cells when the "Hide OTPs by default" setting
+ * changes. render_otp_value_label reads hide_otps at bind time; without this
+ * hook, already-bound cells would stay stuck on the old value until they were
+ * re-bound by a scroll or selection change. Re-emitting notify::otp-value
+ * piggybacks on the existing bind-time listener that re-renders the label. */
+static void
+refresh_otp_value_cells (OTPClientWindow *self)
+{
+    if (self->otp_store != NULL)
+    {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+        for (guint i = 0; i < n; i++)
+        {
+            g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+            if (entry != NULL)
+                g_object_notify (G_OBJECT (entry), "otp-value");
+        }
+    }
+    if (self->cross_db_store != NULL)
+    {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->cross_db_store));
+        for (guint i = 0; i < n; i++)
+        {
+            g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->cross_db_store), i);
+            if (entry != NULL)
+                g_object_notify (G_OBJECT (entry), "otp-value");
+        }
+    }
+}
+
+static void
+on_hide_otps_changed (GObject    *gobject,
+                      GParamSpec *pspec,
+                      gpointer    user_data)
+{
+    (void) gobject;
+    (void) pspec;
+    refresh_otp_value_cells (OTPCLIENT_WINDOW (user_data));
+}
+
+static void
+otpclient_window_constructed (GObject *object)
+{
+    G_OBJECT_CLASS (otpclient_window_parent_class)->constructed (object);
+
+    /* The "application" construct property is set before constructed() runs,
+     * so the app is reachable here (unlike in _init). g_signal_connect_object
+     * auto-disconnects when the window is finalized. */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (object)));
+    if (app != NULL)
+    {
+        g_signal_connect_object (app, "notify::hide-otps",
+                                 G_CALLBACK (on_hide_otps_changed), object,
+                                 G_CONNECT_DEFAULT);
+    }
+}
+
 static void
 otpclient_window_init (OTPClientWindow *self)
 {
@@ -4215,6 +4317,15 @@ g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked)
     g_signal_connect (right_click, "pressed", G_CALLBACK (on_token_right_click), self);
     gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (right_click));
 
+    /* Primary-click on the already-selected row: GtkSingleSelection won't
+     * emit notify::selected (no change), so attach a capture-phase gesture
+     * to detect the re-click and re-fire the OTP action. */
+    GtkGesture *primary_click = gtk_gesture_click_new ();
+    gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (primary_click), GDK_BUTTON_PRIMARY);
+    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (primary_click), GTK_PHASE_CAPTURE);
+    g_signal_connect (primary_click, "pressed", G_CALLBACK (on_otp_list_primary_pressed), self);
+    gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (primary_click));
+
     /* Right-click context menu on database sidebar */
     GtkGesture *db_right_click = gtk_gesture_click_new ();
     gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (db_right_click), GDK_BUTTON_SECONDARY);
@@ -4237,6 +4348,7 @@ static void
 otpclient_window_class_init (OTPClientWindowClass *klass)
 {
     G_OBJECT_CLASS(klass)->dispose = otpclient_window_dispose;
+    G_OBJECT_CLASS(klass)->constructed = otpclient_window_constructed;
 
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
     gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");

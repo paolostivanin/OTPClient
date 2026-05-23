@@ -51,6 +51,15 @@ gboolean use_secret_service;
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
 
+enum
+{
+    PROP_0,
+    PROP_HIDE_OTPS,
+    N_PROPS
+};
+
+static GParamSpec *properties[N_PROPS];
+
 static void otpclient_application_show_about      (GSimpleAction *simple,
                                                    GVariant      *parameter,
                                                    gpointer       user_data);
@@ -925,6 +934,38 @@ otpclient_application_dispose (GObject *object)
 }
 
 static void
+otpclient_application_get_property (GObject    *object,
+                                    guint       prop_id,
+                                    GValue     *value,
+                                    GParamSpec *pspec)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (object);
+    switch (prop_id) {
+        case PROP_HIDE_OTPS:
+            g_value_set_boolean (value, self->hide_otps);
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+    }
+}
+
+static void
+otpclient_application_set_property (GObject      *object,
+                                    guint         prop_id,
+                                    const GValue *value,
+                                    GParamSpec   *pspec)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (object);
+    switch (prop_id) {
+        case PROP_HIDE_OTPS:
+            otpclient_application_set_hide_otps (self, g_value_get_boolean (value));
+            break;
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+    }
+}
+
+static void
 otpclient_application_class_init (OTPClientApplicationClass *klass)
 {
     GApplicationClass *application_class = G_APPLICATION_CLASS(klass);
@@ -934,6 +975,16 @@ otpclient_application_class_init (OTPClientApplicationClass *klass)
     application_class->startup = otpclient_application_startup;
     application_class->shutdown = otpclient_application_shutdown;
     object_class->dispose = otpclient_application_dispose;
+    object_class->get_property = otpclient_application_get_property;
+    object_class->set_property = otpclient_application_set_property;
+
+    /* Notifies on every change so the main window can re-render OTP cells
+     * without a restart when the user toggles the setting from preferences. */
+    properties[PROP_HIDE_OTPS] =
+        g_param_spec_boolean ("hide-otps", NULL, NULL, TRUE,
+                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
+
+    g_object_class_install_properties (object_class, N_PROPS, properties);
 }
 
 static void
@@ -1243,7 +1294,10 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
     self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
     self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
+    gboolean old_hide_otps = self->hide_otps;
     self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
+    if (old_hide_otps != self->hide_otps)
+        g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_HIDE_OTPS]);
     self->otp_reveal_timeout = g_settings_get_uint (self->settings, "otp-reveal-timeout");
 
     /* Apply dark theme */
@@ -1275,9 +1329,12 @@ gboolean otpclient_application_get_hide_otps (OTPClientApplication *self)
 void otpclient_application_set_hide_otps (OTPClientApplication *self, gboolean hide)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (self->hide_otps == hide)
+        return;
     self->hide_otps = hide;
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "hide-otps", hide);
+    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_HIDE_OTPS]);
 }
 
 guint otpclient_application_get_otp_reveal_timeout (OTPClientApplication *self)
