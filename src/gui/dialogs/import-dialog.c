@@ -76,6 +76,8 @@ do_import (ImportDialog *self)
         const gchar *text = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
         gsize len = strlen (text);
         self->import_password = gcry_calloc_secure (len + 1, 1);
+        if (self->import_password == NULL)
+            return;
         memcpy (self->import_password, text, len);
         gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
     }
