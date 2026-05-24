@@ -67,6 +67,7 @@ db_invalidate_kdf_cache (DatabaseData *db_data)
         db_data->cached_derived_key = NULL;
     }
     explicit_bzero (db_data->cached_salt, KDF_SALT_SIZE);
+    explicit_bzero (db_data->cached_pwd_hash, sizeof (db_data->cached_pwd_hash));
     db_data->has_cached_key = FALSE;
 }
 
@@ -346,20 +347,30 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
     } else {
-        // Cache hit: same salt as the last derive => same key (password and
-        // KDF params haven't changed, since the cache is invalidated on
-        // password change). Return a fresh copy so callers can free it.
+        // Cache hit: same salt AND same password as the last successful
+        // derive => same derived key (KDF params haven't changed, since the
+        // cache is invalidated on password change). The password-hash check
+        // is what stops a cached key from a prior successful unlock being
+        // returned to a later attempt with a different password — without it
+        // the salt-only lookup would accept any password against a cache
+        // entry from the same file.
         if (!use_legacy_length
             && db_data->has_cached_key
             && db_data->cached_derived_key != NULL
             && memcmp (db_data->cached_salt, salt, KDF_SALT_SIZE) == 0) {
-            derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
-            if (derived_key == NULL) {
-                g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
-                return NULL;
+            guint8 pwd_hash[32];
+            gcry_md_hash_buffer (GCRY_MD_SHA256, pwd_hash, db_data->key, pwd_len);
+            gboolean pwd_matches = (memcmp (db_data->cached_pwd_hash, pwd_hash, sizeof (pwd_hash)) == 0);
+            explicit_bzero (pwd_hash, sizeof (pwd_hash));
+            if (pwd_matches) {
+                derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+                if (derived_key == NULL) {
+                    g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
+                    return NULL;
+                }
+                memcpy (derived_key, db_data->cached_derived_key, ARGON2ID_KEYLEN);
+                return derived_key;
             }
-            memcpy (derived_key, db_data->cached_derived_key, ARGON2ID_KEYLEN);
-            return derived_key;
         }
 
         derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
@@ -387,18 +398,6 @@ get_db_derived_key (DatabaseData  *db_data,
             return NULL;
         }
         gcry_kdf_close (hd);
-
-        // Populate cache only on the corrected-length path; the legacy retry
-        // is for one-shot read of pre-fix files and shouldn't poison the cache.
-        if (!use_legacy_length) {
-            if (db_data->cached_derived_key == NULL)
-                db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
-            if (db_data->cached_derived_key != NULL) {
-                memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
-                memcpy (db_data->cached_salt, salt, KDF_SALT_SIZE);
-                db_data->has_cached_key = TRUE;
-            }
-        }
     }
 
     return derived_key;
@@ -473,6 +472,25 @@ try_decrypt_v2 (DatabaseData    *db_data,
     }
 
     gcry_cipher_close (hd);
+
+    // Cache the derived key ONLY after the tag verifies. Caching pre-tag
+    // (the old behaviour) poisoned the cache with the wrong-password-derived
+    // key on a failed attempt; the salt-keyed lookup then returned that wrong
+    // key to subsequent correct-password attempts, producing an unlock loop
+    // that only ended at process exit (#448). The legacy-length retry is
+    // one-shot for pre-fix files and must not populate the cache.
+    if (!use_legacy_length) {
+        if (db_data->cached_derived_key == NULL)
+            db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+        if (db_data->cached_derived_key != NULL) {
+            memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
+            memcpy (db_data->cached_salt, header_data->salt, KDF_SALT_SIZE);
+            gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->cached_pwd_hash,
+                                 db_data->key, strlen (db_data->key));
+            db_data->has_cached_key = TRUE;
+        }
+    }
+
     explicit_bzero (derived_key, ARGON2ID_KEYLEN);
     gcry_free (derived_key);
     return dec_buf;

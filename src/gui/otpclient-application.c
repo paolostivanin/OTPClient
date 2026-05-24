@@ -533,6 +533,10 @@ on_unlock_done (GObject      *source_object,
         /* Show password dialog again on wrong password */
         if (err->code == BAD_TAG_ERRCODE)
         {
+            /* Belt-and-braces: drop any cached derived key so a stale entry
+             * (e.g. from a prior successful unlock with a since-changed file)
+             * can't be returned to the next attempt via the salt-keyed cache. */
+            db_invalidate_kdf_cache (self->db_data);
             gcry_free (self->db_data->key);
             self->db_data->key = NULL;
             g_clear_error (&err);

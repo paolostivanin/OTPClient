@@ -82,15 +82,18 @@ typedef struct db_data_t {
     // the corrected strlen length, migrating the file in place.
     gboolean needs_legacy_kdf_migration;
 
-    // Cached Argon2id-derived key + the salt that produced it. The KDF costs
-    // ~150 ms per call, so reusing the derived key across saves makes edits
-    // feel instantaneous. Reusing the salt within one database is safe: the
-    // per-save random IV provides AES-GCM nonce uniqueness, and the salt's
-    // job (defeating rainbow tables) is unaffected by reuse against the same
-    // password. Cache must be invalidated on password change via
-    // db_invalidate_kdf_cache().
+    // Cached Argon2id-derived key + the salt and password-hash that produced
+    // it. The KDF costs ~150 ms per call, so reusing the derived key across
+    // saves makes edits feel instantaneous. Reusing the salt within one
+    // database is safe: the per-save random IV provides AES-GCM nonce
+    // uniqueness, and the salt's job (defeating rainbow tables) is unaffected
+    // by reuse against the same password. cached_pwd_hash is SHA-256 of the
+    // password bytes and is checked alongside the salt on lookup so a cache
+    // entry from one password never gets returned to a different one. Cache
+    // must be invalidated on password change via db_invalidate_kdf_cache().
     guchar *cached_derived_key;     // gcry secure memory; ARGON2ID_KEYLEN bytes
     guint8 cached_salt[KDF_SALT_SIZE];
+    guint8 cached_pwd_hash[32];     // SHA-256(db_data->key) when cache populated
     gboolean has_cached_key;
 } DatabaseData;
 
