@@ -8,8 +8,6 @@
         <property name="top-bar-style">ADW_TOOLBAR_RAISED</property>
         <child type="top">
           <object class="AdwHeaderBar">
-            <property name="show-start-title-buttons">False</property>
-            <property name="show-end-title-buttons">True</property>
             <child type="title">
               <object class="AdwWindowTitle" id="title">
                 <property name="title">OTPClient</property>
