@@ -66,4 +66,12 @@ void         otp_entry_set_revealed (OTPEntry    *self,
 void         otp_entry_reveal_for   (OTPEntry    *self,
                                      guint        seconds);
 
+/* TOTP auto-roll bookkeeping: when revealed during a rotation, the window may
+ * re-copy + re-notify the next code at most once per reveal session. The flag
+ * resets automatically on FALSE->TRUE of `revealed`; the explicit reset is
+ * for re-click paths where set_revealed(TRUE) no-ops. */
+gboolean     otp_entry_get_roll_consumed  (OTPEntry *self);
+void         otp_entry_mark_roll_consumed (OTPEntry *self);
+void         otp_entry_reset_roll         (OTPEntry *self);
+
 G_END_DECLS

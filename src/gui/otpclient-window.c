@@ -75,6 +75,12 @@ struct _OTPClientWindow
     /* Clipboard auto-clear */
     guint clipboard_clear_timer_id;
 
+    /* Tracks which OTPEntry currently owns the clipboard contents. Used by
+     * otp_refresh_tick to decide whether a TOTP rotation should auto-recopy
+     * the next code (only if the rotating entry is still the clipboard owner)
+     * or just hide. Weak so the entry can still be freed normally. */
+    GWeakRef clipboard_owner_entry;
+
     /* Suppress clipboard copy + notification for programmatic selection changes */
     gboolean suppress_selection_action;
 
@@ -92,6 +98,11 @@ struct _OTPClientWindow
 };
 
 #define HOTP_FLUSH_DEBOUNCE_SECONDS 5
+
+/* HOTP has no periodic rotation, so a reveal cannot be tied to a validity
+ * window. Use a short fixed timeout that matches the typical use case
+ * (paste the code somewhere, then it disappears). */
+#define HOTP_REVEAL_SECONDS 30
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
 
@@ -116,6 +127,7 @@ static void schedule_hotp_flush (OTPClientWindow *self);
 static void refresh_otp_value_cells (OTPClientWindow *self);
 static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
 static void otpclient_window_constructed (GObject *object);
+static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry);
 
 static inline gboolean
 window_is_locked (OTPClientWindow *self)
@@ -658,6 +670,10 @@ otp_refresh_tick (gpointer user_data)
     if (self->otp_store == NULL)
         return G_SOURCE_REMOVE;
 
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    gboolean show_next = (app != NULL && otpclient_application_get_show_next_otp (app));
+
     guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
     for (guint i = 0; i < n; i++)
     {
@@ -666,17 +682,42 @@ otp_refresh_tick (gpointer user_data)
             continue;
 
         const gchar *type = otp_entry_get_otp_type (entry);
-        if (type != NULL && g_ascii_strcasecmp (type, "TOTP") == 0)
+        if (type == NULL || g_ascii_strcasecmp (type, "TOTP") != 0)
+            continue;
+
+        guint32 period = otp_entry_get_period (entry);
+        if (period == 0)
+            continue;
+
+        gint64 now = g_get_real_time () / G_USEC_PER_SEC;
+        guint32 remaining = period - (guint32)(now % period);
+        /* Not on a rotation boundary: nothing to do. */
+        if (remaining != period)
+            continue;
+
+        otp_entry_update_otp (entry);
+
+        /* Reveal lifetime is tied to the validity window: if this entry was
+         * revealed when the period rolled over, either auto-roll (re-copy +
+         * re-notify the new value if this entry still owns the clipboard
+         * and the user opted into "show next OTP", and only once per reveal
+         * session) or hide it. */
+        if (!otp_entry_get_revealed (entry))
+            continue;
+
+        g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
+        gboolean owns_clipboard = (clip_owner == entry);
+
+        if (show_next && owns_clipboard && !otp_entry_get_roll_consumed (entry))
         {
-            guint32 period = otp_entry_get_period (entry);
-            if (period > 0)
-            {
-                gint64 now = g_get_real_time () / G_USEC_PER_SEC;
-                guint32 remaining = period - (guint32)(now % period);
-                /* Recompute OTP when validity just reset */
-                if (remaining == period)
-                    otp_entry_update_otp (entry);
-            }
+            copy_otp_to_clipboard_and_notify (self, entry);
+            otp_entry_mark_roll_consumed (entry);
+        }
+        else
+        {
+            if (owns_clipboard)
+                g_weak_ref_set (&self->clipboard_owner_entry, NULL);
+            otp_entry_set_revealed (entry, FALSE);
         }
     }
 
@@ -1221,8 +1262,13 @@ otpclient_window_clear_displayed_otps (OTPClientWindow *self)
     {
         g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
         if (entry != NULL)
+        {
+            otp_entry_set_revealed (entry, FALSE);
             otp_entry_set_otp_value (entry, "");
+        }
     }
+
+    g_weak_ref_set (&self->clipboard_owner_entry, NULL);
 
     if (self->otp_selection != NULL)
         gtk_single_selection_set_selected (self->otp_selection, GTK_INVALID_LIST_POSITION);
@@ -1699,6 +1745,45 @@ otpclient_window_clear_clipboard_now (OTPClientWindow *self)
         gdk_clipboard_set_text (clipboard, "");
 }
 
+/* Push the entry's current OTP to the clipboard, mark the entry as the
+ * clipboard owner, re-arm the auto-clear timer, and fire the copy
+ * notification. Shared by the user-click path and the TOTP auto-roll path
+ * in otp_refresh_tick. */
+static void
+copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
+{
+    const gchar *otp_value = otp_entry_get_otp_value (entry);
+    if (otp_value == NULL || otp_value[0] == '\0')
+        return;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+
+    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    gdk_clipboard_set_text (clipboard, otp_value);
+
+    g_weak_ref_set (&self->clipboard_owner_entry, entry);
+
+    if (self->clipboard_clear_timer_id != 0)
+        g_source_remove (self->clipboard_clear_timer_id);
+    guint clear_timeout = 30;
+    if (app != NULL)
+        clear_timeout = otpclient_application_get_clipboard_clear_timeout (app);
+    if (clear_timeout > 0)
+        self->clipboard_clear_timer_id = g_timeout_add_seconds (clear_timeout,
+                                                                  clipboard_clear_cb, self);
+
+    if (app != NULL && !otpclient_application_get_disable_notifications (app))
+    {
+        const gchar *issuer = otp_entry_get_issuer (entry);
+        g_autofree gchar *body = g_strdup_printf (_("OTP for %s copied to clipboard"),
+                                                   issuer ? issuer : otp_entry_get_account (entry));
+        g_autoptr (GNotification) notification = g_notification_new ("OTPClient");
+        g_notification_set_body (notification, body);
+        g_application_send_notification (G_APPLICATION (app), "otp-copied", notification);
+    }
+}
+
 /* Body of the OTP-activate action: HOTP counter advance, clipboard copy,
  * reveal-on-hide, clipboard-clear schedule, and notification. Factored out
  * of on_otp_selection_changed so a primary-click on the already-selected
@@ -1715,8 +1800,8 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
     /* For HOTP tokens, increment counter and regenerate OTP on each activation.
      * Skip for cross-DB entries since their database is not actively loaded. */
     const gchar *type = otp_entry_get_otp_type (entry);
-    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0
-        && app != NULL && otp_entry_get_db_name (entry) == NULL)
+    gboolean is_hotp = (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0);
+    if (is_hotp && app != NULL && otp_entry_get_db_name (entry) == NULL)
     {
         DatabaseData *db_data = otpclient_application_get_db_data (app);
         if (db_data != NULL && db_data->in_memory_json_data != NULL)
@@ -1732,7 +1817,7 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
                 if (token_obj != NULL)
                 {
                     json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
-                    /* Defer the disk write to lock / shutdown — flush_pending_writes() picks it up.
+                    /* Defer the disk write to lock / shutdown, flush_pending_writes() picks it up.
                      * Also arm a debounced timer so a hard crash within HOTP_FLUSH_DEBOUNCE_SECONDS
                      * (rather than a clean shutdown) still persists the new counter. */
                     self->hotp_counter_dirty = TRUE;
@@ -1752,34 +1837,26 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
     if (otp_value == NULL || otp_value[0] == '\0')
         return;
 
-    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
-    gdk_clipboard_set_text (clipboard, otp_value);
+    copy_otp_to_clipboard_and_notify (self, entry);
 
-    /* Briefly reveal the value the user just copied so they can verify it
-     * on screen before the auto-hide kicks back in. No-op when the user
-     * has disabled hide-by-default. */
+    /* Reveal-on-hide: tie the reveal lifetime to the validity window. For
+     * TOTP, just flip revealed=TRUE and let otp_refresh_tick decide what
+     * happens at rotation. For HOTP (no rotation), use a fixed short timer.
+     * No-op when hide-by-default is off. */
     if (app != NULL && otpclient_application_get_hide_otps (app))
-        otp_entry_reveal_for (entry, otpclient_application_get_otp_reveal_timeout (app));
-
-    /* Schedule clipboard clear */
-    if (self->clipboard_clear_timer_id != 0)
-        g_source_remove (self->clipboard_clear_timer_id);
-    guint clear_timeout = 30;
-    if (app != NULL)
-        clear_timeout = otpclient_application_get_clipboard_clear_timeout (app);
-    if (clear_timeout > 0)
-        self->clipboard_clear_timer_id = g_timeout_add_seconds (clear_timeout,
-                                                                  clipboard_clear_cb, self);
-
-    /* Send notification unless disabled */
-    if (app != NULL && !otpclient_application_get_disable_notifications (app))
     {
-        const gchar *issuer = otp_entry_get_issuer (entry);
-        g_autofree gchar *body = g_strdup_printf (_("OTP for %s copied to clipboard"),
-                                                   issuer ? issuer : otp_entry_get_account (entry));
-        g_autoptr (GNotification) notification = g_notification_new ("OTPClient");
-        g_notification_set_body (notification, body);
-        g_application_send_notification (G_APPLICATION (app), "otp-copied", notification);
+        if (is_hotp)
+        {
+            otp_entry_reveal_for (entry, HOTP_REVEAL_SECONDS);
+        }
+        else
+        {
+            otp_entry_set_revealed (entry, TRUE);
+            /* Re-click on an already-revealed row: set_revealed() no-ops,
+             * so the FALSE->TRUE auto-reset of roll_consumed never fires.
+             * Reset explicitly so the user gets a fresh roll cycle. */
+            otp_entry_reset_roll (entry);
+        }
     }
 }
 
@@ -2199,6 +2276,8 @@ otpclient_window_dispose (GObject *object)
      * Without this, an OTP copied just before window close (or app lock) sits
      * in the system clipboard until the user's next copy. */
     otpclient_window_clear_clipboard_now (win);
+
+    g_weak_ref_clear (&win->clipboard_owner_entry);
 
     if (win->otp_refresh_timer_id != 0)
     {
@@ -4235,6 +4314,8 @@ otpclient_window_init (OTPClientWindow *self)
     g_autoptr (GSettingsSchema) schema = NULL;
 
     gtk_widget_init_template (GTK_WIDGET(self));
+
+    g_weak_ref_init (&self->clipboard_owner_entry, NULL);
 
     GtkWidget *spinner;
 #if ADW_CHECK_VERSION(1, 6, 0)

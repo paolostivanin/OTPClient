@@ -30,6 +30,13 @@ struct _OTPEntry
      * persistent). */
     gboolean revealed;
     guint    reveal_timeout_id;
+
+    /* TOTP auto-roll bookkeeping: when the user reveals a TOTP entry, the
+     * window's refresh tick may re-copy + re-notify the next code on rotation
+     * (when "show next OTP" is on). This flag bounds that to once per reveal
+     * session, then the next rotation hides. Reset on the FALSE->TRUE
+     * transition of `revealed` and on explicit re-click. */
+    gboolean roll_consumed;
 };
 
 static gchar *
@@ -513,7 +520,7 @@ otp_entry_set_revealed (OTPEntry *self,
 
     /* If we're hiding (revealed=FALSE), cancel any pending auto-hide timer
      * since we just got there manually. If we're showing, leave any prior
-     * timer to run — reveal_for() resets it explicitly when re-arming. */
+     * timer to run, reveal_for() resets it explicitly when re-arming. */
     if (!revealed && self->reveal_timeout_id != 0)
     {
         g_source_remove (self->reveal_timeout_id);
@@ -521,6 +528,8 @@ otp_entry_set_revealed (OTPEntry *self,
     }
 
     self->revealed = revealed;
+    if (revealed)
+        self->roll_consumed = FALSE;
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_REVEALED]);
 }
 
@@ -555,6 +564,27 @@ otp_entry_reveal_for (OTPEntry *self,
 
     if (seconds > 0)
         self->reveal_timeout_id = g_timeout_add_seconds (seconds, on_reveal_timeout, self);
+}
+
+gboolean
+otp_entry_get_roll_consumed (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), FALSE);
+    return self->roll_consumed;
+}
+
+void
+otp_entry_mark_roll_consumed (OTPEntry *self)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+    self->roll_consumed = TRUE;
+}
+
+void
+otp_entry_reset_roll (OTPEntry *self)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+    self->roll_consumed = FALSE;
 }
 
 const gchar *

@@ -114,12 +114,7 @@
     <key name="hide-otps" type="b">
       <default>true</default>
       <summary>Hide OTPs by default</summary>
-      <description>When enabled, OTP codes are hidden in the list and only revealed when a row is clicked. Reveals are temporary; see otp-reveal-timeout. Disabling this restores the legacy always-visible behavior.</description>
-    </key>
-    <key name="otp-reveal-timeout" type="u">
-      <default>10</default>
-      <summary>OTP reveal timeout</summary>
-      <description>Seconds to keep an OTP visible after it is revealed by clicking. Ignored when hide-otps is disabled. Reasonable values are 5–60.</description>
+      <description>When enabled, OTP codes are hidden in the list and only revealed when a row is clicked. A TOTP reveal lasts until the validity window rotates (then either auto-rolls to the next code when "show next OTP" is on, or hides). HOTP reveals are timed. Disabling this restores the legacy always-visible behavior.</description>
     </key>
   </schema>
 </schemalist>

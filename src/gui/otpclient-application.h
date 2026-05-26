@@ -80,10 +80,6 @@ gboolean              otpclient_application_get_hide_otps (OTPClientApplication 
 void                  otpclient_application_set_hide_otps (OTPClientApplication *self,
                                                            gboolean              hide);
 
-guint                 otpclient_application_get_otp_reveal_timeout (OTPClientApplication *self);
-void                  otpclient_application_set_otp_reveal_timeout (OTPClientApplication *self,
-                                                                    guint                 timeout);
-
 void                  otpclient_application_reload_settings (OTPClientApplication *self);
 
 G_END_DECLS

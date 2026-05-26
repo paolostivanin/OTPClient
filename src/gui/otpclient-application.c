@@ -46,7 +46,6 @@ gboolean use_secret_service;
     gboolean minimize_to_tray;
     guint clipboard_clear_timeout;
     gboolean hide_otps;
-    guint otp_reveal_timeout;
 };
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
@@ -832,7 +831,6 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
         self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
         self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
-        self->otp_reveal_timeout = g_settings_get_uint (self->settings, "otp-reveal-timeout");
     } else {
         self->settings = NULL;
         self->show_next_otp = FALSE;
@@ -849,7 +847,6 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->minimize_to_tray = FALSE;
         self->clipboard_clear_timeout = 30;
         self->hide_otps = TRUE;
-        self->otp_reveal_timeout = 10;
     }
 
     G_APPLICATION_CLASS (otpclient_application_parent_class)->startup (application);
@@ -1302,7 +1299,6 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
     if (old_hide_otps != self->hide_otps)
         g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_HIDE_OTPS]);
-    self->otp_reveal_timeout = g_settings_get_uint (self->settings, "otp-reveal-timeout");
 
     /* Apply dark theme */
     adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
@@ -1339,18 +1335,4 @@ void otpclient_application_set_hide_otps (OTPClientApplication *self, gboolean h
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "hide-otps", hide);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_HIDE_OTPS]);
-}
-
-guint otpclient_application_get_otp_reveal_timeout (OTPClientApplication *self)
-{
-    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), 10);
-    return self->otp_reveal_timeout;
-}
-
-void otpclient_application_set_otp_reveal_timeout (OTPClientApplication *self, guint timeout)
-{
-    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
-    self->otp_reveal_timeout = timeout;
-    if (self->settings != NULL)
-        g_settings_set_uint (self->settings, "otp-reveal-timeout", timeout);
 }

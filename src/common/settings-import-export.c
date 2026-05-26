@@ -32,7 +32,6 @@ static const SettingDef exportable_settings[] = {
     { "show-sidebar",           SETTING_BOOL },
     { "minimize-to-tray",       SETTING_BOOL },
     { "hide-otps",              SETTING_BOOL },
-    { "otp-reveal-timeout",     SETTING_UINT },
     { NULL, 0 }
 };
 
