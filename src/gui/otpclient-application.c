@@ -53,6 +53,14 @@ gboolean use_secret_service;
      * reset on every unlock outcome so a bad-password retry can't destroy
      * the only copy of the password. */
     gboolean migrating_legacy_keyring;
+
+    /* TRUE between the moment on_password_received hands db_data to the
+     * worker thread and on_unlock_done firing back on the main thread.
+     * Window-side actions that would free db_data (sidebar switch, Open/New
+     * DB) consult otpclient_application_is_unlocking and refuse during this
+     * window: the worker still holds a raw pointer to db_data and freeing
+     * it under the worker's feet is a use-after-free. */
+    gboolean unlock_in_progress;
 };
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
@@ -487,6 +495,11 @@ on_unlock_done (GObject      *source_object,
     (void) source_object;
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
+    /* The worker has returned and is no longer reading db_data, so it is
+     * safe again for the window to swap or free it. Clear up-front so
+     * every early-return path below uncovers the lock automatically. */
+    self->unlock_in_progress = FALSE;
+
     GError *err = NULL;
     g_task_propagate_boolean (G_TASK (result), &err);
     if (err != NULL)
@@ -630,6 +643,12 @@ on_password_received (const gchar *password,
 
     if (self->window != NULL)
         otpclient_window_show_loading (self->window);
+
+    /* Mark the unlock as in-flight before kicking off the worker. While
+     * this is TRUE, the window refuses any action that would free db_data
+     * (sidebar switch, Open/New DB), because the worker still holds a
+     * raw pointer to it. Cleared at the top of on_unlock_done. */
+    self->unlock_in_progress = TRUE;
 
     GTask *task = g_task_new (self, self->cancellable, on_unlock_done, self);
     g_task_set_task_data (task, self->db_data, NULL);
@@ -1084,6 +1103,13 @@ otpclient_application_get_db_data (OTPClientApplication *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), NULL);
     return self->db_data;
+}
+
+gboolean
+otpclient_application_is_unlocking (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->unlock_in_progress;
 }
 
 void

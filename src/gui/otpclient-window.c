@@ -1474,7 +1474,7 @@ database_row_selected (GtkListBox      *box,
         return;
 
     /* Suppress redundant switches:
-     *  - Same DB already loaded → nothing to do.
+     *  - Same DB already loaded -> nothing to do.
      *  - Cold start: init_database() calls select_database() before it
      *    sets db_data, so this fires once with current == NULL. If the
      *    row matches the path init_database is about to load, let that
@@ -1487,6 +1487,32 @@ database_row_selected (GtkListBox      *box,
         g_autofree gchar *cfg_path = gui_misc_get_db_path_from_cfg ();
         if (g_strcmp0 (cfg_path, path) == 0)
             return;
+    }
+
+    /* Refuse the switch while an unlock worker is still reading db_data;
+     * otherwise otpclient_application_switch_to_db -> set_db_data(NULL)
+     * would free db_data under the worker's feet. Revert the visual row
+     * selection back to the currently loaded DB so the sidebar does not
+     * mislead the user about which DB is active. */
+    if (otpclient_application_is_unlocking (app))
+    {
+        otpclient_window_show_error_toast (self,
+            _("Please wait, the database is still being unlocked."));
+        if (current != NULL && current->db_path != NULL)
+        {
+            guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+            for (guint i = 0; i < n; i++)
+            {
+                g_autoptr (DatabaseEntry) e = g_list_model_get_item (
+                    G_LIST_MODEL (self->db_store), i);
+                if (g_strcmp0 (database_entry_get_path (e), current->db_path) == 0)
+                {
+                    otpclient_window_select_database (self, (gint) i);
+                    break;
+                }
+            }
+        }
+        return;
     }
 
     otpclient_application_switch_to_db (app, path);
@@ -3815,6 +3841,19 @@ new_db_button_clicked (GtkButton       *button,
 {
     (void) button;
 
+    /* Refuse while an unlock worker is still reading the current db_data:
+     * on_new_db_file_selected -> on_new_db_password_received eventually
+     * calls set_db_data, which would free db_data under the worker's
+     * feet. The user only loses the file dialog round-trip. */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL && otpclient_application_is_unlocking (app))
+    {
+        otpclient_window_show_error_toast (self,
+            _("Please wait, the database is still being unlocked."));
+        return;
+    }
+
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Create New Database"));
     gtk_file_dialog_set_initial_name (dialog, "otpclient-db.enc");
@@ -3930,6 +3969,18 @@ open_db_button_clicked (GtkButton       *button,
                         OTPClientWindow *self)
 {
     (void) button;
+
+    /* Same UAF guard as new_db_button_clicked: on_open_db_password_received
+     * eventually calls set_db_data, which would free the in-flight db_data
+     * being read by the unlock worker. */
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL && otpclient_application_is_unlocking (app))
+    {
+        otpclient_window_show_error_toast (self,
+            _("Please wait, the database is still being unlocked."));
+        return;
+    }
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Open Database"));

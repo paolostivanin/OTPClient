@@ -20,6 +20,12 @@ void                  otpclient_application_set_db_data (OTPClientApplication *s
 void                  otpclient_application_switch_to_db (OTPClientApplication *self,
                                                           const gchar          *db_path);
 
+/* TRUE between on_password_received handing db_data to the unlock worker
+ * and on_unlock_done firing. Window callers must consult this before any
+ * action that would free or replace db_data: the worker holds a raw
+ * pointer to it and freeing under its feet is a use-after-free. */
+gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
+
 gboolean              otpclient_application_get_show_next_otp (OTPClientApplication *self);
 void                  otpclient_application_set_show_next_otp (OTPClientApplication *self,
                                                                gboolean              show);
