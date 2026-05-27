@@ -135,10 +135,16 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
      * false in GSettings here — a scripted CLI run through a transiently
      * broken D-Bus session shouldn't flip the user's GUI setting. */
     gboolean secret_service_runtime_ok = TRUE;
+    gboolean recovered_from_legacy_keyring = FALSE;
     if (use_secret_service == TRUE && g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
         GError *ss_err = NULL;
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
-                                                  "string", db_data->db_path, NULL);
+        /* Issue #448: fall back to the v4 "main_pwd" attribute if the v5
+         * db_path-keyed lookup returns nothing, so upgraders aren't forced
+         * to retype their password. On success via fallback, we clear the
+         * legacy entry below once load_db has accepted the password. */
+        gchar *pwd = otpclient_secret_lookup_with_legacy_fallback (db_data->db_path,
+                                                                   &recovered_from_legacy_keyring,
+                                                                   &ss_err);
         if (ss_err != NULL) {
             g_printerr (_("Warning: secret service lookup failed: %s\n"
                           "Falling back to interactive password prompt.\n"),
@@ -195,8 +201,28 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
     }
 
-    if (use_secret_service == TRUE && db_data->key_stored == FALSE && secret_service_runtime_ok) {
-        secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "OTPClient database password", db_data->key, NULL, on_password_stored, NULL, "string", db_data->db_path, NULL);
+    if (use_secret_service == TRUE && secret_service_runtime_ok &&
+        (db_data->key_stored == FALSE || recovered_from_legacy_keyring)) {
+        if (recovered_from_legacy_keyring) {
+            /* Issue #448 migration: use sync ops so the new db_path-keyed
+             * entry is committed before we clear the v4 legacy entry. CLI
+             * has no main loop, so the async store's callback would not
+             * fire, and a process exit racing with the in-flight store
+             * could leave the user with neither entry. */
+            GError *store_err = NULL;
+            if (secret_password_store_sync (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT,
+                                            "OTPClient database password",
+                                            db_data->key, NULL, &store_err,
+                                            "string", db_data->db_path, NULL)) {
+                otpclient_secret_clear_legacy_sync ();
+            } else {
+                g_printerr (_("Warning: failed to store password under db_path: %s\n"),
+                            store_err != NULL ? store_err->message : _("unknown error"));
+                g_clear_error (&store_err);
+            }
+        } else {
+            secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "OTPClient database password", db_data->key, NULL, on_password_stored, NULL, "string", db_data->db_path, NULL);
+        }
     }
 
     if (cmdline_opts->show) {

@@ -147,11 +147,14 @@ load_entries_from_db (GPtrArray   *entries,
         return;
 
     /* Issue #446: surface broken-keyring errors via a warning instead of
-     * silently returning. Don't mutate GSettings here — the search provider
-     * is a passive consumer; the GUI app owns the setting. */
+     * silently returning. Don't mutate GSettings here, the search provider
+     * is a passive consumer; the GUI app owns the setting.
+     * Issue #448: try the v4 "main_pwd" entry too when the db_path-keyed
+     * lookup misses, so users who upgraded but have not opened the GUI yet
+     * still get search hits. No cleanup here, the GUI's first launch is
+     * what migrates and clears the legacy entry. */
     GError *ss_err = NULL;
-    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
-                                               "string", db_path, NULL);
+    gchar *pwd = otpclient_secret_lookup_with_legacy_fallback (db_path, NULL, &ss_err);
     if (ss_err != NULL) {
         g_warning ("Search provider: secret service lookup failed for %s: %s",
                    db_path, ss_err->message);
@@ -460,8 +463,9 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
     if (!gsettings_common_get_use_secret_service ()) return NULL;
 
     GError *ss_err = NULL;
-    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &ss_err,
-                                               "string", entry->db_path, NULL);
+    /* Issue #448: v4 fallback so a v4 upgrader who has not opened the GUI
+     * yet still gets OTP values from the search provider. */
+    gchar *pwd = otpclient_secret_lookup_with_legacy_fallback (entry->db_path, NULL, &ss_err);
     if (ss_err != NULL) {
         g_warning ("Search provider: secret service lookup failed: %s", ss_err->message);
         g_clear_error (&ss_err);

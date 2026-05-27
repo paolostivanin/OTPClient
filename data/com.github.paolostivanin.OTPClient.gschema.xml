@@ -56,6 +56,11 @@
       <summary>Secret Service Integration</summary>
       <description>Whether to store the database password in the system keyring so the app unlocks automatically after login</description>
     </key>
+    <key name="secret-service-v4-migrated" type="b">
+      <default>false</default>
+      <summary>Internal: v4 keyring migration attempted</summary>
+      <description>Tracks whether the v4 to v5 secret-service migration has run on this profile. Set after the first attempt, regardless of outcome. Do not modify.</description>
+    </key>
     <key name="search-provider-enabled" type="b">
       <default>true</default>
       <summary>Search Provider</summary>

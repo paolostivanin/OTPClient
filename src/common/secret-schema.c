@@ -7,6 +7,13 @@
  * Real db_paths are absolute filesystem paths, so they cannot match this. */
 #define OTPCLIENT_SECRET_PROBE_ATTR "__otpclient_probe__"
 
+/* Attribute value used by pre-5.0 builds for the (single) database password.
+ * v5 switched to keying by absolute db_path so multi-database setups can
+ * each have their own keyring entry; the legacy value is only consulted on
+ * the fallback path to migrate upgraders without forcing them to retype the
+ * password on first launch (issue #448). */
+#define OTPCLIENT_SECRET_LEGACY_ATTR "main_pwd"
+
 const SecretSchema *
 otpclient_get_schema (void)
 {
@@ -139,4 +146,95 @@ cleanup:
         g_propagate_error (error, probe_err);
 
     return ok;
+}
+
+
+gchar *
+otpclient_secret_lookup_with_legacy_fallback (const gchar  *db_path,
+                                              gboolean     *out_is_legacy,
+                                              GError      **err)
+{
+    g_return_val_if_fail (db_path != NULL, NULL);
+    g_return_val_if_fail (err == NULL || *err == NULL, NULL);
+
+    if (out_is_legacy != NULL)
+        *out_is_legacy = FALSE;
+
+    GError *local_err = NULL;
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &local_err,
+                                              "string", db_path, NULL);
+    if (local_err != NULL) {
+        g_propagate_error (err, local_err);
+        return NULL;
+    }
+    if (pwd != NULL)
+        return pwd;
+
+    pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &local_err,
+                                       "string", OTPCLIENT_SECRET_LEGACY_ATTR, NULL);
+    if (local_err != NULL) {
+        g_propagate_error (err, local_err);
+        return NULL;
+    }
+    if (pwd != NULL && out_is_legacy != NULL)
+        *out_is_legacy = TRUE;
+    return pwd;
+}
+
+
+gchar *
+otpclient_secret_lookup_legacy_only (GError **err)
+{
+    g_return_val_if_fail (err == NULL || *err == NULL, NULL);
+    return secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, err,
+                                        "string", OTPCLIENT_SECRET_LEGACY_ATTR,
+                                        NULL);
+}
+
+
+gboolean
+otpclient_secret_legacy_entry_exists (void)
+{
+    GError *err = NULL;
+    gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, &err,
+                                              "string", OTPCLIENT_SECRET_LEGACY_ATTR,
+                                              NULL);
+    if (err != NULL) {
+        g_clear_error (&err);
+        return FALSE;
+    }
+    if (pwd != NULL) {
+        secret_password_free (pwd);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+
+void
+otpclient_secret_clear_legacy_async (void)
+{
+    /* Pass NULL as user_data: the migration cleanup is internal, not a
+     * user-initiated action. on_password_cleared's notification short-circuits
+     * on a NULL/non-GApplication user_data, so a clear failure logs a warning
+     * but does not pop up a confusing "Couldn't remove the password" toast.
+     * A stale legacy entry is self-healing on the next successful unlock. */
+    secret_password_clear (OTPCLIENT_SCHEMA, NULL,
+                           on_password_cleared, NULL,
+                           "string", OTPCLIENT_SECRET_LEGACY_ATTR,
+                           NULL);
+}
+
+
+void
+otpclient_secret_clear_legacy_sync (void)
+{
+    GError *err = NULL;
+    secret_password_clear_sync (OTPCLIENT_SCHEMA, NULL, &err,
+                                "string", OTPCLIENT_SECRET_LEGACY_ATTR,
+                                NULL);
+    if (err != NULL) {
+        g_warning ("Couldn't clear v4 secret-service entry: %s", err->message);
+        g_clear_error (&err);
+    }
 }

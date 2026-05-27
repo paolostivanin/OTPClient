@@ -46,6 +46,13 @@ gboolean use_secret_service;
     gboolean minimize_to_tray;
     guint clipboard_clear_timeout;
     gboolean hide_otps;
+
+    /* Set TRUE while the password being used to unlock came from the v4
+     * legacy keyring entry (issue #448). on_unlock_done consults it to
+     * decide whether to clear the legacy entry after a successful unlock;
+     * reset on every unlock outcome so a bad-password retry can't destroy
+     * the only copy of the password. */
+    gboolean migrating_legacy_keyring;
 };
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
@@ -540,6 +547,11 @@ on_unlock_done (GObject      *source_object,
             self->db_data->key = NULL;
             g_clear_error (&err);
 
+            /* The legacy entry holds the only copy of the v4 password until
+             * we successfully migrate it; never clear it on a bad-password
+             * attempt. The next on_secret_lookup_done will re-discover it. */
+            self->migrating_legacy_keyring = FALSE;
+
             if (self->window != NULL)
             {
                 PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
@@ -563,6 +575,7 @@ on_unlock_done (GObject      *source_object,
             gcry_free (self->db_data->key);
             self->db_data->key = NULL;
         }
+        self->migrating_legacy_keyring = FALSE;
         g_clear_error (&err);
         return;
     }
@@ -581,7 +594,18 @@ on_unlock_done (GObject      *source_object,
                                NULL);
     }
 
-    /* Populate first, *then* swap out the loading page — otherwise
+    /* Issue #448: the password we just used came from the v4 legacy keyring
+     * entry. It is now (or about to be) stored under the v5 db_path key, so
+     * drop the legacy entry to keep the keyring tidy and avoid re-running
+     * the fallback on future launches. Async clear: failures are surfaced
+     * via on_password_cleared but do not affect the unlock outcome. */
+    if (self->migrating_legacy_keyring)
+    {
+        self->migrating_legacy_keyring = FALSE;
+        otpclient_secret_clear_legacy_async ();
+    }
+
+    /* Populate first, *then* swap out the loading page, otherwise
      * non-empty databases briefly flash the empty-state placeholder. */
     populate_window_from_db (self);
     if (self->window != NULL)
@@ -632,10 +656,32 @@ on_secret_lookup_done (GObject      *source,
 
     if (password != NULL)
     {
+        self->migrating_legacy_keyring = FALSE;
         on_password_received (password, self);
         secret_password_free (password);
         g_clear_error (&err);
         return;
+    }
+
+    /* Issue #448: v5 keys keyring entries by absolute db_path; pre-5.0 used
+     * a fixed "main_pwd" attribute. If the primary lookup returned "not
+     * stored" (NULL with no error), try the legacy entry before falling
+     * back to the password dialog. The sync call here is acceptable: it
+     * only runs on the (rare) failure path, and a successful unlock then
+     * migrates the entry over via on_unlock_done. */
+    if (err == NULL)
+    {
+        GError *legacy_err = NULL;
+        gchar *legacy_pwd = otpclient_secret_lookup_legacy_only (&legacy_err);
+        if (legacy_err != NULL)
+            g_clear_error (&legacy_err);
+        if (legacy_pwd != NULL)
+        {
+            self->migrating_legacy_keyring = TRUE;
+            on_password_received (legacy_pwd, self);
+            secret_password_free (legacy_pwd);
+            return;
+        }
     }
 
     /* password == NULL: distinguish "not stored" (err == NULL, normal) from
@@ -649,6 +695,7 @@ on_secret_lookup_done (GObject      *source,
         g_clear_error (&err);
     }
 
+    self->migrating_legacy_keyring = FALSE;
     if (self->window != NULL)
     {
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
@@ -657,6 +704,37 @@ on_secret_lookup_done (GObject      *source,
         adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
         adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
     }
+}
+
+/* Issue #448: pre-5.0 stored the keyring password under the fixed
+ * "main_pwd" attribute and shipped secret-service=TRUE by default. v5
+ * keys keyring entries by absolute db_path and defaults secret-service to
+ * FALSE. Upgraders therefore lose auto-unlock and look at a fresh password
+ * prompt with no idea what changed. On the first launch where the
+ * migration has not yet run, probe the keyring for a legacy entry; if one
+ * exists and the user has not explicitly chosen a value for the
+ * secret-service setting, flip it ON so the per-launch fallback in
+ * on_secret_lookup_done can recover the password. Always set the flag
+ * afterward so we never probe twice on the same profile. */
+static void
+maybe_migrate_v4_secret_service (OTPClientApplication *self)
+{
+    if (self->settings == NULL)
+        return;
+    if (g_settings_get_boolean (self->settings, "secret-service-v4-migrated"))
+        return;
+
+    GVariant *user_value = g_settings_get_user_value (self->settings, "secret-service");
+    gboolean inheriting_default = (user_value == NULL);
+    if (user_value != NULL)
+        g_variant_unref (user_value);
+
+    if (inheriting_default && otpclient_secret_legacy_entry_exists ()) {
+        g_message ("Detected pre-5.0 secret-service entry; auto-enabling Secret Service integration");
+        otpclient_application_set_use_secret_service (self, TRUE);
+    }
+
+    g_settings_set_boolean (self->settings, "secret-service-v4-migrated", TRUE);
 }
 
 static void
@@ -734,6 +812,8 @@ init_database (OTPClientApplication *self)
     self->db_data = g_new0 (DatabaseData, 1);
     self->db_data->db_path = g_strdup (db_path);
     self->db_data->max_file_size_from_memlock = memlock_value;
+
+    maybe_migrate_v4_secret_service (self);
 
     if (self->use_secret_service)
     {
