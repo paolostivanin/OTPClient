@@ -90,6 +90,22 @@
   </content_rating>
 
   <releases>
+    <release version="5.0.6" date="2026-05-27">
+      <description>
+        <p>Bug-fix release in the 5.0.x line. Headline fix is an unlock-loop affecting users who upgraded from 4.x: with the correct password, the unlock dialog would re-prompt forever until the app was restarted. Also restores auto-unlock via the system keyring for upgraders, fixes the Backup/Restore buttons on distros shipping libadwaita 1.5 (Ubuntu 24.04, Pop!_OS 24.04, Linux Mint 22.3), and several smaller GUI fixes.</p>
+        <ul>
+          <li>FIX: unlock dialog re-prompting forever with the correct password. A wrong-password attempt was poisoning the in-memory key cache, so even the correct password kept being rejected until the app was restarted (#448)</li>
+          <li>FIX: auto-unlock via the system keyring stopped working after upgrading from 4.x. On first launch, OTPClient now picks up the old keyring entry, uses it to unlock, and re-saves it under the new format so it keeps working (#448)</li>
+          <li>FIX: Backup and Restore buttons in Settings did nothing on Ubuntu 24.04, Pop!_OS 24.04, Linux Mint 22.3, and other distros shipping libadwaita 1.5 (#449)</li>
+          <li>FIX: a revealed OTP could fall out of sync with the clipboard near the end of a 30-second window, leaving you unsure which code you actually pasted. Reveal now ends cleanly when the code rotates, and the clipboard rolls to the new code if "Show next OTP" is on (#450)</li>
+          <li>FIX: "Hide OTPs by default" only took effect after restarting the app. Toggling it now updates the visible list immediately (#450)</li>
+          <li>FIX: re-clicking an already-selected token did nothing, so it could not be copied or advance the HOTP counter a second time. Re-clicks now re-trigger the copy and counter-advance action (#451)</li>
+          <li>FIX: window close/minimize/maximize buttons were forced to the right side, ignoring the system setting. They now follow the desktop's decoration layout, e.g. left-side buttons on macOS-style KDE setups (#452)</li>
+          <li>FIX: switching to a different database (sidebar click, Open DB, or New DB) while an unlock was still in progress could corrupt memory. The app now shows a toast and waits for the unlock to finish</li>
+          <li>IMPROVEMENT: saving the database after a fresh unlock is noticeably faster. The password-derivation result is now cached on save just like on unlock, so the first save no longer re-runs the slow key derivation</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.5" date="2026-05-21">
       <description>
         <p>Bug-fix release in the 5.0.x line. Headline fix is a hardening of the auto-lock flow: dismissing the unlock dialog (Esc, X, or click-outside) previously left the token list visible and interactive, so a single click would still copy an OTP — and "Show QR" would render the secret as a scannable image. The unlock dialog is now non-dismissable and a dedicated locked page hides the token list across every code path. Also recovers gracefully on systems where the registered Secret Service provider is broken (e.g. KDE Plasma with KWallet disabled): the setting is pre-flighted before being enabled and auto-disabled on runtime failure, instead of looping every launch.</p>
