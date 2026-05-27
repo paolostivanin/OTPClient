@@ -794,9 +794,23 @@ encrypt_db (DatabaseData *db_data,
     }
 
     // Wipe the just-written tag from the stack: not strictly secret in AES-GCM,
-    // but defense-in-depth — an inspection of the freed stack page won't recover
+    // but defense-in-depth, an inspection of the freed stack page won't recover
     // the value-commitment.
     explicit_bzero (tag, TAG_SIZE);
+
+    // Mirror try_decrypt_v2's cache populate so subsequent operations under
+    // the same (password, salt) skip the 150 ms Argon2id derivation. Without
+    // this, the first save after a fresh unlock paid the derive cost but
+    // discarded the result, forcing the next save to redo the work.
+    if (db_data->cached_derived_key == NULL)
+        db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+    if (db_data->cached_derived_key != NULL) {
+        memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
+        memcpy (db_data->cached_salt, header_data->salt, KDF_SALT_SIZE);
+        gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->cached_pwd_hash,
+                             db_data->key, strlen (db_data->key));
+        db_data->has_cached_key = TRUE;
+    }
 
     free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
 
