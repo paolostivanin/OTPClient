@@ -10,6 +10,7 @@ struct _PasswordDialog
     PasswordDialogCallback callback;
     gpointer callback_data;
 
+    GtkWidget *header;
     GtkWidget *status_page;
     GtkWidget *prefs_group;
     GtkWidget *current_password_row;
@@ -17,7 +18,16 @@ struct _PasswordDialog
     GtkWidget *confirm_row;
     GtkWidget *unlock_button;
     GtkWidget *error_label;
+
+    gboolean locked_mode;
 };
+
+enum {
+    SIGNAL_QUIT_REQUESTED,
+    N_SIGNALS
+};
+
+static guint signals[N_SIGNALS];
 
 G_DEFINE_FINAL_TYPE (PasswordDialog, password_dialog, ADW_TYPE_DIALOG)
 
@@ -140,6 +150,48 @@ password_dialog_class_init (PasswordDialogClass *klass)
 {
     GObjectClass *object_class = G_OBJECT_CLASS (klass);
     object_class->dispose = password_dialog_dispose;
+
+    signals[SIGNAL_QUIT_REQUESTED] =
+        g_signal_new ("quit-requested",
+                      G_TYPE_FROM_CLASS (klass),
+                      G_SIGNAL_RUN_LAST,
+                      0, NULL, NULL, NULL,
+                      G_TYPE_NONE, 0);
+}
+
+static void
+on_quit_button_clicked (GtkButton      *button,
+                        PasswordDialog *self)
+{
+    (void) button;
+    g_signal_emit (self, signals[SIGNAL_QUIT_REQUESTED], 0);
+}
+
+static void
+on_locked_close_attempt (AdwDialog      *dialog,
+                         PasswordDialog *self)
+{
+    (void) dialog;
+    g_signal_emit (self, signals[SIGNAL_QUIT_REQUESTED], 0);
+}
+
+void
+password_dialog_set_locked_mode (PasswordDialog *self)
+{
+    g_return_if_fail (PASSWORD_IS_DIALOG (self));
+
+    if (self->locked_mode)
+        return;
+    self->locked_mode = TRUE;
+
+    adw_dialog_set_can_close (ADW_DIALOG (self), FALSE);
+
+    GtkWidget *quit_button = gtk_button_new_with_label (_("Quit"));
+    gtk_widget_add_css_class (quit_button, "flat");
+    g_signal_connect (quit_button, "clicked", G_CALLBACK (on_quit_button_clicked), self);
+    adw_header_bar_pack_start (ADW_HEADER_BAR (self->header), quit_button);
+
+    g_signal_connect (self, "close-attempt", G_CALLBACK (on_locked_close_attempt), self);
 }
 
 PasswordDialog *
@@ -159,8 +211,8 @@ password_dialog_new (PasswordDialogMode     mode,
 
     /* Build UI programmatically */
     GtkWidget *toolbar_view = adw_toolbar_view_new ();
-    GtkWidget *header = adw_header_bar_new ();
-    adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (toolbar_view), header);
+    self->header = adw_header_bar_new ();
+    adw_toolbar_view_add_top_bar (ADW_TOOLBAR_VIEW (toolbar_view), self->header);
 
     GtkWidget *clamp = adw_clamp_new ();
     gtk_widget_set_margin_start (clamp, 12);

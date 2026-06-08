@@ -570,7 +570,7 @@ on_unlock_done (GObject      *source_object,
                 PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                            on_password_received,
                                                            self);
-                adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+                lock_app_install_unlock_dialog_quit (dlg, self);
                 adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
             }
             return;
@@ -720,7 +720,7 @@ on_secret_lookup_done (GObject      *source,
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                    on_password_received,
                                                    self);
-        adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+        lock_app_install_unlock_dialog_quit (dlg, self);
         adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
     }
 }
@@ -846,7 +846,7 @@ init_database (OTPClientApplication *self)
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                    on_password_received,
                                                    self);
-        adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+        lock_app_install_unlock_dialog_quit (dlg, self);
         adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
     }
 }
@@ -1184,7 +1184,7 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
         PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                    on_password_received,
                                                    self);
-        adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+        lock_app_install_unlock_dialog_quit (dlg, self);
         adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
     }
 }

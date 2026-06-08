@@ -35,6 +35,27 @@ on_unlock_dialog_closed (AdwDialog *dialog,
 }
 
 static void
+on_unlock_dialog_quit_requested (PasswordDialog       *dlg,
+                                 OTPClientApplication *app)
+{
+    (void) dlg;
+    g_application_quit (G_APPLICATION (app));
+}
+
+void
+lock_app_install_unlock_dialog_quit (PasswordDialog       *dlg,
+                                     OTPClientApplication *app)
+{
+    g_return_if_fail (PASSWORD_IS_DIALOG (dlg));
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (app));
+
+    password_dialog_set_locked_mode (dlg);
+    g_signal_connect_object (dlg, "quit-requested",
+                             G_CALLBACK (on_unlock_dialog_quit_requested),
+                             app, 0);
+}
+
+static void
 present_unlock_dialog (OTPClientApplication *app)
 {
     GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
@@ -44,7 +65,7 @@ present_unlock_dialog (OTPClientApplication *app)
     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                on_unlock_password,
                                                app);
-    adw_dialog_set_can_close (ADW_DIALOG (dlg), FALSE);
+    lock_app_install_unlock_dialog_quit (dlg, app);
     g_signal_connect (dlg, "closed", G_CALLBACK (on_unlock_dialog_closed), app);
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
 }
