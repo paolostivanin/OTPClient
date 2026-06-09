@@ -46,6 +46,18 @@ jobs:
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
+  sanitizers:
+    docker:
+      - image: ubuntu:resolute
+    environment:
+      EXTRA_CMAKE_ARGS: "-DSANITIZE=ON -DCMAKE_BUILD_TYPE=Debug"
+    steps:
+      - checkout
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
+      - run: chmod +x .ci/smoke-test.sh && .ci/smoke-test.sh
+
 workflows:
   version: 2
   build:
@@ -55,3 +67,4 @@ workflows:
       - debianStable
       - fedoraLatestStable
       - archlinux
+      - sanitizers

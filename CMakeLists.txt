@@ -82,6 +82,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 endif()
 
+option(SANITIZE "Enable AddressSanitizer + UndefinedBehaviorSanitizer (debug builds)" OFF)
+if(SANITIZE)
+    # ASan/UBSan want frame pointers, low optimization, and conflict with FORTIFY_SOURCE
+    # (the fortified glibc wrappers re-enter the instrumented allocator).
+    list(REMOVE_ITEM COMMON_C_OPTIONS -O3 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3)
+    list(APPEND COMMON_C_OPTIONS
+            -O1 -g -fno-omit-frame-pointer
+            -fsanitize=address,undefined
+            -fno-sanitize-recover=all)
+    list(APPEND COMMON_LINK_OPTIONS -fsanitize=address,undefined)
+    # The sanitizer runtime resolves symbols at load time; --no-undefined trips on it.
+    list(REMOVE_ITEM COMMON_LINK_OPTIONS "-Wl,--no-undefined")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION FALSE)
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GCRYPT REQUIRED IMPORTED_TARGET libgcrypt>=1.10.1)
 pkg_check_modules(COTP REQUIRED IMPORTED_TARGET cotp>=4.0.0)
