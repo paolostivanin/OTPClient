@@ -66,6 +66,13 @@ struct _OTPClientWindow
     gchar *active_group_filter;  /* NULL = "All", "" = "Ungrouped", non-empty = group name */
     gboolean syncing_group_filter;
 
+    /* Search filter cache: lowered forms of the search box contents, refreshed
+     * whenever the filter is invalidated (search text changed / group changed /
+     * cross-db load completed). search_filter_func runs once per visible row,
+     * so caching here avoids re-lowering the query string N times per keystroke. */
+    gchar *search_lower;
+    gchar *search_group_lower;
+
     /* Cross-database search */
     GListStore *cross_db_store;
     GtkFlattenListModel *flatten_model;
@@ -128,6 +135,7 @@ static void refresh_otp_value_cells (OTPClientWindow *self);
 static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
 static void otpclient_window_constructed (GObject *object);
 static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry);
+static void refresh_search_cache (OTPClientWindow *self);
 
 static inline gboolean
 window_is_locked (OTPClientWindow *self)
@@ -818,11 +826,9 @@ cross_db_load_thread (GTask        *task,
         if (pwd == NULL)
             continue;   /* No password stored for this DB -- skip it */
 
-        DatabaseData *db_data = g_new0 (DatabaseData, 1);
-        db_data->db_path = g_strdup (dbe->path);
+        DatabaseData *db_data = database_data_new (dbe->path, td->max_file_size);
         db_data->key = secure_strdup (pwd);
         secret_password_free (pwd);
-        db_data->max_file_size_from_memlock = td->max_file_size;
 
         GError *err = NULL;
         load_db (db_data, &err);
@@ -830,11 +836,7 @@ cross_db_load_thread (GTask        *task,
         {
             if (err != NULL)
                 g_clear_error (&err);
-            db_invalidate_kdf_cache (db_data);
-            gcry_free (db_data->key);
-            g_slist_free_full (db_data->objects_hash, g_free);
-            g_free (db_data->db_path);
-            g_free (db_data);
+            database_data_free (db_data);
             continue;
         }
 
@@ -879,12 +881,7 @@ cross_db_load_thread (GTask        *task,
             g_object_unref (entry);
         }
 
-        db_invalidate_kdf_cache (db_data);
-        gcry_free (db_data->key);
-        json_decref (db_data->in_memory_json_data);
-        g_slist_free_full (db_data->objects_hash, g_free);
-        g_free (db_data->db_path);
-        g_free (db_data);
+        database_data_free (db_data);
     }
 
     g_task_return_pointer (task, result, g_object_unref);
@@ -916,6 +913,7 @@ cross_db_load_done (GObject      *source,
     if (text != NULL && text[0] != '\0')
     {
         cross_db_activate (self);
+        refresh_search_cache (self);
         gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
     }
 }
@@ -965,6 +963,60 @@ otpclient_window_invalidate_cross_db (OTPClientWindow *self)
         g_list_store_remove_all (self->cross_db_store);
 }
 
+/* Re-derive search_lower / search_group_lower from the live search entry text.
+ * Must be called from every code path that ends with gtk_filter_changed on the
+ * search filter — otherwise the per-row filter will run against stale strings. */
+static void
+refresh_search_cache (OTPClientWindow *self)
+{
+    g_clear_pointer (&self->search_lower, g_free);
+    g_clear_pointer (&self->search_group_lower, g_free);
+
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
+    if (text == NULL || text[0] == '\0')
+        return;
+
+    const gchar *remaining_text = text;
+    g_autofree gchar *search_group = NULL;
+
+    if (g_str_has_prefix (text, "group:"))
+    {
+        const gchar *rest = text + 6;
+        const gchar *space = strchr (rest, ' ');
+        if (space != NULL)
+        {
+            search_group = g_strndup (rest, space - rest);
+            remaining_text = space + 1;
+        }
+        else
+        {
+            search_group = g_strdup (rest);
+            remaining_text = NULL;
+        }
+    }
+    else if (text[0] == '#' && text[1] != '\0')
+    {
+        const gchar *rest = text + 1;
+        const gchar *space = strchr (rest, ' ');
+        if (space != NULL)
+        {
+            search_group = g_strndup (rest, space - rest);
+            remaining_text = space + 1;
+        }
+        else
+        {
+            search_group = g_strdup (rest);
+            remaining_text = NULL;
+        }
+    }
+
+    if (search_group != NULL)
+        self->search_group_lower = g_utf8_strdown (search_group, -1);
+
+    if (remaining_text != NULL && remaining_text[0] != '\0')
+        self->search_lower = g_utf8_strdown (remaining_text, -1);
+}
+
 static gboolean
 search_filter_func (gpointer item,
                     gpointer user_data)
@@ -990,65 +1042,22 @@ search_filter_func (gpointer item,
         }
     }
 
-    /* --- Search text filter --- */
-    const gchar *search_text = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
-    if (search_text == NULL || search_text[0] == '\0')
+    /* --- Search text filter (uses cached lowered strings) --- */
+    if (self->search_group_lower != NULL)
+    {
+        const gchar *eg_lower = otp_entry_get_group_lower (entry);
+        if (g_strstr_len (eg_lower, -1, self->search_group_lower) == NULL)
+            return FALSE;
+    }
+
+    if (self->search_lower == NULL)
         return TRUE;
 
-    /* Parse "group:xxx" or "#xxx" prefix */
-    const gchar *remaining_text = search_text;
-    g_autofree gchar *search_group = NULL;
-
-    if (g_str_has_prefix (search_text, "group:"))
-    {
-        const gchar *rest = search_text + 6;
-        const gchar *space = strchr (rest, ' ');
-        if (space != NULL)
-        {
-            search_group = g_strndup (rest, space - rest);
-            remaining_text = space + 1;
-        }
-        else
-        {
-            search_group = g_strdup (rest);
-            remaining_text = NULL;
-        }
-    }
-    else if (search_text[0] == '#' && search_text[1] != '\0')
-    {
-        const gchar *rest = search_text + 1;
-        const gchar *space = strchr (rest, ' ');
-        if (space != NULL)
-        {
-            search_group = g_strndup (rest, space - rest);
-            remaining_text = space + 1;
-        }
-        else
-        {
-            search_group = g_strdup (rest);
-            remaining_text = NULL;
-        }
-    }
-
-    if (search_group != NULL)
-    {
-        g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
-        const gchar *eg_lower = otp_entry_get_group_lower (entry);
-        if (g_strstr_len (eg_lower, -1, sg_lower) == NULL)
-            return FALSE;
-
-        /* If no remaining text after group prefix, we're done */
-        if (remaining_text == NULL || remaining_text[0] == '\0')
-            return TRUE;
-    }
-
-    /* Account/issuer substring match on remaining text */
-    g_autofree gchar *search_lower = g_utf8_strdown (remaining_text, -1);
     const gchar *account_lower = otp_entry_get_account_lower (entry);
-    const gchar *issuer_lower = otp_entry_get_issuer_lower (entry);
+    const gchar *issuer_lower  = otp_entry_get_issuer_lower (entry);
 
-    return (g_strstr_len (account_lower, -1, search_lower) != NULL ||
-            g_strstr_len (issuer_lower, -1, search_lower) != NULL);
+    return (g_strstr_len (account_lower, -1, self->search_lower) != NULL ||
+            g_strstr_len (issuer_lower,  -1, self->search_lower) != NULL);
 }
 
 /* Show a banner reminding the user to take a backup. We surface it when:
@@ -1409,6 +1418,7 @@ search_text_changed (GtkEntry        *entry,
         }
     }
 
+    refresh_search_cache (win);
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
 
     /* Auto-select when search narrows to a single result */
@@ -2326,6 +2336,8 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->flatten_model);
     g_clear_object (&win->group_list_model);
     g_clear_pointer (&win->active_group_filter, g_free);
+    g_clear_pointer (&win->search_lower, g_free);
+    g_clear_pointer (&win->search_group_lower, g_free);
     g_clear_object (&win->settings);
 
     if (win->dnd_css_provider != NULL)
@@ -2523,6 +2535,7 @@ on_group_dropdown_changed (GtkDropDown     *dropdown,
         self->active_group_filter = g_strdup (group_name);
     }
 
+    refresh_search_cache (self);
     gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
 }
 
@@ -2741,6 +2754,25 @@ action_add_qr_file (GtkWidget  *widget,
 }
 
 static void
+on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
+                     GAsyncResult *result,
+                     gpointer      user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+
+    GError *err = NULL;
+    g_autofree gchar *otpauth_uri = webcam_scan_qrcode_finish (result, &err);
+    if (otpauth_uri == NULL) {
+        show_error_toast (self, _("Webcam scan failed: %s"),
+                          err ? err->message : _("unknown error"));
+        g_clear_error (&err);
+        return;
+    }
+
+    add_token_from_otpauth_uri (self, otpauth_uri);
+}
+
+static void
 action_add_qr_webcam (GtkWidget  *widget,
                       const char *action_name,
                       GVariant   *parameter)
@@ -2750,15 +2782,7 @@ action_add_qr_webcam (GtkWidget  *widget,
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
 
-    GError *err = NULL;
-    gchar *otpauth_uri = webcam_scan_qrcode (&err);
-    if (otpauth_uri == NULL) {
-        show_error_toast (self, _("Webcam scan failed: %s"), err ? err->message : _("unknown error"));
-        g_clear_error (&err);
-        return;
-    }
-
-    add_token_from_otpauth_uri (self, otpauth_uri);
+    webcam_scan_qrcode_async (NULL, on_webcam_scan_done, self);
 }
 
 static void

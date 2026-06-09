@@ -828,9 +828,7 @@ init_database (OTPClientApplication *self)
     DatabaseEntry *primary_entry = g_ptr_array_index (db_list, primary_index);
     const gchar *db_path = database_entry_get_path (primary_entry);
 
-    self->db_data = g_new0 (DatabaseData, 1);
-    self->db_data->db_path = g_strdup (db_path);
-    self->db_data->max_file_size_from_memlock = memlock_value;
+    self->db_data = database_data_new (db_path, memlock_value);
 
     maybe_migrate_v4_secret_service (self);
 
@@ -1016,17 +1014,7 @@ otpclient_application_dispose (GObject *object)
 
     if (self->db_data != NULL)
     {
-        db_invalidate_kdf_cache (self->db_data);
-        if (self->db_data->in_memory_json_data != NULL)
-            json_decref (self->db_data->in_memory_json_data);
-        if (self->db_data->key != NULL)
-            gcry_free (self->db_data->key);
-        g_free (self->db_data->db_path);
-        g_slist_free_full (self->db_data->objects_hash, g_free);
-        g_free (self->db_data->last_hotp);
-        if (self->db_data->last_hotp_update != NULL)
-            g_date_time_unref (self->db_data->last_hotp_update);
-        g_free (self->db_data);
+        database_data_free (self->db_data);
         self->db_data = NULL;
     }
 
@@ -1118,20 +1106,7 @@ otpclient_application_set_db_data (OTPClientApplication *self,
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
 
-    if (self->db_data != NULL)
-    {
-        db_invalidate_kdf_cache (self->db_data);
-        if (self->db_data->in_memory_json_data != NULL)
-            json_decref (self->db_data->in_memory_json_data);
-        if (self->db_data->key != NULL)
-            gcry_free (self->db_data->key);
-        g_free (self->db_data->db_path);
-        g_slist_free_full (self->db_data->objects_hash, g_free);
-        g_free (self->db_data->last_hotp);
-        if (self->db_data->last_hotp_update != NULL)
-            g_date_time_unref (self->db_data->last_hotp_update);
-        g_free (self->db_data);
-    }
+    database_data_free (self->db_data);
 
     self->db_data = db_data;
 }

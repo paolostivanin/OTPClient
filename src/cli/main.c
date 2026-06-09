@@ -92,18 +92,6 @@ main (gint    argc,
 }
 
 
-void
-free_dbdata (DatabaseData *db_data)
-{
-    db_invalidate_kdf_cache (db_data);
-    gcry_free (db_data->key);
-    g_free (db_data->db_path);
-    g_slist_free_full (db_data->objects_hash, g_free);
-    json_decref (db_data->in_memory_json_data);
-    g_free (db_data);
-}
-
-
 static gint
 handle_local_options (GApplication      *application __attribute__((unused)),
                       GVariantDict      *options,
@@ -216,16 +204,13 @@ command_line (GApplication                *application __attribute__((unused)),
         return 0;
     }
 
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->key_stored = FALSE;
-    db_data->objects_hash = NULL;
-    db_data->max_file_size_from_memlock = 0;
+    DatabaseData *db_data = database_data_new (NULL, 0);
 
     gint32 memlock_ret_value = set_memlock_value (&db_data->max_file_size_from_memlock);
     if (memlock_ret_value == MEMLOCK_ERR) {
         g_printerr (_("Couldn't get the memlock value, therefore secure memory cannot be allocated. Please have a look at the following page before re-running OTPClient:"
                     "https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"));
-        g_free (db_data);
+        database_data_free (db_data);
         g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
@@ -234,18 +219,18 @@ command_line (GApplication                *application __attribute__((unused)),
     if (init_msg != NULL) {
         g_application_command_line_printerr (cmdline, _("Error while initializing GCrypt: %s\n"), init_msg);
         g_free (init_msg);
-        g_free (db_data);
+        database_data_free (db_data);
         g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
 
     if (!exec_action (cmdline_opts, db_data)) {
-        free_dbdata (db_data);
+        database_data_free (db_data);
         g_free_cmdline_opts (cmdline_opts);
         return -1;
     }
 
-    free_dbdata (db_data);
+    database_data_free (db_data);
     g_free_cmdline_opts (cmdline_opts);
 
     return 0;

@@ -39,6 +39,4 @@ typedef struct cmdline_opts_t {
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
                       DatabaseData *db_data);
 
-void     free_dbdata (DatabaseData *db_data);
-
 G_END_DECLS

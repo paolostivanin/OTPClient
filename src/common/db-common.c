@@ -72,6 +72,40 @@ db_invalidate_kdf_cache (DatabaseData *db_data)
 }
 
 
+DatabaseData *
+database_data_new (const gchar *db_path,
+                   gint32       max_file_size_from_memlock)
+{
+    DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    db_data->db_path = g_strdup (db_path);
+    db_data->max_file_size_from_memlock = max_file_size_from_memlock;
+    return db_data;
+}
+
+
+void
+database_data_free (DatabaseData *db_data)
+{
+    if (db_data == NULL)
+        return;
+    db_invalidate_kdf_cache (db_data);
+    if (db_data->key != NULL)
+        gcry_free (db_data->key);
+    g_free (db_data->db_path);
+    g_slist_free_full (db_data->objects_hash, g_free);
+    /* data_to_add holds json_t* pointers that are also referenced from
+     * in_memory_json_data. Free the list shell only; json_decref on the
+     * in-memory array drops the underlying objects. */
+    g_slist_free (db_data->data_to_add);
+    if (db_data->in_memory_json_data != NULL)
+        json_decref (db_data->in_memory_json_data);
+    g_free (db_data->last_hotp);
+    if (db_data->last_hotp_update != NULL)
+        g_date_time_unref (db_data->last_hotp_update);
+    g_free (db_data);
+}
+
+
 void
 load_db (DatabaseData    *db_data,
          GError         **err)

@@ -164,22 +164,16 @@ load_entries_from_db (GPtrArray   *entries,
     if (pwd == NULL)
         return;
 
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = g_strdup (db_path);
+    DatabaseData *db_data = database_data_new (db_path, global_max_file_size);
     db_data->key = secure_strdup (pwd);
     secret_password_free (pwd);
-    db_data->max_file_size_from_memlock = global_max_file_size;
 
     GError *err = NULL;
     load_db (db_data, &err);
     if (err != NULL || db_data->in_memory_json_data == NULL)
     {
         if (err != NULL) g_clear_error (&err);
-        db_invalidate_kdf_cache (db_data);
-        gcry_free (db_data->key);
-        g_slist_free_full (db_data->objects_hash, g_free);
-        g_free (db_data->db_path);
-        g_free (db_data);
+        database_data_free (db_data);
         return;
     }
 
@@ -206,12 +200,7 @@ load_entries_from_db (GPtrArray   *entries,
         g_ptr_array_add (entries, entry);
     }
 
-    db_invalidate_kdf_cache (db_data);
-    gcry_free (db_data->key);
-    json_decref (db_data->in_memory_json_data);
-    g_slist_free_full (db_data->objects_hash, g_free);
-    g_free (db_data->db_path);
-    g_free (db_data);
+    database_data_free (db_data);
 }
 
 static void
@@ -473,11 +462,9 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
     }
     if (pwd == NULL) return NULL;
 
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = g_strdup (entry->db_path);
+    DatabaseData *db_data = database_data_new (entry->db_path, global_max_file_size);
     db_data->key = secure_strdup (pwd);
     secret_password_free (pwd);
-    db_data->max_file_size_from_memlock = global_max_file_size;
 
     GError *err = NULL;
     load_db (db_data, &err);
@@ -489,12 +476,7 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
     }
     if (err != NULL) g_clear_error (&err);
 
-    db_invalidate_kdf_cache (db_data);
-    if (db_data->key) gcry_free (db_data->key);
-    if (db_data->in_memory_json_data) json_decref (db_data->in_memory_json_data);
-    g_slist_free_full (db_data->objects_hash, g_free);
-    g_free (db_data->db_path);
-    g_free (db_data);
+    database_data_free (db_data);
 
     return otp;
 }

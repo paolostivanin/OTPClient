@@ -1,7 +1,14 @@
 #include <glib/gi18n.h>
+#include <gio/gio.h>
 #include <zbar.h>
 #include "webcam-scanner.h"
 #include "gquarks.h"
+
+
+static void webcam_scan_thread (GTask        *task,
+                                gpointer      source_object,
+                                gpointer      task_data,
+                                GCancellable *cancellable);
 
 
 gchar *
@@ -63,4 +70,40 @@ webcam_scan_qrcode (GError **err)
     }
 
     return result;
+}
+
+
+static void
+webcam_scan_thread (GTask        *task,
+                    gpointer      source_object G_GNUC_UNUSED,
+                    gpointer      task_data     G_GNUC_UNUSED,
+                    GCancellable *cancellable   G_GNUC_UNUSED)
+{
+    GError *err = NULL;
+    gchar *uri = webcam_scan_qrcode (&err);
+    if (uri == NULL) {
+        g_task_return_error (task, err);
+        return;
+    }
+    g_task_return_pointer (task, uri, g_free);
+}
+
+
+void
+webcam_scan_qrcode_async (GCancellable        *cancellable,
+                          GAsyncReadyCallback  callback,
+                          gpointer             user_data)
+{
+    GTask *task = g_task_new (NULL, cancellable, callback, user_data);
+    g_task_run_in_thread (task, webcam_scan_thread);
+    g_object_unref (task);
+}
+
+
+gchar *
+webcam_scan_qrcode_finish (GAsyncResult  *result,
+                           GError       **err)
+{
+    g_return_val_if_fail (g_task_is_valid (result, NULL), NULL);
+    return g_task_propagate_pointer (G_TASK (result), err);
 }

@@ -98,6 +98,11 @@ typedef struct db_data_t {
 } DatabaseData;
 
 
+DatabaseData *database_data_new  (const gchar  *db_path,
+                                  gint32        max_file_size_from_memlock);
+
+void          database_data_free (DatabaseData *db_data);
+
 void    load_db            (DatabaseData   *db_data,
                             GError        **error);
 
