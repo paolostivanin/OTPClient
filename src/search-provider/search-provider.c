@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <gio/gio.h>
 #include <glib.h>
 #include <jansson.h>
@@ -32,6 +33,40 @@ static gint64      cached_at = 0;
  * which writes would slip past the cache invalidator. */
 static GHashTable *file_monitors = NULL;
 
+/* Argon2id is ~150-300 ms per derivation, paid in the user-visible latency
+ * between Activate/Run and the notification. The original design comment
+ * claimed the per-db_data cached_derived_key field covered this, but the
+ * cache lives on the DatabaseData that compute_otp_for_entry creates fresh
+ * (and frees) every call, so the derivation actually ran every time.
+ *
+ * g_kdf_cache lifts the derived key out of DatabaseData so it survives across
+ * activations. Each entry is invalidated eagerly by the existing GFileMonitor
+ * when the DB file changes (password change → new salt → cache miss anyway,
+ * but we drop the entry to wipe the old derived key sooner).
+ *
+ * Trade-off: ARGON2ID_KEYLEN bytes per active DB live in secure memory
+ * between calls. The plaintext json is still wiped after each compute_otp call. */
+typedef struct {
+    guchar  *derived_key;             /* ARGON2ID_KEYLEN bytes, gcry_malloc_secure */
+    guint8   salt[KDF_SALT_SIZE];
+    guint8   pwd_hash[32];            /* SHA-256(password) */
+} KdfCacheEntry;
+
+static GHashTable *g_kdf_cache = NULL;
+
+/* Per-sender token bucket for Activate/Run. Without it, any session-bus peer
+ * can spam OTP delivery (which sends a notification carrying the live code)
+ * at unlimited rate. Match queries are not rate-limited here because the
+ * entries cache already absorbs them; only the OTP-yielding paths are. */
+#define RATE_BUCKET_MAX     10.0
+#define RATE_REFILL_PER_SEC  5.0
+typedef struct {
+    gdouble  tokens;
+    gint64   last_refill_us;          /* g_get_monotonic_time() at last update */
+} RateBucket;
+
+static GHashTable *g_rate_buckets = NULL;
+
 /* Trigger keyword loaded once at startup. The daemon ignores any query whose
  * first whitespace-separated token doesn't equal g_keyword (case-insensitive).
  * An empty keyword disables the filter and falls back to plain substring
@@ -65,6 +100,13 @@ static void sync_file_monitors (GPtrArray *desired_paths);
 static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
                                 GFileMonitorEvent event, gpointer user_data);
 static gboolean prewarm_cache (gpointer user_data);
+static void kdf_cache_entry_free (KdfCacheEntry *entry);
+static void kdf_cache_invalidate_path (const gchar *db_path);
+static void kdf_cache_clear (void);
+static void kdf_cache_apply_to_db_data (DatabaseData *db_data, const gchar *db_path);
+static void kdf_cache_capture_from_db_data (const DatabaseData *db_data, const gchar *db_path);
+static gboolean rate_bucket_consume (const gchar *sender);
+static void rate_buckets_clear (void);
 
 static const gchar *krunner_introspection_xml =
 "<node>"
@@ -101,6 +143,138 @@ otp_search_entry_free (OtpSearchEntry *entry)
     g_free (entry->label_fold);
     g_free (entry->issuer_fold);
     g_free (entry);
+}
+
+
+static void
+kdf_cache_entry_free (KdfCacheEntry *entry)
+{
+    if (entry == NULL)
+        return;
+    if (entry->derived_key != NULL) {
+        explicit_bzero (entry->derived_key, ARGON2ID_KEYLEN);
+        gcry_free (entry->derived_key);
+    }
+    explicit_bzero (entry->salt, sizeof (entry->salt));
+    explicit_bzero (entry->pwd_hash, sizeof (entry->pwd_hash));
+    g_free (entry);
+}
+
+
+static void
+kdf_cache_invalidate_path (const gchar *db_path)
+{
+    if (g_kdf_cache == NULL || db_path == NULL)
+        return;
+    g_hash_table_remove (g_kdf_cache, db_path);
+}
+
+
+static void
+kdf_cache_clear (void)
+{
+    if (g_kdf_cache == NULL)
+        return;
+    g_hash_table_destroy (g_kdf_cache);
+    g_kdf_cache = NULL;
+}
+
+
+/* Populate db_data's KDF cache fields from g_kdf_cache so load_db's
+ * try_decrypt_v2 path hits its salt+pwd_hash lookup and skips Argon2id.
+ * No-op on cache miss. */
+static void
+kdf_cache_apply_to_db_data (DatabaseData *db_data,
+                            const gchar  *db_path)
+{
+    if (g_kdf_cache == NULL || db_data == NULL || db_path == NULL)
+        return;
+    KdfCacheEntry *cache = g_hash_table_lookup (g_kdf_cache, db_path);
+    if (cache == NULL || cache->derived_key == NULL)
+        return;
+    if (db_data->cached_derived_key == NULL)
+        db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+    if (db_data->cached_derived_key == NULL)
+        return;
+    memcpy (db_data->cached_derived_key, cache->derived_key, ARGON2ID_KEYLEN);
+    memcpy (db_data->cached_salt, cache->salt, KDF_SALT_SIZE);
+    memcpy (db_data->cached_pwd_hash, cache->pwd_hash, sizeof (cache->pwd_hash));
+    db_data->has_cached_key = TRUE;
+}
+
+
+/* Copy db_data's (just-populated by try_decrypt_v2) KDF cache fields into
+ * g_kdf_cache so the next call can reuse them. Called only after a successful
+ * load_db, when has_cached_key is guaranteed TRUE. */
+static void
+kdf_cache_capture_from_db_data (const DatabaseData *db_data,
+                                const gchar        *db_path)
+{
+    if (db_data == NULL || db_path == NULL || !db_data->has_cached_key ||
+        db_data->cached_derived_key == NULL)
+        return;
+    if (g_kdf_cache == NULL)
+        g_kdf_cache = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                             g_free,
+                                             (GDestroyNotify) kdf_cache_entry_free);
+    KdfCacheEntry *entry = g_new0 (KdfCacheEntry, 1);
+    entry->derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+    if (entry->derived_key == NULL) {
+        g_free (entry);
+        return;
+    }
+    memcpy (entry->derived_key, db_data->cached_derived_key, ARGON2ID_KEYLEN);
+    memcpy (entry->salt, db_data->cached_salt, KDF_SALT_SIZE);
+    memcpy (entry->pwd_hash, db_data->cached_pwd_hash, sizeof (entry->pwd_hash));
+    g_hash_table_replace (g_kdf_cache, g_strdup (db_path), entry);
+}
+
+
+/* Returns TRUE if the call should proceed (a token was available), FALSE if
+ * the sender's bucket is empty. Tokens refill at RATE_REFILL_PER_SEC up to
+ * RATE_BUCKET_MAX. A NULL sender (peer-to-peer connection without a name)
+ * is bucketed under a fixed key so it can't bypass the limiter by being
+ * unidentifiable. */
+static gboolean
+rate_bucket_consume (const gchar *sender)
+{
+    if (g_rate_buckets == NULL)
+        g_rate_buckets = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                g_free, g_free);
+
+    const gchar *key = (sender != NULL && sender[0] != '\0') ? sender : ":anon";
+    gint64 now = g_get_monotonic_time ();
+
+    RateBucket *bucket = g_hash_table_lookup (g_rate_buckets, key);
+    if (bucket == NULL) {
+        bucket = g_new0 (RateBucket, 1);
+        bucket->tokens = RATE_BUCKET_MAX;
+        bucket->last_refill_us = now;
+        g_hash_table_insert (g_rate_buckets, g_strdup (key), bucket);
+    } else {
+        gdouble elapsed_sec = (gdouble) (now - bucket->last_refill_us) / 1.0e6;
+        if (elapsed_sec > 0) {
+            bucket->tokens += elapsed_sec * RATE_REFILL_PER_SEC;
+            if (bucket->tokens > RATE_BUCKET_MAX)
+                bucket->tokens = RATE_BUCKET_MAX;
+            bucket->last_refill_us = now;
+        }
+    }
+
+    if (bucket->tokens < 1.0)
+        return FALSE;
+    bucket->tokens -= 1.0;
+    return TRUE;
+}
+
+
+static void
+rate_buckets_clear (void)
+{
+    if (g_rate_buckets == NULL)
+        return;
+    g_hash_table_destroy (g_rate_buckets);
+    g_rate_buckets = NULL;
 }
 
 
@@ -168,6 +342,11 @@ load_entries_from_db (GPtrArray   *entries,
     db_data->key = secure_strdup (pwd);
     secret_password_free (pwd);
 
+    /* Same cache reuse as compute_otp_for_entry: skip Argon2id on every
+     * subsequent entries reload (prewarm, TTL expiry) if the derived key
+     * for this db_path is still in g_kdf_cache. */
+    kdf_cache_apply_to_db_data (db_data, db_path);
+
     GError *err = NULL;
     load_db (db_data, &err);
     if (err != NULL || db_data->in_memory_json_data == NULL)
@@ -176,6 +355,8 @@ load_entries_from_db (GPtrArray   *entries,
         database_data_free (db_data);
         return;
     }
+
+    kdf_cache_capture_from_db_data (db_data, db_path);
 
     gsize index;
     json_t *obj;
@@ -205,7 +386,7 @@ load_entries_from_db (GPtrArray   *entries,
 
 static void
 on_db_file_changed (GFileMonitor      *monitor G_GNUC_UNUSED,
-                    GFile             *file G_GNUC_UNUSED,
+                    GFile             *file,
                     GFile             *other G_GNUC_UNUSED,
                     GFileMonitorEvent  event,
                     gpointer           user_data G_GNUC_UNUSED)
@@ -222,6 +403,15 @@ on_db_file_changed (GFileMonitor      *monitor G_GNUC_UNUSED,
         event == G_FILE_MONITOR_EVENT_MOVED_OUT)
     {
         cached_at = 0;
+        /* Drop the KDF cache entry for this specific path: a password change
+         * yields a new salt + new derived key, so the stale entry would just
+         * cause a wasted memcmp on the next call. Wiping it sooner also
+         * shortens the lifetime of the old derived key in secure memory. */
+        if (file != NULL) {
+            g_autofree gchar *path = g_file_get_path (file);
+            if (path != NULL)
+                kdf_cache_invalidate_path (path);
+        }
     }
 }
 
@@ -466,6 +656,12 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
     db_data->key = secure_strdup (pwd);
     secret_password_free (pwd);
 
+    /* Pre-load the cached Argon2id derived key (if any) before load_db so
+     * try_decrypt_v2's salt+pwd_hash lookup hits and skips the 150-300 ms
+     * derivation. A mismatch (changed password) falls through to a fresh
+     * derive and overwrites the cache below. */
+    kdf_cache_apply_to_db_data (db_data, entry->db_path);
+
     GError *err = NULL;
     load_db (db_data, &err);
     gchar *otp = NULL;
@@ -473,6 +669,10 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
         json_t *obj = json_array_get (db_data->in_memory_json_data, entry->json_index);
         if (obj != NULL)
             otp = get_entry_otp_value (obj);
+        /* try_decrypt_v2 populates db_data->cached_* on success; persist
+         * those into g_kdf_cache so the next call hits. Capturing only on
+         * success keeps a wrong-password attempt from poisoning the cache. */
+        kdf_cache_capture_from_db_data (db_data, entry->db_path);
     }
     if (err != NULL) g_clear_error (&err);
 
@@ -647,6 +847,15 @@ handle_gnome_call (GDBusConnection       *conn,
             g_dbus_method_invocation_return_value (inv, NULL);
             return;
         }
+        /* Per-sender token bucket: a hostile session-bus peer could
+         * otherwise spam ActivateResult to burn Argon2id CPU/memory and
+         * surface a flood of notifications carrying live OTPs. The bucket
+         * is generous enough for legit double-clicks but caps sustained
+         * abuse at RATE_REFILL_PER_SEC. */
+        if (!rate_bucket_consume (g_dbus_method_invocation_get_sender (inv))) {
+            g_dbus_method_invocation_return_value (inv, NULL);
+            return;
+        }
         const gchar *id;
         g_variant_get (params, "(&s^as u)", &id, NULL, NULL);
         g_autofree gchar *otp = NULL;
@@ -722,6 +931,11 @@ handle_krunner_call (GDBusConnection       *conn,
         // Same gate as the GNOME ActivateResult path: no keyword set means
         // the provider refuses to deliver codes, even via id lookup.
         if (g_keyword_fold == NULL || g_keyword_fold[0] == '\0') {
+            g_dbus_method_invocation_return_value (inv, NULL);
+            return;
+        }
+        /* Same per-sender token bucket as ActivateResult; see comment there. */
+        if (!rate_bucket_consume (g_dbus_method_invocation_get_sender (inv))) {
             g_dbus_method_invocation_return_value (inv, NULL);
             return;
         }
@@ -843,6 +1057,10 @@ main (int    argc,
         g_ptr_array_free (cached_entries, TRUE);
         cached_entries = NULL;
     }
+    /* Wipe derived keys + per-sender state on shutdown. The kdf_cache entry
+     * destroy callback explicit_bzero's the derived key before gcry_free. */
+    kdf_cache_clear ();
+    rate_buckets_clear ();
     g_clear_pointer (&g_keyword, g_free);
     g_clear_pointer (&g_keyword_fold, g_free);
     g_main_loop_unref (main_loop);
