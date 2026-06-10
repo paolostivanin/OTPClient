@@ -206,12 +206,7 @@ on_add_clicked (GtkButton       *button,
         return;
     }
 
-    /* json_decref each payload: add_to_json deep-copied them into
-     * in_memory_json_data, so the originals here are an unshared ref each.
-     * g_slist_free alone would leak them. */
-    g_slist_free_full (self->db_data->data_to_add, (GDestroyNotify) json_decref);
-    self->db_data->data_to_add = NULL;
-
+    /* data_to_add is consumed inside update_db; just refresh in-memory state. */
     reload_db (self->db_data, &err);
     if (err != NULL)
     {

@@ -202,10 +202,31 @@ update_db (DatabaseData  *db_data,
     }
 
     encrypt_db (db_data, err);
+
+    /* add_to_json deep-copied each staged element into in_memory_json_data,
+     * so the originals in data_to_add are now redundant refs. Consume the
+     * list here (success or failure) so callers don't have to remember —
+     * forgetting would cause the next update_db to re-add deep copies and
+     * silently duplicate entries on disk. */
+    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
+    db_data->data_to_add = NULL;
+
     if (err != NULL && *err != NULL) {
         if (!first_run) {
             g_printerr ("Encrypting the new data failed, restoring the original copy...\n");
             restore_db (db_data->db_path);
+            /* in_memory_json_data still holds the just-added entries that
+             * are NOT on disk after the restore. Without this reload, a
+             * subsequent successful encrypt_db would serialize those ghost
+             * entries to disk, silently persisting items the user was just
+             * told had failed to save. Reload errors are logged (not
+             * propagated) so the caller sees the original encrypt failure. */
+            GError *reload_err = NULL;
+            reload_db (db_data, &reload_err);
+            if (reload_err != NULL) {
+                g_warning ("Failed to reload db after restore: %s", reload_err->message);
+                g_clear_error (&reload_err);
+            }
         } else {
             g_printerr ("Couldn't update the database (encrypt_db failed)\n");
             if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {

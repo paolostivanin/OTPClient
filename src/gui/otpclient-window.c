@@ -2584,11 +2584,8 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
         show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
         g_clear_error (&err);
     } else {
-        /* json_decref each payload: add_to_json deep-copied them into
-         * in_memory_json_data, so the originals here are an unshared ref
-         * each. g_slist_free alone would leak them. */
-        g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
-        db_data->data_to_add = NULL;
+        /* data_to_add is consumed inside update_db; just refresh the in-memory
+         * view from the just-written file so generated indices / hashes match. */
         reload_db (db_data, &err);
         g_clear_error (&err);
     }
