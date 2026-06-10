@@ -1,6 +1,8 @@
+#define _DEFAULT_SOURCE
 #include <glib/gi18n.h>
 #include <glib-unix.h>
 #include <adwaita.h>
+#include <string.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otp-entry.h"
@@ -638,8 +640,18 @@ on_password_received (const gchar *password,
     if (password == NULL || self->db_data == NULL)
         return;
 
-    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
-    memcpy (self->db_data->key, password, strlen (password) + 1);
+    gsize pwd_len = strlen (password);
+    self->db_data->key = gcry_calloc_secure (pwd_len + 1, 1);
+    memcpy (self->db_data->key, password, pwd_len + 1);
+
+    /* Defense in depth: every observed caller already wipes its own buffer
+     * (password-dialog gcry_free's a secmem copy, secret_password_free wipes
+     * libsecret-owned memory), but wiping here guarantees no plaintext
+     * survives the memcpy even if a future caller forgets. The cast
+     * discards const; password is documented as caller-owned and consumed
+     * by this function. */
+    if (pwd_len > 0)
+        explicit_bzero ((gchar *) password, pwd_len);
 
     if (self->window != NULL)
         otpclient_window_show_loading (self->window);

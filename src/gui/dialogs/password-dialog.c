@@ -1,5 +1,7 @@
+#define _DEFAULT_SOURCE
 #include <glib/gi18n.h>
 #include <gcrypt.h>
+#include <string.h>
 #include "password-dialog.h"
 
 struct _PasswordDialog
@@ -88,15 +90,36 @@ on_unlock_clicked (GtkButton      *button,
     }
 
     /* Copy password into secure memory */
-    gchar *secure_pwd = gcry_calloc_secure (strlen (pwd) + 1, 1);
-    memcpy (secure_pwd, pwd, strlen (pwd) + 1);
+    gsize pwd_len = strlen (pwd);
+    gchar *secure_pwd = gcry_calloc_secure (pwd_len + 1, 1);
+    memcpy (secure_pwd, pwd, pwd_len + 1);
+
+    /* GTK's AdwPasswordEntryRow keeps the plaintext in a regular GtkText
+     * buffer that gtk_editable_set_text("") does NOT zero before
+     * reallocating. Wipe the bytes in place first so a heap inspection of
+     * the GUI process after unlock can't recover the password. pwd is a
+     * const pointer into that buffer; the cast is intentional. Best-effort:
+     * GTK is free to reallocate at any time, but this covers the common
+     * case where the buffer is still the one we just read. */
+    if (pwd_len > 0)
+        explicit_bzero ((gchar *) pwd, pwd_len);
 
     /* Clear password entry widgets */
     gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
     if (self->confirm_row != NULL)
+    {
+        const gchar *confirm_pwd = gtk_editable_get_text (GTK_EDITABLE (self->confirm_row));
+        if (confirm_pwd != NULL && confirm_pwd[0] != '\0')
+            explicit_bzero ((gchar *) confirm_pwd, strlen (confirm_pwd));
         gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
+    }
     if (self->current_password_row != NULL)
+    {
+        const gchar *current_pwd = gtk_editable_get_text (GTK_EDITABLE (self->current_password_row));
+        if (current_pwd != NULL && current_pwd[0] != '\0')
+            explicit_bzero ((gchar *) current_pwd, strlen (current_pwd));
         gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
+    }
 
     /* Order matters: lock-state callers attach a "closed" handler that
      * re-presents this dialog if the app is still locked when it fires. Run
