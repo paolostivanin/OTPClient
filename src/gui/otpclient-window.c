@@ -2584,7 +2584,10 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
         show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
         g_clear_error (&err);
     } else {
-        g_slist_free (db_data->data_to_add);
+        /* json_decref each payload: add_to_json deep-copied them into
+         * in_memory_json_data, so the originals here are an unshared ref
+         * each. g_slist_free alone would leak them. */
+        g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
         db_data->data_to_add = NULL;
         reload_db (db_data, &err);
         g_clear_error (&err);
@@ -3339,7 +3342,7 @@ action_set_group (GtkWidget  *widget,
 
     const gchar *group_name = g_variant_get_string (parameter, NULL);
     if (group_name != NULL && group_name[0] != '\0')
-        json_object_set (token_obj, "group", json_string (group_name));
+        json_object_set_new (token_obj, "group", json_string (group_name));
     else
         json_object_del (token_obj, "group");
 
@@ -3441,7 +3444,7 @@ on_new_group_response (AdwAlertDialog  *dialog,
     json_t *token_obj = json_array_get (db_data->in_memory_json_data, ctx->token_pos);
     if (token_obj != NULL)
     {
-        json_object_set (token_obj, "group", json_string (group_name));
+        json_object_set_new (token_obj, "group", json_string (group_name));
 
         GError *err = NULL;
         update_db (db_data, &err);
@@ -3716,10 +3719,12 @@ on_new_db_password_received (const gchar *password,
     {
         show_error_toast (self, _("Could not create database: %s"), err->message);
         g_clear_error (&err);
-        db_invalidate_kdf_cache (db_data);
-        gcry_free (db_data->key);
-        g_free (db_data->db_path);
-        g_free (db_data);
+        /* update_db sets in_memory_json_data = json_array() before encrypt_db
+         * runs, so a partially-initialized db_data is reachable here. The
+         * previous open-coded cleanup freed only key/db_path and leaked the
+         * json_t array. Defer to database_data_free which handles every
+         * field correctly. */
+        database_data_free (db_data);
         return;
     }
 
@@ -3853,10 +3858,10 @@ on_open_db_password_received (const gchar *password,
     {
         show_error_toast (self, _("Could not open database: %s"), err->message);
         g_clear_error (&err);
-        db_invalidate_kdf_cache (db_data);
-        gcry_free (db_data->key);
-        g_free (db_data->db_path);
-        g_free (db_data);
+        /* load_db's v1->v2 migration and legacy_kdf_migration paths can set
+         * in_memory_json_data / objects_hash before failing. The previous
+         * open-coded cleanup leaked both. database_data_free handles them. */
+        database_data_free (db_data);
         return;
     }
 

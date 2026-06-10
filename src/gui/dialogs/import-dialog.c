@@ -114,13 +114,16 @@ do_import (ImportDialog *self)
             gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
             gtk_widget_set_visible (self->error_label, TRUE);
             g_clear_error (&err);
-            g_slist_free (self->db_data->data_to_add);
+            /* json_decref each payload: add_to_json deep-copies into
+             * in_memory_json_data, so these are unshared refs. Even on the
+             * error path encrypt_db has already run add_to_json. */
+            g_slist_free_full (self->db_data->data_to_add, (GDestroyNotify) json_decref);
             self->db_data->data_to_add = NULL;
             free_otps_gslist (otps, g_slist_length (otps));
             return;
         }
 
-        g_slist_free (self->db_data->data_to_add);
+        g_slist_free_full (self->db_data->data_to_add, (GDestroyNotify) json_decref);
         self->db_data->data_to_add = NULL;
 
         guint list_len = g_slist_length (otps);

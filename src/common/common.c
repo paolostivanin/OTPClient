@@ -444,6 +444,10 @@ free_otps_gslist (GSList *otps,
         g_free (otp_data->issuer);
         gcry_free (otp_data->secret);
         g_free (otp_data->group);
+        // The struct itself is heap-allocated by every producer (parse-uri
+        // via g_memdup2, importers via g_new0). Freeing only the inner fields
+        // leaked sizeof(otp_t) per parsed token on every URI / import.
+        g_free (otp_data);
     }
     g_slist_free (otps);
 }

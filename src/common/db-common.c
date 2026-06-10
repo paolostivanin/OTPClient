@@ -93,10 +93,11 @@ database_data_free (DatabaseData *db_data)
         gcry_free (db_data->key);
     g_free (db_data->db_path);
     g_slist_free_full (db_data->objects_hash, g_free);
-    /* data_to_add holds json_t* pointers that are also referenced from
-     * in_memory_json_data. Free the list shell only; json_decref on the
-     * in-memory array drops the underlying objects. */
-    g_slist_free (db_data->data_to_add);
+    /* add_to_json deep-copies each element into in_memory_json_data, so the
+     * originals in data_to_add are NOT shared with the in-memory array.
+     * Decref each json_t* payload explicitly; freeing only the list shell
+     * (the old behavior) leaked one json_t per imported/added token. */
+    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
     if (db_data->in_memory_json_data != NULL)
         json_decref (db_data->in_memory_json_data);
     g_free (db_data->last_hotp);
