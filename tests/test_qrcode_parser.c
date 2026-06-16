@@ -148,23 +148,29 @@ make_qr_pixbuf (const gchar *payload)
     return pixbuf;
 }
 
-/* Skip the JPEG test gracefully when gdk-pixbuf can't actually produce a JPEG
- * in the current environment. Two failure modes show up in CI:
- *  - minimal images ship without a JPEG loader entirely (format not writable);
+/* Skip image tests gracefully when gdk-pixbuf can't actually produce the
+ * requested format in the current environment. Two failure modes show up
+ * in CI:
+ *  - minimal images ship without the writer plugin at all (format not
+ *    writable);
  *  - the writer is glycin-image-rs which wraps itself in bwrap, and bwrap
- *    can't spawn inside an unprivileged Docker container (no user namespaces),
- *    so the format is registered as writable but the save aborts at runtime.
+ *    can't spawn inside an unprivileged Docker container (no user
+ *    namespaces), so the format is registered as writable but the save
+ *    aborts at runtime.
  * Probe with a tiny save and skip on either failure. */
 static gboolean
-pixbuf_jpeg_save_works (void)
+pixbuf_save_works (const gchar *format,
+                   const gchar *suffix)
 {
     g_autoptr (GdkPixbuf) probe = gdk_pixbuf_new (GDK_COLORSPACE_RGB, FALSE, 8, 8, 8);
     g_assert_nonnull (probe);
     gdk_pixbuf_fill (probe, 0xffffffff);
 
+    gchar *template = g_strdup_printf ("otpclient-pixbuf-probe-XXXXXX%s", suffix);
     gchar *tmpfile = NULL;
     GError *err = NULL;
-    gint fd = g_file_open_tmp ("otpclient-jpeg-probe-XXXXXX.jpg", &tmpfile, &err);
+    gint fd = g_file_open_tmp (template, &tmpfile, &err);
+    g_free (template);
     if (fd < 0) {
         g_clear_error (&err);
         g_free (tmpfile);
@@ -172,7 +178,7 @@ pixbuf_jpeg_save_works (void)
     }
     close (fd);
 
-    gboolean ok = gdk_pixbuf_save (probe, tmpfile, "jpeg", &err, NULL);
+    gboolean ok = gdk_pixbuf_save (probe, tmpfile, format, &err, NULL);
     g_clear_error (&err);
     g_unlink (tmpfile);
     g_free (tmpfile);
@@ -182,7 +188,7 @@ pixbuf_jpeg_save_works (void)
 static void
 test_valid_jpeg_qr (void)
 {
-    if (!pixbuf_jpeg_save_works ()) {
+    if (!pixbuf_save_works ("jpeg", ".jpg")) {
         g_test_skip ("gdk-pixbuf JPEG writer unusable in this environment");
         return;
     }
@@ -212,6 +218,11 @@ test_valid_jpeg_qr (void)
 static void
 test_image_without_qr_rejected (void)
 {
+    if (!pixbuf_save_works ("png", ".png")) {
+        g_test_skip ("gdk-pixbuf PNG writer unusable in this environment");
+        return;
+    }
+
     gchar *dir = NULL;
     gchar *path = make_tmp_path ("plain.png", &dir);
 
