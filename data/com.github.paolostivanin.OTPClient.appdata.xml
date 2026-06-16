@@ -90,6 +90,30 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.0" date="2026-06-16">
+      <description>
+        <p>Feature and hardening release. Webcam QR scanning now runs on a worker thread so the UI no longer freezes while the camera warms up or while frames are decoded. You can quit the app while the database is locked. The database file format is bumped to v3 with a portable big-endian header; v1 and v2 databases are still read transparently and upgraded on next save. Search-provider results now use single-use, time-bounded capability tokens instead of predictable indices. Plus a broad security and correctness pass across the core and GUI code, memory-leak fixes, freeotp importer fixes, and a new ASan/UBSan CI job.</p>
+        <ul>
+          <li>NEW: webcam QR scanning runs on a worker thread, no more main-thread freeze while the camera initializes or while frames are decoded</li>
+          <li>NEW: you can quit OTPClient while the database is locked (#456)</li>
+          <li>IMPROVEMENT: database file format bumped to v3 with a portable, byte-addressable big-endian header. v1 and v2 databases are read transparently and upgraded to v3 on next save</li>
+          <li>IMPROVEMENT: cross-process write serialization via a bounded-wait .lock sidecar, prevents two OTPClient instances from clobbering each other on save</li>
+          <li>IMPROVEMENT: search-filter cache, large token lists filter without re-walking the model on every keystroke</li>
+          <li>IMPROVEMENT: changing the password now requires verifying the current one before the change is applied</li>
+          <li>IMPROVEMENT: CLI plain imports dispatch by file type automatically, no longer prompt for a password on unencrypted formats</li>
+          <li>SECURITY: search-provider activation IDs are now random 128-bit capability tokens with a 30-second TTL and single-use enforcement, replacing the predictable db_index:json_index scheme</li>
+          <li>SECURITY: HOTP entries are excluded from the search provider at load time, advancing a counter from a desktop search result is too easy to do by accident</li>
+          <li>SECURITY: transient password buffers are wiped after use across the GUI and CLI</li>
+          <li>SECURITY: search-provider derived-key cache + rate limit on OTP delivery</li>
+          <li>SECURITY: broad correctness and hardening pass across src/ (core + GUI)</li>
+          <li>SECURITY: tightened Argon2id parameter bounds (MAX_ITER 100 -&gt; 64, MAX_MC 4 GiB -&gt; 1 GiB, MAX_PARAL 64 -&gt; 16) to reject pathological configurations</li>
+          <li>FIX: memory leaks in database and OTP handling paths</li>
+          <li>FIX: freeotp importer secmem budget and GError-overwrite bug that also affected other importers</li>
+          <li>FIX: in-memory database state is now restored if an encrypt-on-save fails, instead of being left half-mutated</li>
+          <li>FIX: debianStable CI build and the JPEG sanitizers test</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.0.6" date="2026-05-27">
       <description>
         <p>Bug-fix release in the 5.0.x line. Headline fix is an unlock-loop affecting users who upgraded from 4.x: with the correct password, the unlock dialog would re-prompt forever until the app was restarted. Also restores auto-unlock via the system keyring for upgraders, fixes the Backup/Restore buttons on distros shipping libadwaita 1.5 (Ubuntu 24.04, Pop!_OS 24.04, Linux Mint 22.3), and several smaller GUI fixes.</p>
