@@ -78,6 +78,75 @@ target_include_directories(test_malformed_aegis PRIVATE
 target_link_libraries(test_malformed_aegis ${COMMON_LIBS})
 add_test(NAME malformed_aegis COMMAND test_malformed_aegis)
 
+add_executable(test_otp_generation
+        test_otp_generation.c
+)
+otpclient_apply_target_settings(test_otp_generation)
+target_link_libraries(test_otp_generation ${COMMON_LIBS})
+add_test(NAME otp_generation COMMAND test_otp_generation)
+
+add_executable(test_db_roundtrip
+        test_db_roundtrip.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/db-common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+)
+otpclient_apply_target_settings(test_db_roundtrip)
+target_include_directories(test_db_roundtrip PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_db_roundtrip ${COMMON_LIBS})
+add_test(NAME db_roundtrip COMMAND test_db_roundtrip)
+
+add_executable(test_parse_uri_extra
+        test_parse_uri_extra.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+        ${PROJECT_SOURCE_DIR}/src/common/parse-uri.c
+)
+otpclient_apply_target_settings(test_parse_uri_extra)
+target_include_directories(test_parse_uri_extra PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_parse_uri_extra ${COMMON_LIBS})
+add_test(NAME parse_uri_extra COMMAND test_parse_uri_extra)
+
+add_executable(test_malformed_importers
+        test_malformed_importers.c
+        ${PROJECT_SOURCE_DIR}/src/common/authpro.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/freeotp.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+        ${PROJECT_SOURCE_DIR}/src/common/parse-uri.c
+        ${PROJECT_SOURCE_DIR}/src/common/twofas.c
+)
+otpclient_apply_target_settings(test_malformed_importers)
+target_include_directories(test_malformed_importers PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_malformed_importers ${COMMON_LIBS})
+add_test(NAME malformed_importers COMMAND test_malformed_importers)
+
+add_executable(test_common_utils
+        test_common_utils.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+)
+otpclient_apply_target_settings(test_common_utils)
+target_include_directories(test_common_utils PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_common_utils ${COMMON_LIBS})
+add_test(NAME common_utils COMMAND test_common_utils)
+
 if(BUILD_GUI)
     add_executable(test_qrcode_parser
             test_qrcode_parser.c
