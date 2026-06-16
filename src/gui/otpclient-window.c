@@ -682,12 +682,14 @@ typedef struct {
     GPtrArray *db_list;    /* array of DbListEntry (owned) */
     gchar *current_db_path;
     gint32 max_file_size;
+    GWeakRef window_ref;
 } CrossDbTaskData;
 
 static void
 cross_db_task_data_free (gpointer data)
 {
     CrossDbTaskData *td = data;
+    g_weak_ref_clear (&td->window_ref);
     g_free (td->current_db_path);
     if (td->db_list != NULL)
         g_ptr_array_unref (td->db_list);
@@ -701,13 +703,18 @@ cross_db_load_thread (GTask        *task,
                       GCancellable *cancellable)
 {
     (void) source;
-    (void) cancellable;
-
     CrossDbTaskData *td = task_data;
     GListStore *result = g_list_store_new (OTP_TYPE_ENTRY);
 
     for (guint i = 0; i < td->db_list->len; i++)
     {
+        if (g_cancellable_is_cancelled (cancellable)) {
+            g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                                     "Cross-database load cancelled");
+            g_object_unref (result);
+            return;
+        }
+
         DbListEntry *dbe = g_ptr_array_index (td->db_list, i);
 
         /* Skip the currently active database */
@@ -715,7 +722,7 @@ cross_db_load_thread (GTask        *task,
             continue;
 
         /* Look up password from Secret Service */
-        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, NULL, NULL,
+        gchar *pwd = secret_password_lookup_sync (OTPCLIENT_SCHEMA, cancellable, NULL,
                                                    "string", dbe->path, NULL);
         if (pwd == NULL)
             continue;   /* No password stored for this DB -- skip it */
@@ -788,12 +795,29 @@ cross_db_load_done (GObject      *source,
 {
     (void) source;
 
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    CrossDbTaskData *td = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&td->window_ref);
+    if (self == NULL)
+        return;
+
     self->cross_db_loading = FALSE;
 
-    GListStore *store = g_task_propagate_pointer (G_TASK (result), NULL);
+    GError *err = NULL;
+    GListStore *store = g_task_propagate_pointer (G_TASK (result), &err);
+    if (err != NULL) {
+        if (!g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+            g_warning ("Cross-database load failed: %s", err->message);
+        g_clear_error (&err);
+        return;
+    }
     if (store == NULL)
         return;
+
+    if (self->disposing)
+    {
+        g_object_unref (store);
+        return;
+    }
 
     g_clear_object (&self->cross_db_store);
     self->cross_db_store = store;
@@ -836,13 +860,16 @@ cross_db_trigger_load (OTPClientWindow *self)
     }
 
     self->cross_db_loading = TRUE;
+    g_clear_object (&self->cross_db_cancellable);
+    self->cross_db_cancellable = g_cancellable_new ();
 
     CrossDbTaskData *td = g_new0 (CrossDbTaskData, 1);
     td->db_list = db_list;
     td->current_db_path = g_strdup (db_data->db_path);
     td->max_file_size = db_data->max_file_size_from_memlock;
+    g_weak_ref_init (&td->window_ref, self);
 
-    GTask *task = g_task_new (NULL, NULL, cross_db_load_done, self);
+    GTask *task = g_task_new (NULL, self->cross_db_cancellable, cross_db_load_done, td);
     g_task_set_task_data (task, td, cross_db_task_data_free);
     g_task_run_in_thread (task, cross_db_load_thread);
     g_object_unref (task);
@@ -1668,7 +1695,10 @@ otpclient_window_clear_clipboard_now (OTPClientWindow *self)
         self->clipboard_clear_timer_id = 0;
     }
 
-    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    GdkDisplay *display = gdk_display_get_default ();
+    if (display == NULL)
+        return;
+    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
     if (clipboard != NULL)
         gdk_clipboard_set_text (clipboard, "");
 }
@@ -1687,7 +1717,12 @@ copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
 
-    GdkClipboard *clipboard = gdk_display_get_clipboard (gdk_display_get_default ());
+    GdkDisplay *display = gdk_display_get_default ();
+    if (display == NULL)
+        return;
+    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
+    if (clipboard == NULL)
+        return;
     gdk_clipboard_set_text (clipboard, otp_value);
 
     g_weak_ref_set (&self->clipboard_owner_entry, entry);
@@ -2190,6 +2225,16 @@ static void
 otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
+    win->disposing = TRUE;
+
+    if (win->cross_db_cancellable != NULL)
+        g_cancellable_cancel (win->cross_db_cancellable);
+    if (win->webcam_cancellable != NULL)
+        g_cancellable_cancel (win->webcam_cancellable);
+    if (win->clipboard_cancellable != NULL)
+        g_cancellable_cancel (win->clipboard_cancellable);
+    if (win->file_dialog_cancellable != NULL)
+        g_cancellable_cancel (win->file_dialog_cancellable);
 
     /* Persist any deferred HOTP counter advances before tearing down. */
     otpclient_window_flush_pending_writes (win);
@@ -2226,6 +2271,10 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->db_store);
     g_clear_object (&win->cross_db_store);
     g_clear_object (&win->flatten_model);
+    g_clear_object (&win->cross_db_cancellable);
+    g_clear_object (&win->webcam_cancellable);
+    g_clear_object (&win->clipboard_cancellable);
+    g_clear_object (&win->file_dialog_cancellable);
     g_clear_object (&win->group_list_model);
     g_clear_pointer (&win->active_group_filter, g_free);
     g_clear_pointer (&win->search_lower, g_free);
@@ -2510,6 +2559,14 @@ on_import_done (const ImportSummary *summary,
         msg = g_strdup_printf (ngettext ("Imported %u token.",
                                          "Imported %u tokens.",
                                          summary->added), summary->added);
+    } else if (summary->skipped_invalid > 0 && summary->skipped_duplicates > 0) {
+        msg = g_strdup_printf (_("Imported %u, skipped %u duplicate and %u invalid."),
+                               summary->added,
+                               summary->skipped_duplicates,
+                               summary->skipped_invalid);
+    } else if (summary->skipped_invalid > 0) {
+        msg = g_strdup_printf (_("Imported %u, skipped %u invalid."),
+                               summary->added, summary->skipped_invalid);
     } else if (summary->added == 0) {
         msg = g_strdup_printf (ngettext ("Skipped %u duplicate.",
                                          "Skipped %u duplicates.",
@@ -2577,19 +2634,40 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
     }
 
     GError *err = NULL;
-    add_otps_to_db (otps, db_data);
+    OtpImportReport report = {0, 0, 0};
+    db_import_otps (db_data, otps, &report, &err);
     free_otps_gslist (otps, g_slist_length (otps));
-    update_db (db_data, &err);
     if (err != NULL) {
         show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
         g_clear_error (&err);
-    } else {
-        /* data_to_add is consumed inside update_db; just refresh the in-memory
-         * view from the just-written file so generated indices / hashes match. */
-        reload_db (db_data, &err);
-        g_clear_error (&err);
+    } else if (report.added == 0) {
+        if (report.skipped_duplicates > 0)
+            show_error_toast (self, "%s", _("This token already exists"));
+        else
+            show_error_toast (self, "%s", _("QR code contains an invalid OTP token"));
     }
     on_db_modified (self);
+}
+
+typedef struct {
+    GWeakRef window_ref;
+} WindowAsyncContext;
+
+static WindowAsyncContext *
+window_async_context_new (OTPClientWindow *self)
+{
+    WindowAsyncContext *ctx = g_new0 (WindowAsyncContext, 1);
+    g_weak_ref_init (&ctx->window_ref, self);
+    return ctx;
+}
+
+static void
+window_async_context_free (WindowAsyncContext *ctx)
+{
+    if (ctx == NULL)
+        return;
+    g_weak_ref_clear (&ctx->window_ref);
+    g_free (ctx);
 }
 
 static void
@@ -2597,25 +2675,44 @@ on_qr_file_selected (GObject      *source,
                      GAsyncResult *result,
                      gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
-    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, NULL);
-    if (file == NULL)
+    WindowAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (ctx);
         return;
+    }
+
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    GError *err = NULL;
+    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (ctx);
+        return;
+    }
+    g_clear_error (&err);
+    if (file == NULL)
+    {
+        window_async_context_free (ctx);
+        return;
+    }
 
     g_autofree gchar *path = g_file_get_path (file);
-    if (path == NULL)
+    if (path == NULL) {
+        window_async_context_free (ctx);
         return;
+    }
 
-    GError *err = NULL;
     gchar *otpauth_uri = qrcode_parse_image_file (path, &err);
     if (otpauth_uri == NULL) {
         show_error_toast (self, _("Could not read QR code: %s"), err ? err->message : _("unknown error"));
         g_clear_error (&err);
+        window_async_context_free (ctx);
         return;
     }
 
     add_token_from_otpauth_uri (self, otpauth_uri);
+    window_async_context_free (ctx);
 }
 
 static void
@@ -2640,8 +2737,10 @@ action_add_qr_file (GtkWidget  *widget,
     g_object_unref (filter);
     g_object_unref (filters);
 
-    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
-                          on_qr_file_selected, self);
+    g_clear_object (&self->file_dialog_cancellable);
+    self->file_dialog_cancellable = g_cancellable_new ();
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
+                          on_qr_file_selected, window_async_context_new (self));
     g_object_unref (dialog);
 }
 
@@ -2650,18 +2749,30 @@ on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
                      GAsyncResult *result,
                      gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    WindowAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (ctx);
+        return;
+    }
 
     GError *err = NULL;
     g_autofree gchar *otpauth_uri = webcam_scan_qrcode_finish (result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (ctx);
+        return;
+    }
     if (otpauth_uri == NULL) {
         show_error_toast (self, _("Webcam scan failed: %s"),
                           err ? err->message : _("unknown error"));
         g_clear_error (&err);
+        window_async_context_free (ctx);
         return;
     }
 
     add_token_from_otpauth_uri (self, otpauth_uri);
+    window_async_context_free (ctx);
 }
 
 static void
@@ -2674,7 +2785,10 @@ action_add_qr_webcam (GtkWidget  *widget,
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
 
-    webcam_scan_qrcode_async (NULL, on_webcam_scan_done, self);
+    g_clear_object (&self->webcam_cancellable);
+    self->webcam_cancellable = g_cancellable_new ();
+    webcam_scan_qrcode_async (self->webcam_cancellable, on_webcam_scan_done,
+                              window_async_context_new (self));
 }
 
 static void
@@ -2682,14 +2796,26 @@ on_clipboard_texture_received (GObject      *source,
                                GAsyncResult *result,
                                gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    WindowAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (ctx);
+        return;
+    }
+
     GError *err = NULL;
     g_autoptr (GdkTexture) texture =
         gdk_clipboard_read_texture_finish (GDK_CLIPBOARD (source), result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (ctx);
+        return;
+    }
     if (texture == NULL) {
         show_error_toast (self, _("No image on clipboard: %s"),
                           err ? err->message : _("unknown error"));
         g_clear_error (&err);
+        window_async_context_free (ctx);
         return;
     }
 
@@ -2698,10 +2824,12 @@ on_clipboard_texture_received (GObject      *source,
         show_error_toast (self, _("Could not read QR code: %s"),
                           err ? err->message : _("unknown error"));
         g_clear_error (&err);
+        window_async_context_free (ctx);
         return;
     }
 
     add_token_from_otpauth_uri (self, otpauth_uri);
+    window_async_context_free (ctx);
 }
 
 static void
@@ -2725,8 +2853,11 @@ action_add_qr_clipboard (GtkWidget  *widget,
         return;
     }
 
-    gdk_clipboard_read_texture_async (clipboard, NULL,
-                                      on_clipboard_texture_received, self);
+    g_clear_object (&self->clipboard_cancellable);
+    self->clipboard_cancellable = g_cancellable_new ();
+    gdk_clipboard_read_texture_async (clipboard, self->clipboard_cancellable,
+                                      on_clipboard_texture_received,
+                                      window_async_context_new (self));
 }
 
 static void
@@ -2779,13 +2910,25 @@ on_backup_tokens_save_complete (GObject      *source,
                                 GAsyncResult *result,
                                 gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    WindowAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (ctx);
+        return;
+    }
+
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
 
     GError *err = NULL;
     GFile *file = gtk_file_dialog_save_finish (dialog, result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (ctx);
+        return;
+    }
     if (file == NULL) {
         g_clear_error (&err);
+        window_async_context_free (ctx);
         return;
     }
 
@@ -2795,17 +2938,22 @@ on_backup_tokens_save_complete (GObject      *source,
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
+    {
+        window_async_context_free (ctx);
         return;
+    }
 
     DatabaseData *db_data = otpclient_application_get_db_data (app);
     if (db_data == NULL || db_data->db_path == NULL) {
         show_error_toast (self, "%s", _("No database is currently open."));
+        window_async_context_free (ctx);
         return;
     }
 
     g_autofree gchar *error_msg = db_copy_to (db_data->db_path, path);
     if (error_msg != NULL) {
         show_error_toast (self, "%s", error_msg);
+        window_async_context_free (ctx);
         return;
     }
 
@@ -2820,6 +2968,7 @@ on_backup_tokens_save_complete (GObject      *source,
     AdwToast *toast = adw_toast_new (_("Token database backed up"));
     adw_toast_set_timeout (toast, 5);
     adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+    window_async_context_free (ctx);
 }
 
 static void
@@ -2853,8 +3002,10 @@ action_backup_tokens (GtkWidget  *widget,
     g_autofree gchar *suggested = g_strdup_printf ("%s.%s.bak", base, stamp);
     gtk_file_dialog_set_initial_name (dialog, suggested);
 
-    gtk_file_dialog_save (dialog, GTK_WINDOW (self), NULL,
-                          on_backup_tokens_save_complete, self);
+    g_clear_object (&self->file_dialog_cancellable);
+    self->file_dialog_cancellable = g_cancellable_new ();
+    gtk_file_dialog_save (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
+                          on_backup_tokens_save_complete, window_async_context_new (self));
     g_object_unref (dialog);
 }
 
@@ -3095,17 +3246,21 @@ move_token_context_free (MoveTokenContext *ctx)
     g_free (ctx);
 }
 
-static void
-on_move_target_password (const gchar *password,
-                         gpointer     user_data)
+static gboolean
+on_move_target_password (const gchar  *current_password,
+                         const gchar  *password,
+                         gchar       **error_message,
+                         gpointer      user_data)
 {
+    (void) current_password;
+    (void) error_message;
     MoveTokenContext *ctx = (MoveTokenContext *) user_data;
     OTPClientWindow *self = ctx->self;
 
     if (password == NULL)
     {
         move_token_context_free (ctx);
-        return;
+        return TRUE;
     }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3113,18 +3268,16 @@ on_move_target_password (const gchar *password,
     if (app == NULL)
     {
         move_token_context_free (ctx);
-        return;
+        return TRUE;
     }
-
-    /* Open and decrypt the target database */
-    DatabaseData *target = g_new0 (DatabaseData, 1);
-    target->db_path = g_strdup (ctx->target_db_path);
-    target->key = gcry_calloc_secure (strlen (password) + 1, 1);
-    memcpy (target->key, password, strlen (password) + 1);
 
     gint32 memlock = 0;
     set_memlock_value (&memlock);
-    target->max_file_size_from_memlock = memlock;
+
+    /* Open and decrypt the target database */
+    DatabaseData *target = database_data_new (ctx->target_db_path, memlock);
+    target->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (target->key, password, strlen (password) + 1);
 
     GError *err = NULL;
     load_db (target, &err);
@@ -3132,11 +3285,9 @@ on_move_target_password (const gchar *password,
     {
         show_error_toast (self, _("Could not open target database: %s"), err->message);
         g_clear_error (&err);
-        gcry_free (target->key);
-        g_free (target->db_path);
-        g_free (target);
+        database_data_free (target);
         move_token_context_free (ctx);
-        return;
+        return TRUE;
     }
 
     /* Append the token to the target database */
@@ -3176,16 +3327,10 @@ on_move_target_password (const gchar *password,
         }
     }
 
-    /* Clean up target */
-    db_invalidate_kdf_cache (target);
-    if (target->in_memory_json_data != NULL)
-        json_decref (target->in_memory_json_data);
-    gcry_free (target->key);
-    g_free (target->db_path);
-    g_slist_free_full (target->objects_hash, g_free);
-    g_free (target);
+    database_data_free (target);
 
     move_token_context_free (ctx);
+    return TRUE;
 }
 
 static void
@@ -3354,7 +3499,8 @@ action_set_group (GtkWidget  *widget,
 
     /* Defer store rebuild so the popover menu can close cleanly first,
      * avoiding "Broken accounting of active state" warnings. */
-    g_idle_add (on_db_modified_idle, self);
+    g_idle_add_full (G_PRIORITY_DEFAULT, on_db_modified_idle,
+                     g_object_ref (self), g_object_unref);
 }
 
 static void
@@ -3395,7 +3541,8 @@ action_remove_from_group (GtkWidget  *widget,
     }
 
     /* Defer store rebuild so the popover menu can close cleanly first. */
-    g_idle_add (on_db_modified_idle, self);
+    g_idle_add_full (G_PRIORITY_DEFAULT, on_db_modified_idle,
+                     g_object_ref (self), g_object_unref);
 }
 
 typedef struct {
@@ -3624,9 +3771,11 @@ on_token_right_click (GtkGestureClick *gesture,
     g_object_unref (builder);
 }
 
-static void
-on_new_db_password_received (const gchar *password,
-                              gpointer     user_data);
+static gboolean
+on_new_db_password_received (const gchar  *current_password,
+                              const gchar  *password,
+                              gchar       **error_message,
+                              gpointer      user_data);
 
 typedef struct {
     OTPClientWindow *self;
@@ -3638,15 +3787,32 @@ on_new_db_file_selected (GObject      *source,
                           GAsyncResult *result,
                           gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
-    g_autoptr (GFile) file = gtk_file_dialog_save_finish (dialog, result, NULL);
-    if (file == NULL)
+    WindowAsyncContext *async_ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&async_ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (async_ctx);
         return;
+    }
+
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    GError *err = NULL;
+    g_autoptr (GFile) file = gtk_file_dialog_save_finish (dialog, result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (async_ctx);
+        return;
+    }
+    g_clear_error (&err);
+    if (file == NULL) {
+        window_async_context_free (async_ctx);
+        return;
+    }
 
     g_autofree gchar *path = g_file_get_path (file);
-    if (path == NULL)
+    if (path == NULL) {
+        window_async_context_free (async_ctx);
         return;
+    }
 
     /* Ensure .enc extension */
     gchar *db_path;
@@ -3663,12 +3829,17 @@ on_new_db_file_selected (GObject      *source,
                                                     on_new_db_password_received,
                                                     ctx);
     adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
+    window_async_context_free (async_ctx);
 }
 
-static void
-on_new_db_password_received (const gchar *password,
-                              gpointer     user_data)
+static gboolean
+on_new_db_password_received (const gchar  *current_password,
+                              const gchar  *password,
+                              gchar       **error_message,
+                              gpointer      user_data)
 {
+    (void) current_password;
+    (void) error_message;
     NewDbContext *ctx = (NewDbContext *) user_data;
     OTPClientWindow *self = ctx->self;
     gchar *db_path = ctx->db_path;
@@ -3677,7 +3848,7 @@ on_new_db_password_received (const gchar *password,
     if (password == NULL)
     {
         g_free (db_path);
-        return;
+        return TRUE;
     }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3685,7 +3856,7 @@ on_new_db_password_received (const gchar *password,
     if (app == NULL)
     {
         g_free (db_path);
-        return;
+        return TRUE;
     }
 
     /* Free old db_data if present */
@@ -3696,19 +3867,19 @@ on_new_db_password_received (const gchar *password,
         g_list_store_remove_all (self->otp_store);
     }
 
+    gint32 memlock = 0;
+    set_memlock_value (&memlock);
+
     /* Create new DatabaseData */
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = db_path;
+    DatabaseData *db_data = database_data_new (db_path, memlock);
+    g_free (db_path);
+    db_path = NULL;
     db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
     memcpy (db_data->key, password, strlen (password) + 1);
     db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
     db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
     db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
     db_data->current_db_version = DB_VERSION;
-
-    gint32 memlock = 0;
-    set_memlock_value (&memlock);
-    db_data->max_file_size_from_memlock = memlock;
 
     GError *err = NULL;
     update_db (db_data, &err);
@@ -3722,7 +3893,7 @@ on_new_db_password_received (const gchar *password,
          * json_t array. Defer to database_data_free which handles every
          * field correctly. */
         database_data_free (db_data);
-        return;
+        return TRUE;
     }
 
     /* Reload to populate in_memory_json_data */
@@ -3738,8 +3909,8 @@ on_new_db_password_received (const gchar *password,
     /* Add to sidebar. The first DB ever added is auto-set as primary by
      * otpclient_window_add_database; subsequent creations leave the
      * existing primary alone — only an explicit "Set as Primary" changes it. */
-    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
-    otpclient_window_add_database (self, display_name, db_path);
+    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_data->db_path);
+    otpclient_window_add_database (self, display_name, db_data->db_path);
     otpclient_window_sync_active_flag (self);
     otpclient_window_select_database (self,
         (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1);
@@ -3749,6 +3920,7 @@ on_new_db_password_received (const gchar *password,
 
     if (db_data->in_memory_json_data != NULL)
         otpclient_window_set_db_actions_enabled (self, TRUE);
+    return TRUE;
 }
 
 static void
@@ -3774,8 +3946,10 @@ new_db_button_clicked (GtkButton       *button,
     gtk_file_dialog_set_title (dialog, _("Create New Database"));
     gtk_file_dialog_set_initial_name (dialog, "otpclient-db.enc");
 
-    gtk_file_dialog_save (dialog, GTK_WINDOW (self), NULL,
-                          on_new_db_file_selected, self);
+    g_clear_object (&self->file_dialog_cancellable);
+    self->file_dialog_cancellable = g_cancellable_new ();
+    gtk_file_dialog_save (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
+                          on_new_db_file_selected, window_async_context_new (self));
     g_object_unref (dialog);
 }
 
@@ -3784,24 +3958,43 @@ on_open_db_file_selected (GObject      *source,
                            GAsyncResult *result,
                            gpointer      user_data);
 
-static void
-on_open_db_password_received (const gchar *password,
-                               gpointer     user_data);
+static gboolean
+on_open_db_password_received (const gchar  *current_password,
+                               const gchar  *password,
+                               gchar       **error_message,
+                               gpointer      user_data);
 
 static void
 on_open_db_file_selected (GObject      *source,
                            GAsyncResult *result,
                            gpointer      user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
-    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, NULL);
-    if (file == NULL)
+    WindowAsyncContext *async_ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&async_ctx->window_ref);
+    if (self == NULL) {
+        window_async_context_free (async_ctx);
         return;
+    }
+
+    GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
+    GError *err = NULL;
+    g_autoptr (GFile) file = gtk_file_dialog_open_finish (dialog, result, &err);
+    if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED) || self->disposing) {
+        g_clear_error (&err);
+        window_async_context_free (async_ctx);
+        return;
+    }
+    g_clear_error (&err);
+    if (file == NULL) {
+        window_async_context_free (async_ctx);
+        return;
+    }
 
     g_autofree gchar *path = g_file_get_path (file);
-    if (path == NULL)
+    if (path == NULL) {
+        window_async_context_free (async_ctx);
         return;
+    }
 
     NewDbContext *ctx = g_new0 (NewDbContext, 1);
     ctx->self = self;
@@ -3811,12 +4004,17 @@ on_open_db_file_selected (GObject      *source,
                                                     on_open_db_password_received,
                                                     ctx);
     adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
+    window_async_context_free (async_ctx);
 }
 
-static void
-on_open_db_password_received (const gchar *password,
-                               gpointer     user_data)
+static gboolean
+on_open_db_password_received (const gchar  *current_password,
+                               const gchar  *password,
+                               gchar       **error_message,
+                               gpointer      user_data)
 {
+    (void) current_password;
+    (void) error_message;
     NewDbContext *ctx = (NewDbContext *) user_data;
     OTPClientWindow *self = ctx->self;
     gchar *db_path = ctx->db_path;
@@ -3825,7 +4023,7 @@ on_open_db_password_received (const gchar *password,
     if (password == NULL)
     {
         g_free (db_path);
-        return;
+        return TRUE;
     }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3833,21 +4031,21 @@ on_open_db_password_received (const gchar *password,
     if (app == NULL)
     {
         g_free (db_path);
-        return;
+        return TRUE;
     }
 
     /* Stop current DB */
     otpclient_window_stop_otp_timer (self);
     g_list_store_remove_all (self->otp_store);
 
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = db_path;
-    db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
-    memcpy (db_data->key, password, strlen (password) + 1);
-
     gint32 memlock = 0;
     set_memlock_value (&memlock);
-    db_data->max_file_size_from_memlock = memlock;
+
+    DatabaseData *db_data = database_data_new (db_path, memlock);
+    g_free (db_path);
+    db_path = NULL;
+    db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
+    memcpy (db_data->key, password, strlen (password) + 1);
 
     GError *err = NULL;
     load_db (db_data, &err);
@@ -3859,7 +4057,7 @@ on_open_db_password_received (const gchar *password,
          * in_memory_json_data / objects_hash before failing. The previous
          * open-coded cleanup leaked both. database_data_free handles them. */
         database_data_free (db_data);
-        return;
+        return TRUE;
     }
 
     otpclient_application_set_db_data (app, db_data);
@@ -3867,8 +4065,8 @@ on_open_db_password_received (const gchar *password,
     /* Add to sidebar. The first DB ever added is auto-set as primary by
      * otpclient_window_add_database; opening an existing DB while one is
      * already in the list does not change the default. */
-    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_path);
-    otpclient_window_add_database (self, display_name, db_path);
+    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_data->db_path);
+    otpclient_window_add_database (self, display_name, db_data->db_path);
     otpclient_window_sync_active_flag (self);
     otpclient_window_select_database (self,
         (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1);
@@ -3878,6 +4076,7 @@ on_open_db_password_received (const gchar *password,
 
     if (db_data->in_memory_json_data != NULL)
         otpclient_window_set_db_actions_enabled (self, TRUE);
+    return TRUE;
 }
 
 static void
@@ -3910,8 +4109,10 @@ open_db_button_clicked (GtkButton       *button,
     g_object_unref (filter);
     g_object_unref (filters);
 
-    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
-                          on_open_db_file_selected, self);
+    g_clear_object (&self->file_dialog_cancellable);
+    self->file_dialog_cancellable = g_cancellable_new ();
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
+                          on_open_db_file_selected, window_async_context_new (self));
     g_object_unref (dialog);
 }
 
@@ -3942,8 +4143,10 @@ action_restore_tokens (GtkWidget  *widget,
     g_object_unref (filter);
     g_object_unref (filters);
 
-    gtk_file_dialog_open (dialog, GTK_WINDOW (self), NULL,
-                          on_open_db_file_selected, self);
+    g_clear_object (&self->file_dialog_cancellable);
+    self->file_dialog_cancellable = g_cancellable_new ();
+    gtk_file_dialog_open (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
+                          on_open_db_file_selected, window_async_context_new (self));
     g_object_unref (dialog);
 }
 

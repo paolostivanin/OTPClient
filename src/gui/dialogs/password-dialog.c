@@ -70,6 +70,9 @@ on_unlock_clicked (GtkButton      *button,
     (void) button;
 
     const gchar *pwd = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
+    const gchar *current_pwd = (self->current_password_row != NULL)
+        ? gtk_editable_get_text (GTK_EDITABLE (self->current_password_row))
+        : NULL;
 
     if (self->mode == PASSWORD_MODE_NEW || self->mode == PASSWORD_MODE_CHANGE)
     {
@@ -82,17 +85,18 @@ on_unlock_clicked (GtkButton      *button,
         }
     }
 
-    if (self->mode == PASSWORD_MODE_CHANGE)
-    {
-        /* Return the current password first, then the new password via callback.
-         * For CHANGE mode we return the new password; the caller uses current_password_row
-         * separately before calling this. We pass the new password. */
-    }
-
     /* Copy password into secure memory */
     gsize pwd_len = strlen (pwd);
     gchar *secure_pwd = gcry_calloc_secure (pwd_len + 1, 1);
     memcpy (secure_pwd, pwd, pwd_len + 1);
+    gchar *secure_current_pwd = NULL;
+    gsize current_pwd_len = 0;
+    if (self->mode == PASSWORD_MODE_CHANGE && current_pwd != NULL)
+    {
+        current_pwd_len = strlen (current_pwd);
+        secure_current_pwd = gcry_calloc_secure (current_pwd_len + 1, 1);
+        memcpy (secure_current_pwd, current_pwd, current_pwd_len + 1);
+    }
 
     /* GTK's AdwPasswordEntryRow keeps the plaintext in a regular GtkText
      * buffer that gtk_editable_set_text("") does NOT zero before
@@ -103,23 +107,43 @@ on_unlock_clicked (GtkButton      *button,
      * case where the buffer is still the one we just read. */
     if (pwd_len > 0)
         explicit_bzero ((gchar *) pwd, pwd_len);
-
-    /* Clear password entry widgets */
-    gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+    if (current_pwd_len > 0)
+        explicit_bzero ((gchar *) current_pwd, current_pwd_len);
     if (self->confirm_row != NULL)
     {
         const gchar *confirm_pwd = gtk_editable_get_text (GTK_EDITABLE (self->confirm_row));
         if (confirm_pwd != NULL && confirm_pwd[0] != '\0')
             explicit_bzero ((gchar *) confirm_pwd, strlen (confirm_pwd));
-        gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
     }
-    if (self->current_password_row != NULL)
+
+    gboolean accepted = TRUE;
+    g_autofree gchar *error_message = NULL;
+    if (self->callback != NULL)
+        accepted = self->callback (secure_current_pwd, secure_pwd, &error_message, self->callback_data);
+
+    if (!accepted)
     {
-        const gchar *current_pwd = gtk_editable_get_text (GTK_EDITABLE (self->current_password_row));
-        if (current_pwd != NULL && current_pwd[0] != '\0')
-            explicit_bzero ((gchar *) current_pwd, strlen (current_pwd));
-        gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            error_message != NULL ? error_message : _("Password was rejected"));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+        if (self->confirm_row != NULL)
+            gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
+        if (self->current_password_row != NULL)
+            gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
+        if (secure_current_pwd != NULL)
+            gcry_free (secure_current_pwd);
+        gcry_free (secure_pwd);
+        update_unlock_sensitivity (self);
+        return;
     }
+
+    /* Clear password entry widgets */
+    gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+    if (self->confirm_row != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
+    if (self->current_password_row != NULL)
+        gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
 
     /* Order matters: lock-state callers attach a "closed" handler that
      * re-presents this dialog if the app is still locked when it fires. Run
@@ -127,11 +151,10 @@ on_unlock_clicked (GtkButton      *button,
      * triggers that handler — otherwise a successful unlock would race with a
      * stale re-present. force_close bypasses can-close=FALSE (set by callers
      * that want to block user-initiated dismissal). */
-    if (self->callback != NULL)
-        self->callback (secure_pwd, self->callback_data);
-
     adw_dialog_force_close (ADW_DIALOG (self));
 
+    if (secure_current_pwd != NULL)
+        gcry_free (secure_current_pwd);
     gcry_free (secure_pwd);
 }
 

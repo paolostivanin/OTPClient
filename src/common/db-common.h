@@ -11,9 +11,10 @@ G_BEGIN_DECLS
 // Header data
 #define DB_HEADER_NAME         "OTPClient"
 #define DB_HEADER_NAME_LEN      9
-#define DB_VERSION              2
+#define DB_VERSION              3
 #define IV_SIZE                 16
 #define KDF_SALT_SIZE           32
+#define DB_V3_HEADER_SIZE       (DB_HEADER_NAME_LEN + 4 + IV_SIZE + KDF_SALT_SIZE + 4 + 4 + 4)
 
 // Parameter used by the encryption routine (+IV from header data)
 #define TAG_SIZE                16
@@ -29,11 +30,11 @@ G_BEGIN_DECLS
 // Below these floors the KDF would be cryptographically weak; above the ceilings
 // the open path is a denial-of-service vector (excessive memory / CPU).
 #define ARGON2ID_MIN_ITER           1
-#define ARGON2ID_MAX_ITER         100
+#define ARGON2ID_MAX_ITER          64
 #define ARGON2ID_MIN_MC          8192   // 8 MiB
-#define ARGON2ID_MAX_MC       4194304   // 4 GiB
+#define ARGON2ID_MAX_MC       1048576   // 1 GiB
 #define ARGON2ID_MIN_PARAL          1
-#define ARGON2ID_MAX_PARAL         64
+#define ARGON2ID_MAX_PARAL         16
 
 
 typedef struct db_header_data_v1_t {
@@ -54,11 +55,15 @@ typedef struct db_header_data_v2_t {
 
 
 typedef struct db_data_t {
+    gint ref_count;
+
     gchar *db_path;
 
     gchar *key;
 
     json_t *in_memory_json_data;
+
+    json_t *committed_json_data;
 
     GSList *objects_hash;
 
@@ -95,11 +100,28 @@ typedef struct db_data_t {
     guint8 cached_salt[KDF_SALT_SIZE];
     guint8 cached_pwd_hash[32];     // SHA-256(db_data->key) when cache populated
     gboolean has_cached_key;
+
+    guint8 loaded_file_digest[32];
+    gboolean has_loaded_file_digest;
 } DatabaseData;
+
+typedef gboolean (*DbMutationFunc) (json_t  *candidate,
+                                    gpointer user_data,
+                                    GError **err);
+
+typedef struct {
+    guint added;
+    guint skipped_duplicates;
+    guint skipped_invalid;
+} OtpImportReport;
 
 
 DatabaseData *database_data_new  (const gchar  *db_path,
                                   gint32        max_file_size_from_memlock);
+
+DatabaseData *database_data_ref  (DatabaseData *db_data);
+
+void          database_data_unref (DatabaseData *db_data);
 
 void          database_data_free (DatabaseData *db_data);
 
@@ -109,8 +131,25 @@ void    load_db            (DatabaseData   *db_data,
 void    update_db          (DatabaseData  *db_data,
                             GError       **err);
 
-void    reload_db          (DatabaseData  *db_data,
+gboolean db_transaction    (DatabaseData  *db_data,
+                            DbMutationFunc mutation,
+                            gpointer       user_data,
                             GError       **err);
+
+gboolean db_change_password (DatabaseData  *db_data,
+                             const gchar   *new_password,
+                             GError       **err);
+
+gboolean db_update_kdf_params (DatabaseData *db_data,
+                               gint32        iter,
+                               gint32        memcost,
+                               gint32        parallelism,
+                               GError      **err);
+
+gboolean db_import_otps    (DatabaseData      *db_data,
+                            GSList            *otps,
+                            OtpImportReport   *report,
+                            GError          **err);
 
 void    add_otps_to_db     (GSList       *otps,
                             DatabaseData *db_data);
@@ -134,5 +173,10 @@ void    db_invalidate_kdf_cache (DatabaseData *db_data);
  * newly-allocated, translated error message the caller frees with g_free. */
 gchar  *db_copy_to              (const gchar  *src_path,
                                  const gchar  *dst_path);
+
+#ifdef OTPCLIENT_TESTING
+void    db_test_set_fail_encrypt      (gboolean fail);
+void    db_test_set_fail_atomic_write (gboolean fail);
+#endif
 
 G_END_DECLS

@@ -1,6 +1,7 @@
 #include <glib/gi18n.h>
 #include "kdf-dialog.h"
 #include "gquarks.h"
+#include "../otpclient-application.h"
 
 struct _KdfDialog
 {
@@ -33,6 +34,15 @@ static const struct {
 #define KDF_PRESET_CUSTOM 3
 
 static void
+kdf_dialog_dispose (GObject *object)
+{
+    KdfDialog *self = KDF_DIALOG (object);
+    g_clear_pointer (&self->db_data, database_data_free);
+
+    G_OBJECT_CLASS (kdf_dialog_parent_class)->dispose (object);
+}
+
+static void
 kdf_dialog_init (KdfDialog *self)
 {
     (void) self;
@@ -41,7 +51,8 @@ kdf_dialog_init (KdfDialog *self)
 static void
 kdf_dialog_class_init (KdfDialogClass *klass)
 {
-    (void) klass;
+    GObjectClass *object_class = G_OBJECT_CLASS (klass);
+    object_class->dispose = kdf_dialog_dispose;
 }
 
 static guint
@@ -100,6 +111,18 @@ on_apply_clicked (GtkButton *button,
 {
     (void) button;
 
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app)
+        : NULL;
+    if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+    {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("The active database changed. Reopen this dialog before applying KDF changes."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
+
     double iter_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->iter_spin));
     double mc_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->memcost_spin));
     double par_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->parallelism_spin));
@@ -120,15 +143,8 @@ on_apply_clicked (GtkButton *button,
      * to block re-entry from a double-click while the re-encrypt is in flight. */
     gtk_widget_set_sensitive (self->apply_btn, FALSE);
 
-    self->db_data->argon2id_iter = new_iter;
-    self->db_data->argon2id_memcost = new_mc;
-    self->db_data->argon2id_parallelism = new_par;
-
-    /* New KDF parameters invalidate the cached derived key */
-    db_invalidate_kdf_cache (self->db_data);
-
     GError *err = NULL;
-    update_db (self->db_data, &err);
+    db_update_kdf_params (self->db_data, new_iter, new_mc, new_par, &err);
     if (err != NULL)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
@@ -150,7 +166,7 @@ kdf_dialog_new (DatabaseData *db_data)
                                      "content-height", 680,
                                      NULL);
 
-    self->db_data = db_data;
+    self->db_data = database_data_ref (db_data);
 
     GtkWidget *toolbar_view = adw_toolbar_view_new ();
     GtkWidget *header = adw_header_bar_new ();

@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
 #include <glib/gstdio.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -26,6 +27,8 @@ static gchar    *resolve_db_path       (const gchar *database_arg);
 
 static gchar    *get_pwd               (const gchar *pwd_msg,
                                         int password_fd);
+
+static gboolean  import_type_is_encrypted (const gchar *type);
 
 
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
@@ -226,9 +229,9 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     if (cmdline_opts->show) {
-        show_token (db_data, cmdline_opts->account, cmdline_opts->issuer,
-                    cmdline_opts->match_exact, cmdline_opts->show_next,
-                    cmdline_opts->output_format);
+        return show_token (db_data, cmdline_opts->account, cmdline_opts->issuer,
+                           cmdline_opts->match_exact, cmdline_opts->show_next,
+                           cmdline_opts->output_format);
     }
 
     if (cmdline_opts->list) {
@@ -241,9 +244,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             return FALSE;
         }
 
-        gchar *pwd = get_pwd (_("Type the password for the file you want to import: "), STDIN_FILENO);
-        if (pwd == NULL) {
-            return FALSE;
+        gchar *pwd = NULL;
+        if (import_type_is_encrypted (cmdline_opts->import_type)) {
+            pwd = get_pwd (_("Type the password for the file you want to import: "), STDIN_FILENO);
+            if (pwd == NULL) {
+                return FALSE;
+            }
         }
 
         GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, json_dumpb (db_data->in_memory_json_data, NULL, 0, 0), &err);
@@ -264,24 +270,17 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         }
         gcry_free (pwd);
 
-        add_otps_to_db (otps, db_data);
+        OtpImportReport report = {0, 0, 0};
+        db_import_otps (db_data, otps, &report, &err);
         free_otps_gslist (otps, g_slist_length (otps));
-
-        update_db (db_data, &err);
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr (_("Error while updating the database: %s\n"), err->message);
             g_clear_error (&err);
             return FALSE;
         }
         g_clear_error (&err);
-        reload_db (db_data, &err);
-        if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
-            g_printerr (_("Error while reloading the database: %s\n"), err->message);
-            g_clear_error (&err);
-            return FALSE;
-        }
-        g_clear_error (&err);
-        g_print ("%s", _("Data successfully imported.\n"));
+        g_print (_("Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"),
+                 report.added, report.skipped_duplicates, report.skipped_invalid);
     }
 
     if (cmdline_opts->export) {
@@ -338,6 +337,8 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         if (ret_msg != NULL) {
             g_printerr (_("An error occurred while exporting the data: %s\n"), ret_msg);
             g_free (ret_msg);
+            g_free (exported_file_path);
+            return FALSE;
         } else {
             if (exported) {
                 g_print (_("Data successfully exported to: %s\n"), exported_file_path);
@@ -358,6 +359,14 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     }
 
     return TRUE;
+}
+
+static gboolean
+import_type_is_encrypted (const gchar *type)
+{
+    return g_strcmp0 (type, AEGIS_ENC_ACTION_NAME) == 0 ||
+           g_strcmp0 (type, TWOFAS_ENC_ACTION_NAME) == 0 ||
+           g_strcmp0 (type, AUTHPRO_ENC_ACTION_NAME) == 0;
 }
 
 static gchar *
@@ -468,5 +477,3 @@ get_pwd (const gchar *pwd_msg,
 
     return pwd;
 }
-
-

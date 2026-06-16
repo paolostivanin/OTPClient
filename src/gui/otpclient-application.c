@@ -226,7 +226,7 @@ otpclient_application_shortcuts (GSimpleAction *simple,
  * user knows what happened and how to re-enable it later. */
 static void
 application_disable_secret_service_runtime (OTPClientApplication *self,
-                                             const gchar          *libsecret_err_msg)
+                                            const gchar          *libsecret_err_msg)
 {
     if (!self->use_secret_service)
         return;
@@ -244,62 +244,122 @@ application_disable_secret_service_runtime (OTPClientApplication *self,
                                 body);
 }
 
+typedef struct {
+    GWeakRef app_ref;
+} ApplicationAsyncContext;
+
+static ApplicationAsyncContext *
+application_async_context_new (OTPClientApplication *self)
+{
+    ApplicationAsyncContext *ctx = g_new0 (ApplicationAsyncContext, 1);
+    g_weak_ref_init (&ctx->app_ref, self);
+    return ctx;
+}
+
+static void
+application_async_context_free (ApplicationAsyncContext *ctx)
+{
+    if (ctx == NULL)
+        return;
+    g_weak_ref_clear (&ctx->app_ref);
+    g_free (ctx);
+}
+
+typedef struct {
+    GWeakRef app_ref;
+    gboolean clear_legacy_on_success;
+} StorePasswordContext;
+
+static gboolean
+password_bytes_equal (const gchar *a,
+                      const gchar *b)
+{
+    if (a == NULL || b == NULL)
+        return FALSE;
+
+    gsize a_len = strlen (a);
+    gsize b_len = strlen (b);
+    volatile guchar result = (a_len != b_len);
+    gsize cmp_len = (a_len < b_len) ? a_len : b_len;
+    for (gsize i = 0; i < cmp_len; i++)
+        result |= ((const volatile guchar *) a)[i] ^ ((const volatile guchar *) b)[i];
+
+    return result == 0;
+}
+
 static void
 on_password_stored_gui (GObject      *source         __attribute__((unused)),
                         GAsyncResult *result,
                         gpointer      user_data)
 {
-    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    StorePasswordContext *ctx = user_data;
+    g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
+    const gboolean clear_legacy = ctx->clear_legacy_on_success;
+    g_weak_ref_clear (&ctx->app_ref);
+    g_free (ctx);
+
     GError *err = NULL;
     secret_password_store_finish (result, &err);
+
+    if (self == NULL) {
+        g_clear_error (&err);
+        return;
+    }
+
     if (err != NULL) {
         application_disable_secret_service_runtime (self, err->message);
         g_error_free (err);
+    } else if (clear_legacy) {
+        otpclient_secret_clear_legacy_async ();
     }
 }
 
-static void
-on_change_password_received (const gchar *password,
-                              gpointer     user_data)
+static gboolean
+on_change_password_received (const gchar  *current_password,
+                              const gchar  *password,
+                              gchar       **error_message,
+                              gpointer      user_data)
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
     if (password == NULL || self->db_data == NULL)
-        return;
+        return FALSE;
 
-    /* Update the key */
-    if (self->db_data->key != NULL)
-        gcry_free (self->db_data->key);
+    if (!password_bytes_equal (current_password, self->db_data->key))
+    {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Current password is incorrect"));
+        return FALSE;
+    }
 
-    self->db_data->key = gcry_calloc_secure (strlen (password) + 1, 1);
-    memcpy (self->db_data->key, password, strlen (password) + 1);
-
-    /* Force fresh salt + KDF derivation under the new password */
-    db_invalidate_kdf_cache (self->db_data);
-
-    /* Re-encrypt the database with the new key */
     GError *err = NULL;
-    update_db (self->db_data, &err);
+    db_change_password (self->db_data, password, &err);
     if (err != NULL)
     {
         g_warning ("Failed to update database with new password: %s", err->message);
+        if (error_message != NULL)
+            *error_message = g_strdup (err->message);
         g_clear_error (&err);
-        return;
+        return FALSE;
     }
 
     /* Update secret service */
     if (self->use_secret_service)
     {
+        StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
+        g_weak_ref_init (&ctx->app_ref, self);
         secret_password_store (OTPCLIENT_SCHEMA,
                                SECRET_COLLECTION_DEFAULT,
                                "OTPClient database password",
                                self->db_data->key,
                                NULL,
                                on_password_stored_gui,
-                               self,
+                               ctx,
                                "string", self->db_data->db_path,
                                NULL);
     }
+
+    return TRUE;
 }
 
 static void
@@ -445,7 +505,10 @@ otpclient_application_activate (GApplication *application)
     gtk_window_present (GTK_WINDOW(self->window));
 }
 
-static void on_password_received (const gchar *password, gpointer user_data);
+static gboolean on_password_received (const gchar  *current_password,
+                                      const gchar  *password,
+                                      gchar       **error_message,
+                                      gpointer      user_data);
 
 static void
 present_db_missing_dialog (OTPClientWindow *win,
@@ -495,15 +558,22 @@ on_unlock_done (GObject      *source_object,
                 gpointer      user_data)
 {
     (void) source_object;
-    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    ApplicationAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
+    application_async_context_free (ctx);
+
+    GError *err = NULL;
+    g_task_propagate_boolean (G_TASK (result), &err);
+
+    if (self == NULL) {
+        g_clear_error (&err);
+        return;
+    }
 
     /* The worker has returned and is no longer reading db_data, so it is
      * safe again for the window to swap or free it. Clear up-front so
      * every early-return path below uncovers the lock automatically. */
     self->unlock_in_progress = FALSE;
-
-    GError *err = NULL;
-    g_task_propagate_boolean (G_TASK (result), &err);
     if (err != NULL)
     {
         g_warning ("Failed to load database: %s", err->message);
@@ -598,13 +668,16 @@ on_unlock_done (GObject      *source_object,
     /* Store password in secret service if enabled */
     if (self->use_secret_service)
     {
+        StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
+        g_weak_ref_init (&ctx->app_ref, self);
+        ctx->clear_legacy_on_success = self->migrating_legacy_keyring;
         secret_password_store (OTPCLIENT_SCHEMA,
                                SECRET_COLLECTION_DEFAULT,
                                "OTPClient database password",
                                self->db_data->key,
                                NULL,
                                on_password_stored_gui,
-                               self,
+                               ctx,
                                "string", self->db_data->db_path,
                                NULL);
     }
@@ -614,11 +687,7 @@ on_unlock_done (GObject      *source_object,
      * drop the legacy entry to keep the keyring tidy and avoid re-running
      * the fallback on future launches. Async clear: failures are surfaced
      * via on_password_cleared but do not affect the unlock outcome. */
-    if (self->migrating_legacy_keyring)
-    {
-        self->migrating_legacy_keyring = FALSE;
-        otpclient_secret_clear_legacy_async ();
-    }
+    self->migrating_legacy_keyring = FALSE;
 
     /* Populate first, *then* swap out the loading page, otherwise
      * non-empty databases briefly flash the empty-state placeholder. */
@@ -631,14 +700,18 @@ on_unlock_done (GObject      *source_object,
     }
 }
 
-static void
-on_password_received (const gchar *password,
-                      gpointer     user_data)
+static gboolean
+on_password_received (const gchar  *current_password,
+                      const gchar  *password,
+                      gchar       **error_message,
+                      gpointer      user_data)
 {
+    (void) current_password;
+    (void) error_message;
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
     if (password == NULL || self->db_data == NULL)
-        return;
+        return FALSE;
 
     gsize pwd_len = strlen (password);
     self->db_data->key = gcry_calloc_secure (pwd_len + 1, 1);
@@ -662,10 +735,12 @@ on_password_received (const gchar *password,
      * raw pointer to it. Cleared at the top of on_unlock_done. */
     self->unlock_in_progress = TRUE;
 
-    GTask *task = g_task_new (self, self->cancellable, on_unlock_done, self);
+    GTask *task = g_task_new (self, self->cancellable, on_unlock_done,
+                              application_async_context_new (self));
     g_task_set_task_data (task, self->db_data, NULL);
     g_task_run_in_thread (task, unlock_db_thread);
     g_object_unref (task);
+    return TRUE;
 }
 
 static void
@@ -674,13 +749,25 @@ on_secret_lookup_done (GObject      *source,
                        gpointer      user_data)
 {
     (void) source;
-    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    ApplicationAsyncContext *ctx = user_data;
+    g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
+    application_async_context_free (ctx);
 
     GError *err = NULL;
     gchar *password = secret_password_lookup_finish (result, &err);
 
+    if (self == NULL)
+    {
+        if (password != NULL)
+            secret_password_free (password);
+        g_clear_error (&err);
+        return;
+    }
+
     if (g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED))
     {
+        if (password != NULL)
+            secret_password_free (password);
         g_clear_error (&err);
         return;
     }
@@ -688,7 +775,7 @@ on_secret_lookup_done (GObject      *source,
     if (password != NULL)
     {
         self->migrating_legacy_keyring = FALSE;
-        on_password_received (password, self);
+        on_password_received (NULL, password, NULL, self);
         secret_password_free (password);
         g_clear_error (&err);
         return;
@@ -709,7 +796,7 @@ on_secret_lookup_done (GObject      *source,
         if (legacy_pwd != NULL)
         {
             self->migrating_legacy_keyring = TRUE;
-            on_password_received (legacy_pwd, self);
+            on_password_received (NULL, legacy_pwd, NULL, self);
             secret_password_free (legacy_pwd);
             return;
         }
@@ -847,7 +934,8 @@ init_database (OTPClientApplication *self)
     if (self->use_secret_service)
     {
         secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
-                                on_secret_lookup_done, self,
+                                on_secret_lookup_done,
+                                application_async_context_new (self),
                                 "string", self->db_data->db_path,
                                 NULL);
     }
@@ -1154,15 +1242,13 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
     if (set_memlock_value (&memlock_value) == MEMLOCK_ERR)
         memlock_value = DEFAULT_MEMLOCK_VALUE;
 
-    DatabaseData *db_data = g_new0 (DatabaseData, 1);
-    db_data->db_path = g_strdup (db_path);
-    db_data->max_file_size_from_memlock = memlock_value;
-    self->db_data = db_data;
+    self->db_data = database_data_new (db_path, memlock_value);
 
     if (self->use_secret_service)
     {
         secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
-                                on_secret_lookup_done, self,
+                                on_secret_lookup_done,
+                                application_async_context_new (self),
                                 "string", db_path,
                                 NULL);
     }

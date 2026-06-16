@@ -138,12 +138,22 @@ import_settings_from_json (const gchar *json_str,
                     g_settings_set_boolean (settings, def->key, json_boolean_value (val));
                 break;
             case SETTING_INT:
-                if (json_is_integer (val))
-                    g_settings_set_int (settings, def->key, (gint) json_integer_value (val));
+                if (json_is_integer (val)) {
+                    json_int_t v = json_integer_value (val);
+                    if (v >= G_MININT && v <= G_MAXINT)
+                        g_settings_set_int (settings, def->key, (gint) v);
+                    else
+                        g_warning ("Skipping out-of-range integer setting '%s'.", def->key);
+                }
                 break;
             case SETTING_UINT:
-                if (json_is_integer (val))
-                    g_settings_set_uint (settings, def->key, (guint) json_integer_value (val));
+                if (json_is_integer (val)) {
+                    json_int_t v = json_integer_value (val);
+                    if (v >= 0 && (guint64) v <= G_MAXUINT)
+                        g_settings_set_uint (settings, def->key, (guint) v);
+                    else
+                        g_warning ("Skipping out-of-range unsigned setting '%s'.", def->key);
+                }
                 break;
             case SETTING_STRING:
                 if (json_is_string (val))

@@ -1,4 +1,5 @@
 #include <glib/gi18n.h>
+#include <stdlib.h>
 #include "settings-dialog.h"
 #include "gui-misc.h"
 #include "common.h"
@@ -246,7 +247,7 @@ on_export_file_save_complete (GObject      *source,
                               gpointer      user_data)
 {
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
-    SettingsDialog *self = SETTINGS_DIALOG (user_data);
+    g_autoptr (SettingsDialog) self = SETTINGS_DIALOG (user_data);
     GError *err = NULL;
 
     GFile *file = gtk_file_dialog_save_finish (dialog, result, &err);
@@ -290,7 +291,7 @@ on_export_settings_clicked (GtkWidget      *button __attribute__((unused)),
                           GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (self))),
                           NULL,
                           on_export_file_save_complete,
-                          self);
+                          g_object_ref (self));
     g_object_unref (dialog);
 }
 
@@ -300,7 +301,7 @@ on_import_file_open_complete (GObject      *source,
                               gpointer      user_data)
 {
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
-    SettingsDialog *self = SETTINGS_DIALOG (user_data);
+    g_autoptr (SettingsDialog) self = SETTINGS_DIALOG (user_data);
     GError *err = NULL;
 
     GFile *file = gtk_file_dialog_open_finish (dialog, result, &err);
@@ -349,7 +350,7 @@ on_import_settings_clicked (GtkWidget      *button __attribute__((unused)),
                           GTK_WINDOW (gtk_widget_get_root (GTK_WIDGET (self))),
                           NULL,
                           on_import_file_open_complete,
-                          self);
+                          g_object_ref (self));
     g_object_unref (dialog);
 }
 

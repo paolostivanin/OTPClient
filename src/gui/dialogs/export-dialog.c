@@ -55,7 +55,7 @@ on_file_dialog_save_complete (GObject      *source,
                               GAsyncResult *result,
                               gpointer      user_data)
 {
-    ExportDialog *self = EXPORT_DIALOG (user_data);
+    g_autoptr (ExportDialog) self = EXPORT_DIALOG (user_data);
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
 
     GError *err = NULL;
@@ -145,8 +145,17 @@ on_export_clicked (GtkButton    *button,
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_save (dialog, win, NULL,
-                          on_file_dialog_save_complete, self);
+                          on_file_dialog_save_complete, g_object_ref (self));
     g_object_unref (dialog);
+}
+
+static void
+export_dialog_dispose (GObject *object)
+{
+    ExportDialog *self = EXPORT_DIALOG (object);
+    g_clear_pointer (&self->db_data, database_data_free);
+
+    G_OBJECT_CLASS (export_dialog_parent_class)->dispose (object);
 }
 
 static void
@@ -158,7 +167,8 @@ export_dialog_init (ExportDialog *self)
 static void
 export_dialog_class_init (ExportDialogClass *klass)
 {
-    (void) klass;
+    GObjectClass *object_class = G_OBJECT_CLASS (klass);
+    object_class->dispose = export_dialog_dispose;
 }
 
 ExportDialog *
@@ -171,7 +181,7 @@ export_dialog_new (DatabaseData *db_data,
                                        "content-height", 440,
                                        NULL);
 
-    self->db_data = db_data;
+    self->db_data = database_data_ref (db_data);
     self->parent_widget = parent;
 
     /* Build UI */

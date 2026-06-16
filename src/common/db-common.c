@@ -11,12 +11,43 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include "gquarks.h"
 #include "db-common.h"
 #include "file-size.h"
+#include "otp-validation.h"
 
 
-static gint32    get_db_version     (const gchar      *db_path);
+typedef struct {
+    int fd;
+    gchar *path;
+} DbLock;
+
+#ifdef OTPCLIENT_TESTING
+static gboolean test_fail_encrypt = FALSE;
+static gboolean test_fail_atomic_write = FALSE;
+
+void
+db_test_set_fail_encrypt (gboolean fail)
+{
+    test_fail_encrypt = fail;
+}
+
+void
+db_test_set_fail_atomic_write (gboolean fail)
+{
+    test_fail_atomic_write = fail;
+}
+#endif
+
+static gint32    get_db_version     (const gchar      *db_path,
+                                     GError          **err);
+
+static gboolean  lock_db            (const gchar      *db_path,
+                                     DbLock           *lock,
+                                     GError          **err);
+
+static void      unlock_db          (DbLock           *lock);
 
 static guchar   *get_db_derived_key (DatabaseData     *db_data,
                                      gint32            db_version,
@@ -32,18 +63,30 @@ static gchar    *try_decrypt_v2     (DatabaseData     *db_data,
                                      gboolean          use_legacy_length,
                                      GError          **err);
 
-static gchar    *decrypt_db         (DatabaseData     *db_data,
+static gchar    *try_decrypt_v3     (DatabaseData     *db_data,
+                                     const guint8     *header_data,
+                                     gsize             header_data_size,
+                                     const guint8     *salt,
+                                     const guint8     *iv,
+                                     guchar           *enc_buf,
+                                     gsize             enc_buf_size,
+                                     const guchar     *tag,
+                                     gboolean          use_legacy_length,
                                      GError          **err);
 
-static void      encrypt_db         (DatabaseData     *db_data,
+static gchar    *decrypt_db         (DatabaseData     *db_data,
+                                     gsize            *dec_len,
+                                     GError          **err);
+
+static gboolean  encrypt_db         (DatabaseData     *db_data,
+                                     json_t           *json_data,
                                      GError          **err);
 
 static void      add_to_json        (gpointer          list_elem,
                                      gpointer          json_array);
 
-static void      backup_db          (const gchar      *path);
-
-static void      restore_db         (const gchar      *path);
+static gboolean  backup_db          (const gchar      *path,
+                                     GError          **err);
 
 static void      cleanup_db_gfile   (GFile            *file,
                                      gpointer          stream,
@@ -55,6 +98,19 @@ static void      free_db_resources  (gcry_cipher_hd_t  hd,
                                      gchar            *dec_buf,
                                      DbHeaderData_v1  *header_data_v1,
                                      DbHeaderData_v2  *header_data_v2);
+
+static gboolean  compute_file_digest (const gchar      *path,
+                                      guint8            digest[32],
+                                      GError          **err);
+
+static gboolean  loaded_file_digest_matches (DatabaseData *db_data,
+                                             GError      **err);
+
+static void      rebuild_objects_hash (DatabaseData *db_data);
+
+static void      refresh_committed_snapshot (DatabaseData *db_data);
+
+static void      restore_live_from_committed (DatabaseData *db_data);
 
 
 void
@@ -72,22 +128,216 @@ db_invalidate_kdf_cache (DatabaseData *db_data)
 }
 
 
+static guint32
+read_be32 (const guint8 *p)
+{
+    return ((guint32) p[0] << 24) |
+           ((guint32) p[1] << 16) |
+           ((guint32) p[2] << 8) |
+           (guint32) p[3];
+}
+
+
+static void
+write_be32 (guint8 *p,
+            guint32 v)
+{
+    p[0] = (guint8) ((v >> 24) & 0xff);
+    p[1] = (guint8) ((v >> 16) & 0xff);
+    p[2] = (guint8) ((v >> 8) & 0xff);
+    p[3] = (guint8) (v & 0xff);
+}
+
+
+static gboolean
+write_all_fd (int           fd,
+              const void   *buf,
+              gsize         len,
+              GError      **err)
+{
+    const guint8 *p = buf;
+    gsize written = 0;
+    while (written < len) {
+        ssize_t n = write (fd, p + written, len - written);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to write database file: %s", g_strerror (errno));
+            return FALSE;
+        }
+        if (n == 0) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Short write while writing database file.");
+            return FALSE;
+        }
+        written += (gsize) n;
+    }
+    return TRUE;
+}
+
+
+static gboolean
+fsync_parent_dir (const gchar *path)
+{
+    g_autofree gchar *dir = g_path_get_dirname (path);
+    int dir_fd = g_open (dir, O_RDONLY | O_CLOEXEC, 0);
+    if (dir_fd < 0)
+        return FALSE;
+    gboolean ok = (fsync (dir_fd) == 0);
+    close (dir_fd);
+    return ok;
+}
+
+
+static gboolean
+atomic_write_database (const gchar  *path,
+                       const guint8 *header,
+                       gsize         header_len,
+                       const guint8 *enc_buf,
+                       gsize         enc_len,
+                       const guint8  tag[TAG_SIZE],
+                       GError      **err)
+{
+#ifdef OTPCLIENT_TESTING
+    if (test_fail_atomic_write) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Injected atomic write failure.");
+        return FALSE;
+    }
+#endif
+
+    g_autofree gchar *dir = g_path_get_dirname (path);
+    g_autofree gchar *base = g_path_get_basename (path);
+    g_autofree gchar *tmpl = g_strdup_printf ("%s/.%s.tmp.XXXXXX", dir, base);
+
+    int fd = g_mkstemp_full (tmpl, O_WRONLY | O_CLOEXEC, 0600);
+    if (fd < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to create temporary database file: %s", g_strerror (errno));
+        return FALSE;
+    }
+
+    gboolean ok = write_all_fd (fd, header, header_len, err) &&
+                  write_all_fd (fd, enc_buf, enc_len, err) &&
+                  write_all_fd (fd, tag, TAG_SIZE, err);
+    if (ok && fsync (fd) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to fsync temporary database file: %s", g_strerror (errno));
+        ok = FALSE;
+    }
+    if (close (fd) != 0 && ok) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to close temporary database file: %s", g_strerror (errno));
+        ok = FALSE;
+    }
+
+    if (!ok) {
+        g_unlink (tmpl);
+        return FALSE;
+    }
+
+    if (g_rename (tmpl, path) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to replace database file: %s", g_strerror (errno));
+        g_unlink (tmpl);
+        return FALSE;
+    }
+
+    if (!fsync_parent_dir (path)) {
+        g_warning ("Failed to fsync parent directory for %s: %s", path, g_strerror (errno));
+    }
+    return TRUE;
+}
+
+
+static gboolean
+lock_db (const gchar *db_path,
+         DbLock      *lock,
+         GError     **err)
+{
+    g_return_val_if_fail (lock != NULL, FALSE);
+
+    lock->fd = -1;
+    lock->path = g_strconcat (db_path, ".lock", NULL);
+    lock->fd = g_open (lock->path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (lock->fd < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to open database lock '%s': %s", lock->path, g_strerror (errno));
+        g_clear_pointer (&lock->path, g_free);
+        return FALSE;
+    }
+
+    gint64 deadline = g_get_monotonic_time () + (2 * G_USEC_PER_SEC);
+    while (flock (lock->fd, LOCK_EX | LOCK_NB) != 0) {
+        if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to acquire database lock '%s': %s", lock->path, g_strerror (errno));
+            unlock_db (lock);
+            return FALSE;
+        }
+        if (g_get_monotonic_time () >= deadline) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Database is busy. Another OTPClient process is writing it; retry shortly.");
+            unlock_db (lock);
+            return FALSE;
+        }
+        g_usleep (50 * 1000);
+    }
+    return TRUE;
+}
+
+
+static void
+unlock_db (DbLock *lock)
+{
+    if (lock == NULL)
+        return;
+    if (lock->fd >= 0) {
+        flock (lock->fd, LOCK_UN);
+        close (lock->fd);
+        lock->fd = -1;
+    }
+    g_clear_pointer (&lock->path, g_free);
+}
+
+
 DatabaseData *
 database_data_new (const gchar *db_path,
                    gint32       max_file_size_from_memlock)
 {
     DatabaseData *db_data = g_new0 (DatabaseData, 1);
+    g_atomic_int_set (&db_data->ref_count, 1);
     db_data->db_path = g_strdup (db_path);
     db_data->max_file_size_from_memlock = max_file_size_from_memlock;
     return db_data;
 }
 
 
+DatabaseData *
+database_data_ref (DatabaseData *db_data)
+{
+    g_return_val_if_fail (db_data != NULL, NULL);
+
+    if (g_atomic_int_get (&db_data->ref_count) <= 0)
+        g_atomic_int_set (&db_data->ref_count, 1);
+    else
+        g_atomic_int_inc (&db_data->ref_count);
+
+    return db_data;
+}
+
+
 void
-database_data_free (DatabaseData *db_data)
+database_data_unref (DatabaseData *db_data)
 {
     if (db_data == NULL)
         return;
+
+    if (g_atomic_int_get (&db_data->ref_count) > 0 &&
+        !g_atomic_int_dec_and_test (&db_data->ref_count))
+        return;
+
     db_invalidate_kdf_cache (db_data);
     if (db_data->key != NULL)
         gcry_free (db_data->key);
@@ -100,10 +350,19 @@ database_data_free (DatabaseData *db_data)
     g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
     if (db_data->in_memory_json_data != NULL)
         json_decref (db_data->in_memory_json_data);
+    if (db_data->committed_json_data != NULL)
+        json_decref (db_data->committed_json_data);
     g_free (db_data->last_hotp);
     if (db_data->last_hotp_update != NULL)
         g_date_time_unref (db_data->last_hotp_update);
     g_free (db_data);
+}
+
+
+void
+database_data_free (DatabaseData *db_data)
+{
+    database_data_unref (db_data);
 }
 
 
@@ -117,7 +376,14 @@ load_db (DatabaseData    *db_data,
         return;
     }
 
-    db_data->current_db_version = get_db_version (db_data->db_path);
+    db_data->current_db_version = get_db_version (db_data->db_path, err);
+    if (err != NULL && *err != NULL)
+        return;
+    if (db_data->current_db_version > DB_VERSION) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Unsupported future database version %d.", db_data->current_db_version);
+        return;
+    }
 
     /* Bail-on-error pattern: decrypt_db / update_db return NULL or set *err on
      * failure. Previously we used g_return_if_fail (err == NULL || *err == NULL)
@@ -125,20 +391,25 @@ load_db (DatabaseData    *db_data,
      * on every legitimate failure (wrong password, truncated file, etc.) — and
      * that noise made real bugs harder to spot in the journal. A plain early
      * return preserves the original control flow without the misuse. */
-    gchar *in_memory_json = decrypt_db (db_data, err);
+    gsize in_memory_json_len = 0;
+    gchar *in_memory_json = decrypt_db (db_data, &in_memory_json_len, err);
     if (in_memory_json == NULL)
         return;
 
     json_error_t jerr;
-    db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
+    if (in_memory_json_len > 0 && in_memory_json[in_memory_json_len - 1] == '\0')
+        in_memory_json_len--;
+    db_data->in_memory_json_data = json_loadb (in_memory_json, in_memory_json_len, 0, &jerr);
     gcry_free (in_memory_json);
     if (db_data->in_memory_json_data == NULL) {
         g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE,
                      "Error while loading json data: %s", jerr.text);
         return;
     }
+    if (!otp_validate_database_root (db_data->in_memory_json_data, err))
+        return;
 
-    if (db_data->current_db_version < 2) {
+    if (db_data->current_db_version < DB_VERSION || db_data->needs_legacy_kdf_migration) {
         update_db (db_data, err);
         if (err != NULL && *err != NULL)
             return;
@@ -149,33 +420,28 @@ load_db (DatabaseData    *db_data,
         g_slist_free_full (db_data->objects_hash, g_free);
         db_data->objects_hash = NULL;
 
-        in_memory_json = decrypt_db (db_data, err);
+        in_memory_json = decrypt_db (db_data, &in_memory_json_len, err);
         if (in_memory_json == NULL)
             return;
 
-        db_data->in_memory_json_data = json_loads (in_memory_json, 0, &jerr);
+        if (in_memory_json_len > 0 && in_memory_json[in_memory_json_len - 1] == '\0')
+            in_memory_json_len--;
+        db_data->in_memory_json_data = json_loadb (in_memory_json, in_memory_json_len, 0, &jerr);
         gcry_free (in_memory_json);
         if (db_data->in_memory_json_data == NULL) {
             g_set_error (err, memlock_error_gquark(), MEMLOCK_ERRCODE,
                          "Error while loading json data: %s", jerr.text);
             return;
         }
+        if (!otp_validate_database_root (db_data->in_memory_json_data, err))
+            return;
     }
 
-    gsize index;
-    json_t *obj;
-    json_array_foreach (db_data->in_memory_json_data, index, obj) {
-        guint32 hash = json_object_get_hash (obj);
-        db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
-    }
+    rebuild_objects_hash (db_data);
+    refresh_committed_snapshot (db_data);
 
-    // Opportunistic KDF byte-length migration: if decrypt only succeeded with
-    // the legacy g_utf8_strlen length, silently re-encrypt now with the
-    // corrected strlen length. encrypt_db clears the flag on success.
-    if (db_data->needs_legacy_kdf_migration) {
-        g_message ("Migrating database to corrected KDF password byte length.");
-        update_db (db_data, err);
-    }
+    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
+    db_data->has_loaded_file_digest = TRUE;
 }
 
 
@@ -185,75 +451,299 @@ update_db (DatabaseData  *db_data,
 {
     g_return_if_fail (err == NULL || *err == NULL);
 
-    gboolean first_run = (db_data->in_memory_json_data == NULL) ? TRUE : FALSE;
-    if (first_run == TRUE) {
-        db_data->in_memory_json_data = json_array ();
-        // we need some default values for the first run
+    gboolean first_run = (db_data->in_memory_json_data == NULL);
+    json_t *candidate = first_run ? json_array () : json_deep_copy (db_data->in_memory_json_data);
+    if (candidate == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to allocate a database update candidate.");
+        restore_live_from_committed (db_data);
+        return;
+    }
+
+    if (first_run) {
         db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
         db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
         db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
-    } else {
-        // database is backed-up only if this is not the first run
-        backup_db (db_data->db_path);
     }
 
     if (db_data->data_to_add != NULL) {
-        g_slist_foreach (db_data->data_to_add, add_to_json, db_data->in_memory_json_data);
+        g_slist_foreach (db_data->data_to_add, add_to_json, candidate);
     }
 
-    encrypt_db (db_data, err);
+    if (!otp_validate_database_root (candidate, err)) {
+        json_decref (candidate);
+        restore_live_from_committed (db_data);
+        return;
+    }
 
-    /* add_to_json deep-copied each staged element into in_memory_json_data,
-     * so the originals in data_to_add are now redundant refs. Consume the
-     * list here (success or failure) so callers don't have to remember —
-     * forgetting would cause the next update_db to re-add deep copies and
-     * silently duplicate entries on disk. */
+    DbLock lock = { .fd = -1, .path = NULL };
+    if (!lock_db (db_data->db_path, &lock, err)) {
+        json_decref (candidate);
+        restore_live_from_committed (db_data);
+        return;
+    }
+
+    gboolean exists = g_file_test (db_data->db_path, G_FILE_TEST_EXISTS);
+    if (exists && db_data->has_loaded_file_digest &&
+        !loaded_file_digest_matches (db_data, err)) {
+        unlock_db (&lock);
+        json_decref (candidate);
+        restore_live_from_committed (db_data);
+        return;
+    }
+
+    if (exists && !backup_db (db_data->db_path, err)) {
+        unlock_db (&lock);
+        json_decref (candidate);
+        restore_live_from_committed (db_data);
+        return;
+    }
+
+    gboolean committed = encrypt_db (db_data, candidate, err);
+    unlock_db (&lock);
+
+    if (!committed) {
+        json_decref (candidate);
+        restore_live_from_committed (db_data);
+        return;
+    }
+
+    if (db_data->in_memory_json_data != NULL)
+        json_decref (db_data->in_memory_json_data);
+    db_data->in_memory_json_data = candidate;
+    db_data->current_db_version = DB_VERSION;
+    db_data->needs_legacy_kdf_migration = FALSE;
+    refresh_committed_snapshot (db_data);
+
     g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
     db_data->data_to_add = NULL;
+    rebuild_objects_hash (db_data);
 
-    if (err != NULL && *err != NULL) {
-        if (!first_run) {
-            g_printerr ("Encrypting the new data failed, restoring the original copy...\n");
-            restore_db (db_data->db_path);
-            /* in_memory_json_data still holds the just-added entries that
-             * are NOT on disk after the restore. Without this reload, a
-             * subsequent successful encrypt_db would serialize those ghost
-             * entries to disk, silently persisting items the user was just
-             * told had failed to save. Reload errors are logged (not
-             * propagated) so the caller sees the original encrypt failure. */
-            GError *reload_err = NULL;
-            reload_db (db_data, &reload_err);
-            if (reload_err != NULL) {
-                g_warning ("Failed to reload db after restore: %s", reload_err->message);
-                g_clear_error (&reload_err);
-            }
-        } else {
-            g_printerr ("Couldn't update the database (encrypt_db failed)\n");
-            if (g_file_test (db_data->db_path, G_FILE_TEST_EXISTS)) {
-                if (g_unlink (db_data->db_path) == -1) {
-                    g_printerr ("%s\n", _("Error while unlinking the file."));
-                }
-            }
-        }
-    } else {
-        // database must be backed-up both before and after the update
-        backup_db (db_data->db_path);
-    }
+    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
+    db_data->has_loaded_file_digest = TRUE;
+
+    backup_db (db_data->db_path, NULL);
 }
 
 
-void
-reload_db (DatabaseData  *db_data,
-           GError       **err)
+gboolean
+db_transaction (DatabaseData   *db_data,
+                DbMutationFunc  mutation,
+                gpointer        user_data,
+                GError        **err)
 {
-    if (db_data->in_memory_json_data != NULL) {
-        json_decref (db_data->in_memory_json_data);
+    g_return_val_if_fail (db_data != NULL, FALSE);
+    g_return_val_if_fail (mutation != NULL, FALSE);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
+
+    json_t *candidate = (db_data->in_memory_json_data != NULL)
+        ? json_deep_copy (db_data->in_memory_json_data)
+        : json_array ();
+    if (candidate == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to allocate a database transaction candidate.");
+        return FALSE;
     }
 
-    g_slist_free_full (db_data->objects_hash, g_free);
-    db_data->objects_hash = NULL;
+    if (!mutation (candidate, user_data, err) ||
+        !otp_validate_database_root (candidate, err)) {
+        json_decref (candidate);
+        return FALSE;
+    }
 
-    load_db (db_data, err);
+    DbLock lock = { .fd = -1, .path = NULL };
+    if (!lock_db (db_data->db_path, &lock, err)) {
+        json_decref (candidate);
+        return FALSE;
+    }
+
+    gboolean exists = g_file_test (db_data->db_path, G_FILE_TEST_EXISTS);
+    if (exists && db_data->has_loaded_file_digest &&
+        !loaded_file_digest_matches (db_data, err)) {
+        unlock_db (&lock);
+        json_decref (candidate);
+        return FALSE;
+    }
+    if (exists && !backup_db (db_data->db_path, err)) {
+        unlock_db (&lock);
+        json_decref (candidate);
+        return FALSE;
+    }
+
+    gboolean committed = encrypt_db (db_data, candidate, err);
+    unlock_db (&lock);
+    if (!committed) {
+        json_decref (candidate);
+        return FALSE;
+    }
+
+    if (db_data->in_memory_json_data != NULL)
+        json_decref (db_data->in_memory_json_data);
+    db_data->in_memory_json_data = candidate;
+    db_data->current_db_version = DB_VERSION;
+    db_data->needs_legacy_kdf_migration = FALSE;
+    rebuild_objects_hash (db_data);
+    refresh_committed_snapshot (db_data);
+    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
+    db_data->has_loaded_file_digest = TRUE;
+    backup_db (db_data->db_path, NULL);
+    return TRUE;
+}
+
+
+gboolean
+db_change_password (DatabaseData  *db_data,
+                    const gchar   *new_password,
+                    GError       **err)
+{
+    g_return_val_if_fail (db_data != NULL, FALSE);
+    g_return_val_if_fail (new_password != NULL, FALSE);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
+
+    gchar *old_key = db_data->key;
+    gchar *new_key = gcry_calloc_secure (strlen (new_password) + 1, 1);
+    if (new_key == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Could not allocate secure memory for the new database password.");
+        return FALSE;
+    }
+    memcpy (new_key, new_password, strlen (new_password) + 1);
+
+    db_data->key = new_key;
+    db_invalidate_kdf_cache (db_data);
+
+    update_db (db_data, err);
+    if (err != NULL && *err != NULL) {
+        gcry_free (new_key);
+        db_data->key = old_key;
+        db_invalidate_kdf_cache (db_data);
+        return FALSE;
+    }
+
+    if (old_key != NULL)
+        gcry_free (old_key);
+    return TRUE;
+}
+
+
+gboolean
+db_update_kdf_params (DatabaseData *db_data,
+                      gint32        iter,
+                      gint32        memcost,
+                      gint32        parallelism,
+                      GError      **err)
+{
+    g_return_val_if_fail (db_data != NULL, FALSE);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
+
+    if (iter < ARGON2ID_MIN_ITER || iter > ARGON2ID_MAX_ITER ||
+        memcost < ARGON2ID_MIN_MC || memcost > ARGON2ID_MAX_MC ||
+        parallelism < ARGON2ID_MIN_PARAL || parallelism > ARGON2ID_MAX_PARAL)
+    {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "KDF parameters are outside supported bounds.");
+        return FALSE;
+    }
+
+    gint32 old_iter = db_data->argon2id_iter;
+    gint32 old_memcost = db_data->argon2id_memcost;
+    gint32 old_parallelism = db_data->argon2id_parallelism;
+
+    db_data->argon2id_iter = iter;
+    db_data->argon2id_memcost = memcost;
+    db_data->argon2id_parallelism = parallelism;
+    db_invalidate_kdf_cache (db_data);
+
+    update_db (db_data, err);
+    if (err != NULL && *err != NULL) {
+        db_data->argon2id_iter = old_iter;
+        db_data->argon2id_memcost = old_memcost;
+        db_data->argon2id_parallelism = old_parallelism;
+        db_invalidate_kdf_cache (db_data);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+
+typedef struct {
+    GSList *otps;
+    OtpImportReport *report;
+} ImportOtpsContext;
+
+
+static gboolean
+candidate_contains_object (json_t *candidate,
+                           json_t *obj)
+{
+    gsize index;
+    json_t *existing;
+
+    json_array_foreach (candidate, index, existing) {
+        if (json_equal (existing, obj))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+
+static gboolean
+import_otps_mutation (json_t   *candidate,
+                      gpointer  user_data,
+                      GError  **err)
+{
+    (void) err;
+    ImportOtpsContext *ctx = user_data;
+    OtpImportReport local = {0, 0, 0};
+    OtpImportReport *report = ctx->report != NULL ? ctx->report : &local;
+    *report = (OtpImportReport) {0, 0, 0};
+
+    for (GSList *l = ctx->otps; l != NULL; l = l->next) {
+        otp_t *otp = l->data;
+        GError *validation_err = NULL;
+        if (!otp_validate_import_token (otp, &validation_err)) {
+            if (validation_err != NULL) {
+                g_printerr ("Skipping invalid imported token: %s\n", validation_err->message);
+                g_clear_error (&validation_err);
+            }
+            report->skipped_invalid++;
+            continue;
+        }
+
+        json_t *obj = build_json_obj (otp->type, otp->account_name, otp->issuer,
+                                      otp->secret, otp->digits, otp->algo,
+                                      otp->period, otp->counter, otp->group);
+        if (obj == NULL) {
+            report->skipped_invalid++;
+            continue;
+        }
+
+        if (candidate_contains_object (candidate, obj)) {
+            json_decref (obj);
+            report->skipped_duplicates++;
+            continue;
+        }
+
+        json_array_append_new (candidate, obj);
+        report->added++;
+    }
+
+    return TRUE;
+}
+
+
+gboolean
+db_import_otps (DatabaseData     *db_data,
+                GSList           *otps,
+                OtpImportReport  *report,
+                GError         **err)
+{
+    ImportOtpsContext ctx = {
+        .otps = otps,
+        .report = report,
+    };
+    return db_transaction (db_data, import_otps_mutation, &ctx, err);
 }
 
 
@@ -281,18 +771,71 @@ otp_object_already_present (DatabaseData *db_data,
 }
 
 
+static void
+rebuild_objects_hash (DatabaseData *db_data)
+{
+    g_slist_free_full (db_data->objects_hash, g_free);
+    db_data->objects_hash = NULL;
+
+    if (db_data->in_memory_json_data == NULL)
+        return;
+
+    gsize index;
+    json_t *obj;
+    json_array_foreach (db_data->in_memory_json_data, index, obj) {
+        guint32 hash = json_object_get_hash (obj);
+        db_data->objects_hash = g_slist_prepend (db_data->objects_hash,
+                                                 g_memdup2 (&hash, sizeof (guint32)));
+    }
+    db_data->objects_hash = g_slist_reverse (db_data->objects_hash);
+}
+
+
+static void
+refresh_committed_snapshot (DatabaseData *db_data)
+{
+    if (db_data->committed_json_data != NULL) {
+        json_decref (db_data->committed_json_data);
+        db_data->committed_json_data = NULL;
+    }
+    if (db_data->in_memory_json_data != NULL)
+        db_data->committed_json_data = json_deep_copy (db_data->in_memory_json_data);
+}
+
+
+static void
+restore_live_from_committed (DatabaseData *db_data)
+{
+    if (db_data->committed_json_data == NULL)
+        return;
+    if (db_data->in_memory_json_data != NULL)
+        json_decref (db_data->in_memory_json_data);
+    db_data->in_memory_json_data = json_deep_copy (db_data->committed_json_data);
+    rebuild_objects_hash (db_data);
+}
+
+
 void
 add_otps_to_db_ex (GSList       *otps,
                    DatabaseData *db_data,
                    guint        *added_out,
                    guint        *skipped_out)
 {
-    json_t *obj;
     guint added = 0, skipped = 0;
-    guint list_len = g_slist_length (otps);
-    for (guint i = 0; i < list_len; i++) {
-        otp_t *otp = g_slist_nth_data (otps, i);
-        obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
+    GSList *new_hashes = NULL;
+    GSList *new_data = NULL;
+    for (GSList *l = otps; l != NULL; l = l->next) {
+        otp_t *otp = l->data;
+        GError *validation_err = NULL;
+        if (!otp_validate_import_token (otp, &validation_err)) {
+            if (validation_err != NULL) {
+                g_printerr ("Skipping invalid imported token: %s\n", validation_err->message);
+                g_clear_error (&validation_err);
+            }
+            skipped++;
+            continue;
+        }
+        json_t *obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
         guint32 hash = json_object_get_hash (obj);
         gboolean is_duplicate = FALSE;
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
@@ -302,15 +845,26 @@ add_otps_to_db_ex (GSList       *otps,
             // user-visible data loss on import.
             is_duplicate = otp_object_already_present (db_data, obj);
         }
+        if (!is_duplicate &&
+            g_slist_find_custom (new_hashes, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
+            for (GSList *staged = new_data; staged != NULL; staged = staged->next) {
+                if (json_equal ((json_t *) staged->data, obj)) {
+                    is_duplicate = TRUE;
+                    break;
+                }
+            }
+        }
         if (!is_duplicate) {
-            db_data->objects_hash = g_slist_append (db_data->objects_hash, g_memdup2 (&hash, sizeof (guint32)));
-            db_data->data_to_add = g_slist_append (db_data->data_to_add, obj);
+            new_hashes = g_slist_prepend (new_hashes, g_memdup2 (&hash, sizeof (guint32)));
+            new_data = g_slist_prepend (new_data, obj);
             added++;
         } else {
             json_decref (obj);
             skipped++;
         }
     }
+    db_data->objects_hash = g_slist_concat (db_data->objects_hash, g_slist_reverse (new_hashes));
+    db_data->data_to_add = g_slist_concat (db_data->data_to_add, g_slist_reverse (new_data));
     if (added_out != NULL) *added_out = added;
     if (skipped_out != NULL) *skipped_out = skipped;
 }
@@ -337,28 +891,46 @@ check_duplicate (gconstpointer data,
 
 
 static gint32
-get_db_version (const gchar *db_path)
+get_db_version (const gchar  *db_path,
+                GError      **err)
 {
-    GError *err = NULL;
     GFile *in_file = g_file_new_for_path (db_path);
-    GFileInputStream *in_stream = g_file_read (in_file, NULL, &err);
+    GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
     if (!in_stream) {
-        g_printerr ("%s\n", err->message);
-        cleanup_db_gfile (in_file, NULL, err);
+        cleanup_db_gfile (in_file, NULL, NULL);
         return -1;
     }
 
-    gchar *header_name = g_malloc0 (g_utf8_strlen (DB_HEADER_NAME, -1) + 1);
-    if (g_input_stream_read (G_INPUT_STREAM(in_stream), header_name, g_utf8_strlen (DB_HEADER_NAME, -1), NULL, &err) == -1) {
-        g_printerr ("%s\n", err->message);
-        g_free (header_name);
-        cleanup_db_gfile (in_file, in_stream, err);
+    guint8 header[DB_HEADER_NAME_LEN + 4] = {0};
+    gsize bytes_read = 0;
+    if (!g_input_stream_read_all (G_INPUT_STREAM(in_stream), header, sizeof (header),
+                                  &bytes_read, NULL, err)) {
+        cleanup_db_gfile (in_file, in_stream, NULL);
         return -1;
     }
 
-    gint32 version = (g_strcmp0 (DB_HEADER_NAME, header_name) == 0) ? DB_VERSION : 1;
-    g_free (header_name);
+    if (bytes_read < DB_HEADER_NAME_LEN) {
+        cleanup_db_gfile (in_file, in_stream, NULL);
+        return 1;
+    }
+    if (memcmp (DB_HEADER_NAME, header, DB_HEADER_NAME_LEN) != 0) {
+        cleanup_db_gfile (in_file, in_stream, NULL);
+        return 1;
+    }
+    if (bytes_read < sizeof (header)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database header is truncated.");
+        cleanup_db_gfile (in_file, in_stream, NULL);
+        return -1;
+    }
 
+    guint32 be_version = read_be32 (header + DB_HEADER_NAME_LEN);
+    gint32 native_version = 0;
+    memcpy (&native_version, header + DB_HEADER_NAME_LEN, sizeof (native_version));
+    gint32 version = (be_version == 3) ? 3 : native_version;
+    if (version < 2)
+        version = 2;
+    cleanup_db_gfile (in_file, in_stream, NULL);
     return version;
 }
 
@@ -490,7 +1062,7 @@ try_decrypt_v2 (DatabaseData    *db_data,
         return NULL;
     }
 
-    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size + 1, 1);
     if (!dec_buf) {
         g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
         gcry_cipher_close (hd);
@@ -554,305 +1126,401 @@ try_decrypt_v2 (DatabaseData    *db_data,
 
 
 static gchar *
+try_decrypt_v3 (DatabaseData  *db_data,
+                const guint8  *header_data,
+                gsize          header_data_size,
+                const guint8  *salt,
+                const guint8  *iv,
+                guchar        *enc_buf,
+                gsize          enc_buf_size,
+                const guchar  *tag,
+                gboolean       use_legacy_length,
+                GError       **err)
+{
+    guchar *derived_key = get_db_derived_key (db_data, DB_VERSION, salt,
+                                              use_legacy_length, err);
+    if (derived_key == NULL)
+        return NULL;
+
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, (guchar *) iv, IV_SIZE);
+    if (!hd) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Error while opening and setting the cipher data.");
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_authenticate (hd, header_data, header_data_size) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Error while processing the authenticated data.");
+        gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    gchar *dec_buf = gcry_calloc_secure (enc_buf_size + 1, 1);
+    if (!dec_buf) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Error while allocating secure memory.");
+        gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        return NULL;
+    }
+
+    if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Error while decrypting the data.");
+        gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    gpg_error_t tag_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+    if (tag_err != GPG_ERR_NO_ERROR) {
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                     "Tag verification failed: %s/%s",
+                     gcry_strsource (tag_err), gcry_strerror (tag_err));
+        gcry_cipher_close (hd);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        gcry_free (dec_buf);
+        return NULL;
+    }
+
+    gcry_cipher_close (hd);
+
+    if (!use_legacy_length) {
+        if (db_data->cached_derived_key == NULL)
+            db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+        if (db_data->cached_derived_key != NULL) {
+            memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
+            memcpy (db_data->cached_salt, salt, KDF_SALT_SIZE);
+            gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->cached_pwd_hash,
+                                 db_data->key, strlen (db_data->key));
+            db_data->has_cached_key = TRUE;
+        }
+    }
+
+    explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+    gcry_free (derived_key);
+    return dec_buf;
+}
+
+
+static gchar *
 decrypt_db (DatabaseData *db_data,
+            gsize        *dec_len,
             GError      **err)
 {
     g_return_val_if_fail (err == NULL || *err == NULL, NULL);
 
-    GFile *in_file = g_file_new_for_path (db_data->db_path);
-    GFileInputStream *in_stream = g_file_read (in_file, NULL, NULL);
-    if (!in_stream) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the database file.");
-        g_object_unref (in_file);
+    int fd = path_open_safe_regular_file (db_data->db_path, err);
+    if (fd < 0)
+        return NULL;
+
+    struct stat st;
+    if (fstat (fd, &st) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Cannot stat database file: %s", g_strerror (errno));
+        close (fd);
         return NULL;
     }
 
-    DbHeaderData_v1 *header_data_v1 = g_new0 (DbHeaderData_v1, 1);
-    DbHeaderData_v2 *header_data_v2 = g_new0 (DbHeaderData_v2, 1);
-    goffset header_data_size = (db_data->current_db_version >= 2) ? sizeof(DbHeaderData_v2) : sizeof(DbHeaderData_v1);
-
-    gssize res;
-    if (db_data->current_db_version >= 2) {
-        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v2, header_data_size, NULL, NULL);
-        db_data->argon2id_iter = header_data_v2->argon2id_iter;
-        db_data->argon2id_memcost = header_data_v2->argon2id_memcost;
-        db_data->argon2id_parallelism = header_data_v2->argon2id_parallelism;
-    } else {
-        res = g_input_stream_read (G_INPUT_STREAM(in_stream), header_data_v1, header_data_size, NULL, NULL);
-        // when decrypting v1 db, we need to set some default values for the next re-encryption
-        db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
-        db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
-        db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
+    goffset input_file_size = st.st_size;
+    if (input_file_size <= 0 || input_file_size > G_MAXSIZE) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database file size is invalid.");
+        close (fd);
+        return NULL;
     }
-    if (res == -1) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the header data.");
-        cleanup_db_gfile (in_file, in_stream, NULL);
-        free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+    if (db_data->max_file_size_from_memlock > 0 &&
+        input_file_size > (goffset) (db_data->max_file_size_from_memlock * SECMEM_SIZE_THRESHOLD_RATIO)) {
+        g_set_error (err, file_too_big_gquark (), FILE_TOO_BIG_ERRCODE, FILE_SIZE_SECMEM_MSG);
+        close (fd);
         return NULL;
     }
 
-    g_debug ("decrypt_db: db_version=%d argon2id_iter=%d argon2id_memcost=%d argon2id_parallelism=%d",
-             db_data->current_db_version,
-             db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism);
+    gsize file_size = (gsize) input_file_size;
+    guint8 *file_buf = g_malloc0 (file_size);
+    gsize total_read = 0;
+    while (total_read < file_size) {
+        ssize_t n = read (fd, file_buf + total_read, file_size - total_read);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to read database file: %s", g_strerror (errno));
+            close (fd);
+            g_free (file_buf);
+            return NULL;
+        }
+        if (n == 0) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Short read while reading database file.");
+            close (fd);
+            g_free (file_buf);
+            return NULL;
+        }
+        total_read += (gsize) n;
+    }
+    close (fd);
 
-    if (db_data->current_db_version >= 2) {
+    gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->loaded_file_digest, file_buf, file_size);
+    db_data->has_loaded_file_digest = TRUE;
+
+    gsize header_data_size = 0;
+    if (db_data->current_db_version == 1)
+        header_data_size = sizeof (DbHeaderData_v1);
+    else if (db_data->current_db_version == 2)
+        header_data_size = sizeof (DbHeaderData_v2);
+    else if (db_data->current_db_version == 3)
+        header_data_size = DB_V3_HEADER_SIZE;
+    else {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Unsupported database version %d.", db_data->current_db_version);
+        g_free (file_buf);
+        return NULL;
+    }
+
+    if (file_size < header_data_size + TAG_SIZE) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database file is too small (got %" G_GSIZE_FORMAT " bytes, need at least %" G_GSIZE_FORMAT ").",
+                     file_size, header_data_size + TAG_SIZE);
+        g_free (file_buf);
+        return NULL;
+    }
+
+    const guint8 *tag = file_buf + file_size - TAG_SIZE;
+    guchar *enc_buf = file_buf + header_data_size;
+    gsize enc_buf_size = file_size - header_data_size - TAG_SIZE;
+    if (dec_len != NULL)
+        *dec_len = enc_buf_size;
+
+    gchar *dec_buf = NULL;
+    if (db_data->current_db_version == 3) {
+        const guint8 *header = file_buf;
+        if (memcmp (header, DB_HEADER_NAME, DB_HEADER_NAME_LEN) != 0 ||
+            read_be32 (header + DB_HEADER_NAME_LEN) != 3) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Malformed database v3 header.");
+            g_free (file_buf);
+            return NULL;
+        }
+
+        const guint8 *iv = header + DB_HEADER_NAME_LEN + 4;
+        const guint8 *salt = iv + IV_SIZE;
+        db_data->argon2id_iter = (gint32) read_be32 (salt + KDF_SALT_SIZE);
+        db_data->argon2id_memcost = (gint32) read_be32 (salt + KDF_SALT_SIZE + 4);
+        db_data->argon2id_parallelism = (gint32) read_be32 (salt + KDF_SALT_SIZE + 8);
+
         if (db_data->argon2id_iter < ARGON2ID_MIN_ITER || db_data->argon2id_iter > ARGON2ID_MAX_ITER ||
             db_data->argon2id_memcost < ARGON2ID_MIN_MC || db_data->argon2id_memcost > ARGON2ID_MAX_MC ||
             db_data->argon2id_parallelism < ARGON2ID_MIN_PARAL || db_data->argon2id_parallelism > ARGON2ID_MAX_PARAL) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                          "Database header contains out-of-range Argon2id parameters "
-                         "(iter=%d, memcost=%d KiB, parallelism=%d). Refusing to open: the file may be tampered or corrupted.",
-                         db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism);
-            cleanup_db_gfile (in_file, in_stream, NULL);
-            free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+                         "(iter=%d, memcost=%d KiB, parallelism=%d).",
+                         db_data->argon2id_iter, db_data->argon2id_memcost,
+                         db_data->argon2id_parallelism);
+            g_free (file_buf);
             return NULL;
         }
-    }
 
-    goffset input_file_size = get_file_size (db_data->db_path);
-    // Validate sizes in signed math BEFORE casting/subtracting into gsize. A
-    // truncated or tampered DB with input_file_size < header_data_size+TAG_SIZE
-    // would otherwise produce a huge unsigned enc_buf_size and either OOM or
-    // crash inside g_malloc0. Reject the file cleanly instead.
-    goffset min_db_size = header_data_size + TAG_SIZE;
-    if (input_file_size < min_db_size) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                     "Database file is too small (got %" G_GOFFSET_FORMAT " bytes, need at least %" G_GOFFSET_FORMAT "). The file may be truncated or corrupted.",
-                     input_file_size, min_db_size);
-        cleanup_db_gfile (in_file, in_stream, NULL);
-        free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
-        return NULL;
-    }
-    guchar tag[TAG_SIZE];
-    if (!g_seekable_seek (G_SEEKABLE(in_stream), input_file_size - TAG_SIZE, G_SEEK_SET, NULL, NULL) ||
-        g_input_stream_read (G_INPUT_STREAM(in_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
-            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the stored tag.");
-            cleanup_db_gfile (in_file, in_stream, NULL);
-            free_db_resources(NULL, NULL, NULL, NULL, header_data_v1, header_data_v2);
+        dec_buf = try_decrypt_v3 (db_data, header, header_data_size, salt, iv,
+                                  enc_buf, enc_buf_size, tag, FALSE, err);
+    } else if (db_data->current_db_version == 2) {
+        DbHeaderData_v2 *header_data_v2 = g_new0 (DbHeaderData_v2, 1);
+        memcpy (header_data_v2, file_buf, sizeof (DbHeaderData_v2));
+        db_data->argon2id_iter = header_data_v2->argon2id_iter;
+        db_data->argon2id_memcost = header_data_v2->argon2id_memcost;
+        db_data->argon2id_parallelism = header_data_v2->argon2id_parallelism;
+
+        if (db_data->argon2id_iter < ARGON2ID_MIN_ITER || db_data->argon2id_iter > ARGON2ID_MAX_ITER ||
+            db_data->argon2id_memcost < ARGON2ID_MIN_MC || db_data->argon2id_memcost > ARGON2ID_MAX_MC ||
+            db_data->argon2id_parallelism < ARGON2ID_MIN_PARAL || db_data->argon2id_parallelism > ARGON2ID_MAX_PARAL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Database header contains out-of-range Argon2id parameters "
+                         "(iter=%d, memcost=%d KiB, parallelism=%d).",
+                         db_data->argon2id_iter, db_data->argon2id_memcost,
+                         db_data->argon2id_parallelism);
+            g_free (header_data_v2);
+            g_free (file_buf);
             return NULL;
-    }
+        }
 
-    gsize enc_buf_size = (gsize) (input_file_size - header_data_size - TAG_SIZE);
-    guchar *enc_buf = g_malloc0 (enc_buf_size);
-    if (!g_seekable_seek (G_SEEKABLE(in_stream), header_data_size, G_SEEK_SET, NULL, NULL) ||
-        g_input_stream_read (G_INPUT_STREAM(in_stream), enc_buf, enc_buf_size, NULL, NULL) == -1) {
-            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to read the encrypted data.");
-            cleanup_db_gfile (in_file, in_stream, NULL);
-            free_db_resources(NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
-            return NULL;
-    }
-
-    g_object_unref (in_stream);
-    g_object_unref (in_file);
-
-    if (db_data->current_db_version >= 2) {
-        // Modern path: try the corrected (strlen) password length first.
-        g_debug ("decrypt_db: v2 attempt with corrected length (use_legacy_length=FALSE)");
-        gchar *dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, FALSE, err);
-
+        dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, FALSE, err);
         if (dec_buf == NULL && err != NULL && *err != NULL && (*err)->domain == bad_tag_gquark ()) {
-            // BAD_TAG with the corrected length: the DB may have been written
-            // with the legacy g_utf8_strlen byte length (which truncated multi-byte
-            // passwords). Skip the retry for pure-ASCII passwords where strlen and
-            // g_utf8_strlen always agree — the second attempt would just waste a
-            // ~150-300ms Argon2id derivation on a guaranteed-identical result.
             gsize byte_len = strlen (db_data->key);
             gsize char_len = (gsize) g_utf8_strlen (db_data->key, -1);
-            g_debug ("decrypt_db: v2 BAD_TAG with corrected length; password ascii_only=%s (byte_len==char_len)",
-                     (byte_len == char_len) ? "TRUE" : "FALSE");
             if (byte_len != char_len) {
                 g_clear_error (err);
-                g_debug ("decrypt_db: v2 retry with legacy length (use_legacy_length=TRUE)");
                 dec_buf = try_decrypt_v2 (db_data, header_data_v2, enc_buf, enc_buf_size, tag, TRUE, err);
-                if (dec_buf != NULL) {
+                if (dec_buf != NULL)
                     db_data->needs_legacy_kdf_migration = TRUE;
-                    g_debug ("decrypt_db: v2 legacy-length retry SUCCEEDED, scheduling KDF migration");
-                } else {
-                    g_debug ("decrypt_db: v2 legacy-length retry also FAILED");
-                }
-            } else {
-                g_debug ("decrypt_db: v2 retry skipped (password is ASCII-only); rejecting as BAD_TAG");
             }
-        } else if (dec_buf != NULL) {
-            g_debug ("decrypt_db: v2 SUCCESS with corrected length");
         }
+        g_free (header_data_v2);
+    } else {
+        DbHeaderData_v1 *header_data_v1 = g_new0 (DbHeaderData_v1, 1);
+        memcpy (header_data_v1, file_buf, sizeof (DbHeaderData_v1));
+        db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
+        db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
+        db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
 
-        free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
-        return dec_buf;
-    }
-
-    g_debug ("decrypt_db: v1 (PBKDF2) path with legacy length");
-
-    // v1 (PBKDF2) path: always written with the legacy length, so decrypt with
-    // that. The caller migrates v1 -> v2 right after, which is when the
-    // corrected length starts being used.
-    guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version, header_data_v1->salt, FALSE, err);
-    if (derived_key == NULL) {
-        free_db_resources (NULL, NULL, enc_buf, NULL, header_data_v1, header_data_v2);
-        return NULL;
-    }
-
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
-    if (!hd) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while opening and setting the cipher data.");
-        free_db_resources (NULL, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return NULL;
-    }
-
-    if (gcry_cipher_authenticate (hd, header_data_v1, header_data_size) != GPG_ERR_NO_ERROR) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data.");
-        free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return NULL;
-    }
-
-    gchar *dec_buf = gcry_calloc_secure (enc_buf_size, 1);
-    if (!dec_buf) {
-        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE, "Error while allocating secure memory.");
-        free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-        return NULL;
-    }
-
-    if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while decrypting the data.");
-        free_db_resources (hd, derived_key, enc_buf, dec_buf, header_data_v1, header_data_v2);
-        return NULL;
-    }
-
-    gpg_error_t v1_tag_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
-    if (v1_tag_err != GPG_ERR_NO_ERROR) {
-        if (gcry_err_code (v1_tag_err) == GPG_ERR_CHECKSUM) {
-            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE, "The tag doesn't match. Either the password is wrong or the file is corrupted.");
-        } else {
-            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
-                         "Tag verification failed: %s/%s",
-                         gcry_strsource (v1_tag_err), gcry_strerror (v1_tag_err));
+        guchar *derived_key = get_db_derived_key (db_data, db_data->current_db_version,
+                                                  header_data_v1->salt, FALSE, err);
+        if (derived_key != NULL) {
+            gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data_v1->iv, IV_SIZE);
+            if (hd == NULL) {
+                g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "Error while opening and setting the cipher data.");
+            } else if (gcry_cipher_authenticate (hd, header_data_v1, header_data_size) != GPG_ERR_NO_ERROR) {
+                g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "Error while processing the authenticated data.");
+            } else {
+                dec_buf = gcry_calloc_secure (enc_buf_size + 1, 1);
+                if (dec_buf == NULL) {
+                    g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                                 "Error while allocating secure memory.");
+                } else if (gcry_cipher_decrypt (hd, dec_buf, enc_buf_size, enc_buf, enc_buf_size) != GPG_ERR_NO_ERROR) {
+                    g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                                 "Error while decrypting the data.");
+                    gcry_free (dec_buf);
+                    dec_buf = NULL;
+                } else {
+                    gpg_error_t tag_err = gcry_cipher_checktag (hd, tag, TAG_SIZE);
+                    if (tag_err != GPG_ERR_NO_ERROR) {
+                        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                                     "Tag verification failed: %s/%s",
+                                     gcry_strsource (tag_err), gcry_strerror (tag_err));
+                        gcry_free (dec_buf);
+                        dec_buf = NULL;
+                    }
+                }
+            }
+            if (hd != NULL)
+                gcry_cipher_close (hd);
+            explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+            gcry_free (derived_key);
         }
-        free_db_resources (hd, derived_key, enc_buf, dec_buf, header_data_v1, header_data_v2);
-        return NULL;
+        g_free (header_data_v1);
     }
 
-    free_db_resources (hd, derived_key, enc_buf, NULL, header_data_v1, header_data_v2);
-
+    g_free (file_buf);
     return dec_buf;
 }
 
 
-static void
+static gboolean
 encrypt_db (DatabaseData *db_data,
+            json_t       *json_data,
             GError      **err)
 {
-    g_return_if_fail (err == NULL || *err == NULL);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
 
-    DbHeaderData_v2 *header_data = g_new0 (DbHeaderData_v2, 1);
+#ifdef OTPCLIENT_TESTING
+    if (test_fail_encrypt) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Injected encrypt failure.");
+        return FALSE;
+    }
+#endif
 
-    memcpy (header_data->header_name, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
-    header_data->db_version = DB_VERSION;
-    gcry_create_nonce (header_data->iv, IV_SIZE);
+    guint8 header_data[DB_V3_HEADER_SIZE] = {0};
+    memcpy (header_data, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
+    write_be32 (header_data + DB_HEADER_NAME_LEN, DB_VERSION);
+    guint8 *iv = header_data + DB_HEADER_NAME_LEN + 4;
+    guint8 *salt = iv + IV_SIZE;
+    gcry_create_nonce (iv, IV_SIZE);
     // Reuse the previously-derived salt when we have a cached key so the KDF
     // step is a memcpy instead of a 150 ms Argon2id derivation. The per-save
     // random IV above guarantees AES-GCM nonce uniqueness independently of
     // salt reuse. db_invalidate_kdf_cache() is called on password change to
     // force a fresh salt + key on the next save.
     if (db_data->has_cached_key)
-        memcpy (header_data->salt, db_data->cached_salt, KDF_SALT_SIZE);
+        memcpy (salt, db_data->cached_salt, KDF_SALT_SIZE);
     else
-        gcry_create_nonce (header_data->salt, KDF_SALT_SIZE);
-    header_data->argon2id_iter = db_data->argon2id_iter;
-    header_data->argon2id_memcost = db_data->argon2id_memcost;
-    header_data->argon2id_parallelism = db_data->argon2id_parallelism;
-
-    GFile *out_file = g_file_new_for_path (db_data->db_path);
-    GFileOutputStream *out_stream = g_file_replace (out_file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, NULL);
-    if (out_stream == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to replace existing file");
-        g_object_unref (out_file);
-        g_free (header_data);
-        return;
-    }
-
-    if (g_output_stream_write (G_OUTPUT_STREAM (out_stream), header_data, sizeof(DbHeaderData_v2), NULL, NULL) == -1) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to write the header data to file");
-        cleanup_db_gfile (out_file, out_stream, NULL);
-        g_free (header_data);
-        return;
-    }
+        gcry_create_nonce (salt, KDF_SALT_SIZE);
+    write_be32 (salt + KDF_SALT_SIZE, (guint32) db_data->argon2id_iter);
+    write_be32 (salt + KDF_SALT_SIZE + 4, (guint32) db_data->argon2id_memcost);
+    write_be32 (salt + KDF_SALT_SIZE + 8, (guint32) db_data->argon2id_parallelism);
 
     // encrypt_db unconditionally uses the corrected (strlen) password byte length.
     // The legacy g_utf8_strlen length is only used on the decrypt retry path
     // when reading older databases (see decrypt_db / try_decrypt_v2).
-    guchar *derived_key = get_db_derived_key (db_data, header_data->db_version, header_data->salt, FALSE, err);
+    guchar *derived_key = get_db_derived_key (db_data, DB_VERSION, salt, FALSE, err);
     if (derived_key == NULL) {
-        cleanup_db_gfile (out_file, out_stream, NULL);
-        g_free (header_data);
-        return;
+        return FALSE;
     }
 
-    gchar *in_memory_dumped_data = json_dumps (db_data->in_memory_json_data, JSON_COMPACT);
-    if (in_memory_dumped_data == NULL) {
+    gsize input_data_len = json_dumpb (json_data, NULL, 0, JSON_COMPACT);
+    if (input_data_len == 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
-        cleanup_db_gfile (out_file, out_stream, NULL);
         explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
-        g_free (header_data);
-        return;
+        return FALSE;
     }
-    gsize input_data_len = strlen (in_memory_dumped_data) + 1;
+    gchar *in_memory_dumped_data = gcry_calloc_secure (input_data_len, 1);
+    if (in_memory_dumped_data == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Failed to allocate secure memory for serialized database.");
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        return FALSE;
+    }
+    if (json_dumpb (json_data, in_memory_dumped_data, input_data_len, JSON_COMPACT) == (size_t) -1) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
+        gcry_free (in_memory_dumped_data);
+        explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+        gcry_free (derived_key);
+        return FALSE;
+    }
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
     // C3 fix: in_memory_dumped_data holds the plaintext database (every secret).
     // Every error path below MUST free it; previously only the success path did,
     // leaving plaintext in secure memory until process exit on encrypt failures.
-    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, header_data->iv, IV_SIZE);
+    gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, iv, IV_SIZE);
     if (hd == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to open the cipher and set the data.");
-        cleanup_db_gfile (out_file, out_stream, NULL);
         gcry_free (in_memory_dumped_data);
-        free_db_resources (NULL, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
+        free_db_resources (NULL, derived_key, enc_buffer, NULL, NULL, NULL);
+        return FALSE;
     }
 
-    if (gcry_cipher_authenticate (hd, header_data, sizeof(DbHeaderData_v2)) != GPG_ERR_NO_ERROR) {
+    if (gcry_cipher_authenticate (hd, header_data, sizeof (header_data)) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while processing the authenticated data");
-        cleanup_db_gfile (out_file, out_stream, NULL);
         gcry_free (in_memory_dumped_data);
-        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
+        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);
+        return FALSE;
     }
 
     if (gcry_cipher_encrypt (hd, enc_buffer, input_data_len, in_memory_dumped_data, input_data_len) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the data.");
-        cleanup_db_gfile (out_file, out_stream, NULL);
         gcry_free (in_memory_dumped_data);
-        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
+        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);
+        return FALSE;
     }
     gcry_free (in_memory_dumped_data);
-
-    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buffer, input_data_len, NULL, NULL) == -1) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing encrypted buffer to file");
-        cleanup_db_gfile (out_file, out_stream, NULL);
-        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
-    }
 
     guchar tag[TAG_SIZE];
     if (gcry_cipher_gettag (hd, tag, TAG_SIZE) != GPG_ERR_NO_ERROR) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error while getting the tag.");
-        cleanup_db_gfile (out_file, out_stream, NULL);
-        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
-    }
-    if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, TAG_SIZE, NULL, NULL) == -1) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed while writing tag data to file");
-        cleanup_db_gfile (out_file, out_stream, NULL);
-        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-        return;
+        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);
+        return FALSE;
     }
 
-    // Wipe the just-written tag from the stack: not strictly secret in AES-GCM,
-    // but defense-in-depth, an inspection of the freed stack page won't recover
-    // the value-commitment.
+    gboolean wrote = atomic_write_database (db_data->db_path, header_data, sizeof (header_data),
+                                            enc_buffer, input_data_len, tag, err);
     explicit_bzero (tag, TAG_SIZE);
+    if (!wrote) {
+        free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);
+        return FALSE;
+    }
 
     // Mirror try_decrypt_v2's cache populate so subsequent operations under
     // the same (password, salt) skip the 150 ms Argon2id derivation. Without
@@ -862,31 +1530,17 @@ encrypt_db (DatabaseData *db_data,
         db_data->cached_derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
     if (db_data->cached_derived_key != NULL) {
         memcpy (db_data->cached_derived_key, derived_key, ARGON2ID_KEYLEN);
-        memcpy (db_data->cached_salt, header_data->salt, KDF_SALT_SIZE);
+        memcpy (db_data->cached_salt, salt, KDF_SALT_SIZE);
         gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->cached_pwd_hash,
                              db_data->key, strlen (db_data->key));
         db_data->has_cached_key = TRUE;
     }
 
-    free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, header_data);
-
-    /* Flush and sync to disk before cleanup to prevent data loss on power failure */
-    if (!g_output_stream_close (G_OUTPUT_STREAM (out_stream), NULL, NULL)) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to flush database file to disk");
-    }
-    int fd = g_open (db_data->db_path, O_RDONLY, 0);
-    if (fd >= 0) {
-        if (fsync (fd) != 0) {
-            g_warning ("fsync(%s) failed: %s", db_data->db_path, g_strerror (errno));
-        }
-        close (fd);
-    }
-
-    cleanup_db_gfile (out_file, out_stream, NULL);
+    free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);
 
     db_data->current_db_version = DB_VERSION;
-    // The just-written file uses the corrected password byte length.
     db_data->needs_legacy_kdf_migration = FALSE;
+    return TRUE;
 }
 
 
@@ -901,9 +1555,10 @@ add_to_json (gpointer list_elem,
 }
 
 
-static void
+static gboolean
 perform_backup_restore (const gchar *path,
-                        gboolean     is_backup)
+                        gboolean     is_backup,
+                        GError     **out_err)
 {
     GError *err = NULL;
     gchar *src_path = is_backup ? g_strdup (path) : g_strconcat (path, ".bak", NULL);
@@ -920,15 +1575,19 @@ perform_backup_restore (const gchar *path,
     umask (old_umask);
 
     if (!copied) {
-        g_printerr ("Couldn't %s: %s\n", is_backup ? "create the backup" : "restore the backup", err->message);
-        g_clear_error (&err);
+        g_propagate_prefixed_error (out_err, err, "Couldn't %s: ",
+                                    is_backup ? "create the backup" : "restore the backup");
+        err = NULL;
     } else {
         /* Belt-and-braces: if the destination already existed with broader
          * perms, g_file_copy preserves them. Force 0600 unconditionally. */
         if (g_chmod (dst_path, 0600) != 0) {
-            g_warning ("Failed to chmod 0600 on %s: %s", dst_path, g_strerror (errno));
+            g_set_error (out_err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to chmod 0600 on %s: %s", dst_path, g_strerror (errno));
+            copied = FALSE;
+        } else {
+            g_print("%s\n", is_backup ? _("Backup copy successfully created.") : _("Backup copy successfully restored."));
         }
-        g_print("%s\n", is_backup ? _("Backup copy successfully created.") : _("Backup copy successfully restored."));
     }
 
     g_free (src_path);
@@ -936,13 +1595,15 @@ perform_backup_restore (const gchar *path,
 
     g_object_unref (src);
     g_object_unref (dst);
+    return copied;
 }
 
 
-static void
-backup_db (const gchar *path)
+static gboolean
+backup_db (const gchar *path,
+           GError     **err)
 {
-    perform_backup_restore (path, TRUE);
+    return perform_backup_restore (path, TRUE, err);
 }
 
 
@@ -979,10 +1640,70 @@ db_copy_to (const gchar *src_path,
 }
 
 
-static void
-restore_db (const gchar *path)
+static gboolean
+compute_file_digest (const gchar *path,
+                     guint8       digest[32],
+                     GError     **err)
 {
-    perform_backup_restore (path, FALSE);
+    int fd = path_open_safe_regular_file (path, err);
+    if (fd < 0)
+        return FALSE;
+
+    struct stat st;
+    if (fstat (fd, &st) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Cannot stat '%s': %s", path, g_strerror (errno));
+        close (fd);
+        return FALSE;
+    }
+    if (st.st_size < 0 || st.st_size > G_MAXSIZE) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "File size for '%s' is invalid.", path);
+        close (fd);
+        return FALSE;
+    }
+
+    gsize size = (gsize) st.st_size;
+    g_autofree guint8 *buf = g_malloc0 (size > 0 ? size : 1);
+    gsize total = 0;
+    while (total < size) {
+        ssize_t n = read (fd, buf + total, size - total);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to read '%s': %s", path, g_strerror (errno));
+            close (fd);
+            return FALSE;
+        }
+        if (n == 0) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Short read while hashing '%s'.", path);
+            close (fd);
+            return FALSE;
+        }
+        total += (gsize) n;
+    }
+    close (fd);
+
+    gcry_md_hash_buffer (GCRY_MD_SHA256, digest, buf, size);
+    return TRUE;
+}
+
+
+static gboolean
+loaded_file_digest_matches (DatabaseData *db_data,
+                            GError      **err)
+{
+    guint8 current_digest[32];
+    if (!compute_file_digest (db_data->db_path, current_digest, err))
+        return FALSE;
+    if (memcmp (current_digest, db_data->loaded_file_digest, sizeof (current_digest)) != 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database changed on disk after it was loaded; refusing to overwrite newer data.");
+        return FALSE;
+    }
+    return TRUE;
 }
 
 

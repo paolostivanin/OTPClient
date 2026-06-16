@@ -17,7 +17,10 @@ typedef struct
 
 static LockData *lock_data = NULL;
 
-static void on_unlock_password (const gchar *password, gpointer user_data);
+static gboolean on_unlock_password (const gchar  *current_password,
+                                    const gchar  *password,
+                                    gchar       **error_message,
+                                    gpointer      user_data);
 
 static void
 on_unlock_dialog_closed (AdwDialog *dialog,
@@ -77,15 +80,18 @@ lock_app_present_unlock_dialog (OTPClientApplication *app)
     present_unlock_dialog (app);
 }
 
-static void
-on_unlock_password (const gchar *password,
-                    gpointer     user_data)
+static gboolean
+on_unlock_password (const gchar  *current_password,
+                    const gchar  *password,
+                    gchar       **error_message,
+                    gpointer      user_data)
 {
+    (void) current_password;
     OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
     DatabaseData *db_data = otpclient_application_get_db_data (app);
 
     if (password == NULL || db_data == NULL || db_data->key == NULL)
-        return;
+        return FALSE;
 
     gsize pwd_len = strlen (password);
     gsize key_len = strlen (db_data->key);
@@ -93,11 +99,14 @@ on_unlock_password (const gchar *password,
     gsize cmp_len = (pwd_len < key_len) ? pwd_len : key_len;
     for (gsize i = 0; i < cmp_len; i++)
         result |= ((const volatile guchar *)password)[i] ^ ((const volatile guchar *)db_data->key)[i];
-    if (result == 0)
+    if (result == 0) {
         lock_app_unlock (app);
-    /* On wrong password, the "closed" signal handler re-presents the dialog
-     * once the old one finishes closing. Calling present_unlock_dialog() here
-     * would race with that and pop two dialogs. */
+        return TRUE;
+    }
+
+    if (error_message != NULL)
+        *error_message = g_strdup (_("Password is incorrect"));
+    return FALSE;
 }
 
 void
@@ -266,4 +275,3 @@ lock_app_cleanup (OTPClientApplication *app)
     g_free (lock_data);
     lock_data = NULL;
 }
-

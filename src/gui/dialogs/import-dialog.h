@@ -11,7 +11,9 @@ G_DECLARE_FINAL_TYPE (ImportDialog, import_dialog, IMPORT, DIALOG, AdwDialog)
 
 typedef struct {
     guint added;       /* tokens appended to the database */
-    guint skipped;     /* duplicates ignored */
+    guint skipped;     /* duplicates or invalid records ignored */
+    guint skipped_duplicates;
+    guint skipped_invalid;
 } ImportSummary;
 
 typedef void (*ImportCallback) (const ImportSummary *summary, gpointer user_data);

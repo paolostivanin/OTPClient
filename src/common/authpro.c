@@ -1,6 +1,7 @@
 #define _DEFAULT_SOURCE
 #define _GNU_SOURCE
 #include <string.h>
+#include <stdlib.h>
 #include <glib.h>
 #include <gio/gio.h>
 #include <gcrypt.h>
@@ -237,11 +238,11 @@ export_authpro (const gchar *export_path,
         guchar tag[AUTHPRO_SALT_TAG];
         gcry_cipher_gettag (hd, tag, AUTHPRO_SALT_TAG);
 
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), header, 16, NULL, &err) == -1 ||
-            g_output_stream_write (G_OUTPUT_STREAM(out_stream), salt, AUTHPRO_SALT_TAG, NULL, &err) == -1 ||
-            g_output_stream_write (G_OUTPUT_STREAM(out_stream), iv, AUTHPRO_IV, NULL, &err) == -1 ||
-            g_output_stream_write (G_OUTPUT_STREAM(out_stream), enc_buf, json_data_size, NULL, &err) == -1 ||
-            g_output_stream_write (G_OUTPUT_STREAM(out_stream), tag, AUTHPRO_SALT_TAG, NULL, &err) == -1) {
+        if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), header, 16, &err) ||
+            !output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), salt, AUTHPRO_SALT_TAG, &err) ||
+            !output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), iv, AUTHPRO_IV, &err) ||
+            !output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), enc_buf, json_data_size, &err) ||
+            !output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), tag, AUTHPRO_SALT_TAG, &err)) {
             // err is already populated by g_output_stream_write; don't re-set.
             explicit_bzero (tag, AUTHPRO_SALT_TAG);
             goto end;
@@ -249,7 +250,7 @@ export_authpro (const gchar *export_path,
         explicit_bzero (tag, AUTHPRO_SALT_TAG);
     } else {
         // write the plain json to disk
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err) == -1) {
+        if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, &err)) {
             // err is set by g_output_stream_write.
             goto end;
         }
@@ -282,7 +283,13 @@ get_otps_from_encrypted_backup (const gchar       *path,
                                 GError           **err)
 {
     guchar header[16];
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), header, 16, NULL, err) == -1) {
+    gsize bytes_done = 0;
+    if (!g_input_stream_read_all (G_INPUT_STREAM (in_stream), header, sizeof (header),
+                                  &bytes_done, NULL, err) ||
+        bytes_done != sizeof (header)) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Short read while reading Authenticator Pro header.");
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;

@@ -3,7 +3,9 @@
 #include "manual-add-dialog.h"
 #include "common.h"
 #include "db-common.h"
+#include "otp-validation.h"
 #include "parse-uri.h"
+#include "../otpclient-application.h"
 
 struct _ManualAddDialog
 {
@@ -152,6 +154,18 @@ on_add_clicked (GtkButton       *button,
 {
     (void) button;
 
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app)
+        : NULL;
+    if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+    {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("The active database changed. Reopen this dialog before saving."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
+
     const gchar *label_text = gtk_editable_get_text (GTK_EDITABLE (self->label_row));
     const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (self->issuer_row));
     const gchar *secret = gtk_editable_get_text (GTK_EDITABLE (self->secret_row));
@@ -178,26 +192,35 @@ on_add_clicked (GtkButton       *button,
     const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
     const gchar *group = (group_text != NULL && group_text[0] != '\0') ? group_text : NULL;
 
-    json_t *obj = build_json_obj (type, label_text, issuer, secret,
-                                   digits, algo, period, counter, group);
+    otp_t otp = {
+        .type = (gchar *) type,
+        .account_name = (gchar *) label_text,
+        .issuer = (gchar *) issuer,
+        .secret = (gchar *) secret,
+        .digits = digits,
+        .algo = (gchar *) algo,
+        .group = (gchar *) group,
+    };
+    if (g_ascii_strcasecmp (type, "HOTP") == 0)
+        otp.counter = counter;
+    else
+        otp.period = period;
+    GSList otp_list = {
+        .data = &otp,
+        .next = NULL,
+    };
 
-    guint32 hash = json_object_get_hash (obj);
-    if (g_slist_find_custom (self->db_data->objects_hash,
-                             GUINT_TO_POINTER (hash),
-                             check_duplicate) != NULL)
+    GError *err = NULL;
+    if (!otp_validate_import_token (&otp, &err))
     {
-        gtk_label_set_text (GTK_LABEL (self->error_label), _("This token already exists"));
+        gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
         gtk_widget_set_visible (self->error_label, TRUE);
-        json_decref (obj);
+        g_clear_error (&err);
         return;
     }
 
-    self->db_data->objects_hash = g_slist_append (self->db_data->objects_hash,
-                                                   g_memdup2 (&hash, sizeof (guint32)));
-    self->db_data->data_to_add = g_slist_append (self->db_data->data_to_add, obj);
-
-    GError *err = NULL;
-    update_db (self->db_data, &err);
+    OtpImportReport report = {0, 0, 0};
+    db_import_otps (self->db_data, &otp_list, &report, &err);
     if (err != NULL)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
@@ -206,12 +229,14 @@ on_add_clicked (GtkButton       *button,
         return;
     }
 
-    /* data_to_add is consumed inside update_db; just refresh in-memory state. */
-    reload_db (self->db_data, &err);
-    if (err != NULL)
+    if (report.added == 0)
     {
-        g_warning ("Failed to reload db: %s", err->message);
-        g_clear_error (&err);
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            report.skipped_duplicates > 0
+                                ? _("This token already exists")
+                                : _("Token data is invalid"));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
     }
 
     adw_dialog_close (ADW_DIALOG (self));
@@ -223,6 +248,9 @@ on_add_clicked (GtkButton       *button,
 static void
 manual_add_dialog_dispose (GObject *object)
 {
+    ManualAddDialog *self = MANUAL_ADD_DIALOG (object);
+    g_clear_pointer (&self->db_data, database_data_free);
+
     G_OBJECT_CLASS (manual_add_dialog_parent_class)->dispose (object);
 }
 
@@ -250,7 +278,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
                                           "content-height", 700,
                                           NULL);
 
-    self->db_data = db_data;
+    self->db_data = database_data_ref (db_data);
     self->callback = callback;
     self->callback_data = user_data;
 

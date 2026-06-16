@@ -6,6 +6,7 @@
 #include "db-common.h"
 #include "common.h"
 #include "file-size.h"
+#include "../otpclient-application.h"
 
 struct _ImportDialog
 {
@@ -104,11 +105,24 @@ do_import (ImportDialog *self)
         return;
     }
 
-    ImportSummary summary = {0, 0};
+    ImportSummary summary = {0, 0, 0, 0};
     if (otps != NULL)
     {
-        add_otps_to_db_ex (otps, self->db_data, &summary.added, &summary.skipped);
-        update_db (self->db_data, &err);
+        GApplication *default_app = g_application_get_default ();
+        OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+            ? OTPCLIENT_APPLICATION (default_app)
+            : NULL;
+        if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+        {
+            gtk_label_set_text (GTK_LABEL (self->error_label),
+                                _("The active database changed. Reopen this dialog before importing."));
+            gtk_widget_set_visible (self->error_label, TRUE);
+            free_otps_gslist (otps, g_slist_length (otps));
+            return;
+        }
+
+        OtpImportReport report = {0, 0, 0};
+        db_import_otps (self->db_data, otps, &report, &err);
         if (err != NULL)
         {
             gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
@@ -121,15 +135,13 @@ do_import (ImportDialog *self)
             return;
         }
 
+        summary.added = report.added;
+        summary.skipped_duplicates = report.skipped_duplicates;
+        summary.skipped_invalid = report.skipped_invalid;
+        summary.skipped = report.skipped_duplicates + report.skipped_invalid;
+
         guint list_len = g_slist_length (otps);
         free_otps_gslist (otps, list_len);
-
-        reload_db (self->db_data, &err);
-        if (err != NULL)
-        {
-            g_warning ("Failed to reload db: %s", err->message);
-            g_clear_error (&err);
-        }
     }
 
     adw_dialog_close (ADW_DIALOG (self));
@@ -143,7 +155,7 @@ on_file_dialog_open_complete (GObject      *source,
                               GAsyncResult *result,
                               gpointer      user_data)
 {
-    ImportDialog *self = IMPORT_DIALOG (user_data);
+    g_autoptr (ImportDialog) self = IMPORT_DIALOG (user_data);
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
 
     GError *err = NULL;
@@ -193,7 +205,7 @@ on_import_clicked (GtkButton    *button,
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_open (dialog, win, NULL,
-                          on_file_dialog_open_complete, self);
+                          on_file_dialog_open_complete, g_object_ref (self));
     g_object_unref (dialog);
 }
 
@@ -202,6 +214,7 @@ import_dialog_finalize (GObject *object)
 {
     ImportDialog *self = IMPORT_DIALOG (object);
     g_free (self->selected_file);
+    g_clear_pointer (&self->db_data, database_data_free);
     if (self->import_password != NULL) {
         explicit_bzero (self->import_password, strlen (self->import_password));
         gcry_free (self->import_password);
@@ -234,7 +247,7 @@ import_dialog_new (DatabaseData   *db_data,
                                        "content-height", 360,
                                        NULL);
 
-    self->db_data = db_data;
+    self->db_data = database_data_ref (db_data);
     self->parent_widget = parent;
     self->callback = callback;
     self->callback_data = user_data;

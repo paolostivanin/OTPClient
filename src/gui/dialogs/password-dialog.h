@@ -15,8 +15,10 @@ typedef enum
     PASSWORD_MODE_CHANGE
 } PasswordDialogMode;
 
-typedef void (*PasswordDialogCallback) (const gchar *password,
-                                        gpointer     user_data);
+typedef gboolean (*PasswordDialogCallback) (const gchar *current_password,
+                                            const gchar *password,
+                                            gchar      **error_message,
+                                            gpointer     user_data);
 
 PasswordDialog *password_dialog_new           (PasswordDialogMode    mode,
                                                PasswordDialogCallback callback,

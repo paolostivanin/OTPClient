@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <cotp.h>
 #include "gcrypt.h"
 #include "jansson.h"
@@ -128,6 +129,21 @@ hexstr_to_bytes (const gchar *hexstr)
 }
 
 
+guchar *
+hexstr_to_bytes_exact (const gchar *hexstr,
+                       gsize        expected_len)
+{
+    if (hexstr == NULL)
+        return NULL;
+
+    size_t hex_len = strlen (hexstr);
+    if (expected_len > (G_MAXSIZE / 2) || hex_len != expected_len * 2)
+        return NULL;
+
+    return hexstr_to_bytes (hexstr);
+}
+
+
 gchar *
 bytes_to_hexstr (const guchar *data, size_t datalen)
 {
@@ -240,14 +256,23 @@ get_data_from_encrypted_backup (const gchar       *path,
     }
 
     g_autofree guchar *salt = g_malloc0 (salt_size);
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), salt, salt_size, NULL, err) == -1) {
+    gsize bytes_done = 0;
+    if (!g_input_stream_read_all (G_INPUT_STREAM (in_stream), salt, salt_size,
+                                  &bytes_done, NULL, err) ||
+        bytes_done != (gsize) salt_size) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Short read while reading encrypted backup salt.");
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
     }
 
     g_autofree guchar *iv = g_malloc0 (iv_size);
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), iv, iv_size, NULL, err) == -1) {
+    if (!g_input_stream_read_all (G_INPUT_STREAM (in_stream), iv, iv_size,
+                                  &bytes_done, NULL, err) ||
+        bytes_done != (gsize) iv_size) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Short read while reading encrypted backup IV.");
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
@@ -290,7 +315,11 @@ get_data_from_encrypted_backup (const gchar       *path,
         return NULL;
     }
     g_autofree guchar *tag = g_malloc0 (tag_size);
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), tag, tag_size, NULL, err) == -1) {
+    if (!g_input_stream_read_all (G_INPUT_STREAM (in_stream), tag, tag_size,
+                                  &bytes_done, NULL, err) ||
+        bytes_done != (gsize) tag_size) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Short read while reading encrypted backup tag.");
         g_object_unref (in_stream);
         g_object_unref (in_file);
         return NULL;
@@ -303,7 +332,11 @@ get_data_from_encrypted_backup (const gchar       *path,
         g_free (enc_buf);
         return NULL;
     }
-    if (g_input_stream_read (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size, NULL, err) == -1) {
+    if (!g_input_stream_read_all (G_INPUT_STREAM (in_stream), enc_buf, enc_buf_size,
+                                  &bytes_done, NULL, err) ||
+        bytes_done != enc_buf_size) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Short read while reading encrypted backup payload.");
         g_object_unref (in_stream);
         g_object_unref (in_file);
         g_free (enc_buf);
@@ -331,7 +364,7 @@ get_data_from_encrypted_backup (const gchar       *path,
         return NULL;
     }
 
-    gchar *decrypted_data = gcry_calloc_secure (enc_buf_size, 1);
+    gchar *decrypted_data = gcry_calloc_secure (enc_buf_size + 1, 1);
     if (decrypted_data == NULL) {
         g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
                      "Couldn't allocate %" G_GSIZE_FORMAT " bytes of secure memory for decryption.",
@@ -433,11 +466,12 @@ json_object_get_hash (json_t *obj)
 
 void
 free_otps_gslist (GSList *otps,
-                  guint   list_len)
+                  guint   list_len G_GNUC_UNUSED)
 {
-    otp_t *otp_data;
-    for (guint i = 0; i < list_len; i++) {
-        otp_data = g_slist_nth_data (otps, i);
+    for (GSList *l = otps; l != NULL; l = l->next) {
+        otp_t *otp_data = l->data;
+        if (otp_data == NULL)
+            continue;
         g_free (otp_data->type);
         g_free (otp_data->algo);
         g_free (otp_data->account_name);
@@ -468,13 +502,13 @@ build_json_obj (const gchar *type,
     // these literals have no local handle to decref afterwards, so the extra
     // reference would leak when the parent object is eventually freed.
     json_t *obj = json_object ();
-    json_object_set_new (obj, "type", json_string (type));
-    json_object_set_new (obj, "label", json_string (acc_label));
-    json_object_set_new (obj, "issuer", json_string (acc_iss));
+    json_object_set_new (obj, "type", json_string (type != NULL ? type : ""));
+    json_object_set_new (obj, "label", json_string (acc_label != NULL ? acc_label : ""));
+    json_object_set_new (obj, "issuer", json_string (acc_iss != NULL ? acc_iss : ""));
     json_object_set_new (obj, "digits", json_integer (digits));
     json_object_set_new (obj, "algo", json_string (algo));
 
-    json_object_set_new (obj, "secret", json_string (acc_key));
+    json_object_set_new (obj, "secret", json_string (acc_key != NULL ? acc_key : ""));
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         json_object_set_new (obj, "period", json_integer (period));
@@ -558,6 +592,25 @@ is_secmem_available (gsize    required_size,
         return FALSE;
     }
     gcry_free (test);
+    return TRUE;
+}
+
+
+gboolean
+output_stream_write_all_exact (GOutputStream  *stream,
+                               const void     *buffer,
+                               gsize           count,
+                               GError        **err)
+{
+    gsize bytes_written = 0;
+    if (!g_output_stream_write_all (stream, buffer, count, &bytes_written, NULL, err))
+        return FALSE;
+    if (bytes_written != count) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Short write: wrote %" G_GSIZE_FORMAT " of %" G_GSIZE_FORMAT " bytes.",
+                     bytes_written, count);
+        return FALSE;
+    }
     return TRUE;
 }
 

@@ -49,6 +49,9 @@ gint              get_algo_int_from_str          (const gchar        *algo);
 
 guchar           *hexstr_to_bytes                (const gchar        *hexstr);
 
+guchar           *hexstr_to_bytes_exact          (const gchar        *hexstr,
+                                                  gsize               expected_len);
+
 gchar            *bytes_to_hexstr                (const guchar       *data,
                                                   size_t              datalen);
 
@@ -92,6 +95,11 @@ GKeyFile         *get_kf_ptr                     (void);
 
 gboolean          is_secmem_available            (gsize               required_size,
                                                   GError            **err);
+
+gboolean          output_stream_write_all_exact   (GOutputStream      *stream,
+                                                   const void         *buffer,
+                                                   gsize               count,
+                                                   GError            **err);
 
 /* Open a path with O_NOFOLLOW, fstat to confirm it's a regular file (not a
  * symlink, directory, or special file), and return the open fd. Caller is

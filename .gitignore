@@ -1,6 +1,6 @@
 cmake-build-debug/
 build/
-tests/
+build-asan/
 .flatpak-builder/
 flatpak/repo/
 TODO*

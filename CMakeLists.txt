@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(OTPClient VERSION "5.0.6" LANGUAGES "C")
 include(GNUInstallDirs)
+include(CTest)
 
 configure_file("src/common/version.h.in" "version.h")
 
@@ -109,7 +110,7 @@ pkg_check_modules(LIBSECRET REQUIRED IMPORTED_TARGET libsecret-1>=0.20.0)
 if(BUILD_GUI)
     pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4>=4.10.0)
     pkg_check_modules(ADWAITA REQUIRED IMPORTED_TARGET libadwaita-1>=1.5.0)
-    pkg_check_modules(PNG REQUIRED IMPORTED_TARGET libpng>=1.6.0)
+    pkg_check_modules(GDKPIXBUF REQUIRED IMPORTED_TARGET gdk-pixbuf-2.0)
     pkg_check_modules(ZBAR REQUIRED IMPORTED_TARGET zbar>=0.20)
     pkg_check_modules(PROTOC REQUIRED IMPORTED_TARGET libprotobuf-c>=1.3.0)
     pkg_check_modules(LIBQRENCODE REQUIRED IMPORTED_TARGET libqrencode>=4.0.0)
@@ -140,7 +141,7 @@ if(BUILD_GUI)
     target_link_libraries(${PROJECT_NAME}
             PkgConfig::GTK4
             PkgConfig::ADWAITA
-            PkgConfig::PNG
+            PkgConfig::GDKPIXBUF
             PkgConfig::ZBAR
             PkgConfig::PROTOC
             PkgConfig::LIBQRENCODE
@@ -224,6 +225,10 @@ if(BUILD_SEARCH_PROVIDER)
 
     # KDE Plasma 6 KRunner Metadata
     install(FILES data/krunner/com.github.paolostivanin.OTPClient.KRunner.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/krunner/dbusplugins)
+endif()
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()
 
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)

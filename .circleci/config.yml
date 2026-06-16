@@ -6,7 +6,7 @@ jobs:
       - image: ubuntu:resolute
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -15,7 +15,7 @@ jobs:
       - image: ubuntu:24.04
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -24,7 +24,7 @@ jobs:
       - image: debian:stable
     steps:
       - checkout
-      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libadwaita-1-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -33,7 +33,7 @@ jobs:
       - image: fedora:latest
     steps:
       - checkout
-      - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk4-devel libzip-devel jansson-devel libpng-devel zbar-devel protobuf-c-devel libsecret-devel libuuid-devel protobuf-devel qrencode-devel libadwaita-devel
+      - run: dnf -y update && dnf -y install git gcc clang cmake make libgcrypt-devel gtk4-devel libzip-devel jansson-devel zbar-devel protobuf-c-devel libsecret-devel libuuid-devel protobuf-devel qrencode-devel libadwaita-devel
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -42,7 +42,7 @@ jobs:
       - image: archlinux:latest
     steps:
       - checkout
-      - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk4 libgcrypt zbar gcc clang cmake make libzip jansson libpng protobuf-c libsecret util-linux-libs qrencode  	libadwaita
+      - run: pacman -Syu --noconfirm && pacman -S --noconfirm pkg-config git gtk4 libgcrypt zbar gcc clang cmake make libzip jansson protobuf-c libsecret util-linux-libs qrencode  	libadwaita
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -53,10 +53,21 @@ jobs:
       EXTRA_CMAKE_ARGS: "-DSANITIZE=ON -DCMAKE_BUILD_TYPE=Debug"
     steps:
       - checkout
-      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libpng-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
       - run: chmod +x .ci/smoke-test.sh && .ci/smoke-test.sh
+      - run: ctest --test-dir build --output-on-failure
+
+  staticAnalysis:
+    docker:
+      - image: ubuntu:resolute
+    steps:
+      - checkout
+      - run: apt update && DEBIAN_FRONTEND=noninteractive apt -y install git gcc clang clang-tools cmake make libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
+      - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
+      - run: mkdir build-scan && cd build-scan && CC=clang cmake .. -DCMAKE_BUILD_TYPE=Debug
+      - run: cd build-scan && scan-build --status-bugs make -j2
 
 workflows:
   version: 2
@@ -68,3 +79,4 @@ workflows:
       - fedoraLatestStable
       - archlinux
       - sanitizers
+      - staticAnalysis

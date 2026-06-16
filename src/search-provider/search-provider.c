@@ -11,6 +11,7 @@
 #include "../common/common.h"
 #include "../common/db-common.h"
 #include "../common/file-size.h"
+#include "../common/otp-validation.h"
 #include "../common/secret-schema.h"
 #include "../common/gsettings-common.h"
 
@@ -67,6 +68,19 @@ typedef struct {
 
 static GHashTable *g_rate_buckets = NULL;
 
+#define ACTIVATION_CAP_TTL_US (30 * G_USEC_PER_SEC)
+typedef struct {
+    gchar *id;
+    gchar *sender;
+    gchar *query;
+    gchar *db_path;
+    gchar *label;
+    gsize  json_index;
+    gint64 expires_at_us;
+} ActivationCapability;
+
+static GHashTable *g_activation_caps = NULL;
+
 /* Trigger keyword loaded once at startup. The daemon ignores any query whose
  * first whitespace-separated token doesn't equal g_keyword (case-insensitive).
  * An empty keyword disables the filter and falls back to plain substring
@@ -107,6 +121,17 @@ static void kdf_cache_apply_to_db_data (DatabaseData *db_data, const gchar *db_p
 static void kdf_cache_capture_from_db_data (const DatabaseData *db_data, const gchar *db_path);
 static gboolean rate_bucket_consume (const gchar *sender);
 static void rate_buckets_clear (void);
+static gchar *normalize_terms (gchar **terms);
+static gchar *issue_activation_capability (const gchar          *sender,
+                                           const gchar          *query,
+                                           const OtpSearchEntry *entry);
+static ActivationCapability *consume_activation_capability (const gchar *id,
+                                                            const gchar *sender,
+                                                            const gchar *query);
+static ActivationCapability *lookup_activation_capability (const gchar *id,
+                                                           const gchar *sender);
+static void activation_capability_free (ActivationCapability *cap);
+static void activation_capabilities_clear (void);
 
 static const gchar *krunner_introspection_xml =
 "<node>"
@@ -278,9 +303,144 @@ rate_buckets_clear (void)
 }
 
 
+static void
+activation_capability_free (ActivationCapability *cap)
+{
+    if (cap == NULL)
+        return;
+    g_free (cap->id);
+    g_free (cap->sender);
+    g_free (cap->query);
+    g_free (cap->db_path);
+    g_free (cap->label);
+    g_free (cap);
+}
+
+
+static void
+activation_capabilities_clear (void)
+{
+    if (g_activation_caps == NULL)
+        return;
+    g_hash_table_destroy (g_activation_caps);
+    g_activation_caps = NULL;
+}
+
+
+static void
+activation_capabilities_prune (void)
+{
+    if (g_activation_caps == NULL)
+        return;
+    gint64 now = g_get_monotonic_time ();
+    GHashTableIter iter;
+    gpointer value;
+    g_hash_table_iter_init (&iter, g_activation_caps);
+    while (g_hash_table_iter_next (&iter, NULL, &value)) {
+        ActivationCapability *cap = value;
+        if (cap->expires_at_us <= now)
+            g_hash_table_iter_remove (&iter);
+    }
+}
+
+
+static gchar *
+normalize_terms (gchar **terms)
+{
+    if (terms == NULL)
+        return g_strdup ("");
+    GString *joined = g_string_new (NULL);
+    for (gsize i = 0; terms[i] != NULL; i++) {
+        if (terms[i][0] == '\0')
+            continue;
+        g_autofree gchar *fold = g_utf8_casefold (terms[i], -1);
+        if (joined->len > 0)
+            g_string_append_c (joined, '\x1f');
+        g_string_append (joined, fold);
+    }
+    return g_string_free (joined, FALSE);
+}
+
+
+static gchar *
+issue_activation_capability (const gchar          *sender,
+                             const gchar          *query,
+                             const OtpSearchEntry *entry)
+{
+    if (entry == NULL)
+        return NULL;
+    if (g_activation_caps == NULL)
+        g_activation_caps = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                   g_free,
+                                                   (GDestroyNotify) activation_capability_free);
+    activation_capabilities_prune ();
+
+    guint8 raw[16];
+    gcry_create_nonce (raw, sizeof (raw));
+    gchar *id = bytes_to_hexstr (raw, sizeof (raw));
+    explicit_bzero (raw, sizeof (raw));
+    if (id == NULL)
+        return NULL;
+
+    ActivationCapability *cap = g_new0 (ActivationCapability, 1);
+    cap->id = g_strdup (id);
+    cap->sender = g_strdup ((sender != NULL && sender[0] != '\0') ? sender : ":anon");
+    cap->query = g_strdup (query != NULL ? query : "");
+    cap->db_path = g_strdup (entry->db_path);
+    cap->label = g_strdup (entry->label);
+    cap->json_index = entry->json_index;
+    cap->expires_at_us = g_get_monotonic_time () + ACTIVATION_CAP_TTL_US;
+    g_hash_table_insert (g_activation_caps, g_strdup (id), cap);
+    return id;
+}
+
+
+static ActivationCapability *
+lookup_activation_capability (const gchar *id,
+                              const gchar *sender)
+{
+    if (g_activation_caps == NULL || id == NULL)
+        return NULL;
+    activation_capabilities_prune ();
+    ActivationCapability *cap = g_hash_table_lookup (g_activation_caps, id);
+    const gchar *sender_key = (sender != NULL && sender[0] != '\0') ? sender : ":anon";
+    if (cap == NULL || g_strcmp0 (cap->sender, sender_key) != 0)
+        return NULL;
+    return cap;
+}
+
+
+static ActivationCapability *
+consume_activation_capability (const gchar *id,
+                               const gchar *sender,
+                               const gchar *query)
+{
+    ActivationCapability *cap = lookup_activation_capability (id, sender);
+    if (cap == NULL)
+        return NULL;
+    if (query != NULL && g_strcmp0 (cap->query, query) != 0)
+        return NULL;
+
+    gpointer key = NULL;
+    gpointer value = NULL;
+    if (!g_hash_table_steal_extended (g_activation_caps, id, &key, &value))
+        return NULL;
+    g_free (key);
+    return value;
+}
+
+
 static gchar *
 get_entry_otp_value (json_t *obj)
 {
+    GError *validation_err = NULL;
+    if (!otp_validate_token_object (obj, 0, &validation_err)) {
+        g_warning ("Search provider: refusing invalid OTP token: %s",
+                   validation_err != NULL ? validation_err->message : "unknown validation error");
+        g_clear_error (&validation_err);
+        return NULL;
+    }
+
     const gchar *secret = json_string_value (json_object_get (obj, "secret"));
     const gchar *type = json_string_value (json_object_get (obj, "type"));
     if (!secret || !type) return NULL;
@@ -299,9 +459,6 @@ get_entry_otp_value (json_t *obj)
         } else {
             token = get_totp_at (secret, current_ts, digits, period, algo, &cotp_err);
         }
-    } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
-        gint64 counter = json_integer_value (json_object_get (obj, "counter"));
-        token = get_hotp (secret, counter, digits, algo, &cotp_err);
     }
 
     if (token == NULL) return NULL;
@@ -364,6 +521,9 @@ load_entries_from_db (GPtrArray   *entries,
     {
         const gchar *label = json_string_value (json_object_get (obj, "label"));
         if (label == NULL) continue;
+        const gchar *type = json_string_value (json_object_get (obj, "type"));
+        if (type == NULL || g_ascii_strcasecmp (type, "TOTP") != 0)
+            continue;
         const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
         OtpSearchEntry *entry = g_new0 (OtpSearchEntry, 1);
         entry->id = g_strdup_printf ("%u:%" G_GSIZE_FORMAT, db_index, index);
@@ -803,10 +963,16 @@ handle_gnome_call (GDBusConnection       *conn,
         if (strip_keyword_or_skip (terms, &stripped)) {
             GPtrArray *entries = get_entries ();
             gsize stripped_len = g_strv_length (stripped);
+            g_autofree gchar *normalized_query = normalize_terms (stripped);
             for (guint i = 0; i < entries->len; i++) {
                 OtpSearchEntry *e = g_ptr_array_index (entries, i);
-                if (entry_matches_terms (e, stripped, stripped_len))
-                    g_variant_builder_add (&builder, "s", e->id);
+                if (entry_matches_terms (e, stripped, stripped_len)) {
+                    g_autofree gchar *cap = issue_activation_capability (
+                        g_dbus_method_invocation_get_sender (inv),
+                        normalized_query, e);
+                    if (cap != NULL)
+                        g_variant_builder_add (&builder, "s", cap);
+                }
             }
         }
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
@@ -816,25 +982,17 @@ handle_gnome_call (GDBusConnection       *conn,
         g_variant_get (params, "(^as)", &ids);
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("aa{sv}"));
-        GPtrArray *entries = get_entries ();
         for (gsize j = 0; ids[j]; j++) {
-            for (guint i = 0; i < entries->len; i++) {
-                OtpSearchEntry *e = g_ptr_array_index (entries, i);
-                if (g_strcmp0 (e->id, ids[j]) == 0) {
-                    GVariantBuilder meta;
-                    g_variant_builder_init (&meta, G_VARIANT_TYPE ("a{sv}"));
-                    g_variant_builder_add (&meta, "{sv}", "id", g_variant_new_string (e->id));
-                    g_variant_builder_add (&meta, "{sv}", "name", g_variant_new_string (e->label));
-                    g_autofree gchar *desc = NULL;
-                    if (e->db_name != NULL && e->db_name[0] != '\0')
-                        desc = g_strdup_printf ("%s — %s", e->db_name,
-                                                (e->issuer && e->issuer[0]) ? e->issuer : e->label);
-                    else
-                        desc = g_strdup (e->issuer ? e->issuer : "");
-                    g_variant_builder_add (&meta, "{sv}", "description", g_variant_new_string (desc));
-                    g_variant_builder_add (&meta, "{sv}", "icon", g_variant_new_string ("com.github.paolostivanin.OTPClient"));
-                    g_variant_builder_add_value (&builder, g_variant_builder_end (&meta));
-                }
+            ActivationCapability *cap = lookup_activation_capability (
+                ids[j], g_dbus_method_invocation_get_sender (inv));
+            if (cap != NULL) {
+                GVariantBuilder meta;
+                g_variant_builder_init (&meta, G_VARIANT_TYPE ("a{sv}"));
+                g_variant_builder_add (&meta, "{sv}", "id", g_variant_new_string (cap->id));
+                g_variant_builder_add (&meta, "{sv}", "name", g_variant_new_string (cap->label));
+                g_variant_builder_add (&meta, "{sv}", "description", g_variant_new_string (cap->label));
+                g_variant_builder_add (&meta, "{sv}", "icon", g_variant_new_string ("com.github.paolostivanin.OTPClient"));
+                g_variant_builder_add_value (&builder, g_variant_builder_end (&meta));
             }
         }
         g_dbus_method_invocation_return_value (inv, g_variant_new ("(aa{sv})", &builder));
@@ -857,18 +1015,26 @@ handle_gnome_call (GDBusConnection       *conn,
             return;
         }
         const gchar *id;
-        g_variant_get (params, "(&s^as u)", &id, NULL, NULL);
+        gchar **terms = NULL;
+        g_variant_get (params, "(&s^as u)", &id, &terms, NULL);
+        g_auto(GStrv) stripped = NULL;
+        g_autofree gchar *normalized_query = NULL;
+        if (strip_keyword_or_skip (terms, &stripped))
+            normalized_query = normalize_terms (stripped);
         g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = get_entries ();
-        for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index (entries, i);
-            if (g_strcmp0 (e->id, id) == 0) {
-                otp = compute_otp_for_entry (e);
-                label = g_strdup (e->label);
-                break;
-            }
+        ActivationCapability *cap = (normalized_query != NULL)
+            ? consume_activation_capability (id, g_dbus_method_invocation_get_sender (inv), normalized_query)
+            : NULL;
+        if (cap != NULL) {
+            OtpSearchEntry e = {0};
+            e.db_path = cap->db_path;
+            e.json_index = cap->json_index;
+            otp = compute_otp_for_entry (&e);
+            label = g_strdup (cap->label);
+            activation_capability_free (cap);
         }
+        g_strfreev (terms);
         copy_to_clipboard (otp, FALSE);
         send_notification (label, otp);
         g_dbus_method_invocation_return_value (inv, NULL);
@@ -900,10 +1066,16 @@ handle_krunner_call (GDBusConnection       *conn,
             g_auto(GStrv) stripped = NULL;
             if (strip_keyword_or_skip (terms, &stripped)) {
                 gsize stripped_len = g_strv_length (stripped);
+                g_autofree gchar *normalized_query = normalize_terms (stripped);
                 GPtrArray *entries = get_entries ();
                 for (guint i = 0; i < entries->len; i++) {
                     OtpSearchEntry *e = g_ptr_array_index (entries, i);
                     if (!entry_matches_terms (e, stripped, stripped_len)) continue;
+                    g_autofree gchar *cap = issue_activation_capability (
+                        g_dbus_method_invocation_get_sender (inv),
+                        normalized_query, e);
+                    if (cap == NULL)
+                        continue;
                     GVariantBuilder props;
                     g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
                     // Deliberately do NOT include the OTP value in the subtitle:
@@ -919,7 +1091,7 @@ handle_krunner_call (GDBusConnection       *conn,
                     g_variant_builder_add (&props, "{sv}", "subtext", g_variant_new_string (sub));
                     g_variant_builder_add (&props, "{sv}", "category", g_variant_new_string ("OTPClient"));
                     g_variant_builder_add (&builder, "(sssida{sv})",
-                                           e->id, e->label,
+                                           cap, e->label,
                                            "com.github.paolostivanin.OTPClient",
                                            (gint32)0, (gdouble)1.0, &props);
                 }
@@ -943,14 +1115,15 @@ handle_krunner_call (GDBusConnection       *conn,
         g_variant_get (params, "(&s&s)", &id, NULL);
         g_autofree gchar *otp = NULL;
         g_autofree gchar *label = NULL;
-        GPtrArray *entries = get_entries ();
-        for (guint i = 0; i < entries->len; i++) {
-            OtpSearchEntry *e = g_ptr_array_index (entries, i);
-            if (g_strcmp0 (e->id, id) == 0) {
-                otp = compute_otp_for_entry (e);
-                label = g_strdup (e->label);
-                break;
-            }
+        ActivationCapability *cap = consume_activation_capability (
+            id, g_dbus_method_invocation_get_sender (inv), NULL);
+        if (cap != NULL) {
+            OtpSearchEntry e = {0};
+            e.db_path = cap->db_path;
+            e.json_index = cap->json_index;
+            otp = compute_otp_for_entry (&e);
+            label = g_strdup (cap->label);
+            activation_capability_free (cap);
         }
         copy_to_clipboard (otp, TRUE);
         send_notification (label, otp);
@@ -1061,6 +1234,7 @@ main (int    argc,
      * destroy callback explicit_bzero's the derived key before gcry_free. */
     kdf_cache_clear ();
     rate_buckets_clear ();
+    activation_capabilities_clear ();
     g_clear_pointer (&g_keyword, g_free);
     g_clear_pointer (&g_keyword_fold, g_free);
     g_main_loop_unref (main_loop);

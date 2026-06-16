@@ -4,6 +4,7 @@ set(SEARCH_PROVIDER_SOURCE_FILES
         ../common/db-common.c
         ../common/file-size.c
         ../common/gquarks.c
+        ../common/otp-validation.c
         ../common/secret-schema.c
         ../common/gsettings-common.c
 )
@@ -13,6 +14,7 @@ set(SEARCH_PROVIDER_HEADER_FILES
         ../common/db-common.h
         ../common/file-size.h
         ../common/gquarks.h
+        ../common/otp-validation.h
         ../common/secret-schema.h
         ../common/gsettings-common.h
 )

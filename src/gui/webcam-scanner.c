@@ -79,10 +79,22 @@ webcam_scan_thread (GTask        *task,
                     gpointer      task_data     G_GNUC_UNUSED,
                     GCancellable *cancellable   G_GNUC_UNUSED)
 {
+    if (g_cancellable_is_cancelled (cancellable)) {
+        g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                                 "%s", _("Webcam scan cancelled"));
+        return;
+    }
+
     GError *err = NULL;
     gchar *uri = webcam_scan_qrcode (&err);
     if (uri == NULL) {
         g_task_return_error (task, err);
+        return;
+    }
+    if (g_cancellable_is_cancelled (cancellable)) {
+        g_free (uri);
+        g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                                 "%s", _("Webcam scan cancelled"));
         return;
     }
     g_task_return_pointer (task, uri, g_free);

@@ -2,12 +2,16 @@
 #include "edit-token-dialog.h"
 #include "common.h"
 #include "db-common.h"
+#include "gquarks.h"
+#include "otp-validation.h"
+#include "../otpclient-application.h"
 
 struct _EditTokenDialog
 {
     AdwDialog parent;
 
     json_t *token_obj;
+    json_t *original_token;
     guint token_index;
     DatabaseData *db_data;
     EditTokenCallback callback;
@@ -22,46 +26,75 @@ struct _EditTokenDialog
 
 G_DEFINE_FINAL_TYPE (EditTokenDialog, edit_token_dialog, ADW_TYPE_DIALOG)
 
+typedef struct {
+    guint token_index;
+    json_t *original_token;
+    gchar *label;
+    gchar *issuer;
+    gchar *group;
+} EditTokenMutation;
+
+static gboolean
+edit_token_mutation (json_t   *candidate,
+                     gpointer  user_data,
+                     GError  **err)
+{
+    EditTokenMutation *mutation = user_data;
+    json_t *token_obj = json_array_get (candidate, mutation->token_index);
+    if (token_obj == NULL || !json_equal (token_obj, mutation->original_token)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "%s", _("Token changed while the edit dialog was open."));
+        return FALSE;
+    }
+
+    json_object_set_new (token_obj, "label", json_string (mutation->label));
+    json_object_set_new (token_obj, "issuer", json_string (mutation->issuer));
+
+    if (mutation->group != NULL && mutation->group[0] != '\0')
+        json_object_set_new (token_obj, "group", json_string (mutation->group));
+    else
+        json_object_del (token_obj, "group");
+
+    return otp_validate_token_object (token_obj, mutation->token_index, err);
+}
+
 static void
 on_save_clicked (GtkButton       *button,
                  EditTokenDialog *self)
 {
     (void) button;
 
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app)
+        : NULL;
+    if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+    {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("The active database changed. Reopen this token before saving."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
+
     const gchar *label_text = gtk_editable_get_text (GTK_EDITABLE (self->label_row));
     const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (self->issuer_row));
-
     const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
 
-    json_object_set_new (self->token_obj, "label", json_string (label_text));
-    json_object_set_new (self->token_obj, "issuer", json_string (issuer));
-
-    if (group_text != NULL && group_text[0] != '\0')
-        json_object_set_new (self->token_obj, "group", json_string (group_text));
-    else
-        json_object_del (self->token_obj, "group");
-
     GError *err = NULL;
-    update_db (self->db_data, &err);
+    EditTokenMutation mutation = {
+        .token_index = self->token_index,
+        .original_token = self->original_token,
+        .label = (gchar *) label_text,
+        .issuer = (gchar *) issuer,
+        .group = (gchar *) group_text,
+    };
+    db_transaction (self->db_data, edit_token_mutation, &mutation, &err);
     if (err != NULL)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
         gtk_widget_set_visible (self->error_label, TRUE);
         g_clear_error (&err);
         return;
-    }
-
-    /* Recompute hashes */
-    g_slist_free_full (self->db_data->objects_hash, g_free);
-    self->db_data->objects_hash = NULL;
-
-    gsize index;
-    json_t *obj;
-    json_array_foreach (self->db_data->in_memory_json_data, index, obj)
-    {
-        guint32 hash = json_object_get_hash (obj);
-        self->db_data->objects_hash = g_slist_append (self->db_data->objects_hash,
-                                                       g_memdup2 (&hash, sizeof (guint32)));
     }
 
     adw_dialog_close (ADW_DIALOG (self));
@@ -73,6 +106,10 @@ on_save_clicked (GtkButton       *button,
 static void
 edit_token_dialog_dispose (GObject *object)
 {
+    EditTokenDialog *self = EDIT_TOKEN_DIALOG (object);
+    g_clear_pointer (&self->original_token, json_decref);
+    g_clear_pointer (&self->db_data, database_data_free);
+
     G_OBJECT_CLASS (edit_token_dialog_parent_class)->dispose (object);
 }
 
@@ -103,8 +140,9 @@ edit_token_dialog_new (json_t            *token_obj,
                                           NULL);
 
     self->token_obj = token_obj;
+    self->original_token = json_deep_copy (token_obj);
     self->token_index = token_index;
-    self->db_data = db_data;
+    self->db_data = database_data_ref (db_data);
     self->callback = callback;
     self->callback_data = user_data;
 

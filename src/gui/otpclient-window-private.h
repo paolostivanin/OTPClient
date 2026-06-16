@@ -89,6 +89,11 @@ struct _OTPClientWindow
     GtkFlattenListModel *flatten_model;
     gboolean cross_db_loaded;
     gboolean cross_db_loading;
+    GCancellable *cross_db_cancellable;
+    GCancellable *webcam_cancellable;
+    GCancellable *clipboard_cancellable;
+    GCancellable *file_dialog_cancellable;
+    gboolean disposing;
 
     /* Clipboard auto-clear */
     guint clipboard_clear_timer_id;

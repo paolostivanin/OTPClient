@@ -1,6 +1,7 @@
 #define _DEFAULT_SOURCE
 #define _GNU_SOURCE
 #include <string.h>
+#include <stdlib.h>
 #include <glib.h>
 #include <gio/gio.h>
 #include <jansson.h>
@@ -291,13 +292,13 @@ export_twofas (const gchar *export_path,
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't dump json data");
             goto end;
         }
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_enc_data, strlen (json_enc_data), NULL, &err) == -1) {
+        if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), json_enc_data, strlen (json_enc_data), &err)) {
             // err is set by g_output_stream_write.
             goto end;
         }
     } else {
         // write the plain json to disk
-        if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, NULL, &err) == -1) {
+        if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), json_data, json_data_size, &err)) {
             // err is set by g_output_stream_write.
             goto end;
         }
@@ -505,7 +506,7 @@ decrypt_data (const gchar **b64_data,
         return;
     }
 
-    twofas_data->json_data = gcry_calloc_secure (enc_buf_size, 1);
+    twofas_data->json_data = gcry_calloc_secure (enc_buf_size + 1, 1);
     if (twofas_data->json_data == NULL) {
         g_printerr ("Couldn't allocate secure memory for the decrypted database.\n");
         explicit_bzero (derived_key, 32);

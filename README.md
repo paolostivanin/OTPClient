@@ -151,7 +151,6 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 | GIO                                                 | 2.74.0      |
 | jansson                                             | 2.13        |
 | libgcrypt                                           | 1.10.1      |
-| libpng                                              | 1.6.0       |
 | [libcotp](https://github.com/paolostivanin/libcotp) | 4.0.0       |
 | zbar                                                | 0.20        |
 | protobuf-c                                          | 1.3.0       |
@@ -159,7 +158,7 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 | libsecret                                           | 0.20        |
 | qrencode                                            | 4.0.0       |
 
-GTK, libadwaita, libpng, zbar, protobuf-c, and qrencode are only required
+GTK, libadwaita, zbar, protobuf-c, and qrencode are only required
 when `BUILD_GUI=ON`.
 
 **Note:** The system memlock limit should be at least 64 MB. Lower values may

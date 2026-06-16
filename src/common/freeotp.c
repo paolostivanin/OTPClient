@@ -62,7 +62,7 @@ export_freeotpplus (const gchar *export_path,
         json_array_foreach (json_db_data, index, db_obj) {
             gchar *uri = get_otpauth_uri (db_obj);
             // g_output_stream_write expects a byte count, not Unicode characters.
-            if (g_output_stream_write (G_OUTPUT_STREAM(out_stream), uri, strlen (uri), NULL, &err) == -1) {
+            if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), uri, strlen (uri), &err)) {
                 g_free (uri);
                 break;
             }

@@ -2,6 +2,7 @@
 #include <gio/gio.h>
 #include <gcrypt.h>
 #include <glib/gi18n.h>
+#include <stdlib.h>
 #include "../common/file-size.h"
 #include "version.h"
 #include "../common/import-export.h"

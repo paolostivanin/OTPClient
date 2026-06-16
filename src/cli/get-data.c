@@ -2,18 +2,20 @@
 #include <jansson.h>
 #include <cotp.h>
 #include <glib/gi18n.h>
+#include <stdlib.h>
 #include "../common/db-common.h"
+#include "../common/otp-validation.h"
 #include "get-data.h"
 
 static gint compare_strings (const gchar    *s1,
                              const gchar    *s2,
                              gboolean        match_exactly);
 
-static void emit_token      (json_t         *obj,
-                             DatabaseData   *db_data,
-                             gboolean        show_next_token,
-                             OutputFormat    format,
-                             json_t         *json_out_array);
+static gboolean emit_token (json_t         *obj,
+                            gboolean        show_next_token,
+                            OutputFormat    format,
+                            json_t         *json_out_array,
+                            gboolean       *hotp_changed);
 
 gboolean
 show_token (DatabaseData *db_data,
@@ -26,6 +28,8 @@ show_token (DatabaseData *db_data,
     gsize index;
     json_t *obj;
     gboolean found = FALSE;
+    gboolean had_error = FALSE;
+    gboolean hotp_changed = FALSE;
 
     /* For machine-readable formats we collect rows first, then emit a single
      * well-formed document at the end. */
@@ -58,7 +62,11 @@ show_token (DatabaseData *db_data,
         if (format == OUTPUT_FORMAT_CSV) {
             /* Build a transient json row, then serialize from it for consistency. */
             json_t *row = json_object ();
-            emit_token (obj, db_data, show_next_token, OUTPUT_FORMAT_JSON, row);
+            if (!emit_token (obj, show_next_token, OUTPUT_FORMAT_JSON, row, &hotp_changed)) {
+                had_error = TRUE;
+                json_decref (row);
+                continue;
+            }
 
             csv_append_field (csv, json_string_value (json_object_get (row, "type")));
             g_string_append_c (csv, ',');
@@ -82,7 +90,10 @@ show_token (DatabaseData *db_data,
             g_string_append_c (csv, '\n');
             json_decref (row);
         } else {
-            emit_token (obj, db_data, show_next_token, format, json_rows);
+            if (!emit_token (obj, show_next_token, format, json_rows, &hotp_changed)) {
+                had_error = TRUE;
+                continue;
+            }
         }
         found = TRUE;
     }
@@ -111,6 +122,28 @@ show_token (DatabaseData *db_data,
         g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
         g_printerr ("%s\n", msg->str);
         g_string_free (msg, TRUE);
+        return FALSE;
+    }
+
+    if (hotp_changed) {
+        GError *err = NULL;
+        update_db (db_data, &err);
+        if (err != NULL) {
+            g_printerr ("[ERROR] %s\n", err->message);
+            g_clear_error (&err);
+            if (json_rows != NULL)
+                json_decref (json_rows);
+            if (csv != NULL)
+                g_string_free (csv, TRUE);
+            return FALSE;
+        }
+    }
+
+    if (had_error) {
+        if (json_rows != NULL)
+            json_decref (json_rows);
+        if (csv != NULL)
+            g_string_free (csv, TRUE);
         return FALSE;
     }
 
@@ -200,13 +233,22 @@ compare_strings (const gchar *s1,
 /* Emit one --show row. For TABLE format, prints to stdout in the legacy layout.
  * For JSON format, populates `dest`: if `dest` is an array, appends a new object;
  * if it's an object, fills it in place. */
-static void
+static gboolean
 emit_token (json_t       *obj,
-            DatabaseData *db_data,
             gboolean      show_next_token,
             OutputFormat  format,
-            json_t       *dest)
+            json_t       *dest,
+            gboolean     *hotp_changed)
 {
+    GError *validation_err = NULL;
+    if (!otp_validate_token_object (obj, 0, &validation_err)) {
+        if (format == OUTPUT_FORMAT_TABLE)
+            g_printerr ("[ERROR] Invalid token: %s\n",
+                        validation_err != NULL ? validation_err->message : "unknown validation error");
+        g_clear_error (&validation_err);
+        return FALSE;
+    }
+
     cotp_error_t cotp_err;
     const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
     const gchar *label = json_string_value (json_object_get (obj, "label"));
@@ -217,12 +259,12 @@ emit_token (json_t       *obj,
     if (type == NULL) {
         if (format == OUTPUT_FORMAT_TABLE)
             g_printerr ("[ERROR] Token has no type field, skipping.\n");
-        return;
+        return FALSE;
     }
     if (secret == NULL) {
         if (format == OUTPUT_FORMAT_TABLE)
             g_printerr ("[ERROR] Token has no secret field, skipping.\n");
-        return;
+        return FALSE;
     }
 
     json_t *row = NULL;
@@ -235,6 +277,12 @@ emit_token (json_t       *obj,
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         gint period = (gint)json_integer_value (json_object_get (obj, "period"));
+        if (period <= 0 || period > 300) {
+            if (format == OUTPUT_FORMAT_TABLE)
+                g_printerr ("[ERROR] TOTP token has an invalid period, skipping.\n");
+            if (row != NULL && json_is_array (dest)) json_decref (row);
+            return FALSE;
+        }
         glong current_ts = time (NULL);
         gint token_validity = period - (gint) (current_ts % period);
         gchar *current_totp = NULL;
@@ -246,7 +294,7 @@ emit_token (json_t       *obj,
                     g_printerr ("[ERROR] Failed to generate Steam TOTP (error %d).\n", cotp_err);
                 free (current_totp);
                 if (row != NULL && json_is_array (dest)) json_decref (row);
-                return;
+                return FALSE;
             }
             if (show_next_token) {
                 next_totp = get_steam_totp_at (secret, current_ts + period, period, &cotp_err);
@@ -256,7 +304,7 @@ emit_token (json_t       *obj,
                     free (current_totp);
                     free (next_totp);
                     if (row != NULL && json_is_array (dest)) json_decref (row);
-                    return;
+                    return FALSE;
                 }
             }
         } else {
@@ -266,7 +314,7 @@ emit_token (json_t       *obj,
                     g_printerr ("[ERROR] Failed to generate TOTP (error %d).\n", cotp_err);
                 free (current_totp);
                 if (row != NULL && json_is_array (dest)) json_decref (row);
-                return;
+                return FALSE;
             }
             if (show_next_token) {
                 next_totp = get_totp_at (secret, current_ts + period, digits, period, algo, &cotp_err);
@@ -276,7 +324,7 @@ emit_token (json_t       *obj,
                     free (current_totp);
                     free (next_totp);
                     if (row != NULL && json_is_array (dest)) json_decref (row);
-                    return;
+                    return FALSE;
                 }
             }
         }
@@ -295,14 +343,27 @@ emit_token (json_t       *obj,
         free (current_totp);
         free (next_totp);
     } else {
-        gint64 counter = json_integer_value (json_object_get (obj, "counter"));
+        json_t *counter_obj = json_object_get (obj, "counter");
+        if (!json_is_integer (counter_obj)) {
+            if (format == OUTPUT_FORMAT_TABLE)
+                g_printerr ("[ERROR] HOTP token has no valid counter field, skipping.\n");
+            if (row != NULL && json_is_array (dest)) json_decref (row);
+            return FALSE;
+        }
+        gint64 counter = json_integer_value (counter_obj);
+        if (counter < 0 || (guint64) counter >= OTP_HOTP_COUNTER_MAX) {
+            if (format == OUTPUT_FORMAT_TABLE)
+                g_printerr ("[ERROR] HOTP counter is out of range, skipping.\n");
+            if (row != NULL && json_is_array (dest)) json_decref (row);
+            return FALSE;
+        }
         gchar *hotp = get_hotp (secret, counter, digits, algo, &cotp_err);
         if (cotp_err != NO_ERROR) {
             if (format == OUTPUT_FORMAT_TABLE)
                 g_printerr ("[ERROR] Failed to generate HOTP (error %d).\n", cotp_err);
             free (hotp);
             if (row != NULL && json_is_array (dest)) json_decref (row);
-            return;
+            return FALSE;
         }
         if (format == OUTPUT_FORMAT_TABLE) {
             g_print (_("Current HOTP: %s\n"), hotp);
@@ -311,31 +372,14 @@ emit_token (json_t       *obj,
             json_object_set_new (row, "counter", json_integer (counter + 1));
         }
         free (hotp);
-        // M5: increment the counter, attempt the save, then roll back the
-        // in-memory state if the save failed. Without the rollback, a failed
-        // update_db left the counter advanced in memory but not on disk —
-        // the next CLI invocation would increment again from the wrong base
-        // and produce a code the server has no chance of accepting.
-        json_int_t prev_counter = counter;
-        // set_new for fresh literal: avoids leaking the json_integer.
         json_object_set_new (obj, "counter", json_integer (counter + 1));
-        GError *err = NULL;
-        update_db (db_data, &err);
-        if (err != NULL) {
-            g_printerr ("[ERROR] %s\n", err->message);
-            json_object_set_new (obj, "counter", json_integer (prev_counter));
-            g_clear_error (&err);
-        } else {
-            reload_db (db_data, &err);
-            if (err != NULL) {
-                g_printerr ("[ERROR] %s\n", err->message);
-                g_clear_error (&err);
-            }
-        }
+        if (hotp_changed != NULL)
+            *hotp_changed = TRUE;
     }
 
     if (row != NULL && json_is_array (dest))
         json_array_append_new (dest, row);
+    return TRUE;
 }
 
 

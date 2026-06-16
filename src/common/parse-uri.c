@@ -4,14 +4,12 @@
 #include "common.h"
 #include "file-size.h"
 #include "gquarks.h"
+#include "otp-validation.h"
 
 static void   parse_uri            (const gchar   *uri,
                                     GSList       **otps);
 
-static void   parse_parameters     (const gchar   *modified_uri,
-                                    otp_t         *otp);
-
-static gchar *remove_null_encoding (const gchar   *uri);
+static void   free_parsed_otp      (otp_t         *otp);
 
 
 void
@@ -132,7 +130,14 @@ get_otpauth_data (const gchar  *path,
         return NULL;
     }
 
-    gchar *sec_buf = gcry_calloc_secure (fs, 1);
+    gchar *sec_buf = gcry_calloc_secure ((gsize) fs + 1, 1);
+    if (sec_buf == NULL) {
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Couldn't allocate secure memory for OTP URI import.");
+        explicit_bzero (file_buf, fs);
+        g_free (file_buf);
+        return NULL;
+    }
     memcpy (sec_buf, file_buf, fs);
     explicit_bzero (file_buf, fs);
     g_free (file_buf);
@@ -154,122 +159,131 @@ static void
 parse_uri (const gchar   *uri,
            GSList       **otps)
 {
-    const gchar *uri_copy = uri;
-    if (g_ascii_strncasecmp (uri_copy, "otpauth://", 10) != 0) {
+    if (uri == NULL || g_ascii_strncasecmp (uri, "otpauth://", 10) != 0) {
         return;
     }
-    if (strnlen (uri_copy, MAX_OTPAUTH_URI_LEN + 1) > MAX_OTPAUTH_URI_LEN) {
+    if (strnlen (uri, MAX_OTPAUTH_URI_LEN + 1) > MAX_OTPAUTH_URI_LEN) {
         g_warning ("Skipping otpauth URI larger than %d bytes.", MAX_OTPAUTH_URI_LEN);
         return;
     }
-    uri_copy += 10;
 
-    otp_t *otp = g_new0 (otp_t, 1);
-    // set default digits value to 6. If something else is specified, it will be read later on
-    otp->digits = 6;
-    if (g_ascii_strncasecmp (uri_copy, "totp/", 5) == 0) {
-        otp->type = g_strdup ("TOTP");
-        otp->period = 30;
-    } else if (g_ascii_strncasecmp (uri_copy, "hotp/", 5) == 0) {
-        otp->type = g_strdup ("HOTP");
-    } else {
-        g_free (otp);
+    g_autoptr (GError) uri_err = NULL;
+    GUri *parsed = g_uri_parse (uri, G_URI_FLAGS_NONE, &uri_err);
+    if (parsed == NULL)
+        return;
+
+    const gchar *scheme = g_uri_get_scheme (parsed);
+    const gchar *type_host = g_uri_get_host (parsed);
+    const gchar *path = g_uri_get_path (parsed);
+    const gchar *query = g_uri_get_query (parsed);
+    if (g_ascii_strcasecmp (scheme, "otpauth") != 0 ||
+        type_host == NULL || path == NULL || path[0] != '/' || path[1] == '\0' ||
+        query == NULL || query[0] == '\0') {
+        g_uri_unref (parsed);
         return;
     }
-    uri_copy += 5;
 
-    if (g_strrstr (uri_copy, "algorithm") == NULL) {
-        // if the uri doesn't contain the algo parameter, fallback to sha1
-        otp->algo = g_strdup ("SHA1");
+    g_autofree gchar *label_unescaped = g_uri_unescape_string (path + 1, NULL);
+    if (label_unescaped == NULL) {
+        g_uri_unref (parsed);
+        return;
     }
-    parse_parameters (uri_copy, otp);
 
-    *otps = g_slist_append (*otps, g_memdup2 (otp, sizeof (otp_t)));
-    g_free (otp);
+    g_autoptr (GHashTable) params = g_uri_parse_params (query, -1, "&",
+                                                        G_URI_PARAMS_NONE,
+                                                        &uri_err);
+    if (params == NULL) {
+        g_uri_unref (parsed);
+        return;
+    }
+
+    otp_t *otp = g_new0 (otp_t, 1);
+    otp->digits = 6;
+    otp->algo = g_strdup ("SHA1");
+    if (g_ascii_strcasecmp (type_host, "totp") == 0) {
+        otp->type = g_strdup ("TOTP");
+        otp->period = 30;
+    } else if (g_ascii_strcasecmp (type_host, "hotp") == 0) {
+        otp->type = g_strdup ("HOTP");
+    } else {
+        free_parsed_otp (otp);
+        g_uri_unref (parsed);
+        return;
+    }
+
+    gchar **label_parts = g_strsplit (label_unescaped, ":", 2);
+    if (label_parts[0] != NULL && label_parts[1] != NULL) {
+        otp->issuer = g_strdup (g_strstrip (label_parts[0]));
+        otp->account_name = g_strdup (g_strstrip (label_parts[1]));
+    } else {
+        otp->issuer = g_strdup ("");
+        otp->account_name = g_strdup (g_strstrip (label_unescaped));
+    }
+    g_strfreev (label_parts);
+
+    const gchar *issuer_param = g_hash_table_lookup (params, "issuer");
+    if (issuer_param != NULL) {
+        g_free (otp->issuer);
+        otp->issuer = g_strdup (g_strstrip ((gchar *) issuer_param));
+    }
+    const gchar *secret = g_hash_table_lookup (params, "secret");
+    otp->secret = secure_strdup (secret);
+
+    const gchar *algo = g_hash_table_lookup (params, "algorithm");
+    if (algo != NULL &&
+        (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
+         g_ascii_strcasecmp (algo, "SHA256") == 0 ||
+         g_ascii_strcasecmp (algo, "SHA512") == 0)) {
+        g_free (otp->algo);
+        otp->algo = g_ascii_strup (algo, -1);
+    }
+
+    const gchar *period = g_hash_table_lookup (params, "period");
+    if (period != NULL) {
+        gchar *endptr = NULL;
+        gint64 v = g_ascii_strtoll (period, &endptr, 10);
+        if (endptr != period && *endptr == '\0' && v > 0 && v <= 300)
+            otp->period = (guint32) v;
+    }
+    const gchar *digits = g_hash_table_lookup (params, "digits");
+    if (digits != NULL) {
+        gchar *endptr = NULL;
+        gint64 v = g_ascii_strtoll (digits, &endptr, 10);
+        if (endptr != digits && *endptr == '\0' && v >= 6 && v <= 8)
+            otp->digits = (guint32) v;
+    }
+    const gchar *counter = g_hash_table_lookup (params, "counter");
+    if (counter != NULL) {
+        gchar *endptr = NULL;
+        gint64 v = g_ascii_strtoll (counter, &endptr, 10);
+        if (endptr != counter && *endptr == '\0' && v >= 0 &&
+            (guint64) v <= OTP_HOTP_COUNTER_MAX) {
+            otp->counter = (guint64) v;
+        }
+    }
+
+    GError *validation_err = NULL;
+    if (!otp_validate_import_token (otp, &validation_err)) {
+        if (validation_err != NULL)
+            g_clear_error (&validation_err);
+        free_parsed_otp (otp);
+    } else {
+        *otps = g_slist_append (*otps, otp);
+    }
+
+    g_uri_unref (parsed);
 }
-
 
 static void
-parse_parameters (const gchar   *modified_uri,
-                  otp_t         *otp)
+free_parsed_otp (otp_t *otp)
 {
-    // https://github.com/paolostivanin/OTPClient/issues/369#issuecomment-2238703716
-    gchar *cleaned_uri = remove_null_encoding (modified_uri);
-    gchar **tokens = g_strsplit (cleaned_uri, "?", -1);
-    gchar *escaped_issuer_and_label = g_uri_unescape_string (tokens[0], NULL);
-    gchar *mod_uri_copy_utf8 = g_utf8_offset_to_pointer (cleaned_uri, g_utf8_strlen (tokens[0], -1) + 1);
-    g_strfreev (tokens);
-
-    tokens = g_strsplit (escaped_issuer_and_label, ":", -1);
-    if (tokens[0] && tokens[1]) {
-        otp->issuer = g_strdup (g_strstrip (tokens[0]));
-        otp->account_name = g_strdup (g_strstrip (tokens[1]));
-    } else {
-        otp->account_name = g_strdup (g_strstrip (tokens[0]));
-    }
-    g_free (escaped_issuer_and_label);
-    g_strfreev (tokens);
-
-    tokens = g_strsplit (mod_uri_copy_utf8, "&", -1);
-    gint i = 0;
-    while (tokens[i]) {
-        if (g_ascii_strncasecmp (tokens[i], "secret=", 7) == 0) {
-            tokens[i] += 7;
-            otp->secret = secure_strdup (tokens[i]);
-            tokens[i] -= 7;
-        } else if (g_ascii_strncasecmp (tokens[i], "algorithm=", 10) == 0) {
-            tokens[i] += 10;
-            if (g_ascii_strcasecmp (tokens[i], "SHA1") == 0 ||
-                g_ascii_strcasecmp (tokens[i], "SHA256") == 0 ||
-                g_ascii_strcasecmp (tokens[i], "SHA512") == 0) {
-                otp->algo = g_ascii_strup (tokens[i], -1);
-            }
-            tokens[i] -= 10;
-        } else if (g_ascii_strncasecmp (tokens[i], "period=", 7) == 0) {
-            tokens[i] += 7;
-            gint64 period_val = g_ascii_strtoll (tokens[i], NULL, 10);
-            if (period_val > 0 && period_val <= 300) {
-                otp->period = (guint32) period_val;
-            }
-            tokens[i] -= 7;
-        } else if (g_ascii_strncasecmp (tokens[i], "digits=", 7) == 0) {
-            tokens[i] += 7;
-            gint64 digits_val = g_ascii_strtoll (tokens[i], NULL, 10);
-            if (digits_val >= 6 && digits_val <= 8) {
-                otp->digits = (guint32) digits_val;
-            }
-            tokens[i] -= 7;
-        } else if (g_ascii_strncasecmp (tokens[i], "issuer=", 7) == 0) {
-            tokens[i] += 7;
-            if (!otp->issuer) {
-                otp->issuer = g_strdup (g_strstrip (tokens[i]));
-            }
-            tokens[i] -= 7;
-        } else if (g_ascii_strncasecmp (tokens[i], "counter=", 8) == 0) {
-            tokens[i] += 8;
-            gint64 counter_val = g_ascii_strtoll (tokens[i], NULL, 10);
-            // Bound the HOTP counter at 2^48: comfortably above any realistic
-            // usage but far below int64 max so subsequent increments can't
-            // wrap. RFC 4226 doesn't mandate a cap; this is a sanity guard
-            // against malformed/malicious URIs.
-            if (counter_val >= 0 && counter_val <= (gint64) (1ULL << 48)) {
-                otp->counter = (guint64) counter_val;
-            }
-            tokens[i] -= 8;
-        }
-        i++;
-    }
-    g_strfreev (tokens);
-    g_free (cleaned_uri);
-}
-
-
-static gchar *
-remove_null_encoding (const gchar *uri)
-{
-    GRegex *regex = g_regex_new ("%00", 0, 0, NULL);
-    gchar *cleaned_uri = g_regex_replace_literal (regex, uri, -1, 0, "", 0, NULL);
-    g_regex_unref (regex);
-
-    return cleaned_uri;
+    if (otp == NULL)
+        return;
+    g_free (otp->type);
+    g_free (otp->algo);
+    g_free (otp->account_name);
+    g_free (otp->issuer);
+    gcry_free (otp->secret);
+    g_free (otp->group);
+    g_free (otp);
 }
