@@ -46,6 +46,7 @@ get_authpro_data (const gchar  *path,
             "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
+        g_clear_error (err);
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
         close (safe_fd);
         return NULL;

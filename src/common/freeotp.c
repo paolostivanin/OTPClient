@@ -6,6 +6,7 @@
 #include <glib/gi18n.h>
 
 #include "common.h"
+#include "file-size.h"
 #include "gquarks.h"
 #include "parse-uri.h"
 
@@ -20,13 +21,15 @@ get_freeotpplus_data (const gchar  *path,
     if (safe_fd < 0) {
         return NULL;
     }
-    if (!is_secmem_available (db_size * SECMEM_REQUIRED_MULTIPLIER, err)) {
+    goffset input_size = get_file_size (path);
+    if (!is_secmem_available ((db_size + input_size) * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
             "You need to increase your system's memlock limit by following the instructions on our "
             "<a href=\"https://github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations\">secure memory wiki page</a>.\n"
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
+        g_clear_error (err);
         g_set_error (err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
         close (safe_fd);
         return NULL;
