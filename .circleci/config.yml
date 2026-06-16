@@ -24,7 +24,7 @@ jobs:
       - image: debian:stable
     steps:
       - checkout
-      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libadwaita-1-dev
+      - run: apt update && apt -y install git gcc clang cmake libgcrypt20-dev libgtk-4-dev libzip-dev libjansson-dev libzbar-dev libprotobuf-c-dev libsecret-1-dev uuid-dev libprotobuf-dev libqrencode-dev libadwaita-1-dev
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 

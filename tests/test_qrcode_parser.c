@@ -147,9 +147,36 @@ make_qr_pixbuf (const gchar *payload)
     return pixbuf;
 }
 
+/* Some minimal CI images (e.g. ubuntu:resolute) ship gdk-pixbuf without the
+ * JPEG loader plugin, so gdk_pixbuf_save("jpeg", ...) returns FALSE there.
+ * Skip the test gracefully instead of failing CI: when the writer is
+ * available (every desktop install of OTPClient) the test still exercises
+ * the JPEG decode path end-to-end. */
+static gboolean
+pixbuf_can_save (const gchar *format)
+{
+    GSList *formats = gdk_pixbuf_get_formats ();
+    gboolean writable = FALSE;
+    for (GSList *l = formats; l != NULL; l = l->next) {
+        GdkPixbufFormat *fmt = l->data;
+        if (g_strcmp0 (gdk_pixbuf_format_get_name (fmt), format) == 0
+            && gdk_pixbuf_format_is_writable (fmt)) {
+            writable = TRUE;
+            break;
+        }
+    }
+    g_slist_free (formats);
+    return writable;
+}
+
 static void
 test_valid_jpeg_qr (void)
 {
+    if (!pixbuf_can_save ("jpeg")) {
+        g_test_skip ("JPEG writer not available in gdk-pixbuf loaders");
+        return;
+    }
+
     const gchar *payload = "otpauth://totp/Example:bob?secret=JBSWY3DPEHPK3PXP&issuer=Example";
     gchar *dir = NULL;
     gchar *path = make_tmp_path ("qr.jpg", &dir);
@@ -157,8 +184,9 @@ test_valid_jpeg_qr (void)
     g_autoptr (GdkPixbuf) pixbuf = make_qr_pixbuf (payload);
 
     GError *err = NULL;
-    g_assert_true (gdk_pixbuf_save (pixbuf, path, "jpeg", &err, "quality", "95", NULL));
-    g_assert_no_error (err);
+    if (!gdk_pixbuf_save (pixbuf, path, "jpeg", &err, "quality", "95", NULL))
+        g_error ("gdk_pixbuf_save(jpeg) failed: %s",
+                 err != NULL ? err->message : "(no error message)");
 
     gchar *uri = qrcode_parse_image_file (path, &err);
     g_assert_no_error (err);
