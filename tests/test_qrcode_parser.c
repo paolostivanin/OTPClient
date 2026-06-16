@@ -3,6 +3,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <qrencode.h>
 #include <string.h>
+#include <unistd.h>
 #include "qrcode-parser.h"
 #include "gquarks.h"
 
@@ -147,33 +148,42 @@ make_qr_pixbuf (const gchar *payload)
     return pixbuf;
 }
 
-/* Some minimal CI images (e.g. ubuntu:resolute) ship gdk-pixbuf without the
- * JPEG loader plugin, so gdk_pixbuf_save("jpeg", ...) returns FALSE there.
- * Skip the test gracefully instead of failing CI: when the writer is
- * available (every desktop install of OTPClient) the test still exercises
- * the JPEG decode path end-to-end. */
+/* Skip the JPEG test gracefully when gdk-pixbuf can't actually produce a JPEG
+ * in the current environment. Two failure modes show up in CI:
+ *  - minimal images ship without a JPEG loader entirely (format not writable);
+ *  - the writer is glycin-image-rs which wraps itself in bwrap, and bwrap
+ *    can't spawn inside an unprivileged Docker container (no user namespaces),
+ *    so the format is registered as writable but the save aborts at runtime.
+ * Probe with a tiny save and skip on either failure. */
 static gboolean
-pixbuf_can_save (const gchar *format)
+pixbuf_jpeg_save_works (void)
 {
-    GSList *formats = gdk_pixbuf_get_formats ();
-    gboolean writable = FALSE;
-    for (GSList *l = formats; l != NULL; l = l->next) {
-        GdkPixbufFormat *fmt = l->data;
-        if (g_strcmp0 (gdk_pixbuf_format_get_name (fmt), format) == 0
-            && gdk_pixbuf_format_is_writable (fmt)) {
-            writable = TRUE;
-            break;
-        }
+    g_autoptr (GdkPixbuf) probe = gdk_pixbuf_new (GDK_COLORSPACE_RGB, FALSE, 8, 8, 8);
+    g_assert_nonnull (probe);
+    gdk_pixbuf_fill (probe, 0xffffffff);
+
+    gchar *tmpfile = NULL;
+    GError *err = NULL;
+    gint fd = g_file_open_tmp ("otpclient-jpeg-probe-XXXXXX.jpg", &tmpfile, &err);
+    if (fd < 0) {
+        g_clear_error (&err);
+        g_free (tmpfile);
+        return FALSE;
     }
-    g_slist_free (formats);
-    return writable;
+    close (fd);
+
+    gboolean ok = gdk_pixbuf_save (probe, tmpfile, "jpeg", &err, NULL);
+    g_clear_error (&err);
+    g_unlink (tmpfile);
+    g_free (tmpfile);
+    return ok;
 }
 
 static void
 test_valid_jpeg_qr (void)
 {
-    if (!pixbuf_can_save ("jpeg")) {
-        g_test_skip ("JPEG writer not available in gdk-pixbuf loaders");
+    if (!pixbuf_jpeg_save_works ()) {
+        g_test_skip ("gdk-pixbuf JPEG writer unusable in this environment");
         return;
     }
 
