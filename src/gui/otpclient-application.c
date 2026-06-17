@@ -650,16 +650,16 @@ on_unlock_done (GObject      *source_object,
 
         /* Any other failure (file too big, malformed header, secmem
          * exhaustion, KDF param out-of-range, ...) is a dead-end: surface it
-         * to the user instead of leaving them staring at an empty window. */
+         * to the user instead of leaving them staring at an empty window.
+         * Drop db_data so update_empty_state routes to "no-db" instead of
+         * the "Unlocking…" page (which keys off in_memory_json_data == NULL);
+         * the sidebar entry stays put so the user can click it to retry. */
         if (self->window != NULL)
         {
             g_autofree gchar *msg = g_strdup_printf (_("Could not open database: %s"), err->message);
             otpclient_window_show_error_toast (self->window, msg);
         }
-        if (self->db_data != NULL && self->db_data->key != NULL) {
-            gcry_free (self->db_data->key);
-            self->db_data->key = NULL;
-        }
+        otpclient_application_set_db_data (self, NULL);
         self->migrating_legacy_keyring = FALSE;
         g_clear_error (&err);
         return;

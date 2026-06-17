@@ -924,14 +924,19 @@ get_db_version (const gchar  *db_path,
         return -1;
     }
 
-    guint32 be_version = read_be32 (header + DB_HEADER_NAME_LEN);
-    gint32 native_version = 0;
-    memcpy (&native_version, header + DB_HEADER_NAME_LEN, sizeof (native_version));
-    gint32 version = (be_version == 3) ? 3 : native_version;
+    // v3 writes the version explicitly with write_be32, so bytes [9..12] are
+    // 00 00 00 03. v2 wrote a zero-initialized DbHeaderData_v2 struct whose
+    // 3 bytes of padding before `gint32 db_version` are zero, followed by the
+    // LE int32 value 2 — i.e. bytes [9..12] are 00 00 00 02. Both layouts
+    // round-trip cleanly through read_be32. A previous attempt fell back to a
+    // native-endian memcpy when read_be32 != 3, which turned a v2 file's
+    // 00 00 00 02 into 0x02000000 (33554432) and tripped the "future version"
+    // guard, locking users out of legitimate v2 databases.
+    guint32 version = read_be32 (header + DB_HEADER_NAME_LEN);
     if (version < 2)
         version = 2;
     cleanup_db_gfile (in_file, in_stream, NULL);
-    return version;
+    return (gint32) version;
 }
 
 

@@ -91,15 +91,42 @@ test_truncated_header_rejected (void)
 static void
 test_future_version_rejected (void)
 {
-    guint8 bytes[DB_HEADER_NAME_LEN + sizeof (gint32)] = {0};
+    guint8 bytes[DB_HEADER_NAME_LEN + sizeof (guint32)] = {0};
     memcpy (bytes, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
-    gint32 future = DB_VERSION + 1;
-    memcpy (bytes + DB_HEADER_NAME_LEN, &future, sizeof future);
+    write_be32_test (bytes + DB_HEADER_NAME_LEN, DB_VERSION + 1);
 
     gchar *dir = NULL;
     gchar *path = write_tmp_file ("future.enc", bytes, sizeof bytes, &dir);
 
     assert_load_rejected (path, DEFAULT_MEMLOCK_VALUE, generic_error_gquark ());
+    cleanup_tmp_file (dir, path);
+}
+
+/* Regression: a v2 header on disk has 3 bytes of zero padding (from g_new0
+ * struct init) between "OTPClient" and the LE int32 db_version=2. Reading
+ * those bytes as native LE produced 0x02000000 = 33554432 and tripped the
+ * future-version guard, locking users out of legitimate v2 databases. */
+static void
+test_v2_header_recognized_as_v2 (void)
+{
+    guint8 bytes[DB_HEADER_NAME_LEN + 3 + sizeof (gint32)] = {0};
+    memcpy (bytes, DB_HEADER_NAME, DB_HEADER_NAME_LEN);
+    gint32 v2 = 2;
+    memcpy (bytes + DB_HEADER_NAME_LEN + 3, &v2, sizeof v2);
+
+    gchar *dir = NULL;
+    gchar *path = write_tmp_file ("v2-header.enc", bytes, sizeof bytes, &dir);
+
+    DatabaseData *db_data = database_data_new (path, DEFAULT_MEMLOCK_VALUE);
+    db_data->key = secure_strdup ("password");
+
+    GError *err = NULL;
+    load_db (db_data, &err);
+    g_assert_nonnull (err);
+    g_assert_cmpint (db_data->current_db_version, ==, 2);
+
+    g_clear_error (&err);
+    database_data_free (db_data);
     cleanup_tmp_file (dir, path);
 }
 
@@ -164,6 +191,7 @@ main (int argc, char **argv)
 
     g_test_add_func ("/malformed-db/truncated-header", test_truncated_header_rejected);
     g_test_add_func ("/malformed-db/future-version", test_future_version_rejected);
+    g_test_add_func ("/malformed-db/v2-header-recognized", test_v2_header_recognized_as_v2);
     g_test_add_func ("/malformed-db/truncated-v3-header", test_truncated_v3_header_rejected);
     g_test_add_func ("/malformed-db/truncated-v3-tag", test_truncated_v3_tag_rejected);
     g_test_add_func ("/malformed-db/argon-bounds", test_argon_bounds_rejected);
