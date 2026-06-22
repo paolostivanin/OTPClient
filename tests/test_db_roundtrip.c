@@ -209,6 +209,31 @@ test_kdf_param_update_then_reload (void)
     cleanup_tmp_db (writer, dir, path);
 }
 
+static void
+test_purge_then_reload (void)
+{
+    gchar *path = NULL;
+    gchar *dir = make_tmp_db_dir (&path);
+    DatabaseData *db = make_db_data_with_path (path, "test-password");
+    GError *err = NULL;
+    update_db (db, &err);
+    g_assert_no_error (err);
+
+    database_data_purge_secrets (db);
+    g_assert_null (db->key);
+    g_assert_null (db->in_memory_json_data);
+    g_assert_null (db->committed_json_data);
+    g_assert_null (db->cached_derived_key);
+    g_assert_false (db->has_cached_key);
+    g_assert_nonnull (db->db_path);
+
+    db->key = secure_strdup ("test-password");
+    load_db (db, &err);
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (db->in_memory_json_data), ==, 2);
+    cleanup_tmp_db (db, dir, path);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -221,6 +246,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-roundtrip/corrupted-ciphertext", test_corrupted_ciphertext_rejected);
     g_test_add_func ("/db-roundtrip/password-change",      test_password_change_then_reload);
     g_test_add_func ("/db-roundtrip/kdf-param-update",     test_kdf_param_update_then_reload);
+    g_test_add_func ("/db-roundtrip/purge-then-reload",    test_purge_then_reload);
 
     return g_test_run ();
 }

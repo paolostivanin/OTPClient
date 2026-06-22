@@ -6,6 +6,10 @@
 #include "db-common.h"
 #include "common.h"
 #include "file-size.h"
+#include "gquarks.h"
+#include "../qrcode-parser.h"
+#include "../google-migration.h"
+#include "parse-uri.h"
 #include "../otpclient-application.h"
 
 struct _ImportDialog
@@ -27,6 +31,17 @@ struct _ImportDialog
 };
 
 G_DEFINE_FINAL_TYPE (ImportDialog, import_dialog, ADW_TYPE_DIALOG)
+
+static void
+wipe_password_row (GtkWidget *row)
+{
+    if (row == NULL)
+        return;
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (row));
+    if (text != NULL && text[0] != '\0')
+        explicit_bzero ((gchar *) text, strlen (text));
+    gtk_editable_set_text (GTK_EDITABLE (row), "");
+}
 
 /* Per-format filter spec: NULL pattern lists fall back to "All files".
  * Patterns are case-insensitive thanks to gtk_file_filter_add_suffix. */
@@ -77,8 +92,15 @@ do_import (ImportDialog *self)
         const gchar *text = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
         gsize len = strlen (text);
         self->import_password = gcry_calloc_secure (len + 1, 1);
+        if (self->import_password == NULL) {
+            wipe_password_row (self->password_row);
+            gtk_label_set_text (GTK_LABEL (self->error_label),
+                                _("Secure memory is exhausted"));
+            gtk_widget_set_visible (self->error_label, TRUE);
+            return;
+        }
         memcpy (self->import_password, text, len);
-        gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
+        wipe_password_row (self->password_row);
     }
 
     goffset file_size = get_file_size (self->selected_file);
@@ -90,12 +112,33 @@ do_import (ImportDialog *self)
     }
 
     GError *err = NULL;
-    GSList *otps = get_data_from_provider (import_formats[fmt_idx].action_name,
-                                           self->selected_file,
-                                           self->import_password,
-                                           self->db_data->max_file_size_from_memlock,
-                                           (gsize) file_size,
-                                           &err);
+    GSList *otps = NULL;
+    guint qr_invalid = 0;
+    guint qr_batch_size = 0;
+    guint qr_batch_index = 0;
+    if (g_strcmp0 (import_formats[fmt_idx].action_name,
+                   GOOGLE_FILE_ACTION_NAME) == 0) {
+        gchar *uri = qrcode_parse_image_file (self->selected_file, &err);
+        if (uri != NULL) {
+            if (g_str_has_prefix (uri, "otpauth-migration://"))
+                otps = google_migration_decode (uri, &qr_invalid,
+                                                &qr_batch_size, &qr_batch_index,
+                                                &err);
+            else
+                set_otps_from_uris (uri, &otps);
+            sensitive_g_free (uri);
+            if (otps == NULL && err == NULL)
+                g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "QR code contains no valid OTP token.");
+        }
+    } else {
+        otps = get_data_from_provider (import_formats[fmt_idx].action_name,
+                                       self->selected_file,
+                                       self->import_password,
+                                       self->db_data->max_file_size_from_memlock,
+                                       (gsize) file_size,
+                                       &err);
+    }
 
     if (err != NULL)
     {
@@ -105,14 +148,17 @@ do_import (ImportDialog *self)
         return;
     }
 
-    ImportSummary summary = {0, 0, 0, 0};
+    ImportSummary summary = {0};
+    summary.batch_size = qr_batch_size;
+    summary.batch_index = qr_batch_index;
     if (otps != NULL)
     {
         GApplication *default_app = g_application_get_default ();
         OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
             ? OTPCLIENT_APPLICATION (default_app)
             : NULL;
-        if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+        if (app == NULL || otpclient_application_get_app_locked (app) ||
+            otpclient_application_get_db_data (app) != self->db_data)
         {
             gtk_label_set_text (GTK_LABEL (self->error_label),
                                 _("The active database changed. Reopen this dialog before importing."));
@@ -121,7 +167,7 @@ do_import (ImportDialog *self)
             return;
         }
 
-        OtpImportReport report = {0, 0, 0};
+        OtpImportReport report = {0, 0, qr_invalid};
         db_import_otps (self->db_data, otps, &report, &err);
         if (err != NULL)
         {
@@ -213,6 +259,7 @@ static void
 import_dialog_finalize (GObject *object)
 {
     ImportDialog *self = IMPORT_DIALOG (object);
+    wipe_password_row (self->password_row);
     g_free (self->selected_file);
     g_clear_pointer (&self->db_data, database_data_free);
     if (self->import_password != NULL) {

@@ -120,7 +120,7 @@ otp_validate_token_object (json_t  *obj,
             return FALSE;
         }
         json_int_t counter = json_integer_value (counter_obj);
-        if (counter < 0 || (guint64) counter > OTP_HOTP_COUNTER_MAX) {
+        if (counter < 0 || (guint64) counter >= OTP_HOTP_COUNTER_MAX) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                          "Token %" G_GSIZE_FORMAT " has an out-of-range HOTP counter.", index);
             return FALSE;
@@ -190,7 +190,7 @@ otp_validate_import_token (const otp_t  *otp,
                          "Import token has an out-of-range TOTP period.");
             return FALSE;
         }
-    } else if (otp->counter > OTP_HOTP_COUNTER_MAX) {
+    } else if (otp->counter >= OTP_HOTP_COUNTER_MAX) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Import token has an out-of-range HOTP counter.");
         return FALSE;

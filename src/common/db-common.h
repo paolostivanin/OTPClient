@@ -165,6 +165,7 @@ gint    check_duplicate    (gconstpointer   data,
                             gconstpointer   user_data);
 
 void    db_invalidate_kdf_cache (DatabaseData *db_data);
+void    database_data_purge_secrets (DatabaseData *db_data);
 
 /* Copies an encrypted database file to dst_path with 0600 perms. The source
  * is not followed if it is a symlink, and the destination is forced 0600

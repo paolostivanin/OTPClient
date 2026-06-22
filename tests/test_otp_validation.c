@@ -55,7 +55,7 @@ test_hotp_counter_overflow_rejected (void)
     json_t *root = json_array ();
     json_t *obj = build_json_obj ("HOTP", "alice", "Example",
                                   "JBSWY3DPEHPK3PXP", 6, "SHA1",
-                                  30, OTP_HOTP_COUNTER_MAX + 1, NULL);
+                                  30, OTP_HOTP_COUNTER_MAX, NULL);
     json_array_append_new (root, obj);
 
     GError *err = NULL;

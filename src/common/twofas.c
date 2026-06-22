@@ -31,11 +31,13 @@ static GSList   *get_otps_from_encrypted_backup (const gchar       *path,
 static GSList   *get_otps_from_plain_backup     (const gchar       *path,
                                                  GError           **err);
 
-static gboolean  is_schema_supported            (const gchar       *path);
+static gboolean  is_schema_supported            (const gchar       *path,
+                                                 GError           **err);
 
-static void      decrypt_data                   (const gchar      **b64_data,
+static gboolean  decrypt_data                   (const gchar      **b64_data,
                                                  const gchar       *pwd,
-                                                 TwofasData        *twofas_data);
+                                                 TwofasData        *twofas_data,
+                                                 GError           **err);
 
 static gchar    *get_encoded_data               (guchar            *enc_buf,
                                                  gsize              enc_buf_len,
@@ -335,7 +337,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,
                                 GError           **err)
 {
-    if (!is_schema_supported (path)) {
+    if (!is_schema_supported (path, err)) {
         return NULL;
     }
 
@@ -343,8 +345,16 @@ get_otps_from_encrypted_backup (const gchar       *path,
     GSList *otps = NULL;
 
     json_t *root = get_json_root (path);
+    if (root == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Could not parse the 2FAS backup JSON.");
+        g_free (twofas_data);
+        return NULL;
+    }
     const gchar *services_encrypted = json_string_value (json_object_get (root, "servicesEncrypted"));
     if (services_encrypted == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Malformed 2FAS backup: missing encrypted services.");
         g_free (twofas_data);
         json_decref (root);
         return NULL;
@@ -371,7 +381,16 @@ get_otps_from_encrypted_backup (const gchar       *path,
         json_decref (root);
         return NULL;
     }
-    decrypt_data ((const gchar **)b64_encoded_data, password, twofas_data);
+    if (!decrypt_data ((const gchar **)b64_encoded_data, password,
+                       twofas_data, err)) {
+        g_strfreev (b64_encoded_data);
+        g_hash_table_destroy (group_map);
+        g_free (twofas_data->salt);
+        g_free (twofas_data->iv);
+        g_free (twofas_data);
+        json_decref (root);
+        return NULL;
+    }
     if (twofas_data->json_data != NULL) {
         otps = parse_twofas_json_data (twofas_data->json_data, group_map, err);
         gcry_free (twofas_data->json_data);
@@ -391,7 +410,7 @@ static GSList *
 get_otps_from_plain_backup (const gchar  *path,
                             GError      **err)
 {
-    if (!is_schema_supported (path)) {
+    if (!is_schema_supported (path, err)) {
         return NULL;
     }
 
@@ -433,12 +452,19 @@ get_otps_from_plain_backup (const gchar  *path,
 
 
 static gboolean
-is_schema_supported (const gchar *path)
+is_schema_supported (const gchar *path,
+                     GError     **err)
 {
     json_t *root = get_json_root (path);
+    if (root == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Could not parse the 2FAS backup JSON.");
+        return FALSE;
+    }
     gint32 schema_version = (gint32)json_integer_value (json_object_get (root, "schemaVersion"));
     if (schema_version != 4) {
-        g_printerr ("Unsupported schema version: %d\n", schema_version);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Unsupported 2FAS schema version: %d.", schema_version);
         json_decref (root);
         return FALSE;
     }
@@ -447,10 +473,11 @@ is_schema_supported (const gchar *path)
 }
 
 
-static void
+static gboolean
 decrypt_data (const gchar **b64_data,
               const gchar *pwd,
-              TwofasData   *twofas_data)
+              TwofasData   *twofas_data,
+              GError      **err)
 {
     gsize enc_data_with_tag_size, salt_out_len, iv_out_len;
     guchar *enc_data_with_tag = g_base64_decode (b64_data[0], &enc_data_with_tag_size);
@@ -458,22 +485,24 @@ decrypt_data (const gchar **b64_data,
     twofas_data->iv = g_base64_decode (b64_data[2], &iv_out_len);
 
     if (enc_data_with_tag_size <= TWOFAS_TAG) {
-        g_printerr ("Encrypted data is too small.\n");
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Encrypted 2FAS data is too small.");
         g_free (enc_data_with_tag);
         g_free (twofas_data->salt);
         g_free (twofas_data->iv);
         twofas_data->salt = NULL;
         twofas_data->iv = NULL;
-        return;
+        return FALSE;
     }
     if (salt_out_len != TWOFAS_SALT || iv_out_len != TWOFAS_IV) {
-        g_printerr ("Invalid salt or IV length in encrypted backup (salt=%zu, iv=%zu).\n", salt_out_len, iv_out_len);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Invalid salt or IV length in encrypted 2FAS backup.");
         g_free (enc_data_with_tag);
         g_free (twofas_data->salt);
         g_free (twofas_data->iv);
         twofas_data->salt = NULL;
         twofas_data->iv = NULL;
-        return;
+        return FALSE;
     }
     guchar tag[TWOFAS_TAG];
     gsize enc_buf_size = enc_data_with_tag_size - TWOFAS_TAG;
@@ -484,53 +513,62 @@ decrypt_data (const gchar **b64_data,
 
     guchar *derived_key = gcry_malloc_secure (32);
     if (derived_key == NULL) {
-        g_printerr ("Couldn't allocate secure memory for the derived key.\n");
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Could not allocate secure memory for the 2FAS key.");
         g_free (enc_data);
-        return;
+        return FALSE;
     }
     // gcry_kdf_derive expects the password length in BYTES, not Unicode characters.
     gpg_error_t g_err = gcry_kdf_derive (pwd, strlen (pwd), GCRY_KDF_PBKDF2, GCRY_MD_SHA256,
                                          twofas_data->salt, salt_out_len, TWOFAS_KDF_ITERS, 32, derived_key);
     if (g_err != GPG_ERR_NO_ERROR) {
-        g_printerr ("Failed to derive key: %s/%s\n", gcry_strsource (g_err), gcry_strerror (g_err));
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE,
+                     "Failed to derive the 2FAS key: %s/%s",
+                     gcry_strsource (g_err), gcry_strerror (g_err));
         explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
-        return;
+        return FALSE;
     }
 
     gcry_cipher_hd_t hd = open_cipher_and_set_data (derived_key, twofas_data->iv, iv_out_len);
     if (hd == NULL) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to initialize the 2FAS cipher.");
         explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
-        return;
+        return FALSE;
     }
 
     twofas_data->json_data = gcry_calloc_secure (enc_buf_size + 1, 1);
     if (twofas_data->json_data == NULL) {
-        g_printerr ("Couldn't allocate secure memory for the decrypted database.\n");
+        g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
+                     "Could not allocate secure memory for decrypted 2FAS data.");
         explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
         gcry_cipher_close (hd);
-        return;
+        return FALSE;
     }
     gpg_error_t gpg_err = gcry_cipher_decrypt (hd, twofas_data->json_data, enc_buf_size, enc_data, enc_buf_size);
     if (gpg_err) {
-        g_printerr ("Failed to decrypt data: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Failed to decrypt 2FAS data: %s/%s",
+                     gcry_strsource (gpg_err), gcry_strerror (gpg_err));
         gcry_free (twofas_data->json_data);
         twofas_data->json_data = NULL;
         explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
         g_free (enc_data);
         gcry_cipher_close (hd);
-        return;
+        return FALSE;
     }
 
     gpg_err = gcry_cipher_checktag (hd, tag, TWOFAS_TAG);
     if (gpg_err) {
-        g_printerr ("Failed to verify the tag: %s/%s\n", gcry_strsource (gpg_err), gcry_strerror (gpg_err));
+        g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                     "Wrong password or corrupted 2FAS backup.");
         gcry_free (twofas_data->json_data);
         twofas_data->json_data = NULL;
     }
@@ -539,6 +577,8 @@ decrypt_data (const gchar **b64_data,
     explicit_bzero (derived_key, 32);
     gcry_free (derived_key);
     g_free (enc_data);
+    explicit_bzero (tag, sizeof (tag));
+    return twofas_data->json_data != NULL;
 }
 
 

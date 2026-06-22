@@ -86,6 +86,13 @@ test_bytes_to_hexstr_roundtrip (void)
 }
 
 static void
+test_bytes_to_hexstr_overflow (void)
+{
+    const guchar byte = 0;
+    g_assert_null (bytes_to_hexstr (&byte, (G_MAXSIZE / 2) + 1));
+}
+
+static void
 test_secure_strdup_null (void)
 {
     g_assert_null (secure_strdup (NULL));
@@ -271,6 +278,7 @@ main (int argc, char **argv)
     g_test_add_func ("/common-utils/hexstr-to-bytes-exact/wrong",    test_hexstr_to_bytes_exact_wrong_length);
     g_test_add_func ("/common-utils/bytes-to-hexstr/null",           test_bytes_to_hexstr_null_data);
     g_test_add_func ("/common-utils/bytes-to-hexstr/roundtrip",      test_bytes_to_hexstr_roundtrip);
+    g_test_add_func ("/common-utils/bytes-to-hexstr/overflow",       test_bytes_to_hexstr_overflow);
     g_test_add_func ("/common-utils/secure-strdup/null",             test_secure_strdup_null);
     g_test_add_func ("/common-utils/secure-strdup/empty",            test_secure_strdup_empty);
     g_test_add_func ("/common-utils/get-algo-int-from-str/known",    test_get_algo_int_from_str_known);

@@ -100,6 +100,24 @@ target_include_directories(test_db_roundtrip PRIVATE
 target_link_libraries(test_db_roundtrip ${COMMON_LIBS})
 add_test(NAME db_roundtrip COMMAND test_db_roundtrip)
 
+add_executable(test_cli_hotp
+        test_cli_hotp.c
+        ${PROJECT_SOURCE_DIR}/src/cli/get-data.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/db-common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+)
+otpclient_apply_target_settings(test_cli_hotp)
+target_compile_definitions(test_cli_hotp PRIVATE OTPCLIENT_TESTING)
+target_include_directories(test_cli_hotp PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+        ${PROJECT_SOURCE_DIR}/src/cli
+)
+target_link_libraries(test_cli_hotp ${COMMON_LIBS})
+add_test(NAME cli_hotp COMMAND test_cli_hotp)
+
 add_executable(test_parse_uri_extra
         test_parse_uri_extra.c
         ${PROJECT_SOURCE_DIR}/src/common/common.c
@@ -148,6 +166,45 @@ target_link_libraries(test_common_utils ${COMMON_LIBS})
 add_test(NAME common_utils COMMAND test_common_utils)
 
 if(BUILD_GUI)
+    add_executable(test_otp_entry
+            test_otp_entry.c
+            ${PROJECT_SOURCE_DIR}/src/gui/otp-entry.c
+            ${PROJECT_SOURCE_DIR}/src/common/common.c
+            ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+            ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+            ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+    )
+    otpclient_apply_target_settings(test_otp_entry)
+    target_include_directories(test_otp_entry PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/common
+            ${PROJECT_SOURCE_DIR}/src/gui
+    )
+    target_link_libraries(test_otp_entry
+            PkgConfig::GTK4
+            ${COMMON_LIBS}
+    )
+    add_test(NAME otp_entry COMMAND test_otp_entry)
+
+    add_executable(test_google_migration
+            test_google_migration.c
+            ${PROJECT_SOURCE_DIR}/src/gui/google-migration.c
+            ${PROJECT_SOURCE_DIR}/src/gui/google-migration.pb-c.c
+            ${PROJECT_SOURCE_DIR}/src/common/common.c
+            ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+            ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+            ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+    )
+    otpclient_apply_target_settings(test_google_migration)
+    target_include_directories(test_google_migration PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/common
+            ${PROJECT_SOURCE_DIR}/src/gui
+    )
+    target_link_libraries(test_google_migration
+            PkgConfig::PROTOC
+            ${COMMON_LIBS}
+    )
+    add_test(NAME google_migration COMMAND test_google_migration)
+
     add_executable(test_qrcode_parser
             test_qrcode_parser.c
             ${PROJECT_SOURCE_DIR}/src/gui/qrcode-parser.c

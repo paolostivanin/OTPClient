@@ -158,7 +158,8 @@ on_add_clicked (GtkButton       *button,
     OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
         ? OTPCLIENT_APPLICATION (default_app)
         : NULL;
-    if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label),
                             _("The active database changed. Reopen this dialog before saving."));
@@ -364,7 +365,8 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->period_spin);
 
     /* Counter (HOTP) */
-    GtkAdjustment *counter_adj = gtk_adjustment_new (0, 0, G_MAXUINT32, 1, 10, 0);
+    GtkAdjustment *counter_adj = gtk_adjustment_new (
+        0, 0, (double) (OTP_HOTP_COUNTER_MAX - 1), 1, 10, 0);
     self->counter_spin = adw_spin_row_new (counter_adj, 1, 0);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->counter_spin), _("Counter"));
     gtk_widget_set_tooltip_text (self->counter_spin,

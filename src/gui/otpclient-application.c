@@ -63,6 +63,7 @@ gboolean use_secret_service;
      * window: the worker still holds a raw pointer to db_data and freeing
      * it under the worker's feet is a use-after-free. */
     gboolean unlock_in_progress;
+    guint lock_generation;
 };
 
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
@@ -246,6 +247,7 @@ application_disable_secret_service_runtime (OTPClientApplication *self,
 
 typedef struct {
     GWeakRef app_ref;
+    guint lock_generation;
 } ApplicationAsyncContext;
 
 static ApplicationAsyncContext *
@@ -253,6 +255,7 @@ application_async_context_new (OTPClientApplication *self)
 {
     ApplicationAsyncContext *ctx = g_new0 (ApplicationAsyncContext, 1);
     g_weak_ref_init (&ctx->app_ref, self);
+    ctx->lock_generation = self->lock_generation;
     return ctx;
 }
 
@@ -322,7 +325,7 @@ on_change_password_received (const gchar  *current_password,
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
 
-    if (password == NULL || self->db_data == NULL)
+    if (password == NULL || self->db_data == NULL || self->app_locked)
         return FALSE;
 
     if (!password_bytes_equal (current_password, self->db_data->key))
@@ -559,6 +562,7 @@ on_unlock_done (GObject      *source_object,
 {
     (void) source_object;
     ApplicationAsyncContext *ctx = user_data;
+    guint attempt_generation = ctx->lock_generation;
     g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
     application_async_context_free (ctx);
 
@@ -574,6 +578,20 @@ on_unlock_done (GObject      *source_object,
      * safe again for the window to swap or free it. Clear up-front so
      * every early-return path below uncovers the lock automatically. */
     self->unlock_in_progress = FALSE;
+
+    /* A new lock request arrived after this worker started. The worker could
+     * not be cancelled safely while libgcrypt was using db_data, so discard
+     * everything it produced before any UI model is repopulated. */
+    if (attempt_generation != self->lock_generation) {
+        g_clear_error (&err);
+        database_data_purge_secrets (self->db_data);
+        if (self->window != NULL) {
+            otpclient_window_secure_lock_cleanup (self->window);
+            otpclient_window_hide_loading (self->window);
+            lock_app_present_unlock_dialog (self);
+        }
+        return;
+    }
     if (err != NULL)
     {
         g_warning ("Failed to load database: %s", err->message);
@@ -639,11 +657,22 @@ on_unlock_done (GObject      *source_object,
 
             if (self->window != NULL)
             {
-                PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                           on_password_received,
-                                                           self);
-                lock_app_install_unlock_dialog_quit (dlg, self);
-                adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+                /* While locked, keep the locked-mode chrome: re-present the
+                 * unlock dialog rather than the generic decrypt dialog. Safe
+                 * here because unlock_in_progress is already FALSE and the key
+                 * was just cleared, so the dialog re-enters the unlock path. */
+                if (self->app_locked)
+                {
+                    lock_app_present_unlock_dialog (self);
+                }
+                else
+                {
+                    PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                               on_password_received,
+                                                               self);
+                    lock_app_install_unlock_dialog_quit (dlg, self);
+                    adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+                }
             }
             return;
         }
@@ -698,6 +727,8 @@ on_unlock_done (GObject      *source_object,
         otpclient_window_start_otp_timer (self->window);
         otpclient_window_sync_active_flag (self->window);
     }
+    if (self->app_locked)
+        lock_app_unlock (self);
 }
 
 static gboolean
@@ -714,7 +745,17 @@ on_password_received (const gchar  *current_password,
         return FALSE;
 
     gsize pwd_len = strlen (password);
+    if (self->db_data->key != NULL) {
+        explicit_bzero (self->db_data->key, strlen (self->db_data->key));
+        gcry_free (self->db_data->key);
+        self->db_data->key = NULL;
+    }
     self->db_data->key = gcry_calloc_secure (pwd_len + 1, 1);
+    if (self->db_data->key == NULL) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Secure memory is exhausted"));
+        return FALSE;
+    }
     memcpy (self->db_data->key, password, pwd_len + 1);
 
     /* Defense in depth: every observed caller already wipes its own buffer
@@ -743,6 +784,32 @@ on_password_received (const gchar  *current_password,
     return TRUE;
 }
 
+gboolean
+otpclient_application_submit_unlock_password (OTPClientApplication *self,
+                                              const gchar          *password,
+                                              gchar               **error_message)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    if (self->unlock_in_progress) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("The database is already being unlocked"));
+        return FALSE;
+    }
+    return on_password_received (NULL, password, error_message, self);
+}
+
+void
+otpclient_application_purge_secrets (OTPClientApplication *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->lock_generation++;
+
+    /* If a worker is active it owns a raw db_data pointer. Its completion
+     * observes the generation mismatch and performs the purge safely. */
+    if (!self->unlock_in_progress)
+        database_data_purge_secrets (self->db_data);
+}
+
 static void
 on_secret_lookup_done (GObject      *source,
                        GAsyncResult *result,
@@ -750,6 +817,7 @@ on_secret_lookup_done (GObject      *source,
 {
     (void) source;
     ApplicationAsyncContext *ctx = user_data;
+    guint lookup_generation = ctx->lock_generation;
     g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
     application_async_context_free (ctx);
 
@@ -758,6 +826,12 @@ on_secret_lookup_done (GObject      *source,
 
     if (self == NULL)
     {
+        if (password != NULL)
+            secret_password_free (password);
+        g_clear_error (&err);
+        return;
+    }
+    if (lookup_generation != self->lock_generation) {
         if (password != NULL)
             secret_password_free (password);
         g_clear_error (&err);
@@ -971,7 +1045,7 @@ otpclient_application_signal_quit (gpointer user_data)
      * a SIGTERM (e.g. from the session manager during logout) loses them
      * and the next startup serves stale codes. */
     if (self->window != NULL)
-        otpclient_window_flush_pending_writes (self->window);
+        otpclient_window_flush_pending_writes (self->window, NULL);
     clear_session_clipboard ();
     g_application_quit (app);
     return G_SOURCE_REMOVE;
@@ -985,7 +1059,7 @@ otpclient_application_shutdown (GApplication *application)
      * but doing it here too is idempotent. */
     OTPClientApplication *self = OTPCLIENT_APPLICATION (application);
     if (self->window != NULL)
-        otpclient_window_flush_pending_writes (self->window);
+        otpclient_window_flush_pending_writes (self->window, NULL);
     clear_session_clipboard ();
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (application);
 }
@@ -1184,6 +1258,7 @@ otpclient_application_init (OTPClientApplication *self)
     self->search_provider_keyword = NULL;
     self->validity_color = NULL;
     self->validity_warning_color = NULL;
+    self->lock_generation = 0;
 }
 
 DatabaseData *
@@ -1225,7 +1300,7 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
      * key is still in memory, then tear the window state down. */
     if (self->window != NULL)
     {
-        otpclient_window_flush_pending_writes (self->window);
+        otpclient_window_flush_pending_writes (self->window, NULL);
         otpclient_window_stop_otp_timer (self->window);
         otpclient_window_clear_clipboard_now (self->window);
         otpclient_window_invalidate_cross_db (self->window);
