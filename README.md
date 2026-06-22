@@ -78,8 +78,8 @@ migration to other apps and does **not** count as a backup.
 
 ## Security
 
-- Local database encrypted with AES256-GCM
-- Key derived via Argon2id (default: 4 iterations, 128 MiB memory, parallelism 4 — configurable per database)
+- Local database encrypted with AES256-GCM (v3 on-disk format with an authenticated header)
+- Key derived via Argon2id (default: 4 iterations, 128 MiB memory, parallelism 4, configurable per database)
 - Decrypted content held in libgcrypt secure memory, never written to disk
 - Integration with the OS secret service via libsecret
 
@@ -89,12 +89,14 @@ What is protected:
   your password with Argon2id (parameters configurable per database).
 - **Secrets in RAM**: derived keys, the decrypted token JSON, and per-token
   secrets all live in libgcrypt secure memory. Those pages are `mlock`'d, so
-  they will not be paged to swap or written to a hibernation image.
+  they will not be paged to swap or written to a hibernation image. On lock
+  (manual, idle auto-lock, screensaver, or system suspend), the master key and
+  the decrypted database are wiped from memory; unlocking re-derives the key.
 - **Crash dumps**: `PR_SET_DUMPABLE=0` and `RLIMIT_CORE=0` are set at startup,
   so a crash with secrets in memory will not produce a core file.
 - **Clipboard hygiene**: in the GUI, copied OTPs are wiped after a configurable
-  timeout (default 30 s), on database lock (manual, idle auto-lock, or
-  screensaver), and on app exit (including SIGINT / SIGTERM / SIGHUP). The
+  timeout (default 30 s), on database lock (manual, idle auto-lock, screensaver,
+  or system suspend), and on app exit (including SIGINT / SIGTERM / SIGHUP). The
   search-provider daemon does **not** auto-clear: on KDE the OTP would remain
   in Klipper's history regardless (its D-Bus API has no per-entry history
   removal), so a clear timer would give a misleading sense of protection.
@@ -103,9 +105,10 @@ What is **not** defended against:
 - A same-UID attacker with `ptrace` or `/proc/PID/mem` access can read live
   secrets while the database is unlocked. Distro-default
   `kernel.yama.ptrace_scope=1` mitigates this for unrelated processes.
-- A cold-boot or DMA attack against a running machine can recover secrets
-  from RAM regardless of whether the database is locked. Database lock
-  provides UI gating; it does not scrub secrets from process memory.
+- A cold-boot or DMA attack against a running machine with the database
+  **unlocked** can recover secrets from RAM. Once the database is locked, the
+  master key and decrypted database are wiped from process memory, so a
+  cold-boot or DMA attack against a locked instance does not recover them.
 
 The search-provider daemon caches its own derived key and entry list with a
 60 s TTL plus per-database file-monitor invalidation, independent of the
@@ -147,6 +150,7 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 |-----------------------------------------------------|-------------|
 | GTK                                                 | 4.10.0      |
 | libadwaita                                          | 1.5.0       |
+| gdk-pixbuf                                           | -           |
 | Glib                                                | 2.74.0      |
 | GIO                                                 | 2.74.0      |
 | jansson                                             | 2.13        |
@@ -158,7 +162,7 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 | libsecret                                           | 0.20        |
 | qrencode                                            | 4.0.0       |
 
-GTK, libadwaita, zbar, protobuf-c, and qrencode are only required
+GTK, libadwaita, gdk-pixbuf, zbar, protobuf-c, and qrencode are only required
 when `BUILD_GUI=ON`.
 
 **Note:** The system memlock limit should be at least 64 MB. Lower values may

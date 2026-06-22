@@ -90,23 +90,31 @@
   </content_rating>
 
   <releases>
-    <release version="5.1.0" date="2026-06-16">
+    <release version="5.1.0" date="2026-06-22">
       <description>
-        <p>Feature and hardening release. Webcam QR scanning now runs on a worker thread so the UI no longer freezes while the camera warms up or while frames are decoded. You can quit the app while the database is locked. The database file format is bumped to v3 with a portable big-endian header; v1 and v2 databases are still read transparently and upgraded on next save. Search-provider results now use single-use, time-bounded capability tokens instead of predictable indices. Plus a broad security and correctness pass across the core and GUI code, memory-leak fixes, freeotp importer fixes, and a new ASan/UBSan CI job.</p>
+        <p>Feature and hardening release. Webcam QR scanning now runs on a worker thread so the UI no longer freezes while the camera warms up or while frames are decoded. You can quit the app while the database is locked. The database file format is bumped to v3 with a portable big-endian header; v1 and v2 databases are still read transparently and upgraded on next save. Locking now wipes the decrypted database and master key from memory, and the app also locks automatically when the system suspends. Search-provider results use single-use, time-bounded capability tokens instead of predictable indices. Plus a broad security and correctness pass across the core, GUI, importers, and CLI, a reworked Google Authenticator migration importer, memory-leak fixes, and a new test suite with ASan/UBSan CI.</p>
         <ul>
           <li>NEW: webcam QR scanning runs on a worker thread, no more main-thread freeze while the camera initializes or while frames are decoded</li>
           <li>NEW: you can quit OTPClient while the database is locked (#456)</li>
+          <li>NEW: the app locks automatically when the system suspends (via logind), so the database is never left decrypted across sleep</li>
           <li>IMPROVEMENT: database file format bumped to v3 with a portable, byte-addressable big-endian header. v1 and v2 databases are read transparently and upgraded to v3 on next save</li>
           <li>IMPROVEMENT: cross-process write serialization via a bounded-wait .lock sidecar, prevents two OTPClient instances from clobbering each other on save</li>
           <li>IMPROVEMENT: search-filter cache, large token lists filter without re-walking the model on every keystroke</li>
           <li>IMPROVEMENT: changing the password now requires verifying the current one before the change is applied</li>
           <li>IMPROVEMENT: CLI plain imports dispatch by file type automatically, no longer prompt for a password on unencrypted formats</li>
+          <li>IMPROVEMENT: Google Authenticator migration import was rewritten with bounded payload/token/batch limits and now reports multi-batch progress, across the file, screen, and webcam paths</li>
+          <li>SECURITY: locking wipes the decrypted database and master key from memory; unlocking re-derives the key instead of comparing a copy held in RAM</li>
+          <li>SECURITY: generated codes, notification text, clipboard contents, and per-token values are wiped after use, and live codes are kept in libgcrypt secure memory</li>
           <li>SECURITY: search-provider activation IDs are now random 128-bit capability tokens with a 30-second TTL and single-use enforcement, replacing the predictable db_index:json_index scheme</li>
           <li>SECURITY: HOTP entries are excluded from the search provider at load time, advancing a counter from a desktop search result is too easy to do by accident</li>
-          <li>SECURITY: transient password buffers are wiped after use across the GUI and CLI</li>
-          <li>SECURITY: search-provider derived-key cache + rate limit on OTP delivery</li>
-          <li>SECURITY: broad correctness and hardening pass across src/ (core + GUI)</li>
+          <li>SECURITY: transient password buffers are wiped after use across the GUI and CLI, including on password-dialog cancel and dispose</li>
+          <li>SECURITY: search-provider derived-key cache + rate limit on OTP delivery, using a single global rate bucket with no per-connection bypass and an idle-wipe timer for keys and caches</li>
+          <li>SECURITY: 2FAS encrypted import now surfaces decryption errors instead of silently swallowing them</li>
+          <li>SECURITY: broad correctness and hardening pass across src/ (core, GUI, importers, CLI), including a parse-uri double-error fix, an authpro stream check, a bytes_to_hexstr overflow guard, and NULL-checked secure-memory allocations</li>
           <li>SECURITY: tightened Argon2id parameter bounds (MAX_ITER 100 -&gt; 64, MAX_MC 4 GiB -&gt; 1 GiB, MAX_PARAL 64 -&gt; 16) to reject pathological configurations</li>
+          <li>FIX: v2 databases were misread as a far-future format version and refused to open; both v2 and v3 headers are now read correctly</li>
+          <li>FIX: the window no longer gets stuck on the "Unlocking..." page when a database fails to load for a reason other than a missing file or wrong password; it drops back to the no-database view so you can retry</li>
+          <li>FIX: CLI HOTP counter is now persisted before the code is printed, the counter upper bound is exclusive everywhere, the terminal is restored on interrupt, and CR/LF is stripped from piped input</li>
           <li>FIX: memory leaks in database and OTP handling paths</li>
           <li>FIX: freeotp importer secmem budget and GError-overwrite bug that also affected other importers</li>
           <li>FIX: in-memory database state is now restored if an encrypt-on-save fails, instead of being left half-mutated</li>
@@ -208,7 +216,7 @@
           <li>FIX: notification spam during store rebuilds and search-bar close</li>
           <li>FIX: window size and group dropdown restored across sessions; schema and icon cache updated on install</li>
           <li>PERF: KDF-derived key cache, lazy cross-DB OTP, deferred HOTP writes, pre-folded labels in search provider</li>
-          <li>BREAKING: GTK 4.18+ and libadwaita 1.5+ required; configuration migrated to GSettings (GKeyFile not migrated automatically)</li>
+          <li>BREAKING: GTK 4.10+ and libadwaita 1.5+ required; configuration migrated to GSettings (GKeyFile not migrated automatically)</li>
         </ul>
       </description>
     </release>
