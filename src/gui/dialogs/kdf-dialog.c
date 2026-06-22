@@ -110,12 +110,12 @@ on_apply_clicked (GtkButton *button,
                   KdfDialog *self)
 {
     (void) button;
-
     GApplication *default_app = g_application_get_default ();
     OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
         ? OTPCLIENT_APPLICATION (default_app)
         : NULL;
-    if (app == NULL || otpclient_application_get_db_data (app) != self->db_data)
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label),
                             _("The active database changed. Reopen this dialog before applying KDF changes."));

@@ -1,6 +1,8 @@
 #include <glib/gi18n.h>
 #include <gcrypt.h>
 #include <cotp.h>
+#include <limits.h>
+#include "common.h"
 #include "otp-entry.h"
 
 struct _OTPEntry
@@ -90,7 +92,11 @@ otp_entry_finalize (GObject *object)
 
     g_clear_pointer (&self->account, g_free);
     g_clear_pointer (&self->issuer, g_free);
-    g_clear_pointer (&self->otp_value, g_free);
+    if (self->otp_value != NULL)
+    {
+        gcry_free (self->otp_value);
+        self->otp_value = NULL;
+    }
     g_clear_pointer (&self->otp_type, g_free);
     g_clear_pointer (&self->algorithm, g_free);
 
@@ -184,8 +190,9 @@ otp_entry_set_property (GObject      *object,
             self->issuer_lower = strdown_or_empty (self->issuer);
             break;
         case PROP_OTP_VALUE:
-            g_free (self->otp_value);
-            self->otp_value = g_value_dup_string (value);
+            if (self->otp_value != NULL)
+                gcry_free (self->otp_value);
+            self->otp_value = secure_strdup (g_value_get_string (value));
             break;
         case PROP_OTP_TYPE:
             g_free (self->otp_type);
@@ -207,18 +214,7 @@ otp_entry_set_property (GObject      *object,
         case PROP_SECRET:
             if (self->secret != NULL)
                 gcry_free (self->secret);
-            {
-                const gchar *str = g_value_get_string (value);
-                if (str != NULL)
-                {
-                    self->secret = gcry_calloc_secure (strlen (str) + 1, 1);
-                    memcpy (self->secret, str, strlen (str) + 1);
-                }
-                else
-                {
-                    self->secret = NULL;
-                }
-            }
+            self->secret = secure_strdup (g_value_get_string (value));
             break;
         case PROP_DB_NAME:
             g_free (self->db_name);
@@ -321,8 +317,9 @@ otp_entry_new (const gchar *account,
 
     if (otp_value != NULL)
     {
-        g_free (self->otp_value);
-        self->otp_value = g_strdup (otp_value);
+        if (self->otp_value != NULL)
+            gcry_free (self->otp_value);
+        self->otp_value = secure_strdup (otp_value);
     }
 
     return self;
@@ -425,8 +422,9 @@ otp_entry_set_otp_value (OTPEntry    *self,
     if (g_strcmp0 (self->otp_value, otp_value) == 0)
         return;
 
-    g_free (self->otp_value);
-    self->otp_value = g_strdup (otp_value);
+    if (self->otp_value != NULL)
+        gcry_free (self->otp_value);
+    self->otp_value = secure_strdup (otp_value);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_OTP_VALUE]);
 }
 
@@ -457,7 +455,11 @@ otp_entry_update_otp (OTPEntry *self)
 
     if (g_ascii_strcasecmp (self->otp_type, "TOTP") == 0)
     {
-        otp = get_totp (self->secret, self->digits, self->period, algo, &err);
+        if (self->issuer != NULL &&
+            g_ascii_strcasecmp (self->issuer, "steam") == 0)
+            otp = get_steam_totp (self->secret, self->period, &err);
+        else
+            otp = get_totp (self->secret, self->digits, self->period, algo, &err);
     }
     else
     {
@@ -467,12 +469,12 @@ otp_entry_update_otp (OTPEntry *self)
     if (otp != NULL && err == NO_ERROR)
     {
         otp_entry_set_otp_value (self, otp);
-        g_free (otp);
+        sensitive_free (otp);
     }
     else
     {
         otp_entry_set_otp_value (self, _("Error"));
-        g_free (otp);
+        sensitive_free (otp);
     }
 }
 
@@ -493,11 +495,21 @@ otp_entry_get_next_otp (OTPEntry *self)
     gint64 now = g_get_real_time () / G_USEC_PER_SEC;
     gint64 next_step_time = now + self->period - (now % self->period);
 
-    gchar *otp = get_totp_at (self->secret, next_step_time, self->digits, self->period, algo, &err);
+    if (next_step_time > LONG_MAX)
+        return NULL;
+
+    gchar *otp = NULL;
+    if (self->issuer != NULL &&
+        g_ascii_strcasecmp (self->issuer, "steam") == 0)
+        otp = get_steam_totp_at (self->secret, (long) next_step_time,
+                                 self->period, &err);
+    else
+        otp = get_totp_at (self->secret, (long) next_step_time,
+                           self->digits, self->period, algo, &err);
     if (otp != NULL && err == NO_ERROR)
         return otp;
 
-    g_free (otp);
+    sensitive_free (otp);
     return NULL;
 }
 

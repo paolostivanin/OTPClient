@@ -22,6 +22,7 @@ struct _PasswordDialog
     GtkWidget *error_label;
 
     gboolean locked_mode;
+    gboolean disposed;
 };
 
 enum {
@@ -32,6 +33,17 @@ enum {
 static guint signals[N_SIGNALS];
 
 G_DEFINE_FINAL_TYPE (PasswordDialog, password_dialog, ADW_TYPE_DIALOG)
+
+static void
+wipe_editable (GtkWidget *widget)
+{
+    if (widget == NULL)
+        return;
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (widget));
+    if (text != NULL && text[0] != '\0')
+        explicit_bzero ((gchar *) text, strlen (text));
+    gtk_editable_set_text (GTK_EDITABLE (widget), "");
+}
 
 static void
 update_unlock_sensitivity (PasswordDialog *self)
@@ -88,6 +100,12 @@ on_unlock_clicked (GtkButton      *button,
     /* Copy password into secure memory */
     gsize pwd_len = strlen (pwd);
     gchar *secure_pwd = gcry_calloc_secure (pwd_len + 1, 1);
+    if (secure_pwd == NULL) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Secure memory is exhausted"));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
     memcpy (secure_pwd, pwd, pwd_len + 1);
     gchar *secure_current_pwd = NULL;
     gsize current_pwd_len = 0;
@@ -95,6 +113,13 @@ on_unlock_clicked (GtkButton      *button,
     {
         current_pwd_len = strlen (current_pwd);
         secure_current_pwd = gcry_calloc_secure (current_pwd_len + 1, 1);
+        if (secure_current_pwd == NULL) {
+            gcry_free (secure_pwd);
+            gtk_label_set_text (GTK_LABEL (self->error_label),
+                                _("Secure memory is exhausted"));
+            gtk_widget_set_visible (self->error_label, TRUE);
+            return;
+        }
         memcpy (secure_current_pwd, current_pwd, current_pwd_len + 1);
     }
 
@@ -182,6 +207,13 @@ on_dialog_map (GtkWidget      *widget,
 static void
 password_dialog_dispose (GObject *object)
 {
+    PasswordDialog *self = PASSWORD_DIALOG (object);
+    if (!self->disposed) {
+        self->disposed = TRUE;
+        wipe_editable (self->current_password_row);
+        wipe_editable (self->password_row);
+        wipe_editable (self->confirm_row);
+    }
     G_OBJECT_CLASS (password_dialog_parent_class)->dispose (object);
 }
 

@@ -14,6 +14,8 @@ typedef struct {
     guint skipped;     /* duplicates or invalid records ignored */
     guint skipped_duplicates;
     guint skipped_invalid;
+    guint batch_size;  /* Google migration batch count (0/1 = single payload) */
+    guint batch_index; /* zero-based index of the imported batch */
 } ImportSummary;
 
 typedef void (*ImportCallback) (const ImportSummary *summary, gpointer user_data);

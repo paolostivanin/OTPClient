@@ -125,7 +125,6 @@ get_otpauth_data (const gchar  *path,
 
     gchar *file_buf = NULL;
     if (!g_file_get_contents (path, &file_buf, NULL, err)) {
-        g_set_error (err, generic_error_gquark(), GENERIC_ERRCODE, "Couldn't load the file content into memory.");
         g_free (file_buf);
         return NULL;
     }
@@ -257,7 +256,7 @@ parse_uri (const gchar   *uri,
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (counter, &endptr, 10);
         if (endptr != counter && *endptr == '\0' && v >= 0 &&
-            (guint64) v <= OTP_HOTP_COUNTER_MAX) {
+            (guint64) v < OTP_HOTP_COUNTER_MAX) {
             otp->counter = (guint64) v;
         }
     }

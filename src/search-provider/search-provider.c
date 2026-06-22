@@ -7,6 +7,7 @@
 #include <cotp.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #include "../common/common.h"
 #include "../common/db-common.h"
@@ -62,11 +63,13 @@ static GHashTable *g_kdf_cache = NULL;
 #define RATE_BUCKET_MAX     10.0
 #define RATE_REFILL_PER_SEC  5.0
 typedef struct {
-    gdouble  tokens;
-    gint64   last_refill_us;          /* g_get_monotonic_time() at last update */
+    gdouble tokens;
+    gint64 last_refill_us;
 } RateBucket;
 
-static GHashTable *g_rate_buckets = NULL;
+static RateBucket g_global_rate_bucket = { RATE_BUCKET_MAX, 0 };
+static gint64 g_last_activity_us = 0;
+#define IDLE_WIPE_SECONDS 300
 
 #define ACTIVATION_CAP_TTL_US (30 * G_USEC_PER_SEC)
 typedef struct {
@@ -113,7 +116,6 @@ static void clear_file_monitors (void);
 static void sync_file_monitors (GPtrArray *desired_paths);
 static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
                                 GFileMonitorEvent event, gpointer user_data);
-static gboolean prewarm_cache (gpointer user_data);
 static void kdf_cache_entry_free (KdfCacheEntry *entry);
 static void kdf_cache_invalidate_path (const gchar *db_path);
 static void kdf_cache_clear (void);
@@ -121,6 +123,7 @@ static void kdf_cache_apply_to_db_data (DatabaseData *db_data, const gchar *db_p
 static void kdf_cache_capture_from_db_data (const DatabaseData *db_data, const gchar *db_path);
 static gboolean rate_bucket_consume (const gchar *sender);
 static void rate_buckets_clear (void);
+static gboolean idle_wipe_check (gpointer user_data);
 static gchar *normalize_terms (gchar **terms);
 static gchar *issue_activation_capability (const gchar          *sender,
                                            const gchar          *query,
@@ -263,19 +266,12 @@ kdf_cache_capture_from_db_data (const DatabaseData *db_data,
 static gboolean
 rate_bucket_consume (const gchar *sender)
 {
-    if (g_rate_buckets == NULL)
-        g_rate_buckets = g_hash_table_new_full (g_str_hash, g_str_equal,
-                                                g_free, g_free);
-
-    const gchar *key = (sender != NULL && sender[0] != '\0') ? sender : ":anon";
+    (void) sender;
     gint64 now = g_get_monotonic_time ();
-
-    RateBucket *bucket = g_hash_table_lookup (g_rate_buckets, key);
-    if (bucket == NULL) {
-        bucket = g_new0 (RateBucket, 1);
+    RateBucket *bucket = &g_global_rate_bucket;
+    if (bucket->last_refill_us == 0) {
         bucket->tokens = RATE_BUCKET_MAX;
         bucket->last_refill_us = now;
-        g_hash_table_insert (g_rate_buckets, g_strdup (key), bucket);
     } else {
         gdouble elapsed_sec = (gdouble) (now - bucket->last_refill_us) / 1.0e6;
         if (elapsed_sec > 0) {
@@ -296,10 +292,28 @@ rate_bucket_consume (const gchar *sender)
 static void
 rate_buckets_clear (void)
 {
-    if (g_rate_buckets == NULL)
-        return;
-    g_hash_table_destroy (g_rate_buckets);
-    g_rate_buckets = NULL;
+    g_global_rate_bucket.tokens = RATE_BUCKET_MAX;
+    g_global_rate_bucket.last_refill_us = 0;
+}
+
+static gboolean
+idle_wipe_check (gpointer user_data)
+{
+    (void) user_data;
+    gint64 now = g_get_monotonic_time ();
+    if (g_last_activity_us != 0 &&
+        now - g_last_activity_us >= IDLE_WIPE_SECONDS * G_USEC_PER_SEC) {
+        kdf_cache_clear ();
+        if (cached_entries != NULL) {
+            g_ptr_array_free (cached_entries, TRUE);
+            cached_entries = NULL;
+            cached_at = 0;
+        }
+        activation_capabilities_clear ();
+        rate_buckets_clear ();
+        g_last_activity_us = 0;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 
@@ -453,7 +467,10 @@ get_entry_otp_value (json_t *obj)
 
     if (g_ascii_strcasecmp (type, "TOTP") == 0) {
         gint period = (gint)json_integer_value (json_object_get (obj, "period"));
-        glong current_ts = time (NULL);
+        time_t now = time (NULL);
+        if (now < 0 || (guint64) now > (guint64) LONG_MAX)
+            return NULL;
+        long current_ts = (long) now;
         if (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) {
             token = get_steam_totp_at (secret, current_ts, period, &cotp_err);
         } else {
@@ -462,8 +479,8 @@ get_entry_otp_value (json_t *obj)
     }
 
     if (token == NULL) return NULL;
-    gchar *result = g_strdup (token);
-    g_free (token);
+    gchar *result = secure_strdup (token);
+    sensitive_free (token);
     return result;
 }
 
@@ -694,17 +711,6 @@ get_entries (void)
 }
 
 
-static gboolean
-prewarm_cache (gpointer user_data G_GNUC_UNUSED)
-{
-    /* Run once on idle so the first user query doesn't pay the Argon2id
-     * cost interactively. Failures are silently ignored — they'll be
-     * retried on the next query. */
-    (void) get_entries ();
-    return G_SOURCE_REMOVE;
-}
-
-
 static void
 load_keyword_config (void)
 {
@@ -882,7 +888,12 @@ copy_via_subprocess (const gchar *text)
                 G_SUBPROCESS_FLAGS_STDERR_SILENCE,
                 NULL);
         if (proc == NULL) continue;          /* binary not on PATH; try the next one */
-        g_autoptr (GBytes) input = g_bytes_new (text, strlen (text));
+        gchar *secure_input = secure_strdup (text);
+        if (secure_input == NULL)
+            continue;
+        g_autoptr (GBytes) input = g_bytes_new_with_free_func (
+            secure_input, strlen (secure_input),
+            (GDestroyNotify) gcry_free, secure_input);
         if (g_subprocess_communicate (proc, input, NULL, NULL, NULL, NULL))
             return TRUE;
     }
@@ -914,8 +925,8 @@ send_notification (const gchar *label,
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
     if (!conn) return;
 
-    g_autofree gchar *body = g_strdup_printf ("Your code for %s is: %s",
-                                               label ? label : "Account", otp_value);
+    gchar *body = g_strdup_printf ("Your code for %s is: %s",
+                                    label ? label : "Account", otp_value);
     GVariantBuilder actions, hints;
     g_variant_builder_init (&actions, G_VARIANT_TYPE ("as"));
     g_variant_builder_init (&hints, G_VARIANT_TYPE ("a{sv}"));
@@ -933,6 +944,7 @@ send_notification (const gchar *label,
     if (reply != NULL)
         g_variant_unref (reply);
     g_object_unref (conn);
+    sensitive_g_free (body);
 }
 
 
@@ -947,6 +959,7 @@ handle_gnome_call (GDBusConnection       *conn,
                    gpointer               data)
 {
     (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+    g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
         gchar **terms;
@@ -1021,7 +1034,7 @@ handle_gnome_call (GDBusConnection       *conn,
         g_autofree gchar *normalized_query = NULL;
         if (strip_keyword_or_skip (terms, &stripped))
             normalized_query = normalize_terms (stripped);
-        g_autofree gchar *otp = NULL;
+        gchar *otp = NULL;
         g_autofree gchar *label = NULL;
         ActivationCapability *cap = (normalized_query != NULL)
             ? consume_activation_capability (id, g_dbus_method_invocation_get_sender (inv), normalized_query)
@@ -1037,6 +1050,7 @@ handle_gnome_call (GDBusConnection       *conn,
         g_strfreev (terms);
         copy_to_clipboard (otp, FALSE);
         send_notification (label, otp);
+        sensitive_secure_free (otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else {
         g_dbus_method_invocation_return_value (inv, NULL);
@@ -1055,6 +1069,7 @@ handle_krunner_call (GDBusConnection       *conn,
                      gpointer               data)
 {
     (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+    g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "Match") == 0) {
         const gchar *query;
@@ -1113,7 +1128,7 @@ handle_krunner_call (GDBusConnection       *conn,
         }
         const gchar *id;
         g_variant_get (params, "(&s&s)", &id, NULL);
-        g_autofree gchar *otp = NULL;
+        gchar *otp = NULL;
         g_autofree gchar *label = NULL;
         ActivationCapability *cap = consume_activation_capability (
             id, g_dbus_method_invocation_get_sender (inv), NULL);
@@ -1127,6 +1142,7 @@ handle_krunner_call (GDBusConnection       *conn,
         }
         copy_to_clipboard (otp, TRUE);
         send_notification (label, otp);
+        sensitive_secure_free (otp);
         g_dbus_method_invocation_return_value (inv, NULL);
     } else if (g_strcmp0 (method, "Actions") == 0) {
         GVariant *empty = g_variant_new_array (G_VARIANT_TYPE ("(sss)"), NULL, 0);
@@ -1223,7 +1239,8 @@ main (int    argc,
     if (force_gnome)
         g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE,
                         on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
-    g_idle_add (prewarm_cache, NULL);
+    g_last_activity_us = g_get_monotonic_time ();
+    g_timeout_add_seconds (60, idle_wipe_check, NULL);
     g_main_loop_run (main_loop);
     clear_file_monitors ();
     if (cached_entries != NULL) {

@@ -25,6 +25,11 @@ void                  otpclient_application_switch_to_db (OTPClientApplication *
  * action that would free or replace db_data: the worker holds a raw
  * pointer to it and freeing under its feet is a use-after-free. */
 gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
+gboolean              otpclient_application_submit_unlock_password (
+                                                           OTPClientApplication *self,
+                                                           const gchar          *password,
+                                                           gchar               **error_message);
+void                  otpclient_application_purge_secrets (OTPClientApplication *self);
 
 gboolean              otpclient_application_get_show_next_otp (OTPClientApplication *self);
 void                  otpclient_application_set_show_next_otp (OTPClientApplication *self,

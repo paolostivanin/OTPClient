@@ -60,6 +60,9 @@ gcry_cipher_hd_t  open_cipher_and_set_data       (guchar             *derived_ke
                                                   gsize               iv_len);
 
 gchar            *secure_strdup                  (const gchar        *src);
+void              sensitive_free                 (gchar              *value);
+void              sensitive_g_free               (gchar              *value);
+void              sensitive_secure_free          (gchar              *value);
 
 gchar            *get_data_from_encrypted_backup (const gchar        *path,
                                                   const gchar        *password,

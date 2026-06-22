@@ -116,10 +116,10 @@ test_counter_at_max (void)
 {
     g_autofree gchar *at_max = g_strdup_printf (
         "otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&counter=%" G_GUINT64_FORMAT,
-        OTP_HOTP_COUNTER_MAX);
+        OTP_HOTP_COUNTER_MAX - 1);
     otp_t *otp = parse_single (at_max);
     g_assert_nonnull (otp);
-    g_assert_cmpuint ((guint64) otp->counter, ==, OTP_HOTP_COUNTER_MAX);
+    g_assert_cmpuint ((guint64) otp->counter, ==, OTP_HOTP_COUNTER_MAX - 1);
     free_otp (otp);
 
     /* MAX+1: parse_uri silently keeps counter=0 (the default). The import
@@ -127,7 +127,7 @@ test_counter_at_max (void)
      * that the out-of-bounds value never lands in the struct. */
     g_autofree gchar *over_max = g_strdup_printf (
         "otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&counter=%" G_GUINT64_FORMAT,
-        OTP_HOTP_COUNTER_MAX + 1);
+        OTP_HOTP_COUNTER_MAX);
     otp_t *over = parse_single (over_max);
     g_assert_nonnull (over);
     g_assert_cmpuint ((guint64) over->counter, ==, 0);

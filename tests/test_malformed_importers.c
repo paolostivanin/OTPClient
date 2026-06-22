@@ -123,9 +123,8 @@ test_authpro_unsupported_type_enum (void)
 static void
 test_twofas_invalid_schema_version (void)
 {
-    /* schemaVersion != 4 is rejected silently by is_schema_supported; the
-     * importer returns NULL without populating *err. Pinning this guards
-     * against future "always returns true on missing schemaVersion" bugs. */
+    /* schemaVersion != 4 must be reported as an import error rather than
+     * masquerading as a successful import of zero tokens. */
     gchar *dir = NULL;
     gchar *path = write_tmp_json ("twofas-bad-schema.json",
         "{\"schemaVersion\":99,\"services\":[]}", &dir);
@@ -133,7 +132,8 @@ test_twofas_invalid_schema_version (void)
     GError *err = NULL;
     GSList *otps = get_twofas_data (path, NULL, 0, &err);
     g_assert_null (otps);
-    g_assert_no_error (err);
+    g_assert_error (err, generic_error_gquark (), GENERIC_ERRCODE);
+    g_clear_error (&err);
 
     cleanup_tmp_json (dir, path);
 }
@@ -153,6 +153,29 @@ test_twofas_malformed_servicesencrypted (void)
     g_assert_error (err, generic_error_gquark (), GENERIC_ERRCODE);
     g_clear_error (&err);
 
+    cleanup_tmp_json (dir, path);
+}
+
+static void
+test_twofas_bad_authentication_tag (void)
+{
+    guchar ciphertext[32] = {0};
+    guchar salt[256] = {0};
+    guchar iv[12] = {0};
+    g_autofree gchar *c64 = g_base64_encode (ciphertext, sizeof ciphertext);
+    g_autofree gchar *s64 = g_base64_encode (salt, sizeof salt);
+    g_autofree gchar *i64 = g_base64_encode (iv, sizeof iv);
+    g_autofree gchar *json = g_strdup_printf (
+        "{\"schemaVersion\":4,\"servicesEncrypted\":\"%s:%s:%s\"}",
+        c64, s64, i64);
+    gchar *dir = NULL;
+    gchar *path = write_tmp_json ("twofas-bad-tag.json", json, &dir);
+
+    GError *err = NULL;
+    GSList *otps = get_twofas_data (path, "wrong-password", 0, &err);
+    g_assert_null (otps);
+    g_assert_nonnull (err);
+    g_clear_error (&err);
     cleanup_tmp_json (dir, path);
 }
 
@@ -274,6 +297,8 @@ main (int argc, char **argv)
                      test_twofas_invalid_schema_version);
     g_test_add_func ("/malformed-importers/twofas/malformed-services-encrypted",
                      test_twofas_malformed_servicesencrypted);
+    g_test_add_func ("/malformed-importers/twofas/bad-tag",
+                     test_twofas_bad_authentication_tag);
     g_test_add_func ("/malformed-importers/twofas/unsupported-tokentype",
                      test_twofas_unsupported_tokentype);
     g_test_add_func ("/malformed-importers/twofas/missing-services",

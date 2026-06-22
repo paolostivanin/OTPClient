@@ -127,6 +127,47 @@ db_invalidate_kdf_cache (DatabaseData *db_data)
     db_data->has_cached_key = FALSE;
 }
 
+void
+database_data_purge_secrets (DatabaseData *db_data)
+{
+    if (db_data == NULL)
+        return;
+
+    db_invalidate_kdf_cache (db_data);
+
+    if (db_data->key != NULL) {
+        explicit_bzero (db_data->key, strlen (db_data->key));
+        gcry_free (db_data->key);
+        db_data->key = NULL;
+    }
+
+    if (db_data->in_memory_json_data != NULL) {
+        json_decref (db_data->in_memory_json_data);
+        db_data->in_memory_json_data = NULL;
+    }
+    if (db_data->committed_json_data != NULL) {
+        json_decref (db_data->committed_json_data);
+        db_data->committed_json_data = NULL;
+    }
+
+    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
+    db_data->data_to_add = NULL;
+    g_slist_free_full (db_data->objects_hash, g_free);
+    db_data->objects_hash = NULL;
+
+    if (db_data->last_hotp != NULL) {
+        explicit_bzero (db_data->last_hotp, strlen (db_data->last_hotp));
+        g_free (db_data->last_hotp);
+        db_data->last_hotp = NULL;
+    }
+    g_clear_pointer (&db_data->last_hotp_update, g_date_time_unref);
+
+    explicit_bzero (db_data->loaded_file_digest,
+                    sizeof (db_data->loaded_file_digest));
+    db_data->has_loaded_file_digest = FALSE;
+    db_data->needs_legacy_kdf_migration = FALSE;
+}
+
 
 static guint32
 read_be32 (const guint8 *p)
@@ -338,23 +379,8 @@ database_data_unref (DatabaseData *db_data)
         !g_atomic_int_dec_and_test (&db_data->ref_count))
         return;
 
-    db_invalidate_kdf_cache (db_data);
-    if (db_data->key != NULL)
-        gcry_free (db_data->key);
+    database_data_purge_secrets (db_data);
     g_free (db_data->db_path);
-    g_slist_free_full (db_data->objects_hash, g_free);
-    /* add_to_json deep-copies each element into in_memory_json_data, so the
-     * originals in data_to_add are NOT shared with the in-memory array.
-     * Decref each json_t* payload explicitly; freeing only the list shell
-     * (the old behavior) leaked one json_t per imported/added token. */
-    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
-    if (db_data->in_memory_json_data != NULL)
-        json_decref (db_data->in_memory_json_data);
-    if (db_data->committed_json_data != NULL)
-        json_decref (db_data->committed_json_data);
-    g_free (db_data->last_hotp);
-    if (db_data->last_hotp_update != NULL)
-        g_date_time_unref (db_data->last_hotp_update);
     g_free (db_data);
 }
 
@@ -440,8 +466,9 @@ load_db (DatabaseData    *db_data,
     rebuild_objects_hash (db_data);
     refresh_committed_snapshot (db_data);
 
-    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
-    db_data->has_loaded_file_digest = TRUE;
+    /* decrypt_db records the digest of the exact authenticated bytes. Do not
+     * reopen by path here: that could bind stale-write protection to a
+     * different file than the one whose GCM tag was verified. */
 }
 
 
@@ -1007,6 +1034,12 @@ get_db_derived_key (DatabaseData  *db_data,
         }
 
         derived_key = gcry_malloc_secure (ARGON2ID_KEYLEN);
+        if (derived_key == NULL) {
+            g_set_error (err, secmem_alloc_error_gquark (),
+                         SECMEM_ALLOC_ERRCODE,
+                         "Error while allocating secure memory.");
+            return NULL;
+        }
         const unsigned long params[4] = {ARGON2ID_TAGLEN, db_data->argon2id_iter, db_data->argon2id_memcost, db_data->argon2id_parallelism};
         gcry_kdf_hd_t hd;
         if (gcry_kdf_open (&hd, GCRY_KDF_ARGON2, GCRY_KDF_ARGON2ID,
@@ -1275,9 +1308,6 @@ decrypt_db (DatabaseData *db_data,
     }
     close (fd);
 
-    gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->loaded_file_digest, file_buf, file_size);
-    db_data->has_loaded_file_digest = TRUE;
-
     gsize header_data_size = 0;
     if (db_data->current_db_version == 1)
         header_data_size = sizeof (DbHeaderData_v1);
@@ -1415,6 +1445,11 @@ decrypt_db (DatabaseData *db_data,
         g_free (header_data_v1);
     }
 
+    if (dec_buf != NULL) {
+        gcry_md_hash_buffer (GCRY_MD_SHA256, db_data->loaded_file_digest,
+                             file_buf, file_size);
+        db_data->has_loaded_file_digest = TRUE;
+    }
     g_free (file_buf);
     return dec_buf;
 }

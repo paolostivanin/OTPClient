@@ -96,6 +96,33 @@ secure_strdup (const gchar *src)
     return sec_buf;
 }
 
+void
+sensitive_free (gchar *value)
+{
+    if (value == NULL)
+        return;
+    explicit_bzero (value, strlen (value));
+    free (value);
+}
+
+void
+sensitive_g_free (gchar *value)
+{
+    if (value == NULL)
+        return;
+    explicit_bzero (value, strlen (value));
+    g_free (value);
+}
+
+void
+sensitive_secure_free (gchar *value)
+{
+    if (value == NULL)
+        return;
+    explicit_bzero (value, strlen (value));
+    gcry_free (value);
+}
+
 
 guchar *
 hexstr_to_bytes (const gchar *hexstr)
@@ -152,6 +179,9 @@ bytes_to_hexstr (const guchar *data, size_t datalen)
     if (data == NULL && datalen > 0) {
         return NULL;
     }
+    if (datalen > (G_MAXSIZE - 1) / 2) {
+        return NULL;
+    }
 
     gchar *result = g_malloc0(datalen * 2 + 1);
     if (result == NULL) {
@@ -206,6 +236,9 @@ get_authpro_derived_key (const gchar *password,
                          const guchar *salt)
 {
     guchar *derived_key = gcry_malloc_secure (32);
+    if (derived_key == NULL) {
+        return NULL;
+    }
     // taglen, iterations, memory_cost (65536=64MiB), parallelism
     const unsigned long params[4] = {32, 3, 65536, 4};
     gcry_kdf_hd_t hd;

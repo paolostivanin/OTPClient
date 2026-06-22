@@ -55,7 +55,7 @@ get_authpro_data (const gchar  *path,
     g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
     GFile *in_file = g_file_new_for_path (fd_path);
     GFileInputStream *in_stream = g_file_read (in_file, NULL, err);
-    if (*err != NULL) {
+    if (in_stream == NULL) {
         g_object_unref (in_file);
         close (safe_fd);
         return NULL;

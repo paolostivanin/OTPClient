@@ -15,6 +15,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include "main.h"
 #include "get-data.h"
 #include "../common/import-export.h"
@@ -29,6 +30,14 @@ static gchar    *get_pwd               (const gchar *pwd_msg,
                                         int password_fd);
 
 static gboolean  import_type_is_encrypted (const gchar *type);
+
+static volatile sig_atomic_t password_signal = 0;
+
+static void
+password_signal_handler (int signo)
+{
+    password_signal = signo;
+}
 
 
 gboolean exec_action (CmdlineOpts  *cmdline_opts,
@@ -406,14 +415,22 @@ resolve_db_path (const gchar *database_arg)
 
     /* Last resort: ask interactively */
     g_print ("%s", _("Type the absolute path to the database: "));
-    gchar *typed = g_malloc0 (MAX_ABS_PATH_LEN);
-    if (fgets (typed, MAX_ABS_PATH_LEN, stdin) == NULL) {
+    gchar *typed = NULL;
+    size_t typed_capacity = 0;
+    ssize_t typed_len = getline (&typed, &typed_capacity, stdin);
+    if (typed_len < 0) {
         g_printerr ("%s\n", _("Couldn't get db path from stdin"));
         g_free (typed);
         return NULL;
     }
-    char *nl = strchr (typed, '\n');
-    if (nl) { *nl = '\0'; }
+    while (typed_len > 0 &&
+           (typed[typed_len - 1] == '\n' || typed[typed_len - 1] == '\r'))
+        typed[--typed_len] = '\0';
+    if (typed_len == 0 || !g_path_is_absolute (typed)) {
+        g_printerr ("%s\n", _("The database path must be a non-empty absolute path."));
+        g_free (typed);
+        return NULL;
+    }
     if (!g_file_test (typed, G_FILE_TEST_EXISTS)) {
         g_printerr (_("File '%s' does not exist\n"), typed);
         g_free (typed);
@@ -438,6 +455,14 @@ get_pwd (const gchar *pwd_msg,
 
     struct termios old, new;
     gboolean term_fixed = FALSE;
+    struct sigaction action = {0};
+    struct sigaction old_int = {0}, old_term = {0}, old_hup = {0};
+    action.sa_handler = password_signal_handler;
+    sigemptyset (&action.sa_mask);
+    password_signal = 0;
+    sigaction (SIGINT, &action, &old_int);
+    sigaction (SIGTERM, &action, &old_term);
+    sigaction (SIGHUP, &action, &old_hup);
     if (isatty (password_fd) && tcgetattr (password_fd, &old) == 0) {
         new = old;
         new.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
@@ -450,12 +475,14 @@ get_pwd (const gchar *pwd_msg,
     while (len < BUFFER_SIZE - 1) {
         ssize_t n = read (password_fd, &pwd[len], 1);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR && password_signal == 0) continue;
             break;
         }
         if (n == 0 || pwd[len] == '\n') break;
         len++;
     }
+    if (len > 0 && pwd[len - 1] == '\r')
+        len--;
     pwd[len] = '\0';
 
     if (term_fixed) {
@@ -463,6 +490,17 @@ get_pwd (const gchar *pwd_msg,
     }
     if (isatty (password_fd)) {
         g_print ("\n");
+    }
+    sigaction (SIGINT, &old_int, NULL);
+    sigaction (SIGTERM, &old_term, NULL);
+    sigaction (SIGHUP, &old_hup, NULL);
+
+    if (password_signal != 0) {
+        int signo = password_signal;
+        password_signal = 0;
+        gcry_free (pwd);
+        raise (signo);
+        return NULL;
     }
 
     if (len == BUFFER_SIZE - 1) {

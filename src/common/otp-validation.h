@@ -6,6 +6,7 @@
 
 G_BEGIN_DECLS
 
+/* Exclusive upper bound: valid HOTP counters satisfy counter < 2^48. */
 #define OTP_HOTP_COUNTER_MAX ((guint64) (1ULL << 48))
 
 /* Validation policy:

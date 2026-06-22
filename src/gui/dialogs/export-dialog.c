@@ -1,6 +1,9 @@
+#define _DEFAULT_SOURCE
 #include <glib/gi18n.h>
+#include <string.h>
 #include "export-dialog.h"
 #include "import-export.h"
+#include "../otpclient-application.h"
 
 struct _ExportDialog
 {
@@ -15,6 +18,7 @@ struct _ExportDialog
     GtkWidget *export_button;
     GtkWidget *error_label;
     GtkWidget *plain_warning;
+    gboolean disposed;
 };
 
 typedef enum
@@ -30,6 +34,17 @@ typedef enum
 } ExportFormat;
 
 G_DEFINE_FINAL_TYPE (ExportDialog, export_dialog, ADW_TYPE_DIALOG)
+
+static void
+wipe_password_row (GtkWidget *row)
+{
+    if (row == NULL)
+        return;
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (row));
+    if (text != NULL && text[0] != '\0')
+        explicit_bzero ((gchar *) text, strlen (text));
+    gtk_editable_set_text (GTK_EDITABLE (row), "");
+}
 
 static void
 on_format_changed (AdwComboRow  *combo_row,
@@ -56,6 +71,12 @@ on_file_dialog_save_complete (GObject      *source,
                               gpointer      user_data)
 {
     g_autoptr (ExportDialog) self = EXPORT_DIALOG (user_data);
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app) : NULL;
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data)
+        return;
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
 
     GError *err = NULL;
@@ -153,7 +174,12 @@ static void
 export_dialog_dispose (GObject *object)
 {
     ExportDialog *self = EXPORT_DIALOG (object);
-    g_clear_pointer (&self->db_data, database_data_free);
+    if (!self->disposed) {
+        self->disposed = TRUE;
+        wipe_password_row (self->password_row);
+        wipe_password_row (self->password_confirm_row);
+        g_clear_pointer (&self->db_data, database_data_free);
+    }
 
     G_OBJECT_CLASS (export_dialog_parent_class)->dispose (object);
 }

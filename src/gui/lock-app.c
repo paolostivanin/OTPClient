@@ -8,9 +8,11 @@
 typedef struct
 {
     OTPClientApplication *app;
-    GDBusConnection *bus;
+    GDBusConnection *session_bus;
+    GDBusConnection *system_bus;
     guint dbus_sub_ids[4];
     guint num_dbus_subs;
+    guint sleep_sub_id;
     guint inactivity_timer_id;
     gint64 last_user_activity;
 } LockData;
@@ -33,7 +35,8 @@ on_unlock_dialog_closed (AdwDialog *dialog,
      * still close on parent-window teardown or programmatic close. If the app
      * is still locked when that happens, re-present a fresh dialog so the user
      * can't end up with the locked indicator on and no way to unlock. */
-    if (otpclient_application_get_app_locked (app))
+    if (otpclient_application_get_app_locked (app) &&
+        !otpclient_application_is_unlocking (app))
         lock_app_present_unlock_dialog (app);
 }
 
@@ -77,6 +80,8 @@ void
 lock_app_present_unlock_dialog (OTPClientApplication *app)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (app));
+    if (otpclient_application_is_unlocking (app))
+        return;
     present_unlock_dialog (app);
 }
 
@@ -88,51 +93,44 @@ on_unlock_password (const gchar  *current_password,
 {
     (void) current_password;
     OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
-    DatabaseData *db_data = otpclient_application_get_db_data (app);
-
-    if (password == NULL || db_data == NULL || db_data->key == NULL)
+    if (password == NULL)
         return FALSE;
-
-    gsize pwd_len = strlen (password);
-    gsize key_len = strlen (db_data->key);
-    volatile guchar result = (pwd_len != key_len);
-    gsize cmp_len = (pwd_len < key_len) ? pwd_len : key_len;
-    for (gsize i = 0; i < cmp_len; i++)
-        result |= ((const volatile guchar *)password)[i] ^ ((const volatile guchar *)db_data->key)[i];
-    if (result == 0) {
-        lock_app_unlock (app);
-        return TRUE;
-    }
-
-    if (error_message != NULL)
-        *error_message = g_strdup (_("Password is incorrect"));
-    return FALSE;
+    return otpclient_application_submit_unlock_password (app, password,
+                                                         error_message);
 }
 
 void
 lock_app_lock (OTPClientApplication *app)
 {
-    if (otpclient_application_get_app_locked (app))
+    if (otpclient_application_get_app_locked (app)) {
+        if (otpclient_application_is_unlocking (app))
+            otpclient_application_purge_secrets (app);
         return;
+    }
 
     otpclient_application_set_app_locked (app, TRUE);
 
     GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
-    if (win == NULL)
-        return;
-
-    if (OTPCLIENT_IS_WINDOW (win))
+    if (win != NULL && OTPCLIENT_IS_WINDOW (win))
     {
         /* Persist any deferred HOTP counter advances while we still hold the key. */
-        otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win));
-        otpclient_window_clear_clipboard_now (OTPCLIENT_WINDOW (win));
-        otpclient_window_clear_displayed_otps (OTPCLIENT_WINDOW (win));
+        GError *flush_error = NULL;
+        if (!otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win),
+                                                    &flush_error) &&
+            flush_error != NULL) {
+            otpclient_window_show_error_toast (OTPCLIENT_WINDOW (win),
+                                                flush_error->message);
+            g_clear_error (&flush_error);
+        }
+        otpclient_window_secure_lock_cleanup (OTPCLIENT_WINDOW (win));
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
         otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), FALSE);
         otpclient_window_refresh_content_page (OTPCLIENT_WINDOW (win));
     }
 
-    present_unlock_dialog (app);
+    otpclient_application_purge_secrets (app);
+    if (win != NULL)
+        present_unlock_dialog (app);
 }
 
 void
@@ -183,6 +181,27 @@ on_screensaver_signal (GDBusConnection *connection,
         lock_app_lock (app);
 }
 
+static void
+on_prepare_for_sleep (GDBusConnection *connection,
+                      const gchar     *sender_name,
+                      const gchar     *object_path,
+                      const gchar     *interface_name,
+                      const gchar     *signal_name,
+                      GVariant        *parameters,
+                      gpointer         user_data)
+{
+    (void) connection;
+    (void) sender_name;
+    (void) object_path;
+    (void) interface_name;
+    (void) signal_name;
+
+    gboolean preparing = FALSE;
+    g_variant_get (parameters, "(b)", &preparing);
+    if (preparing)
+        lock_app_lock (OTPCLIENT_APPLICATION (user_data));
+}
+
 static gboolean
 inactivity_check (gpointer user_data)
 {
@@ -217,8 +236,8 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
     lock_data->app = app;
     lock_data->last_user_activity = g_get_monotonic_time ();
 
-    lock_data->bus = g_application_get_dbus_connection (G_APPLICATION (app));
-    if (lock_data->bus != NULL)
+    lock_data->session_bus = g_application_get_dbus_connection (G_APPLICATION (app));
+    if (lock_data->session_bus != NULL)
     {
         /* Subscribe to screensaver signals from various desktop environments */
         static const struct {
@@ -236,7 +255,7 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
         for (guint i = 0; i < G_N_ELEMENTS (watchers); i++)
         {
             lock_data->dbus_sub_ids[lock_data->num_dbus_subs++] =
-                g_dbus_connection_signal_subscribe (lock_data->bus,
+                g_dbus_connection_signal_subscribe (lock_data->session_bus,
                                                     watchers[i].name,
                                                     watchers[i].iface,
                                                     watchers[i].signal,
@@ -247,6 +266,26 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
                                                     app,
                                                     NULL);
         }
+    }
+
+    GError *bus_error = NULL;
+    lock_data->system_bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, &bus_error);
+    if (lock_data->system_bus != NULL) {
+        lock_data->sleep_sub_id = g_dbus_connection_signal_subscribe (
+            lock_data->system_bus,
+            "org.freedesktop.login1",
+            "org.freedesktop.login1.Manager",
+            "PrepareForSleep",
+            "/org/freedesktop/login1",
+            NULL,
+            G_DBUS_SIGNAL_FLAGS_NONE,
+            on_prepare_for_sleep,
+            app,
+            NULL);
+    } else {
+        g_warning ("Could not subscribe to suspend events: %s",
+                   bus_error != NULL ? bus_error->message : "unknown error");
+        g_clear_error (&bus_error);
     }
 
     lock_data->inactivity_timer_id = g_timeout_add_seconds (1, inactivity_check, app);
@@ -260,11 +299,15 @@ lock_app_cleanup (OTPClientApplication *app)
     if (lock_data == NULL)
         return;
 
-    if (lock_data->bus != NULL)
+    if (lock_data->session_bus != NULL)
     {
         for (guint i = 0; i < lock_data->num_dbus_subs; i++)
-            g_dbus_connection_signal_unsubscribe (lock_data->bus, lock_data->dbus_sub_ids[i]);
+            g_dbus_connection_signal_unsubscribe (lock_data->session_bus, lock_data->dbus_sub_ids[i]);
     }
+    if (lock_data->system_bus != NULL && lock_data->sleep_sub_id != 0)
+        g_dbus_connection_signal_unsubscribe (lock_data->system_bus,
+                                              lock_data->sleep_sub_id);
+    g_clear_object (&lock_data->system_bus);
 
     if (lock_data->inactivity_timer_id != 0)
     {

@@ -10,9 +10,18 @@ static void webcam_scan_thread (GTask        *task,
                                 gpointer      task_data,
                                 GCancellable *cancellable);
 
+static gchar *webcam_scan_qrcode_cancellable (GCancellable *cancellable,
+                                               GError      **err);
 
 gchar *
 webcam_scan_qrcode (GError **err)
+{
+    return webcam_scan_qrcode_cancellable (NULL, err);
+}
+
+static gchar *
+webcam_scan_qrcode_cancellable (GCancellable *cancellable,
+                                GError      **err)
 {
     zbar_processor_t *proc = zbar_processor_create (1);
     if (proc == NULL) {
@@ -31,9 +40,20 @@ webcam_scan_qrcode (GError **err)
     zbar_processor_set_visible (proc, 1);
     zbar_processor_set_active (proc, 1);
 
-    /* Wait for a scan result with a 30-second timeout */
-    int rc = zbar_process_one (proc, 30000);
-    if (rc < 0) {
+    /* Poll in short intervals so closing/locking the window releases the
+     * camera promptly instead of waiting for one 30-second blocking call. */
+    int rc = 0;
+    for (guint i = 0; i < 120 && rc == 0; i++) {
+        if (cancellable != NULL &&
+            g_cancellable_is_cancelled (cancellable)) {
+            zbar_processor_destroy (proc);
+            g_set_error (err, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                         "%s", _("Webcam scan cancelled"));
+            return NULL;
+        }
+        rc = zbar_process_one (proc, 250);
+    }
+    if (rc <= 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "%s", _("Webcam scanning failed or timed out"));
         zbar_processor_destroy (proc);
@@ -86,7 +106,7 @@ webcam_scan_thread (GTask        *task,
     }
 
     GError *err = NULL;
-    gchar *uri = webcam_scan_qrcode (&err);
+    gchar *uri = webcam_scan_qrcode_cancellable (cancellable, &err);
     if (uri == NULL) {
         g_task_return_error (task, err);
         return;
