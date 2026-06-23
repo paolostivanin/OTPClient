@@ -54,6 +54,13 @@ an empty string disables the provider entirely: every query is refused, since
 the keyword is the only gate against arbitrary local D-Bus clients enumerating
 accounts.
 
+> **KDE activation latency:** when activating a result from the Plasma
+> application launcher (Kickoff, opened with the Meta key) by pressing
+> **Enter**, there can be a delay of about a second before the code is copied.
+> **Clicking** the result, or using **KRunner** (Alt+Space), is instant. This
+> is a Plasma-side delay in how Kickoff dispatches the activation on Enter, not
+> in the daemon, which computes and copies the OTP in well under 100 ms.
+
 ### Import & export
 Migration to and from other authenticator apps:
 - [Aegis](https://github.com/beemdevelopment/Aegis) (encrypted and plain)

@@ -111,7 +111,8 @@ static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms,
 static gchar *get_entry_otp_value (json_t *obj);
 static gchar *compute_otp_for_entry (const OtpSearchEntry *entry);
 static void send_notification (const gchar *label, const gchar *otp_value);
-static void copy_to_clipboard (const gchar *text, gboolean is_kde);
+static void copy_to_clipboard (GDBusConnection *conn, const gchar *text, gboolean is_kde);
+static gboolean copy_via_subprocess (const gchar *text);
 static void clear_file_monitors (void);
 static void sync_file_monitors (GPtrArray *desired_paths);
 static void on_db_file_changed (GFileMonitor *monitor, GFile *file, GFile *other,
@@ -848,16 +849,47 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
 }
 
 
-static gboolean
-copy_via_klipper (const gchar *text)
+static void
+klipper_copy_done (GObject      *source,
+                   GAsyncResult *res,
+                   gpointer      user_data)
 {
-    g_autoptr (GDBusConnection) conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
-    if (conn == NULL) return FALSE;
-    g_autoptr (GVariant) result = g_dbus_connection_call_sync (conn,
+    gchar *text = user_data;   /* secure_strdup copy kept for the fallback path */
+    g_autoptr (GError) error = NULL;
+    g_autoptr (GVariant) reply =
+        g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &error);
+    /* A timeout means Klipper received setClipboardContents (and therefore set
+     * the clipboard) but did not reply in time, so do NOT also copy via the CLI
+     * tools. Any other error means Klipper is genuinely unreachable: fall back
+     * so users without Klipper still get the code. */
+    if (reply == NULL && text != NULL &&
+        !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_TIMED_OUT))
+        copy_via_subprocess (text);
+    if (text != NULL)
+        sensitive_secure_free (text);
+}
+
+
+static void
+copy_via_klipper (GDBusConnection *conn,
+                  const gchar     *text)
+{
+    /* Fire-and-forget: dispatch the clipboard write to Klipper without blocking
+     * the activation handler on its reply. Klipper sets the clipboard as soon
+     * as it processes the message; the previous synchronous call waited up to
+     * 1000 ms for a reply that may never arrive, stalling every KDE activation
+     * by ~1 s. The CLI fallback now happens in klipper_copy_done only when
+     * Klipper is actually absent. */
+    if (conn == NULL) {
+        copy_via_subprocess (text);
+        return;
+    }
+    gchar *text_copy = secure_strdup (text);   /* freed in klipper_copy_done */
+    g_dbus_connection_call (conn,
             "org.kde.klipper", "/klipper", "org.kde.klipper.klipper",
             "setClipboardContents", g_variant_new ("(s)", text),
-            NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
-    return result != NULL;
+            NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL,
+            klipper_copy_done, text_copy);
 }
 
 
@@ -908,11 +940,15 @@ copy_via_subprocess (const gchar *text)
  * give a misleading sense of protection. Users who want the OTP to disappear
  * sooner should configure Klipper's history retention or clear it manually. */
 static void
-copy_to_clipboard (const gchar *text,
-                   gboolean     is_kde)
+copy_to_clipboard (GDBusConnection *conn,
+                   const gchar     *text,
+                   gboolean         is_kde)
 {
     if (text == NULL || text[0] == '\0') return;
-    if (is_kde && copy_via_klipper (text)) return;
+    if (is_kde) {
+        copy_via_klipper (conn, text);   /* async; falls back internally */
+        return;
+    }
     copy_via_subprocess (text);
 }
 
@@ -958,7 +994,7 @@ handle_gnome_call (GDBusConnection       *conn,
                    GDBusMethodInvocation *inv,
                    gpointer               data)
 {
-    (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+    (void)sender; (void)path; (void)iface; (void)data;
     g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
@@ -1048,7 +1084,7 @@ handle_gnome_call (GDBusConnection       *conn,
             activation_capability_free (cap);
         }
         g_strfreev (terms);
-        copy_to_clipboard (otp, FALSE);
+        copy_to_clipboard (conn, otp, FALSE);
         send_notification (label, otp);
         sensitive_secure_free (otp);
         g_dbus_method_invocation_return_value (inv, NULL);
@@ -1068,7 +1104,7 @@ handle_krunner_call (GDBusConnection       *conn,
                      GDBusMethodInvocation *inv,
                      gpointer               data)
 {
-    (void)conn; (void)sender; (void)path; (void)iface; (void)data;
+    (void)sender; (void)path; (void)iface; (void)data;
     g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "Match") == 0) {
@@ -1140,7 +1176,7 @@ handle_krunner_call (GDBusConnection       *conn,
             label = g_strdup (cap->label);
             activation_capability_free (cap);
         }
-        copy_to_clipboard (otp, TRUE);
+        copy_to_clipboard (conn, otp, TRUE);
         send_notification (label, otp);
         sensitive_secure_free (otp);
         g_dbus_method_invocation_return_value (inv, NULL);
