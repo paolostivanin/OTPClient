@@ -114,6 +114,7 @@
           <li>SECURITY: tightened Argon2id parameter bounds (MAX_ITER 100 -&gt; 64, MAX_MC 4 GiB -&gt; 1 GiB, MAX_PARAL 64 -&gt; 16) to reject pathological configurations</li>
           <li>FIX: v2 databases were misread as a far-future format version and refused to open; both v2 and v3 headers are now read correctly</li>
           <li>FIX: the window no longer gets stuck on the "Unlocking..." page when a database fails to load for a reason other than a missing file or wrong password; it drops back to the no-database view so you can retry</li>
+          <li>FIX: the desktop search provider copies the OTP to the clipboard asynchronously on KDE; the synchronous Klipper D-Bus call could block every activation for up to a second when Klipper did not reply in time, delaying the copy and the notification</li>
           <li>FIX: CLI HOTP counter is now persisted before the code is printed, the counter upper bound is exclusive everywhere, the terminal is restored on interrupt, and CR/LF is stripped from piped input</li>
           <li>FIX: memory leaks in database and OTP handling paths</li>
           <li>FIX: freeotp importer secmem budget and GError-overwrite bug that also affected other importers</li>
