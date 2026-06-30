@@ -60,14 +60,15 @@ otp_validate_token_object (json_t  *obj,
                      "Token %" G_GSIZE_FORMAT " has an unsupported or missing type.", index);
         return FALSE;
     }
-    if (label == NULL || label[0] == '\0') {
+    /* A token only needs one human-readable name. Issuer-only tokens (e.g. some
+     * ProtonMail or Steam entries) have always been valid and were loadable before
+     * 5.1.0 added validation; rejecting them locked users out of the whole database
+     * (see issue #458). Require at least one of label/issuer to be non-empty. */
+    gboolean has_label  = (label  != NULL && label[0]  != '\0');
+    gboolean has_issuer = (issuer != NULL && issuer[0] != '\0');
+    if (!has_label && !has_issuer) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                     "Token %" G_GSIZE_FORMAT " has a missing label.", index);
-        return FALSE;
-    }
-    if (issuer == NULL) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                     "Token %" G_GSIZE_FORMAT " has a missing issuer.", index);
+                     "Token %" G_GSIZE_FORMAT " has neither a label nor an issuer.", index);
         return FALSE;
     }
     if (!otp_secret_is_valid_base32 (secret)) {
@@ -164,9 +165,12 @@ otp_validate_import_token (const otp_t  *otp,
                      "Import token has an unsupported or missing type.");
         return FALSE;
     }
-    if (otp->account_name == NULL || otp->account_name[0] == '\0') {
+    /* Mirror otp_validate_token_object: an issuer-only token is valid. */
+    gboolean has_label  = (otp->account_name != NULL && otp->account_name[0] != '\0');
+    gboolean has_issuer = (otp->issuer       != NULL && otp->issuer[0]       != '\0');
+    if (!has_label && !has_issuer) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                     "Import token has a missing account label.");
+                     "Import token has neither an account label nor an issuer.");
         return FALSE;
     }
     if (!otp_secret_is_valid_base32 (otp->secret)) {

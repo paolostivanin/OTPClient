@@ -24,6 +24,21 @@ test_valid_database_root (void)
 }
 
 static void
+test_issuer_only_accepted (void)
+{
+    /* A token with an issuer but no label must load (issue #458). */
+    json_t *root = json_array ();
+    json_t *obj = valid_totp ();
+    json_object_set_new (obj, "label", json_string (""));
+    json_array_append_new (root, obj);
+
+    GError *err = NULL;
+    g_assert_true (otp_validate_database_root (root, &err));
+    g_assert_no_error (err);
+    json_decref (root);
+}
+
+static void
 test_root_must_be_array (void)
 {
     json_t *root = json_object ();
@@ -73,6 +88,7 @@ main (int argc, char **argv)
     g_assert_null (init_err);
 
     g_test_add_func ("/validation/valid-root", test_valid_database_root);
+    g_test_add_func ("/validation/issuer-only", test_issuer_only_accepted);
     g_test_add_func ("/validation/root-array", test_root_must_be_array);
     g_test_add_func ("/validation/zero-period", test_zero_period_rejected);
     g_test_add_func ("/validation/hotp-overflow", test_hotp_counter_overflow_rejected);

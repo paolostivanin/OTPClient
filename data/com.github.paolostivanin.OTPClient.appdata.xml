@@ -90,6 +90,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.1" date="2026-06-30">
+      <description>
+        <p>Bug-fix release. Databases containing a token with an issuer but no account name (for example some ProtonMail or Steam entries) failed to open on 5.1.0 with "Could not open database: Token has a missing label", locking users out of the entire database. Such tokens are valid again.</p>
+        <ul>
+          <li>FIX: databases with issuer-only tokens (no account name) refused to open on 5.1.0. A token is now valid as long as it has either an account name or an issuer; the same rule applies to imports and manual token entry (#458)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.0" date="2026-06-22">
       <description>
         <p>Feature and hardening release. Webcam QR scanning now runs on a worker thread so the UI no longer freezes while the camera warms up or while frames are decoded. You can quit the app while the database is locked. The database file format is bumped to v3 with a portable big-endian header; v1 and v2 databases are still read transparently and upgraded on next save. Locking now wipes the decrypted database and master key from memory, and the app also locks automatically when the system suspends. Search-provider results use single-use, time-bounded capability tokens instead of predictable indices. Plus a broad security and correctness pass across the core, GUI, importers, and CLI, a reworked Google Authenticator migration importer, memory-leak fixes, and a new test suite with ASan/UBSan CI.</p>
@@ -141,9 +149,9 @@
     </release>
     <release version="5.0.5" date="2026-05-21">
       <description>
-        <p>Bug-fix release in the 5.0.x line. Headline fix is a hardening of the auto-lock flow: dismissing the unlock dialog (Esc, X, or click-outside) previously left the token list visible and interactive, so a single click would still copy an OTP — and "Show QR" would render the secret as a scannable image. The unlock dialog is now non-dismissable and a dedicated locked page hides the token list across every code path. Also recovers gracefully on systems where the registered Secret Service provider is broken (e.g. KDE Plasma with KWallet disabled): the setting is pre-flighted before being enabled and auto-disabled on runtime failure, instead of looping every launch.</p>
+        <p>Bug-fix release in the 5.0.x line. Headline fix is a hardening of the auto-lock flow: dismissing the unlock dialog (Esc, X, or click-outside) previously left the token list visible and interactive, so a single click would still copy an OTP - and "Show QR" would render the secret as a scannable image. The unlock dialog is now non-dismissable and a dedicated locked page hides the token list across every code path. Also recovers gracefully on systems where the registered Secret Service provider is broken (e.g. KDE Plasma with KWallet disabled): the setting is pre-flighted before being enabled and auto-disabled on runtime failure, instead of looping every launch.</p>
         <ul>
-          <li>FIX: lock bypass via unlock dialog dismissal — the token list was still clickable, allowing OTP copy and QR render while the app was "locked" (#447)</li>
+          <li>FIX: lock bypass via unlock dialog dismissal - the token list was still clickable, allowing OTP copy and QR render while the app was "locked" (#447)</li>
           <li>FIX: per-launch loop when the system Secret Service is unavailable; the toggle now pre-flights the keyring before being enabled, and auto-disables on runtime failure rather than nagging on every start (#446)</li>
           <li>FIX: keyboard focus did not land on the token list after unlock, so Up/Down/Enter required a mouse click first; restored the 4.x default and extended it to the empty and no-database pages (#445)</li>
         </ul>
@@ -151,7 +159,7 @@
     </release>
     <release version="5.0.4" date="2026-05-19">
       <description>
-        <p>Small bug-fix release in the 5.0.x line. The headline fix is a Flatpak-only data-loss-prevention hotfix: the GSettings schema XML was installed but never compiled into gschemas.compiled, so the schema lookup failed at runtime and every GSettings write was a silent no-op. As a result, the sidebar appeared empty on each launch (db-list never persisted) and preference changes did not stick. Existing databases were never lost — the .enc files remained on disk and the last-used path was still being written to otpclient.cfg via the GKeyFile fallback. On first launch after upgrading to 5.0.4, the v4 migration path rebuilds the sidebar from that fallback automatically. Non-Flatpak builds are unaffected by the schema fix.</p>
+        <p>Small bug-fix release in the 5.0.x line. The headline fix is a Flatpak-only data-loss-prevention hotfix: the GSettings schema XML was installed but never compiled into gschemas.compiled, so the schema lookup failed at runtime and every GSettings write was a silent no-op. As a result, the sidebar appeared empty on each launch (db-list never persisted) and preference changes did not stick. Existing databases were never lost - the .enc files remained on disk and the last-used path was still being written to otpclient.cfg via the GKeyFile fallback. On first launch after upgrading to 5.0.4, the v4 migration path rebuilds the sidebar from that fallback automatically. Non-Flatpak builds are unaffected by the schema fix.</p>
         <ul>
           <li>FIX: Flatpak GSettings schema not compiled at install time, causing the sidebar to appear empty and preferences to reset on every restart (#442)</li>
           <li>FIX: Welcome dialog Back/Next/page-indicator row got pushed below the visible area when the page's status description was tall enough to overflow; now pinned via AdwToolbarView's bottom bar (#441)</li>
@@ -170,7 +178,7 @@
       <description>
         <p>Restores the "Scan QR from Clipboard" workflow that existed in 4.5.0 and was dropped in the GTK4 rewrite. Reads an image directly from the clipboard via the GTK4 clipboard API and feeds it into the existing zbar pipeline, sidestepping the file-roundtrip needed for browser-copied or screenshot-captured QR codes.</p>
         <ul>
-          <li>NEW: Add → Scan QR from Clipboard (#438)</li>
+          <li>NEW: Add -> Scan QR from Clipboard (#438)</li>
           <li>FIX: scanning a QR that does not encode an otpauth:// URI now surfaces a toast instead of silently doing nothing (applies to file and webcam scans too)</li>
         </ul>
       </description>
@@ -184,13 +192,13 @@
           <li>FIX: token actions (delete, edit, show QR, move to database) act on the right token when a filter or column sort is active</li>
           <li>FIX: clicking a database in the sidebar now actually loads it (#436)</li>
           <li>NEW: sidebar marks the default database (loaded on startup) with a star and the currently open one in bold</li>
-          <li>NEW: creating or opening additional databases no longer changes which one loads on startup — only right-click "Set as Primary" does, and that choice now persists across restarts</li>
+          <li>NEW: creating or opening additional databases no longer changes which one loads on startup - only right-click "Set as Primary" does, and that choice now persists across restarts</li>
         </ul>
       </description>
     </release>
     <release version="5.0.0" date="2026-05-08">
       <description>
-        <p>OTPClient 5.0.0 — first stable release of the GTK4 / libadwaita rewrite, with multi-database support, token grouping, an opt-in trigger keyword for the desktop search provider, and a sweeping crypto and import-path hardening pass. Existing v2 databases unlock and migrate automatically.</p>
+        <p>OTPClient 5.0.0 - first stable release of the GTK4 / libadwaita rewrite, with multi-database support, token grouping, an opt-in trigger keyword for the desktop search provider, and a sweeping crypto and import-path hardening pass. Existing v2 databases unlock and migrate automatically.</p>
         <ul>
           <li>NEW: complete GUI rewrite on GTK4 + libadwaita</li>
           <li>NEW: persistent multi-database support with sidebar and right-click "Move to…" between databases</li>
@@ -199,12 +207,12 @@
           <li>NEW: hidden-by-default OTPs with click-to-reveal and auto-hide</li>
           <li>NEW: async unlock with KDF spinner</li>
           <li>NEW: search-provider trigger keyword (default "otp"); KRunner subtitle no longer leaks live codes; activation copies the OTP</li>
-          <li>NEW: Settings → Backup is the unified entry point for native (encrypted) backup and restore; format-specific export becomes migration-only with a plaintext warning</li>
+          <li>NEW: Settings -> Backup is the unified entry point for native (encrypted) backup and restore; format-specific export becomes migration-only with a plaintext warning</li>
           <li>NEW: settings import/export, Welcome and What's New dialogs, KDF presets, paste-to-fill otpauth:// URI, backup-age banner, lock-time clipboard wipe</li>
           <li>NEW: scriptable CLI output (--output=table|json|csv), translated CLI strings, --list-databases, HOTP counter in CSV, bash/zsh/fish completions</li>
           <li>NEW: native StatusNotifierItem tray (libayatana-appindicator dependency removed)</li>
           <li>SECURITY: Argon2id header validation refuses out-of-bounds parameters on unlock</li>
-          <li>SECURITY: KDF byte-length fix — gcry_kdf_* was passed character count instead of byte count, weakening keys for non-ASCII passwords; transparent retry plus opportunistic re-encryption on the next write</li>
+          <li>SECURITY: KDF byte-length fix - gcry_kdf_* was passed character count instead of byte count, weakening keys for non-ASCII passwords; transparent retry plus opportunistic re-encryption on the next write</li>
           <li>SECURITY: O_NOFOLLOW + fstat S_ISREG on every importer and database read site, closing the symlink-swap TOCTOU window</li>
           <li>SECURITY: 0600 mode on backup files; PR_SET_DUMPABLE=0 + RLIMIT_CORE=0 to suppress core dumps</li>
           <li>SECURITY: AEAD validation tightened across decrypt paths; 2FAS no longer accepts plaintext on tag mismatch</li>
@@ -225,8 +233,8 @@
       <description>
         <p>OTPClient 5.0.0-beta3 - Hide-by-default OTPs, unified backup flow, and fresh-install polish</p>
         <ul>
-          <li>NEW: OTPs are hidden by default — click a row to copy and briefly reveal, then auto-hide (toggle in Settings → Display)</li>
-          <li>NEW: Settings → Backup is now the unified entry point for native (encrypted) database backup and restore</li>
+          <li>NEW: OTPs are hidden by default - click a row to copy and briefly reveal, then auto-hide (toggle in Settings -> Display)</li>
+          <li>NEW: Settings -> Backup is now the unified entry point for native (encrypted) database backup and restore</li>
           <li>NEW: Export dialog is migration-only and warns when choosing a plaintext format</li>
           <li>NEW: dedicated "No database yet" empty-state page on fresh install with Create / Open call-to-action</li>
           <li>NEW: search-provider requires a trigger keyword (default "otp") to surface results above runner clutter</li>
@@ -263,7 +271,7 @@
           <li>SECURITY: backup files (.bak) created with 0600 mode regardless of umask</li>
           <li>SECURITY: signal-safe clipboard wipe on SIGINT/SIGTERM/SIGHUP and shutdown</li>
           <li>SECURITY: CLI --password-file refuses group/world-readable files</li>
-          <li>FIX: KDF byte-length bug — passwords with non-ASCII chars now derive the correct key (with one-shot legacy fallback + opportunistic re-encryption)</li>
+          <li>FIX: KDF byte-length bug - passwords with non-ASCII chars now derive the correct key (with one-shot legacy fallback + opportunistic re-encryption)</li>
           <li>FIX: HOTP click no longer triggers a full re-encrypt; debounced flush coalesces bursts</li>
           <li>FIX: search-provider monitors are diffed across reloads instead of torn down and re-armed</li>
           <li>FIX: token move rolls back on partial failure; cross-DB move invalidates the target KDF cache</li>
@@ -273,10 +281,10 @@
           <li>FIX: empty-state CTAs disabled when no database is loaded</li>
           <li>FIX: signal-quit explicitly flushes pending HOTP writes</li>
           <li>PERF: KDF-derived key cached across saves; per-save random IV preserves AES-GCM nonce uniqueness</li>
-          <li>PERF: search filter uses pre-folded labels — one casefold per term per query instead of per-entry</li>
-          <li>PERF: search-provider cache TTL extended (5s → 60s) with per-DB GFileMonitor invalidation</li>
+          <li>PERF: search filter uses pre-folded labels - one casefold per term per query instead of per-entry</li>
+          <li>PERF: search-provider cache TTL extended (5s -> 60s) with per-DB GFileMonitor invalidation</li>
           <li>PERF: pre-warm search-provider cache after bus ownership so first query avoids Argon2id cost</li>
-          <li>PERF: cross-DB OTP computation is lazy — computed on first row bind rather than upfront</li>
+          <li>PERF: cross-DB OTP computation is lazy - computed on first row bind rather than upfront</li>
           <li>BUILD: probes -fcf-protection=full, -fzero-call-used-regs, -fstrict-flex-arrays=2, -ftrivial-auto-var-init=zero</li>
           <li>BUILD: defaults to Release with LTO when supported</li>
         </ul>

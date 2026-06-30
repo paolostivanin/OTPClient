@@ -159,6 +159,18 @@ assert_root_rejected (json_t *obj_to_wrap)
 }
 
 static void
+assert_root_accepted (json_t *obj_to_wrap)
+{
+    json_t *root = json_array ();
+    json_array_append_new (root, obj_to_wrap);
+
+    GError *err = NULL;
+    g_assert_true (otp_validate_database_root (root, &err));
+    g_assert_no_error (err);
+    json_decref (root);
+}
+
+static void
 test_validation_missing_type (void)
 {
     json_t *obj = valid_totp_obj ();
@@ -167,18 +179,38 @@ test_validation_missing_type (void)
 }
 
 static void
-test_validation_missing_label (void)
+test_validation_missing_label_with_issuer (void)
 {
+    /* No label but issuer present -> valid (issue #458). */
     json_t *obj = valid_totp_obj ();
     json_object_del (obj, "label");
+    assert_root_accepted (obj);
+}
+
+static void
+test_validation_empty_label_with_issuer (void)
+{
+    /* Empty label but issuer present -> valid (issue #458). */
+    json_t *obj = valid_totp_obj ();
+    json_object_set_new (obj, "label", json_string (""));
+    assert_root_accepted (obj);
+}
+
+static void
+test_validation_empty_label_and_issuer (void)
+{
+    json_t *obj = valid_totp_obj ();
+    json_object_set_new (obj, "label", json_string (""));
+    json_object_set_new (obj, "issuer", json_string (""));
     assert_root_rejected (obj);
 }
 
 static void
-test_validation_empty_label (void)
+test_validation_missing_label_and_issuer (void)
 {
     json_t *obj = valid_totp_obj ();
-    json_object_set_new (obj, "label", json_string (""));
+    json_object_del (obj, "label");
+    json_object_del (obj, "issuer");
     assert_root_rejected (obj);
 }
 
@@ -285,8 +317,10 @@ main (int argc, char **argv)
     g_test_add_func ("/common-utils/get-algo-int-from-str/unknown",  test_get_algo_int_from_str_unknown);
 
     g_test_add_func ("/common-utils/validation/missing-type",        test_validation_missing_type);
-    g_test_add_func ("/common-utils/validation/missing-label",       test_validation_missing_label);
-    g_test_add_func ("/common-utils/validation/empty-label",         test_validation_empty_label);
+    g_test_add_func ("/common-utils/validation/missing-label-with-issuer", test_validation_missing_label_with_issuer);
+    g_test_add_func ("/common-utils/validation/empty-label-with-issuer",   test_validation_empty_label_with_issuer);
+    g_test_add_func ("/common-utils/validation/empty-label-and-issuer",    test_validation_empty_label_and_issuer);
+    g_test_add_func ("/common-utils/validation/missing-label-and-issuer",  test_validation_missing_label_and_issuer);
     g_test_add_func ("/common-utils/validation/missing-secret",      test_validation_missing_secret);
     g_test_add_func ("/common-utils/validation/invalid-secret-b32",  test_validation_invalid_secret_base32);
     g_test_add_func ("/common-utils/validation/unknown-algorithm",   test_validation_unknown_algorithm);

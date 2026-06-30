@@ -39,10 +39,13 @@ static void
 update_add_sensitivity (ManualAddDialog *self)
 {
     const gchar *label = gtk_editable_get_text (GTK_EDITABLE (self->label_row));
+    const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (self->issuer_row));
     const gchar *secret = gtk_editable_get_text (GTK_EDITABLE (self->secret_row));
 
-    gboolean sensitive = (label != NULL && label[0] != '\0' &&
-                          secret != NULL && secret[0] != '\0');
+    /* A token only needs one name: accept either a label or an issuer. */
+    gboolean has_name = (label != NULL && label[0] != '\0') ||
+                        (issuer != NULL && issuer[0] != '\0');
+    gboolean sensitive = (has_name && secret != NULL && secret[0] != '\0');
     gtk_widget_set_sensitive (self->add_button, sensitive);
 }
 
@@ -308,6 +311,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
 
     self->issuer_row = adw_entry_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->issuer_row), _("Issuer"));
+    g_signal_connect (self->issuer_row, "changed", G_CALLBACK (on_field_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (details_group), self->issuer_row);
 
     self->group_row = adw_entry_row_new ();
@@ -343,7 +347,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->algo_combo), _("Algorithm"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->algo_combo), G_LIST_MODEL (algo_model));
     gtk_widget_set_tooltip_text (self->algo_combo,
-        _("HMAC hash function. Must match what the provider expects — most use SHA1."));
+        _("HMAC hash function. Must match what the provider expects - most use SHA1."));
     g_signal_connect (self->algo_combo, "notify::selected", G_CALLBACK (on_algo_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->algo_combo);
 
