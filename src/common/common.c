@@ -465,7 +465,7 @@ json_object_get_hash (json_t *obj)
 {
     // GString grows as needed, so a long label/issuer no longer gets truncated
     // and inflates the collision rate of the 32-bit jenkins hash. The hash is
-    // still only used as a fast first-pass filter — add_otps_to_db_ex breaks
+    // still only used as a fast first-pass filter - add_otps_to_db_ex breaks
     // ties with json_equal so a colliding-but-distinct entry isn't silently
     // dropped as a "duplicate".
     GString *tmp_string = g_string_new (NULL);

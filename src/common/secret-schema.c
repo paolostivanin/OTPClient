@@ -40,7 +40,7 @@ otpclient_get_schema (void)
  * silent g_printerr. If the caller passed a GApplication as user_data, also
  * fire a desktop notification so a user with no terminal sees the failure
  * (otherwise their next launch would prompt for the password and they'd have
- * no idea why the keyring wasn't used). The CLI passes NULL — there's no
+ * no idea why the keyring wasn't used). The CLI passes NULL - there's no
  * application to notify, but g_warning still logs to the journal. */
 static void
 notify_secret_failure (gpointer    user_data,
@@ -98,7 +98,7 @@ otpclient_secret_service_probe (GError **error)
     g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
     /* Fresh random payload each call: a stale probe value left behind by a
-     * previously crashed run cannot produce a false positive — the verify
+     * previously crashed run cannot produce a false positive - the verify
      * step compares against this run's uuid. */
     g_autofree gchar *expected = g_uuid_string_random ();
 

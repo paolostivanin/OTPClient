@@ -135,7 +135,7 @@ on_secret_service_toggled (GObject        *obj,
 
     /* Pre-flight: refuse to enable on a broken keyring rather than letting
      * the user discover later via failed lookups and stored-password loops
-     * (issue #446). Sync calls are fine here — the user just clicked the
+     * (issue #446). Sync calls are fine here - the user just clicked the
      * toggle and expects immediate feedback. */
     GError *err = NULL;
     if (otpclient_secret_service_probe (&err)) {
@@ -405,7 +405,7 @@ settings_dialog_new (OTPClientApplication *app)
                       G_CALLBACK (on_show_next_otp_toggled), self);
     adw_preferences_group_add (display_group, self->show_next_otp_switch);
 
-    /* Hide OTPs by default — leaves the cell blank in the list and
+    /* Hide OTPs by default - leaves the cell blank in the list and
      * temporarily reveals the row when clicked (timeout below). */
     gboolean hide_active = otpclient_application_get_hide_otps (app);
     self->hide_otps_switch = adw_switch_row_new ();
@@ -604,7 +604,7 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
 #endif
 
-    /* Backup group — covers both app preferences (GSettings JSON) and the
+    /* Backup group - covers both app preferences (GSettings JSON) and the
      * encrypted token database. The token rows dispatch to window actions so
      * the same code path also serves the backup-age banner button. */
     AdwPreferencesGroup *backup_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());

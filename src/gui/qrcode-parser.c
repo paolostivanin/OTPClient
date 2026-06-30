@@ -8,7 +8,7 @@
  * pixels per side. Cap the dimensions before any allocation: a malicious
  * source (image file, oversized clipboard texture) with width=height=65535
  * would otherwise request huge decode buffers. g_malloc aborts on huge
- * allocations, which crashes the application — DoS via a single QR import. */
+ * allocations, which crashes the application - DoS via a single QR import. */
 #define MAX_QR_IMAGE_DIM 4096u
 
 static gboolean

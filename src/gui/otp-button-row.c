@@ -83,7 +83,7 @@ update_end_icon (OtpButtonRow *self)
     }
 }
 
-/* GtkListBoxRow::activate is NOT called by GtkListBox on user click — it's an
+/* GtkListBoxRow::activate is NOT called by GtkListBox on user click - it's an
  * action signal a caller can fire to simulate activation. To re-emit our
  * "activated" signal on a real click, we mirror AdwButtonRow 1.6: listen for
  * notify::parent, connect_swapped to the parent GtkListBox's "row-activated",

@@ -30,7 +30,7 @@ static gint32 global_max_file_size = 0;
 
 static GPtrArray  *cached_entries = NULL;
 static gint64      cached_at = 0;
-/* path (gchar*) → GFileMonitor*. Diffed across reloads so monitors for
+/* path (gchar*) -> GFileMonitor*. Diffed across reloads so monitors for
  * unchanged DB paths survive without a brief monitor-less window during
  * which writes would slip past the cache invalidator. */
 static GHashTable *file_monitors = NULL;
@@ -43,7 +43,7 @@ static GHashTable *file_monitors = NULL;
  *
  * g_kdf_cache lifts the derived key out of DatabaseData so it survives across
  * activations. Each entry is invalidated eagerly by the existing GFileMonitor
- * when the DB file changes (password change → new salt → cache miss anyway,
+ * when the DB file changes (password change -> new salt -> cache miss anyway,
  * but we drop the entry to wipe the old derived key sooner).
  *
  * Trade-off: ARGON2ID_KEYLEN bytes per active DB live in secure memory
@@ -99,7 +99,7 @@ typedef struct otp_search_entry_t {
     gchar *db_name;
     gchar *db_path;        /* needed to recompute OTP on Run/Activate */
     gsize  json_index;     /* position of the token within the DB's JSON array */
-    /* Pre-folded copies for entry_matches_terms — avoid casefolding per query. */
+    /* Pre-folded copies for entry_matches_terms - avoid casefolding per query. */
     gchar *label_fold;
     gchar *issuer_fold;
 } OtpSearchEntry;
@@ -550,7 +550,7 @@ load_entries_from_db (GPtrArray   *entries,
         entry->db_name = g_strdup (db_name);
         entry->db_path = g_strdup (db_path);
         entry->json_index = index;
-        /* Pre-casefold for entry_matches_terms — done once at load instead of
+        /* Pre-casefold for entry_matches_terms - done once at load instead of
          * once per term per query. Live OTP codes are no longer cached: they're
          * recomputed on demand in compute_otp_for_entry, so a heap inspection
          * of the daemon shows only labels/issuers, not active codes. */
@@ -656,7 +656,7 @@ load_entries_uncached (void)
     GPtrArray *entries = g_ptr_array_new_with_free_func ((GDestroyNotify) otp_search_entry_free);
 
     /* Collect the desired set of paths, then diff our current monitor set
-     * against it — see sync_file_monitors. */
+     * against it - see sync_file_monitors. */
     g_autoptr (GPtrArray) desired_paths = g_ptr_array_new ();
 
     g_autoptr (GPtrArray) db_list = gsettings_common_get_db_list ();
@@ -897,7 +897,7 @@ static gboolean
 copy_via_subprocess (const gchar *text)
 {
     /* On Wayland the X selection tools either fail outright or only address
-     * XWayland's own selection — wl-copy is the only thing that talks to the
+     * XWayland's own selection - wl-copy is the only thing that talks to the
      * compositor's data device. On X11 (or unknown sessions) try xclip first
      * and fall back to xsel since distros ship one or the other by default. */
     const gchar *session = g_getenv ("XDG_SESSION_TYPE");
@@ -1135,7 +1135,7 @@ handle_krunner_call (GDBusConnection       *conn,
                     g_autofree gchar *sub = NULL;
                     if (e->db_name != NULL && e->db_name[0] != '\0')
                         sub = (e->issuer && *e->issuer)
-                            ? g_strdup_printf ("%s — %s", e->db_name, e->issuer)
+                            ? g_strdup_printf ("%s - %s", e->db_name, e->issuer)
                             : g_strdup (e->db_name);
                     else
                         sub = g_strdup (e->issuer ? e->issuer : "");

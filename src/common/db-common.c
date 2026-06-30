@@ -413,8 +413,8 @@ load_db (DatabaseData    *db_data,
 
     /* Bail-on-error pattern: decrypt_db / update_db return NULL or set *err on
      * failure. Previously we used g_return_if_fail (err == NULL || *err == NULL)
-     * here, but that logs a CRITICAL every time the condition is false — i.e.
-     * on every legitimate failure (wrong password, truncated file, etc.) — and
+     * here, but that logs a CRITICAL every time the condition is false - i.e.
+     * on every legitimate failure (wrong password, truncated file, etc.) - and
      * that noise made real bugs harder to spot in the journal. A plain early
      * return preserves the original control flow without the misuse. */
     gsize in_memory_json_len = 0;
@@ -776,7 +776,7 @@ db_import_otps (DatabaseData     *db_data,
 
 /* True when `obj` is byte-equal (per Jansson's json_equal) to any token already
  * present either on disk or staged for the next save. Used to break ties when
- * two distinct OTP tokens share a 32-bit jenkins hash — without this fallback
+ * two distinct OTP tokens share a 32-bit jenkins hash - without this fallback
  * the second token would be silently skipped as a "duplicate". */
 static gboolean
 otp_object_already_present (DatabaseData *db_data,
@@ -954,7 +954,7 @@ get_db_version (const gchar  *db_path,
     // v3 writes the version explicitly with write_be32, so bytes [9..12] are
     // 00 00 00 03. v2 wrote a zero-initialized DbHeaderData_v2 struct whose
     // 3 bytes of padding before `gint32 db_version` are zero, followed by the
-    // LE int32 value 2 — i.e. bytes [9..12] are 00 00 00 02. Both layouts
+    // LE int32 value 2 - i.e. bytes [9..12] are 00 00 00 02. Both layouts
     // round-trip cleanly through read_be32. A previous attempt fell back to a
     // native-endian memcpy when read_be32 != 3, which turned a v2 file's
     // 00 00 00 02 into 0x02000000 (33554432) and tripped the "future version"
@@ -1011,7 +1011,7 @@ get_db_derived_key (DatabaseData  *db_data,
         // derive => same derived key (KDF params haven't changed, since the
         // cache is invalidated on password change). The password-hash check
         // is what stops a cached key from a prior successful unlock being
-        // returned to a later attempt with a different password — without it
+        // returned to a later attempt with a different password - without it
         // the salt-only lookup would accept any password against a cache
         // entry from the same file.
         if (!use_legacy_length

@@ -5,8 +5,8 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### Supported standards
 - TOTP and HOTP
-- Manual entry: digits 4–10, period 1–300 s
-- `otpauth://` URIs (import / display / QR): digits 6–8, period 1–300 s (per RFC 6238)
+- Manual entry: digits 4-10, period 1-300 s
+- `otpauth://` URIs (import / display / QR): digits 6-8, period 1-300 s (per RFC 6238)
 - SHA1, SHA256, and SHA512 algorithms
 - Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 
@@ -14,11 +14,11 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - Token list with drag-and-drop reordering
 - OTPs are hidden by default (cell stays blank); click a row to copy and briefly
   reveal the code, then it re-hides automatically. Reveal duration and the
-  hide-by-default behavior are configurable in *Settings → Display*
+  hide-by-default behavior are configurable in *Settings -> Display*
 - Multiple encrypted databases listed in the sidebar. The first database
-  you create becomes the default — it loads automatically on startup and is
+  you create becomes the default - it loads automatically on startup and is
   marked with a star. Clicking another row switches the currently open
-  database (shown in bold) without changing the default; right-click →
+  database (shown in bold) without changing the default; right-click ->
   *Set as Primary* changes which database is loaded on next startup.
 - Cross-database search (`group:<name>` / `#<name>` syntax for filtering)
 - Token grouping: assign tokens to groups (e.g. "Work", "Personal") via right-click,
@@ -44,10 +44,10 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 ### Desktop search (`otpclient-search-provider`)
 A separate D-Bus daemon that integrates with **GNOME Shell Activities Search**
 and **KDE Plasma 6 KRunner**. Type the configurable trigger keyword (default
-`otp`) followed by a query — selecting a result computes the OTP, delivers it
+`otp`) followed by a query - selecting a result computes the OTP, delivers it
 via system notification, and copies it to the clipboard (via Klipper's D-Bus
 interface on KDE Plasma; via `wl-copy` on Wayland or `xclip` / `xsel` on X11
-elsewhere — those tools must be installed for the clipboard step to work
+elsewhere - those tools must be installed for the clipboard step to work
 outside KDE). The OTP value never appears in the search-result preview, so
 other processes on the session bus cannot poll for it. Setting the keyword to
 an empty string disables the provider entirely: every query is refused, since
@@ -70,15 +70,15 @@ Migration to and from other authenticator apps:
 - Google migration QR codes (import only)
 
 ### Backup & restore
-**Settings → Backup** has four buttons covering both your app preferences (saved
+**Settings -> Backup** has four buttons covering both your app preferences (saved
 as JSON) and your tokens (a byte-for-byte copy of the encrypted database, written
 with `0600` perms). *Restore tokens* opens the saved file as an additional
-database in the sidebar — the previously-active database stays on disk untouched,
+database in the sidebar - the previously-active database stays on disk untouched,
 so restore is non-destructive.
 
 A reminder banner appears on the main window when no token backup has ever been
 taken, or when the last one is more than 30 days old. Its **Back up Now** button
-runs the same flow as *Settings → Backup → Back up tokens*. The reminder can be
+runs the same flow as *Settings -> Backup -> Back up tokens*. The reminder can be
 snoozed for 7 days from the primary menu (**Snooze Backup Reminder**), and it
 hides automatically once a backup completes. The Export menu (Ctrl+E) is for
 migration to other apps and does **not** count as a backup.

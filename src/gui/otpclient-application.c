@@ -221,7 +221,7 @@ otpclient_application_shortcuts (GSimpleAction *simple,
 
 /* Issue #446: when a libsecret call fails at runtime with a real error
  * (i.e. not "no password stored"), the registered Secret Service provider
- * is broken in some way we can't recover from in-process — libsecret has
+ * is broken in some way we can't recover from in-process - libsecret has
  * no fallback to a different keyring. Flip the setting OFF so we don't
  * loop on the failure every launch, and surface one notification so the
  * user knows what happened and how to re-enable it later. */
@@ -448,7 +448,7 @@ populate_window_from_db (OTPClientApplication *self)
     if (self->db_data == NULL || self->db_data->in_memory_json_data == NULL)
         return;
     /* Window can be NULL if it was destroyed while the unlock thread was
-     * still running (150–300 ms Argon2id derive). Bail rather than deref. */
+     * still running (150-300 ms Argon2id derive). Bail rather than deref. */
     if (self->window == NULL)
         return;
 
@@ -982,7 +982,7 @@ init_database (OTPClientApplication *self)
 
     /* Validate every entry against the filesystem so missing files surface
      * in the sidebar (warning icon + dim style). The sidebar's db_store
-     * holds different DatabaseEntry objects than db_list — check the
+     * holds different DatabaseEntry objects than db_list - check the
      * sidebar's copy of the primary entry below. */
     GListStore *sidebar_store = otpclient_window_get_db_store (self->window);
     gui_misc_validate_databases (sidebar_store);
@@ -1041,7 +1041,7 @@ otpclient_application_signal_quit (gpointer user_data)
 {
     GApplication *app = G_APPLICATION (user_data);
     OTPClientApplication *self = OTPCLIENT_APPLICATION (app);
-    /* Persist any deferred HOTP counter advances before bailing — otherwise
+    /* Persist any deferred HOTP counter advances before bailing - otherwise
      * a SIGTERM (e.g. from the session manager during logout) loses them
      * and the next startup serves stale codes. */
     if (self->window != NULL)

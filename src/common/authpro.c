@@ -352,7 +352,7 @@ parse_authpro_json_data (const gchar *data,
         return NULL;
     }
 
-    /* Build category ID → name map */
+    /* Build category ID -> name map */
     GHashTable *cat_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     json_t *categories = json_object_get (root, "Categories");
     if (categories != NULL && json_is_array (categories)) {
@@ -365,7 +365,7 @@ parse_authpro_json_data (const gchar *data,
         }
     }
 
-    /* Build secret → category name map (first category only) */
+    /* Build secret -> category name map (first category only) */
     GHashTable *secret_cat_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     json_t *auth_categories = json_object_get (root, "AuthenticatorCategories");
     if (auth_categories != NULL && json_is_array (auth_categories)) {

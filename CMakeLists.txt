@@ -37,7 +37,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     list(APPEND COMMON_LINK_OPTIONS -pie)
 endif()
 
-# Optional hardening flags — gated on compiler support so older toolchains
+# Optional hardening flags - gated on compiler support so older toolchains
 # (e.g. the GCC shipped on Ubuntu 24.04 LTS) keep building cleanly.
 include(CheckCCompilerFlag)
 foreach(_hardening_flag

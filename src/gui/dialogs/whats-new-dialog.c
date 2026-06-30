@@ -39,17 +39,17 @@ static const PageInfo welcome_pages[] = {
         N_("OTPs Are Hidden by Default"),
         N_("Codes are hidden in the list to prevent "
            "shoulder-surfing and accidental screenshot leaks.\n\n"
-           "Click a row to copy the OTP — it will briefly appear "
+           "Click a row to copy the OTP - it will briefly appear "
            "so you can verify what was copied, then re-hide. "
            "Adjust the reveal duration or turn this off entirely "
-           "in Settings → Display.")
+           "in Settings -> Display.")
     },
     {
         "drive-harddisk-symbolic",
         N_("Multiple Databases"),
         N_("You can create and manage multiple encrypted databases from "
            "the sidebar.\n\n"
-           "The first database you create becomes the default — it loads "
+           "The first database you create becomes the default - it loads "
            "automatically on startup and is marked with a star. The "
            "currently open database is shown in bold.\n\n"
            "Right-click a database to rename it, set it as the default, "
@@ -107,10 +107,10 @@ static const PageInfo whats_new_pages[] = {
         N_("Codes used to be visible at all times. They are now hidden "
            "so a glance at your screen, a screenshot, or "
            "an Alt+Tab thumbnail no longer leaks them.\n\n"
-           "Click a row to copy the OTP — it briefly appears so you "
+           "Click a row to copy the OTP - it briefly appears so you "
            "can verify what was copied, then re-hides. To restore the "
            "previous always-visible behavior, toggle Hide OTPs by "
-           "Default off in Settings → Display.")
+           "Default off in Settings -> Display.")
     },
     {
         "folder-symbolic",
@@ -125,7 +125,7 @@ static const PageInfo whats_new_pages[] = {
         N_("Multiple Databases"),
         N_("You can now manage multiple encrypted databases from the "
            "sidebar.\n\n"
-           "The first database you create is the default — it loads on "
+           "The first database you create is the default - it loads on "
            "startup and is marked with a star. The currently open database "
            "is shown in bold. Right-click a database to rename it, set it "
            "as the default, or remove it from the list.")

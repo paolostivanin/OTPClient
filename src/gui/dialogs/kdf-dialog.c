@@ -27,9 +27,9 @@ static const struct {
     gint32 memcost;   /* KiB */
     gint32 parallelism;
 } kdf_presets[] = {
-    { 3, 131072, 2 },   /* Standard  — 128 MiB */
-    { 5, 262144, 4 },   /* Strong    — 256 MiB */
-    { 8, 524288, 4 },   /* Paranoid  — 512 MiB */
+    { 3, 131072, 2 },   /* Standard  - 128 MiB */
+    { 5, 262144, 4 },   /* Strong    - 256 MiB */
+    { 8, 524288, 4 },   /* Paranoid  - 512 MiB */
 };
 #define KDF_PRESET_CUSTOM 3
 
@@ -75,7 +75,7 @@ on_preset_changed (AdwComboRow *combo_row,
     (void) pspec;
     guint idx = adw_combo_row_get_selected (combo_row);
     if (idx >= G_N_ELEMENTS (kdf_presets))
-        return;  /* Custom — leave spins as-is */
+        return;  /* Custom - leave spins as-is */
 
     self->applying_preset = TRUE;
     adw_spin_row_set_value (ADW_SPIN_ROW (self->iter_spin), kdf_presets[idx].iter);
@@ -93,7 +93,7 @@ on_spin_changed (AdwSpinRow  *spin_row,
     (void) pspec;
     if (self->applying_preset)
         return;
-    /* User edited a spin row — reflect that the values may no longer match a preset. */
+    /* User edited a spin row - reflect that the values may no longer match a preset. */
     double iter_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->iter_spin));
     double mc_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->memcost_spin));
     double par_d = adw_spin_row_get_value (ADW_SPIN_ROW (self->parallelism_spin));
@@ -216,7 +216,7 @@ kdf_dialog_new (DatabaseData *db_data)
     GtkWidget *new_group = adw_preferences_group_new ();
     adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (new_group), _("New Values"));
 
-    /* Preset selector — Standard / Strong / Paranoid / Custom */
+    /* Preset selector - Standard / Strong / Paranoid / Custom */
     const char * const preset_names[] = {
         N_("Standard (128 MiB)"),
         N_("Strong (256 MiB)"),

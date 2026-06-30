@@ -529,7 +529,7 @@ export_aegis (const gchar   *export_path,
             goto cleanup_and_exit;
         }
         enc_db = g_malloc0 (db_size);
-        // M3: dumped_db holds plaintext OTP secrets — keep it in secure memory
+        // M3: dumped_db holds plaintext OTP secrets - keep it in secure memory
         // so it can't be paged to swap.
         dumped_db = gcry_calloc_secure (db_size, 1);
         if (dumped_db == NULL) {

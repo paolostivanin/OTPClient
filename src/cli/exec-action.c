@@ -84,7 +84,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         g_print ("%s", _("Known databases:\n"));
         for (guint i = 0; i < db_list->len; i++) {
             DbListEntry *entry = g_ptr_array_index (db_list, i);
-            g_print ("  %s  →  %s\n", entry->name, entry->path);
+            g_print ("  %s  ->  %s\n", entry->name, entry->path);
         }
         return TRUE;
     }
@@ -144,7 +144,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     /* Issue #446: if the registered Secret Service provider is broken, the
      * sync lookup fails with err != NULL. Treat that as "fall back to the
      * interactive prompt" instead of looping. Don't persist secret-service=
-     * false in GSettings here — a scripted CLI run through a transiently
+     * false in GSettings here - a scripted CLI run through a transiently
      * broken D-Bus session shouldn't flip the user's GUI setting. */
     gboolean secret_service_runtime_ok = TRUE;
     gboolean recovered_from_legacy_keyring = FALSE;
@@ -401,7 +401,7 @@ resolve_db_path (const gchar *database_arg)
         return NULL;
     }
 
-    /* No argument given — try GSettings / GKeyFile */
+    /* No argument given - try GSettings / GKeyFile */
     gchar *db_path = gsettings_common_get_db_path ();
     if (db_path != NULL && db_path[0] != '\0') {
         if (!g_file_test (db_path, G_FILE_TEST_EXISTS)) {

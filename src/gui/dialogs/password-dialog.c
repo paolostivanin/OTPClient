@@ -173,7 +173,7 @@ on_unlock_clicked (GtkButton      *button,
     /* Order matters: lock-state callers attach a "closed" handler that
      * re-presents this dialog if the app is still locked when it fires. Run
      * the callback first so it can flip app_locked to FALSE before the close
-     * triggers that handler — otherwise a successful unlock would race with a
+     * triggers that handler - otherwise a successful unlock would race with a
      * stale re-present. force_close bypasses can-close=FALSE (set by callers
      * that want to block user-initiated dismissal). */
     adw_dialog_force_close (ADW_DIALOG (self));

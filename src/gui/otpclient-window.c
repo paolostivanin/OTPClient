@@ -165,7 +165,7 @@ validity_tick (gpointer data)
     /* Recompute from wallclock instead of decrementing a counter and
      * giving up at 0. At rollover (now % period == 0), `remaining`
      * becomes `period` automatically and the bar refills the moment the
-     * OTP rotates — otp_refresh_tick handles updating the OTP value in
+     * OTP rotates - otp_refresh_tick handles updating the OTP value in
      * parallel. */
     if (widgets->period > 0)
     {
@@ -179,7 +179,7 @@ validity_tick (gpointer data)
 
 /* Decide whether the validity bar/seconds should be visible right now and
  * (re)arm or stop the per-row timer accordingly. The bar only makes sense
- * when the OTP is also visible — when "Hide OTPs by default" is on and the
+ * when the OTP is also visible - when "Hide OTPs by default" is on and the
  * row is not currently revealed, the cell is blank and a countdown next to
  * empty space is just visual noise. */
 static void
@@ -286,10 +286,10 @@ render_otp_value_label (GtkWidget *label,
     if (label == NULL || !GTK_IS_LABEL (label) || entry == NULL)
         return;
 
-    /* Use g_application_get_default() rather than walking up from the label —
+    /* Use g_application_get_default() rather than walking up from the label -
      * during the very first row bind the label may not be parented yet, so
      * gtk_widget_get_root returns NULL, app falls through to NULL, and `hide`
-     * defaults to FALSE → OTPs flash unmasked on startup. The app exists from
+     * defaults to FALSE -> OTPs flash unmasked on startup. The app exists from
      * GApplication startup, well before any column row binds. Same pattern as
      * validity_update_display. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
@@ -297,7 +297,7 @@ render_otp_value_label (GtkWidget *label,
     gboolean masked = hide && !otp_entry_get_revealed (entry);
 
     /* When masked, the cell is left visually empty rather than a bullet
-     * placeholder — the row's other columns (account / issuer / validity)
+     * placeholder - the row's other columns (account / issuer / validity)
      * already make it obvious the entry exists, and a blank value reads as
      * "click to reveal" without giving away the digit count. */
     if (masked)
@@ -390,7 +390,7 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
                 if (cached == NULL || cached[0] == '\0')
                     otp_entry_update_otp (entry);
             }
-            /* Drop any signal connections from a prior entry — labels are
+            /* Drop any signal connections from a prior entry - labels are
              * recycled across rows as the user scrolls. Then connect to the
              * new entry so reveal/hide and HOTP/TOTP updates re-render in
              * place. */
@@ -775,7 +775,7 @@ cross_db_load_thread (GTask        *task,
             if (group != NULL)
                 otp_entry_set_group (entry, group);
             otp_entry_set_db_name (entry, dbe->name);
-            /* OTP is computed lazily — see otp_text_column_bind /
+            /* OTP is computed lazily - see otp_text_column_bind /
              * on_otp_selection_changed. Computing every cross-DB entry's OTP
              * upfront wastes cycles when the user only opens search to find
              * one token. */
@@ -887,7 +887,7 @@ otpclient_window_invalidate_cross_db (OTPClientWindow *self)
 
 /* Re-derive search_lower / search_group_lower from the live search entry text.
  * Must be called from every code path that ends with gtk_filter_changed on the
- * search filter — otherwise the per-row filter will run against stale strings. */
+ * search filter - otherwise the per-row filter will run against stale strings. */
 static void
 refresh_search_cache (OTPClientWindow *self)
 {
@@ -1010,7 +1010,7 @@ refresh_backup_age_banner (OTPClientWindow *self)
     if (last_export == 0)
     {
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner),
-                              _("You haven't saved a backup of your encrypted database yet — keep a copy somewhere safe."));
+                              _("You haven't saved a backup of your encrypted database yet - keep a copy somewhere safe."));
         reveal = TRUE;
     }
     else if (last_export > now)
@@ -1044,7 +1044,7 @@ update_empty_state (OTPClientWindow *self)
 
     /* Pre-list states: locked supersedes everything (don't show the token
      * list, or even the "empty"/"loading" pages, while locked). No DB at all
-     * (fresh install) → "no-db" CTA; an existing DB is being decrypted →
+     * (fresh install) -> "no-db" CTA; an existing DB is being decrypted ->
      * "Unlocking…"; the loaded list is either populated or empty-but-unlocked,
      * handled below. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -1067,7 +1067,7 @@ update_empty_state (OTPClientWindow *self)
     /* Move focus onto the page's primary widget when it first becomes
      * visible, so the obvious next action (consume a token, add the first
      * token, create the first DB) is one keystroke away rather than buried
-     * past the toolbar (issue #445). "loading" is transient — leave focus
+     * past the toolbar (issue #445). "loading" is transient - leave focus
      * alone so it doesn't flicker. */
     if (g_strcmp0 (target_page, current_page) != 0)
     {
@@ -1289,7 +1289,7 @@ search_text_changed (GtkEntry        *entry,
         cross_db_deactivate (win);
     }
 
-    /* Sync search group prefix → dropdown */
+    /* Sync search group prefix -> dropdown */
     if (!win->syncing_group_filter && win->group_list_model != NULL)
     {
         g_autofree gchar *search_group = NULL;
@@ -1623,7 +1623,7 @@ otpclient_window_add_database (OTPClientWindow *self,
     if (!gui_misc_add_db_to_list (self->db_store, name, path))
         return;
 
-    /* If no primary is set yet, this is the first DB the user has — make
+    /* If no primary is set yet, this is the first DB the user has - make
      * it the default. Don't gate on store size: at startup the sidebar is
      * repopulated entry by entry, and the first one would otherwise
      * clobber whatever the user explicitly chose as primary. */
@@ -1833,7 +1833,7 @@ on_otp_selection_changed (GtkSingleSelection *selection,
 
     /* Refuse to reveal or copy any OTP while the database is locked. The
      * locked-page swap normally hides the list, but a stray selection signal
-     * during the lock transition could still fire — bail before reading the
+     * during the lock transition could still fire - bail before reading the
      * cached OTP value. */
     if (window_is_locked (self))
         return;
@@ -1867,7 +1867,7 @@ find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
 /* Resolve the current selection to a JSON-array index.
  *
  * The selection wraps sort+filter+store, so the bare selection position
- * reflects the filtered+sorted view — not the underlying store or the
+ * reflects the filtered+sorted view - not the underlying store or the
  * JSON. on_db_modified() rebuilds otp_store from the JSON array in
  * order, so the store position equals the JSON index. Look up the
  * selected item itself rather than trusting the selection position.
@@ -1893,8 +1893,8 @@ selected_writable_json_index (OTPClientWindow *self)
  * If row_out is non-NULL, the row-level widget is written there.
  *
  * The GtkColumnView hierarchy is:
- *   GtkColumnView → GtkColumnListView → GtkColumnViewRowWidget
- *     → GtkColumnViewCell → our child widget (GtkLabel/GtkBox)
+ *   GtkColumnView -> GtkColumnListView -> GtkColumnViewRowWidget
+ *     -> GtkColumnViewCell -> our child widget (GtkLabel/GtkBox)
  *
  * The row widget is identified as the one whose parent's parent is
  * the GtkColumnView itself.
@@ -2523,12 +2523,12 @@ on_group_dropdown_changed (GtkDropDown     *dropdown,
 
     if (selected == 0)
     {
-        /* "All" — no group filter */
+        /* "All" - no group filter */
         self->active_group_filter = NULL;
     }
     else if (selected == n - 1)
     {
-        /* "Ungrouped" — empty string sentinel */
+        /* "Ungrouped" - empty string sentinel */
         self->active_group_filter = g_strdup ("");
     }
     else
@@ -3402,7 +3402,7 @@ on_move_target_password (const gchar  *current_password,
     {
         /* Remove the token from the current (source) database. If writing
          * the source back fails, restore the in-memory copy so the UI stays
-         * consistent with the on-disk state — otherwise a later reload would
+         * consistent with the on-disk state - otherwise a later reload would
          * resurrect the token and the user would have a silent duplicate. */
         DatabaseData *src = otpclient_application_get_db_data (app);
         if (src != NULL && src->in_memory_json_data != NULL)
@@ -4033,7 +4033,7 @@ on_new_db_password_received (const gchar  *current_password,
 
     /* Add to sidebar. The first DB ever added is auto-set as primary by
      * otpclient_window_add_database; subsequent creations leave the
-     * existing primary alone — only an explicit "Set as Primary" changes it. */
+     * existing primary alone - only an explicit "Set as Primary" changes it. */
     g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_data->db_path);
     otpclient_window_add_database (self, display_name, db_data->db_path);
     otpclient_window_sync_active_flag (self);
@@ -4257,7 +4257,7 @@ action_restore_tokens (GtkWidget  *widget,
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
 
-    /* Reuse the same picker → password → load_db → add-to-sidebar pipeline
+    /* Reuse the same picker -> password -> load_db -> add-to-sidebar pipeline
      * as the sidebar Open button. The previously active database is kept on
      * disk; the restored file becomes the active DB and is appended to the
      * sidebar so the user can switch between them. */
@@ -4651,7 +4651,7 @@ otpclient_window_init (OTPClientWindow *self)
         gboolean show_sidebar = g_settings_get_boolean (self->settings, "show-sidebar");
         adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), show_sidebar);
 
-        /* Banner state depends on these keys — refresh whenever they change
+        /* Banner state depends on these keys - refresh whenever they change
          * (e.g. when the export dialog records a fresh export, or the user
          * snoozes the reminder). */
         g_signal_connect_swapped (self->settings, "changed::last-export-time",
@@ -4668,7 +4668,7 @@ otpclient_window_init (OTPClientWindow *self)
     setup_database_list (self);
     update_empty_state (self);
 
-    /* No DB is loaded yet — keep DB-dependent actions (and the empty-state
+    /* No DB is loaded yet - keep DB-dependent actions (and the empty-state
      * Add/Import CTAs that target them) disabled until populate runs. */
     otpclient_window_set_db_actions_enabled (self, FALSE);
 

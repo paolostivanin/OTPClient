@@ -116,7 +116,7 @@ test_rfc4226_hotp_vectors (void)
 static void
 test_totp_zero_pads_short_value (void)
 {
-    /* The 8-digit form of RFC 6238 SHA1 at T=1111111109 is "07081804" — the
+    /* The 8-digit form of RFC 6238 SHA1 at T=1111111109 is "07081804" - the
      * leading zero must be preserved by zero-padding rather than dropped. */
     g_autofree gchar *b32 = ascii_to_base32 (SECRET_SHA1_ASCII);
     cotp_error_t err = NO_ERROR;

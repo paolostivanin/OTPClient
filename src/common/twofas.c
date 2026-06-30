@@ -129,7 +129,7 @@ export_twofas (const gchar *export_path,
      * we json_dump it standalone for the encrypted branch below, then decref
      * our local handle in the cleanup. */
 
-    /* Build groups array and group name → UUID map */
+    /* Build groups array and group name -> UUID map */
     groups_array = json_array ();
     GHashTable *group_id_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     {
@@ -359,7 +359,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
         json_decref (root);
         return NULL;
     }
-    /* Build group UUID → name map from outer (unencrypted) JSON */
+    /* Build group UUID -> name map from outer (unencrypted) JSON */
     GHashTable *group_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     json_t *groups = json_object_get (root, "groups");
     if (groups != NULL && json_is_array (groups)) {
@@ -421,7 +421,7 @@ get_otps_from_plain_backup (const gchar  *path,
         return NULL;
     }
 
-    /* Build group UUID → name map */
+    /* Build group UUID -> name map */
     GHashTable *group_map = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
     json_t *groups = json_object_get (json, "groups");
     if (groups != NULL && json_is_array (groups)) {

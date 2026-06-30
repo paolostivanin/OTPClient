@@ -2,7 +2,7 @@
 
 /* Returns -1 on every error (NULL path, missing file, query failure). On
  * success returns the actual file size, which may legitimately be 0 for an
- * empty file — callers can distinguish "missing" from "empty" by checking
+ * empty file - callers can distinguish "missing" from "empty" by checking
  * for -1 instead of 0. */
 goffset
 get_file_size (const gchar *file_path)

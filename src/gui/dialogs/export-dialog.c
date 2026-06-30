@@ -148,8 +148,8 @@ on_file_dialog_save_complete (GObject      *source,
     }
 
     /* This dialog now only handles third-party migration formats, so a
-     * successful export does NOT count as a token-database backup — the
-     * banner stays nagging until the user uses Settings → Backup → "Back
+     * successful export does NOT count as a token-database backup - the
+     * banner stays nagging until the user uses Settings -> Backup -> "Back
      * up tokens" (which bumps last-export-time itself). */
 
     adw_dialog_close (ADW_DIALOG (self));
@@ -257,7 +257,7 @@ export_dialog_new (DatabaseData *db_data,
 
     gtk_box_append (GTK_BOX (box), group);
 
-    /* Warning banner — revealed for the four plain formats and hidden for the
+    /* Warning banner - revealed for the four plain formats and hidden for the
      * three encrypted ones (see on_format_changed). The default selection is
      * FreeOTP+ (Plain), which is plaintext, so we start with it visible. */
     self->plain_warning = adw_banner_new (_("Exporting unencrypted reveals all secrets!"));
