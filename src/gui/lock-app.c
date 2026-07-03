@@ -177,7 +177,11 @@ on_screensaver_signal (GDBusConnection *connection,
     gboolean active = FALSE;
 
     g_variant_get (parameters, "(b)", &active);
-    if (active)
+
+    /* Only auto-lock on session lock when Auto-Lock is enabled, matching the
+     * inactivity timer. Without this guard the app locks on every screen lock
+     * even with Auto-Lock off (#460, a re-report of #279). */
+    if (active && otpclient_application_get_auto_lock (app))
         lock_app_lock (app);
 }
 
@@ -196,10 +200,13 @@ on_prepare_for_sleep (GDBusConnection *connection,
     (void) interface_name;
     (void) signal_name;
 
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
     gboolean preparing = FALSE;
     g_variant_get (parameters, "(b)", &preparing);
-    if (preparing)
-        lock_app_lock (OTPCLIENT_APPLICATION (user_data));
+
+    /* Respect Auto-Lock here too (see on_screensaver_signal / #460). */
+    if (preparing && otpclient_application_get_auto_lock (app))
+        lock_app_lock (app);
 }
 
 static gboolean

@@ -34,6 +34,25 @@ struct _SettingsDialog
 
 G_DEFINE_FINAL_TYPE (SettingsDialog, settings_dialog, ADW_TYPE_PREFERENCES_DIALOG)
 
+/* Forward declarations: the Auto-Lock and Secret Service handlers each need to
+ * switch the other off, since the two are mutually exclusive (#279). */
+static void on_auto_lock_toggled (GObject *obj, GParamSpec *pspec, SettingsDialog *self);
+static void on_secret_service_toggled (GObject *obj, GParamSpec *pspec, SettingsDialog *self);
+
+static void
+sync_lock_exclusivity (SettingsDialog *self)
+{
+    gboolean auto_lock = adw_switch_row_get_active (ADW_SWITCH_ROW (self->auto_lock_switch));
+    gboolean secret_service = adw_switch_row_get_active (ADW_SWITCH_ROW (self->secret_service_switch));
+
+    /* A lock is meaningless when the password lives in the keyring (it is
+     * bypassed by a restart), so whichever feature is on greys out and disables
+     * the other. */
+    gtk_widget_set_sensitive (self->auto_lock_switch, !secret_service);
+    gtk_widget_set_sensitive (self->secret_service_switch, !auto_lock);
+    gtk_widget_set_sensitive (self->inactivity_combo, auto_lock && !secret_service);
+}
+
 static void
 on_show_next_otp_toggled (GObject        *obj,
                           GParamSpec     *pspec,
@@ -87,7 +106,20 @@ on_auto_lock_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_auto_lock (self->app, active);
-    gtk_widget_set_sensitive (self->inactivity_combo, active);
+
+    /* Enabling Auto-Lock turns Secret Service off (#279). */
+    if (active &&
+        adw_switch_row_get_active (ADW_SWITCH_ROW (self->secret_service_switch)))
+    {
+        g_signal_handlers_block_by_func (self->secret_service_switch,
+                                         on_secret_service_toggled, self);
+        adw_switch_row_set_active (ADW_SWITCH_ROW (self->secret_service_switch), FALSE);
+        g_signal_handlers_unblock_by_func (self->secret_service_switch,
+                                           on_secret_service_toggled, self);
+        otpclient_application_set_use_secret_service (self->app, FALSE);
+    }
+
+    sync_lock_exclusivity (self);
 }
 
 static void
@@ -130,6 +162,7 @@ on_secret_service_toggled (GObject        *obj,
 
     if (!active) {
         otpclient_application_set_use_secret_service (self->app, FALSE);
+        sync_lock_exclusivity (self);
         return;
     }
 
@@ -140,6 +173,19 @@ on_secret_service_toggled (GObject        *obj,
     GError *err = NULL;
     if (otpclient_secret_service_probe (&err)) {
         otpclient_application_set_use_secret_service (self->app, TRUE);
+
+        /* Enabling Secret Service turns Auto-Lock off (#279). */
+        if (adw_switch_row_get_active (ADW_SWITCH_ROW (self->auto_lock_switch)))
+        {
+            g_signal_handlers_block_by_func (self->auto_lock_switch,
+                                             on_auto_lock_toggled, self);
+            adw_switch_row_set_active (ADW_SWITCH_ROW (self->auto_lock_switch), FALSE);
+            g_signal_handlers_unblock_by_func (self->auto_lock_switch,
+                                               on_auto_lock_toggled, self);
+            otpclient_application_set_auto_lock (self->app, FALSE);
+        }
+
+        sync_lock_exclusivity (self);
         return;
     }
 
@@ -513,8 +559,6 @@ settings_dialog_new (OTPClientApplication *app)
             break;
         }
     }
-    gtk_widget_set_sensitive (self->inactivity_combo,
-                              otpclient_application_get_auto_lock (app));
     g_signal_connect (self->inactivity_combo, "notify::selected",
                       G_CALLBACK (on_inactivity_changed), self);
     adw_preferences_group_add (security_group, self->inactivity_combo);
@@ -557,6 +601,22 @@ settings_dialog_new (OTPClientApplication *app)
     g_signal_connect (self->secret_service_switch, "notify::active",
                       G_CALLBACK (on_secret_service_toggled), self);
     adw_preferences_group_add (security_group, self->secret_service_switch);
+
+    /* #279: Auto-Lock and Secret Service are mutually exclusive. Reconcile a
+     * legacy profile that has both enabled (Secret Service wins, since the lock
+     * is bypassable via restart when the password is in the keyring), then set
+     * the initial greyed-out state. */
+    if (otpclient_application_get_auto_lock (app) &&
+        otpclient_application_get_use_secret_service (app))
+    {
+        g_signal_handlers_block_by_func (self->auto_lock_switch,
+                                         on_auto_lock_toggled, self);
+        adw_switch_row_set_active (ADW_SWITCH_ROW (self->auto_lock_switch), FALSE);
+        g_signal_handlers_unblock_by_func (self->auto_lock_switch,
+                                           on_auto_lock_toggled, self);
+        otpclient_application_set_auto_lock (self->app, FALSE);
+    }
+    sync_lock_exclusivity (self);
 
     /* Integration group */
     AdwPreferencesGroup *integration_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
