@@ -90,6 +90,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.2" date="2026-07-07">
+      <description>
+        <p>Bug-fix release. Screen and session locking, and locking on system suspend, now honor the Auto-Lock setting the same way the inactivity timer already did, so with Auto-Lock off the database is no longer locked on every screen lock. The mutual exclusivity between Auto-Lock and the Secret Service integration is restored.</p>
+        <ul>
+          <li>FIX: screensaver, session lock, and suspend now respect the Auto-Lock setting, so with Auto-Lock off the app no longer locks and then prompts for a password on every screen lock; Auto-Lock and Secret Service are mutually exclusive again, including reconciliation of a legacy both-on profile (#460, re-report of #279)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.1" date="2026-06-30">
       <description>
         <p>Bug-fix release. Databases containing a token with an issuer but no account name (for example some ProtonMail or Steam entries) failed to open on 5.1.0 with "Could not open database: Token has a missing label", locking users out of the entire database. Such tokens are valid again.</p>
