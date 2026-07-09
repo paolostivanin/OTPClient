@@ -209,6 +209,68 @@ test_kdf_param_update_then_reload (void)
     cleanup_tmp_db (writer, dir, path);
 }
 
+static otp_t *
+anonymous_totp (void)
+{
+    otp_t *otp = g_new0 (otp_t, 1);
+    otp->type = g_strdup ("TOTP");
+    otp->algo = g_strdup ("SHA1");
+    otp->digits = 6;
+    otp->period = 30;
+    otp->account_name = NULL;   /* neither a label ... */
+    otp->issuer = NULL;         /* ... nor an issuer */
+    otp->secret = secure_strdup ("JBSWY3DPEHPK3PXP");
+    return otp;
+}
+
+static void
+free_test_otp (otp_t *otp)
+{
+    g_free (otp->type);
+    g_free (otp->algo);
+    g_free (otp->account_name);
+    g_free (otp->issuer);
+    gcry_free (otp->secret);
+    g_free (otp);
+}
+
+static void
+test_import_anonymous_token_roundtrips (void)
+{
+    /* An imported token with neither a label nor an issuer used to be silently
+     * dropped. It now survives with a synthesized label and roundtrips through
+     * the real encrypt/decrypt path (issue #462). */
+    gchar *path = NULL;
+    gchar *dir = make_tmp_db_dir (&path);
+
+    DatabaseData *writer = make_db_data_with_path (path, "test-password");
+    GError *err = NULL;
+    update_db (writer, &err);           /* seed with alice + bob */
+    g_assert_no_error (err);
+
+    GSList *otps = g_slist_append (NULL, anonymous_totp ());
+    guint added = 0, skipped = 0;
+    add_otps_to_db_ex (otps, writer, &added, &skipped);
+    g_assert_cmpuint (added, ==, 1);
+    g_assert_cmpuint (skipped, ==, 0);
+
+    update_db (writer, &err);           /* persist the staged import */
+    g_assert_no_error (err);
+
+    DatabaseData *reader = database_data_new (path, DEFAULT_MEMLOCK_VALUE);
+    reader->key = secure_strdup ("test-password");
+    load_db (reader, &err);
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (reader->in_memory_json_data), ==, 3);
+
+    json_t *imported = json_array_get (reader->in_memory_json_data, 2);
+    g_assert_cmpstr (json_string_value (json_object_get (imported, "label")), ==, "Unknown 0");
+
+    g_slist_free_full (otps, (GDestroyNotify) free_test_otp);
+    database_data_free (reader);
+    cleanup_tmp_db (writer, dir, path);
+}
+
 static void
 test_purge_then_reload (void)
 {
@@ -246,6 +308,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-roundtrip/corrupted-ciphertext", test_corrupted_ciphertext_rejected);
     g_test_add_func ("/db-roundtrip/password-change",      test_password_change_then_reload);
     g_test_add_func ("/db-roundtrip/kdf-param-update",     test_kdf_param_update_then_reload);
+    g_test_add_func ("/db-roundtrip/import-anonymous",     test_import_anonymous_token_roundtrips);
     g_test_add_func ("/db-roundtrip/purge-then-reload",    test_purge_then_reload);
 
     return g_test_run ();

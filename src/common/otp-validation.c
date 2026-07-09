@@ -36,6 +36,17 @@ otp_secret_is_valid_base32 (const gchar *secret)
     return TRUE;
 }
 
+/* Placeholder name for a token that arrives with neither a label nor an issuer.
+ * Not translated: it is written into stored token data and must stay stable
+ * regardless of the locale the database is later opened under. The index keeps
+ * multiple placeholders distinct and mirrors the "Token N" position that
+ * validation reports, so the label matches the diagnostic users used to see. */
+static gchar *
+otp_anonymous_placeholder (gsize index)
+{
+    return g_strdup_printf ("Unknown %" G_GSIZE_FORMAT, index);
+}
+
 gboolean
 otp_validate_token_object (json_t  *obj,
                            gsize    index,
@@ -199,5 +210,61 @@ otp_validate_import_token (const otp_t  *otp,
                      "Import token has an out-of-range HOTP counter.");
         return FALSE;
     }
+    return TRUE;
+}
+
+gboolean
+otp_repair_anonymous_token_object (json_t *obj,
+                                   gsize   index)
+{
+    if (!json_is_object (obj))
+        return FALSE;
+
+    const gchar *label  = json_string_value (json_object_get (obj, "label"));
+    const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+    gboolean has_label  = (label  != NULL && label[0]  != '\0');
+    gboolean has_issuer = (issuer != NULL && issuer[0] != '\0');
+    if (has_label || has_issuer)
+        return FALSE;
+
+    gchar *placeholder = otp_anonymous_placeholder (index);
+    json_object_set_new (obj, "label", json_string (placeholder));
+    g_free (placeholder);
+    return TRUE;
+}
+
+guint
+otp_repair_database_root (json_t *root)
+{
+    if (!json_is_array (root))
+        return 0;
+
+    guint repaired = 0;
+    gsize index;
+    json_t *obj;
+    json_array_foreach (root, index, obj) {
+        if (otp_repair_anonymous_token_object (obj, index))
+            repaired++;
+    }
+    return repaired;
+}
+
+gboolean
+otp_repair_anonymous_import_token (otp_t *otp,
+                                   gsize  index)
+{
+    if (otp == NULL)
+        return FALSE;
+
+    gboolean has_label  = (otp->account_name != NULL && otp->account_name[0] != '\0');
+    gboolean has_issuer = (otp->issuer       != NULL && otp->issuer[0]       != '\0');
+    if (has_label || has_issuer)
+        return FALSE;
+
+    /* account_name is non-sensitive and freed with g_free across the importers,
+     * so g_strdup keeps the allocator contract (even while Jansson's global
+     * allocator is gcry secure memory). */
+    g_free (otp->account_name);
+    otp->account_name = otp_anonymous_placeholder (index);
     return TRUE;
 }

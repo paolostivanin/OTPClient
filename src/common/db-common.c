@@ -432,6 +432,12 @@ load_db (DatabaseData    *db_data,
                      "Error while loading json data: %s", jerr.text);
         return;
     }
+    /* Give any anonymous token (neither label nor issuer) a placeholder so a
+     * single such entry does not make the whole database refuse to open
+     * (issue #462). The names live in memory and persist on the next save. */
+    guint repaired = otp_repair_database_root (db_data->in_memory_json_data);
+    if (repaired > 0)
+        g_info ("Assigned placeholder labels to %u anonymous token(s) on load.", repaired);
     if (!otp_validate_database_root (db_data->in_memory_json_data, err))
         return;
 
@@ -459,6 +465,7 @@ load_db (DatabaseData    *db_data,
                          "Error while loading json data: %s", jerr.text);
             return;
         }
+        otp_repair_database_root (db_data->in_memory_json_data);
         if (!otp_validate_database_root (db_data->in_memory_json_data, err))
             return;
     }
@@ -726,9 +733,13 @@ import_otps_mutation (json_t   *candidate,
     OtpImportReport *report = ctx->report != NULL ? ctx->report : &local;
     *report = (OtpImportReport) {0, 0, 0};
 
-    for (GSList *l = ctx->otps; l != NULL; l = l->next) {
+    gsize import_index = 0;
+    for (GSList *l = ctx->otps; l != NULL; l = l->next, import_index++) {
         otp_t *otp = l->data;
         GError *validation_err = NULL;
+        /* Keep an anonymous imported token instead of dropping it (issue #462);
+         * a no-op if a parse-time repair already named it. */
+        otp_repair_anonymous_import_token (otp, import_index);
         if (!otp_validate_import_token (otp, &validation_err)) {
             if (validation_err != NULL) {
                 g_printerr ("Skipping invalid imported token: %s\n", validation_err->message);
@@ -851,9 +862,13 @@ add_otps_to_db_ex (GSList       *otps,
     guint added = 0, skipped = 0;
     GSList *new_hashes = NULL;
     GSList *new_data = NULL;
-    for (GSList *l = otps; l != NULL; l = l->next) {
+    gsize import_index = 0;
+    for (GSList *l = otps; l != NULL; l = l->next, import_index++) {
         otp_t *otp = l->data;
         GError *validation_err = NULL;
+        /* Keep an anonymous imported token instead of dropping it (issue #462);
+         * a no-op if a parse-time repair already named it. */
+        otp_repair_anonymous_import_token (otp, import_index);
         if (!otp_validate_import_token (otp, &validation_err)) {
             if (validation_err != NULL) {
                 g_printerr ("Skipping invalid imported token: %s\n", validation_err->message);

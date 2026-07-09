@@ -165,6 +165,8 @@ google_migration_decode (const gchar  *uri,
         sensitive_free (base32);
 
         GError *validation_error = NULL;
+        /* Name an anonymous token rather than dropping it (issue #462). */
+        otp_repair_anonymous_import_token (otp, g_slist_length (result));
         if (otp->secret == NULL ||
             !otp_validate_import_token (otp, &validation_error)) {
             g_clear_error (&validation_error);

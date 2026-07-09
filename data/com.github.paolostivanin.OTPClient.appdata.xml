@@ -90,6 +90,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.3" date="2026-07-09">
+      <description>
+        <p>Bug-fix release. Following 5.1.1, which restored issuer-only tokens, a database containing a token with neither an account name nor an issuer still refused to open, and a single such token blocked every other token from loading. These anonymous tokens, common in databases created before 5.1.0 added load-time validation, now load with a synthesized placeholder label instead of being rejected.</p>
+        <ul>
+          <li>FIX: a database (or import) containing a token with neither an account name nor an issuer refused to open on 5.1.x, locking users out of all their tokens. Such tokens now load with a synthesized "Unknown N" label; interactive manual entry and editing still require a name (#462, follow-up to #458)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.2" date="2026-07-07">
       <description>
         <p>Bug-fix release. Screen and session locking, and locking on system suspend, now honor the Auto-Lock setting the same way the inactivity timer already did, so with Auto-Lock off the database is no longer locked on every screen lock. The mutual exclusivity between Auto-Lock and the Secret Service integration is restored.</p>

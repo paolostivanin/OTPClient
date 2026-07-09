@@ -262,6 +262,9 @@ parse_uri (const gchar   *uri,
     }
 
     GError *validation_err = NULL;
+    /* Name an anonymous token rather than rejecting it (issue #462); the
+     * commit path leaves it as-is once it carries a label. */
+    otp_repair_anonymous_import_token (otp, g_slist_length (*otps));
     if (!otp_validate_import_token (otp, &validation_err)) {
         if (validation_err != NULL)
             g_clear_error (&validation_err);
