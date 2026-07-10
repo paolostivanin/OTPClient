@@ -180,6 +180,20 @@ target_include_directories(test_field_bounds_roundtrip PRIVATE
 target_link_libraries(test_field_bounds_roundtrip ${COMMON_LIBS})
 add_test(NAME field_bounds_roundtrip COMMAND test_field_bounds_roundtrip)
 
+add_executable(test_memlock_sizing
+        test_memlock_sizing.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+)
+otpclient_apply_target_settings(test_memlock_sizing)
+target_include_directories(test_memlock_sizing PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_memlock_sizing ${COMMON_LIBS})
+add_test(NAME memlock_sizing COMMAND test_memlock_sizing)
+
 if(BUILD_GUI)
     add_executable(test_otp_entry
             test_otp_entry.c

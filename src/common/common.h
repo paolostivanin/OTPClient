@@ -11,6 +11,8 @@ G_BEGIN_DECLS
 #define MEMLOCK_OK                       2
 #define MEMLOCK_TOO_LOW                  3
 #define DEFAULT_MEMLOCK_VALUE     67108864 // 64 MiB
+#define SECMEM_HEADROOM_VALUE      1048576 // 1 MiB left unlocked below RLIMIT_MEMLOCK so GTK/libadwaita can still mlock the password-entry buffer
+#define MIN_SECMEM_POOL_VALUE      1048576 // 1 MiB floor for our own pool when the limit is too low to reserve headroom
 #define SECMEM_SIZE_THRESHOLD_RATIO   0.80
 #define SECMEM_REQUIRED_MULTIPLIER       3
 
@@ -42,6 +44,9 @@ typedef struct otp_object_t {
 
 
 gint32            set_memlock_value (gint32             *memlock_value);
+
+gint32            secmem_pool_from_limits          (guint64             memlock_budget,
+                                                  gint32             *memlock_value);
 
 gchar            *init_libs                      (gint32              max_file_size);
 

@@ -83,3 +83,12 @@ rejected on open; that the validators still reject values the engine cannot use;
 and that a database file which does contain such a token still opens - the valid
 tokens load while the broken ones are set aside and preserved across a
 save/reload instead of bricking the whole database.
+
+**`test_memlock_sizing`** is the regression guard for the locked-memory
+budgeting (Debian #1141809). It pins `secmem_pool_from_limits()`, the pure part
+of `set_memlock_value()`, so that otpclient never sizes its libgcrypt secure
+pool to the whole `RLIMIT_MEMLOCK` budget: it must always leave
+`SECMEM_HEADROOM_VALUE` unlocked so GTK/libadwaita can still mlock its 16 KiB
+password-entry buffer. It covers a generous budget (full 64 MiB pool), the
+`RLIM_INFINITY` case (no overflow), the threshold and floor boundaries, and the
+typical 8 MiB systemd limit that triggered the report.

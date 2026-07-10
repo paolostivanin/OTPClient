@@ -18,6 +18,31 @@
 
 
 gint32
+secmem_pool_from_limits (guint64  memlock_budget,
+                         gint32  *memlock_value)
+{
+    // Enough room for our full default pool plus headroom for GTK/libadwaita's
+    // password-entry secure buffer: hand out the default and report OK.
+    if (memlock_budget >= (guint64) DEFAULT_MEMLOCK_VALUE + SECMEM_HEADROOM_VALUE) {
+        *memlock_value = DEFAULT_MEMLOCK_VALUE;
+        return MEMLOCK_OK;
+    }
+
+    // Tighter budget: shrink our pool by SECMEM_HEADROOM_VALUE so the kernel still
+    // has locked-memory budget left for GTK's 16 KiB GtkPasswordEntryBuffer block
+    // (otherwise the app itself starves GTK and the unlock field can't be locked).
+    // If the budget is so small that reserving headroom would drop us below the
+    // floor, take what we can and let GTK warn rather than crippling ourselves.
+    if (memlock_budget > (guint64) SECMEM_HEADROOM_VALUE + MIN_SECMEM_POOL_VALUE) {
+        *memlock_value = (gint32) (memlock_budget - SECMEM_HEADROOM_VALUE);
+    } else {
+        *memlock_value = (gint32) memlock_budget;
+    }
+    return MEMLOCK_TOO_LOW;
+}
+
+
+gint32
 set_memlock_value (gint32 *memlock_value)
 {
     struct rlimit r;
@@ -26,14 +51,19 @@ set_memlock_value (gint32 *memlock_value)
         return MEMLOCK_ERR;
     }
 
-    if (r.rlim_cur < DEFAULT_MEMLOCK_VALUE) {
-        // memlock is less than the default value, so we need to warn the user that there might not be enough secmem available.
-        *memlock_value = (gint32) r.rlim_cur;
-        return MEMLOCK_TOO_LOW;
+    // Best-effort: raise the soft limit toward the hard limit so both our libgcrypt
+    // pool and GTK/libadwaita's password-entry secure buffer can be locked.
+    // Unprivileged processes may raise the soft limit up to the hard limit; ignore
+    // failures and fall back to whatever the kernel currently reports.
+    if (r.rlim_cur != RLIM_INFINITY && r.rlim_cur < r.rlim_max) {
+        struct rlimit raised = r;
+        raised.rlim_cur = r.rlim_max;
+        if (setrlimit (RLIMIT_MEMLOCK, &raised) == 0) {
+            r = raised;
+        }
     }
 
-    *memlock_value = DEFAULT_MEMLOCK_VALUE;
-    return MEMLOCK_OK;
+    return secmem_pool_from_limits ((guint64) r.rlim_cur, memlock_value);
 }
 
 
