@@ -3748,6 +3748,7 @@ action_new_group (GtkWidget  *widget,
 }
 
 static void on_popover_closed (GtkPopover *popover, gpointer user_data);
+static void popup_menu_at (GtkWidget *popover, GtkWidget *over, double x, double y);
 
 static void
 on_token_right_click (GtkGestureClick *gesture,
@@ -3870,11 +3871,7 @@ on_token_right_click (GtkGestureClick *gesture,
     g_object_unref (group_submenu);
 
     GtkWidget *popover = gtk_popover_menu_new_from_model (G_MENU_MODEL (menu));
-    gtk_widget_set_parent (popover, self->otp_list);
-    GdkRectangle rect = { (int)x, (int)y, 1, 1 };
-    gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-    g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
-    gtk_popover_popup (GTK_POPOVER (popover));
+    popup_menu_at (popover, self->otp_list, x, y);
 
     g_object_unref (menu);
     g_object_unref (builder);
@@ -4338,6 +4335,37 @@ on_popover_closed (GtkPopover *popover,
     g_idle_add (popover_unparent_idle, popover);
 }
 
+/* Present a context popover menu pointing at (x, y) in `over`'s coordinate
+ * space. The popover is parented to `over`'s nearest non-scrolled GtkBox
+ * ancestor, not to the list itself: a popover inside a GtkScrolledWindow is
+ * clipped to the scrolled viewport, which made GtkPopoverMenu scroll even for a
+ * handful of items (issue #465). Coordinates are translated into the anchor's
+ * space so the menu still points at the clicked row. */
+static void
+popup_menu_at (GtkWidget *popover,
+               GtkWidget *over,
+               double     x,
+               double     y)
+{
+    GtkWidget *anchor = gtk_widget_get_ancestor (over, GTK_TYPE_BOX);
+    if (anchor == NULL)
+        anchor = over;
+
+    graphene_point_t pt;
+    if (!gtk_widget_compute_point (over, anchor,
+                                   &GRAPHENE_POINT_INIT ((float) x, (float) y), &pt))
+    {
+        pt.x = (float) x;
+        pt.y = (float) y;
+    }
+
+    gtk_widget_set_parent (popover, anchor);
+    GdkRectangle rect = { (int) pt.x, (int) pt.y, 1, 1 };
+    gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
+    g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
+    gtk_popover_popup (GTK_POPOVER (popover));
+}
+
 static void
 on_db_right_click (GtkGestureClick *gesture,
                    gint             n_press,
@@ -4363,11 +4391,7 @@ on_db_right_click (GtkGestureClick *gesture,
         gtk_builder_get_object (builder, "db_context_menu"));
 
     GtkWidget *popover = gtk_popover_menu_new_from_model (menu_model);
-    gtk_widget_set_parent (popover, self->database_list);
-    GdkRectangle rect = { (int)x, (int)y, 1, 1 };
-    gtk_popover_set_pointing_to (GTK_POPOVER (popover), &rect);
-    g_signal_connect (popover, "closed", G_CALLBACK (on_popover_closed), NULL);
-    gtk_popover_popup (GTK_POPOVER (popover));
+    popup_menu_at (popover, self->database_list, x, y);
 
     g_object_unref (builder);
 }
