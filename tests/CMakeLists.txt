@@ -165,6 +165,21 @@ target_include_directories(test_common_utils PRIVATE
 target_link_libraries(test_common_utils ${COMMON_LIBS})
 add_test(NAME common_utils COMMAND test_common_utils)
 
+add_executable(test_field_bounds_roundtrip
+        test_field_bounds_roundtrip.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/db-common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+)
+otpclient_apply_target_settings(test_field_bounds_roundtrip)
+target_include_directories(test_field_bounds_roundtrip PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_field_bounds_roundtrip ${COMMON_LIBS})
+add_test(NAME field_bounds_roundtrip COMMAND test_field_bounds_roundtrip)
+
 if(BUILD_GUI)
     add_executable(test_otp_entry
             test_otp_entry.c

@@ -352,7 +352,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->algo_combo);
 
     /* Digits */
-    GtkAdjustment *digits_adj = gtk_adjustment_new (6, 4, 10, 1, 1, 0);
+    GtkAdjustment *digits_adj = gtk_adjustment_new (6, OTP_DIGITS_MIN, OTP_DIGITS_MAX, 1, 1, 0);
     self->digits_spin = adw_spin_row_new (digits_adj, 1, 0);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->digits_spin), _("Digits"));
     gtk_widget_set_tooltip_text (self->digits_spin,
@@ -360,7 +360,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->digits_spin);
 
     /* Period (TOTP) */
-    GtkAdjustment *period_adj = gtk_adjustment_new (30, 1, 300, 1, 10, 0);
+    GtkAdjustment *period_adj = gtk_adjustment_new (30, OTP_PERIOD_MIN, OTP_PERIOD_MAX, 1, 10, 0);
     self->period_spin = adw_spin_row_new (period_adj, 1, 0);
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->period_spin), _("Period (seconds)"));
     gtk_widget_set_tooltip_text (self->period_spin,

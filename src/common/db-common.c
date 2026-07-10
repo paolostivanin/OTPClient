@@ -112,6 +112,9 @@ static void      refresh_committed_snapshot (DatabaseData *db_data);
 
 static void      restore_live_from_committed (DatabaseData *db_data);
 
+static gboolean  partition_valid_tokens (DatabaseData     *db_data,
+                                         GError          **err);
+
 
 void
 db_invalidate_kdf_cache (DatabaseData *db_data)
@@ -148,6 +151,10 @@ database_data_purge_secrets (DatabaseData *db_data)
     if (db_data->committed_json_data != NULL) {
         json_decref (db_data->committed_json_data);
         db_data->committed_json_data = NULL;
+    }
+    if (db_data->quarantined_tokens != NULL) {
+        json_decref (db_data->quarantined_tokens);
+        db_data->quarantined_tokens = NULL;
     }
 
     g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
@@ -392,6 +399,43 @@ database_data_free (DatabaseData *db_data)
 }
 
 
+guint
+db_get_quarantined_count (DatabaseData *db_data)
+{
+    if (db_data == NULL || db_data->quarantined_tokens == NULL)
+        return 0;
+    return (guint) json_array_size (db_data->quarantined_tokens);
+}
+
+
+/* Load-time policy: never let one bad token brick the whole database. Move every
+ * token that fails validation into db_data->quarantined_tokens (preserved and
+ * re-merged on save, surfaced in the UI for repair) so the remaining valid
+ * tokens open normally. Still fails hard when the root is not a JSON array (the
+ * file is structurally corrupt rather than merely holding a bad entry). Rebuilds
+ * quarantined_tokens from scratch each call so the migration re-decrypt pass
+ * does not double-count. */
+static gboolean
+partition_valid_tokens (DatabaseData  *db_data,
+                        GError       **err)
+{
+    if (!json_is_array (db_data->in_memory_json_data)) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Database JSON root must be an array.");
+        return FALSE;
+    }
+    if (db_data->quarantined_tokens != NULL)
+        json_decref (db_data->quarantined_tokens);
+    db_data->quarantined_tokens = json_array ();
+    guint set_aside = otp_extract_invalid_tokens (db_data->in_memory_json_data,
+                                                  db_data->quarantined_tokens);
+    if (set_aside > 0)
+        g_info ("Set aside %u token(s) that failed validation; opened the "
+                "database with the remaining valid tokens.", set_aside);
+    return TRUE;
+}
+
+
 void
 load_db (DatabaseData    *db_data,
          GError         **err)
@@ -438,7 +482,7 @@ load_db (DatabaseData    *db_data,
     guint repaired = otp_repair_database_root (db_data->in_memory_json_data);
     if (repaired > 0)
         g_info ("Assigned placeholder labels to %u anonymous token(s) on load.", repaired);
-    if (!otp_validate_database_root (db_data->in_memory_json_data, err))
+    if (!partition_valid_tokens (db_data, err))
         return;
 
     if (db_data->current_db_version < DB_VERSION || db_data->needs_legacy_kdf_migration) {
@@ -466,7 +510,7 @@ load_db (DatabaseData    *db_data,
             return;
         }
         otp_repair_database_root (db_data->in_memory_json_data);
-        if (!otp_validate_database_root (db_data->in_memory_json_data, err))
+        if (!partition_valid_tokens (db_data, err))
             return;
     }
 
@@ -1512,9 +1556,34 @@ encrypt_db (DatabaseData *db_data,
         return FALSE;
     }
 
-    gsize input_data_len = json_dumpb (json_data, NULL, 0, JSON_COMPACT);
+    // Preserve tokens set aside on load because they failed validation (issue
+    // #464): they are kept out of the live in-memory set, so merge them back in
+    // for serialization only, leaving the caller's json_data untouched. merged is
+    // a shallow copy referencing the same token objects, so freeing it never
+    // touches the underlying secrets.
+    json_t *to_dump = json_data;
+    json_t *merged = NULL;
+    if (db_data->quarantined_tokens != NULL &&
+        json_array_size (db_data->quarantined_tokens) > 0) {
+        merged = json_copy (json_data);
+        if (merged == NULL) {
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Failed to merge preserved tokens for serialization.");
+            explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+            gcry_free (derived_key);
+            return FALSE;
+        }
+        gsize q_idx;
+        json_t *q_obj;
+        json_array_foreach (db_data->quarantined_tokens, q_idx, q_obj)
+            json_array_append (merged, q_obj);
+        to_dump = merged;
+    }
+
+    gsize input_data_len = json_dumpb (to_dump, NULL, 0, JSON_COMPACT);
     if (input_data_len == 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
+        if (merged != NULL) json_decref (merged);
         explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return FALSE;
@@ -1523,17 +1592,20 @@ encrypt_db (DatabaseData *db_data,
     if (in_memory_dumped_data == NULL) {
         g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
                      "Failed to allocate secure memory for serialized database.");
+        if (merged != NULL) json_decref (merged);
         explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return FALSE;
     }
-    if (json_dumpb (json_data, in_memory_dumped_data, input_data_len, JSON_COMPACT) == (size_t) -1) {
+    if (json_dumpb (to_dump, in_memory_dumped_data, input_data_len, JSON_COMPACT) == (size_t) -1) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
+        if (merged != NULL) json_decref (merged);
         gcry_free (in_memory_dumped_data);
         explicit_bzero (derived_key, ARGON2ID_KEYLEN);
         gcry_free (derived_key);
         return FALSE;
     }
+    if (merged != NULL) json_decref (merged);
     guchar *enc_buffer = g_malloc0 (input_data_len);
 
     // C3 fix: in_memory_dumped_data holds the plaintext database (every secret).

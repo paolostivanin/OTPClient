@@ -241,14 +241,14 @@ parse_uri (const gchar   *uri,
     if (period != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (period, &endptr, 10);
-        if (endptr != period && *endptr == '\0' && v > 0 && v <= 300)
+        if (endptr != period && *endptr == '\0' && v >= OTP_PERIOD_MIN && v <= OTP_PERIOD_MAX)
             otp->period = (guint32) v;
     }
     const gchar *digits = g_hash_table_lookup (params, "digits");
     if (digits != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (digits, &endptr, 10);
-        if (endptr != digits && *endptr == '\0' && v >= 6 && v <= 8)
+        if (endptr != digits && *endptr == '\0' && v >= OTP_DIGITS_MIN && v <= OTP_DIGITS_MAX)
             otp->digits = (guint32) v;
     }
     const gchar *counter = g_hash_table_lookup (params, "counter");

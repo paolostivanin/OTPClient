@@ -531,6 +531,12 @@ load_entries_from_db (GPtrArray   *entries,
         return;
     }
 
+    /* Issue #464: broken tokens are set aside so search still works with the
+     * rest; note it in the journal without spamming (this reloads on a TTL). */
+    guint quarantined = db_get_quarantined_count (db_data);
+    if (quarantined > 0)
+        g_info ("%u token(s) in '%s' could not be loaded and were skipped.", quarantined, db_path);
+
     kdf_cache_capture_from_db_data (db_data, db_path);
 
     gsize index;

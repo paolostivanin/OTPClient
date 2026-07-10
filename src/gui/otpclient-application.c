@@ -726,6 +726,20 @@ on_unlock_done (GObject      *source_object,
         otpclient_window_hide_loading (self->window);
         otpclient_window_start_otp_timer (self->window);
         otpclient_window_sync_active_flag (self->window);
+
+        /* Issue #464: tokens that failed validation were set aside so the rest
+         * of the database could open. Tell the user they are preserved; the
+         * dedicated repair dialog arrives in 5.2.0. */
+        guint quarantined = db_get_quarantined_count (self->db_data);
+        if (quarantined > 0)
+        {
+            g_autofree gchar *msg = g_strdup_printf (
+                ngettext ("%u token could not be loaded and was kept for repair",
+                          "%u tokens could not be loaded and were kept for repair",
+                          quarantined),
+                quarantined);
+            otpclient_window_show_error_toast (self->window, msg);
+        }
     }
     if (self->app_locked)
         lock_app_unlock (self);

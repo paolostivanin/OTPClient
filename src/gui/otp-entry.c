@@ -4,6 +4,7 @@
 #include <limits.h>
 #include "common.h"
 #include "otp-entry.h"
+#include "otp-validation.h"
 
 struct _OTPEntry
 {
@@ -256,7 +257,7 @@ otp_entry_class_init (OTPEntryClass *klass)
         g_param_spec_string ("otp-type", NULL, NULL, "TOTP",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     properties[PROP_PERIOD] =
-        g_param_spec_uint ("period", NULL, NULL, 1, 300, 30,
+        g_param_spec_uint ("period", NULL, NULL, OTP_PERIOD_MIN, OTP_PERIOD_MAX, 30,
                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     properties[PROP_COUNTER] =
         g_param_spec_uint64 ("counter", NULL, NULL, 0, G_MAXUINT64, 0,
@@ -265,7 +266,7 @@ otp_entry_class_init (OTPEntryClass *klass)
         g_param_spec_string ("algorithm", NULL, NULL, "SHA1",
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     properties[PROP_DIGITS] =
-        g_param_spec_uint ("digits", NULL, NULL, 4, 10, 6,
+        g_param_spec_uint ("digits", NULL, NULL, OTP_DIGITS_MIN, OTP_DIGITS_MAX, 6,
                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
     properties[PROP_SECRET] =
         g_param_spec_string ("secret", NULL, NULL, NULL,

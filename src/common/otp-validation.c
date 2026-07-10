@@ -98,7 +98,7 @@ otp_validate_token_object (json_t  *obj,
         return FALSE;
     }
     json_int_t digits = json_integer_value (digits_obj);
-    if (digits < 6 || digits > 8) {
+    if (digits < OTP_DIGITS_MIN || digits > OTP_DIGITS_MAX) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Token %" G_GSIZE_FORMAT " has an out-of-range digits value.", index);
         return FALSE;
@@ -119,7 +119,7 @@ otp_validate_token_object (json_t  *obj,
             return FALSE;
         }
         json_int_t period = json_integer_value (period_obj);
-        if (period <= 0 || period > 300) {
+        if (period < OTP_PERIOD_MIN || period > OTP_PERIOD_MAX) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                          "Token %" G_GSIZE_FORMAT " has an out-of-range TOTP period.", index);
             return FALSE;
@@ -194,13 +194,13 @@ otp_validate_import_token (const otp_t  *otp,
                      "Import token has an unsupported or missing algorithm.");
         return FALSE;
     }
-    if (otp->digits < 6 || otp->digits > 8) {
+    if (otp->digits < OTP_DIGITS_MIN || otp->digits > OTP_DIGITS_MAX) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Import token has an out-of-range digits value.");
         return FALSE;
     }
     if (g_ascii_strcasecmp (otp->type, "TOTP") == 0) {
-        if (otp->period == 0 || otp->period > 300) {
+        if (otp->period < OTP_PERIOD_MIN || otp->period > OTP_PERIOD_MAX) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                          "Import token has an out-of-range TOTP period.");
             return FALSE;
@@ -267,4 +267,29 @@ otp_repair_anonymous_import_token (otp_t *otp,
     g_free (otp->account_name);
     otp->account_name = otp_anonymous_placeholder (index);
     return TRUE;
+}
+
+guint
+otp_extract_invalid_tokens (json_t *root,
+                            json_t *invalid_out)
+{
+    if (!json_is_array (root) || !json_is_array (invalid_out))
+        return 0;
+
+    guint moved = 0;
+    /* Walk backwards so removing an entry never shifts an index we still have to
+     * visit. Take a reference in invalid_out before dropping root's, so the
+     * token object survives the move. */
+    for (gsize i = json_array_size (root); i > 0; i--) {
+        gsize idx = i - 1;
+        json_t *obj = json_array_get (root, idx);
+        GError *verr = NULL;
+        if (otp_validate_token_object (obj, idx, &verr))
+            continue;
+        g_clear_error (&verr);
+        json_array_append (invalid_out, obj);
+        json_array_remove (root, idx);
+        moved++;
+    }
+    return moved;
 }

@@ -65,6 +65,13 @@ typedef struct db_data_t {
 
     json_t *committed_json_data;
 
+    /* Tokens that failed validation on load (out-of-range digits/period, invalid
+     * secret, unsupported algo, ...). Kept aside instead of bricking the whole
+     * database (issues #458/#462/#464): the valid tokens load, these are preserved
+     * verbatim and re-merged into the file on every save, and the UI surfaces them
+     * for the user to repair or delete. NULL until load runs. */
+    json_t *quarantined_tokens;
+
     GSList *objects_hash;
 
     GSList *data_to_add;
@@ -124,6 +131,10 @@ DatabaseData *database_data_ref  (DatabaseData *db_data);
 void          database_data_unref (DatabaseData *db_data);
 
 void          database_data_free (DatabaseData *db_data);
+
+/* Number of tokens set aside on load because they failed validation (preserved
+ * in the file and surfaced to the user for repair). 0 in the normal case. */
+guint         db_get_quarantined_count (DatabaseData *db_data);
 
 void    load_db            (DatabaseData   *db_data,
                             GError        **error);

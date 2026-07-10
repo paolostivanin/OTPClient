@@ -74,3 +74,12 @@ utilities that everything else builds on: the JSON validator for stored
 token records, the hex string helpers, `secure_strdup`, and the algorithm
 name -> integer mapping. The validator tests pin every required-field and
 range check so a refactor of the validation policy can't silently relax it.
+
+**`test_field_bounds_roundtrip`** is the regression guard for the database-load
+lockout class (#458/#462/#464). It pins the parity invariant that every digit
+count and TOTP period libcotp can actually generate (4 to 10, 1 to 120) passes
+both the load-time and import validators, so nothing a producer emits is later
+rejected on open; that the validators still reject values the engine cannot use;
+and that a database file which does contain such a token still opens - the valid
+tokens load while the broken ones are set aside and preserved across a
+save/reload instead of bricking the whole database.

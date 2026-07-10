@@ -211,6 +211,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             g_clear_error (&err);
             return FALSE;
         }
+        /* Issue #464: broken tokens are set aside so the database still opens. */
+        guint quarantined = db_get_quarantined_count (db_data);
+        if (quarantined > 0)
+            g_printerr (ngettext ("Warning: %u token could not be loaded and was skipped.\n",
+                                  "Warning: %u tokens could not be loaded and were skipped.\n",
+                                  quarantined), quarantined);
     }
 
     if (use_secret_service == TRUE && secret_service_runtime_ok &&

@@ -80,7 +80,7 @@ test_unknown_algorithm_falls_back_to_sha1 (void)
 static void
 test_period_out_of_bounds (void)
 {
-    /* period=0 and period=999 fall outside (0,300]; parse_uri keeps the
+    /* period=0 and period=999 fall outside [1,120]; parse_uri keeps the
      * default of 30 in those cases. The resulting otp_t is still valid. */
     otp_t *zero = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=0");
@@ -109,6 +109,41 @@ test_digits_out_of_bounds (void)
     g_assert_nonnull (big);
     g_assert_cmpuint (big->digits, ==, 6);
     free_otp (big);
+}
+
+static void
+test_digits_widened_range (void)
+{
+    /* digits 4-10 is libcotp's real range (issue #464). Values the old 6-8
+     * clamp used to reset to 6 - 4, 5, 9, 10 - must now be preserved. */
+    const guint kept[] = { 4, 5, 9, 10 };
+    for (guint i = 0; i < G_N_ELEMENTS (kept); i++) {
+        g_autofree gchar *uri = g_strdup_printf (
+            "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=%u",
+            kept[i]);
+        otp_t *otp = parse_single (uri);
+        g_assert_nonnull (otp);
+        g_assert_cmpuint (otp->digits, ==, kept[i]);
+        free_otp (otp);
+    }
+}
+
+static void
+test_period_upper_bound (void)
+{
+    /* 120 is the top of libcotp's range and must be kept; 150 is above it and
+     * falls back to the default 30 (issue #464). */
+    otp_t *at_max = parse_single (
+        "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=120");
+    g_assert_nonnull (at_max);
+    g_assert_cmpuint (at_max->period, ==, 120);
+    free_otp (at_max);
+
+    otp_t *over = parse_single (
+        "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=150");
+    g_assert_nonnull (over);
+    g_assert_cmpuint (over->period, ==, 30);
+    free_otp (over);
 }
 
 static void
@@ -214,6 +249,8 @@ main (int argc, char **argv)
     g_test_add_func ("/parse-uri-extra/unknown-algorithm",     test_unknown_algorithm_falls_back_to_sha1);
     g_test_add_func ("/parse-uri-extra/period-out-of-bounds",  test_period_out_of_bounds);
     g_test_add_func ("/parse-uri-extra/digits-out-of-bounds",  test_digits_out_of_bounds);
+    g_test_add_func ("/parse-uri-extra/digits-widened-range",  test_digits_widened_range);
+    g_test_add_func ("/parse-uri-extra/period-upper-bound",    test_period_upper_bound);
     g_test_add_func ("/parse-uri-extra/counter-at-max",        test_counter_at_max);
     g_test_add_func ("/parse-uri-extra/malformed-scheme",      test_malformed_scheme_ignored);
     g_test_add_func ("/parse-uri-extra/invalid-secret",        test_invalid_secret_rejected);

@@ -2,12 +2,32 @@
 
 #include <glib.h>
 #include <jansson.h>
+#include <cotp.h>
 #include "common.h"
 
 G_BEGIN_DECLS
 
 /* Exclusive upper bound: valid HOTP counters satisfy counter < 2^48. */
 #define OTP_HOTP_COUNTER_MAX ((guint64) (1ULL << 48))
+
+/* Accepted OTP field ranges, kept in lockstep with what libcotp can actually
+ * generate (it hard-rejects out-of-range input, it never clamps). digits comes
+ * straight from libcotp's MIN_DIGITS/MAX_DIGITS. libcotp does not yet export
+ * period bounds, so we fall back to its check_period() range (1 to 120) until it
+ * does, at which point these pick the macros up automatically. Making the
+ * validator stricter than these is what locked users out in #464 (digits);
+ * making it looser than the engine (the old period ceiling of 300) admits
+ * tokens libcotp then refuses to generate. */
+#define OTP_DIGITS_MIN  MIN_DIGITS
+#define OTP_DIGITS_MAX  MAX_DIGITS
+#ifndef MIN_PERIOD
+#define MIN_PERIOD 1
+#endif
+#ifndef MAX_PERIOD
+#define MAX_PERIOD 120
+#endif
+#define OTP_PERIOD_MIN  MIN_PERIOD
+#define OTP_PERIOD_MAX  MAX_PERIOD
 
 /* Validation policy:
  * - Loaded databases are validated as a full root array before becoming live.
@@ -49,5 +69,13 @@ guint    otp_repair_database_root          (json_t      *root);
  * writing the placeholder into otp->account_name. */
 gboolean otp_repair_anonymous_import_token (otp_t       *otp,
                                             gsize        index);
+
+/* Move every token that fails otp_validate_token_object out of `root` and into
+ * `invalid_out` (both must be JSON arrays), preserving it for later repair
+ * instead of failing the whole load. Run it after otp_repair_database_root so an
+ * anonymous-but-otherwise-valid token is kept, not quarantined. Returns the
+ * number of tokens moved; `root` is left holding only tokens that validate. */
+guint    otp_extract_invalid_tokens        (json_t      *root,
+                                            json_t      *invalid_out);
 
 G_END_DECLS
