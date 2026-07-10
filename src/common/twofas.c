@@ -287,8 +287,9 @@ export_twofas (const gchar *export_path,
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Couldn't encrypt the reference data.");
             goto end;
         }
+        // json_string() copies the C string, it does not take ownership, so
+        // encoded_ref_data still has to be freed by us (done at `end:`).
         json_object_set_new (enc_root, "reference", json_string (encoded_ref_data));
-        encoded_ref_data = NULL;  // ownership transferred via json_string
 
         json_enc_data = json_dumps (enc_root, JSON_COMPACT);
         if (json_enc_data == NULL) {

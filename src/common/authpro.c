@@ -396,8 +396,9 @@ parse_authpro_json_data (const gchar *data,
         otp->account_name = g_strdup (json_string_value (json_object_get (obj, "Username")));
         otp->secret = secure_strdup (secret_str);
         otp->digits = (guint32)json_integer_value (json_object_get(obj, "Digits"));
-        otp->counter = json_integer_value (json_object_get (obj, "Counter"));
-        otp->period = (guint32)json_integer_value (json_object_get (obj, "Period"));
+        /* period and counter share a union, so only the member matching the
+         * token type may be written; it is set per-type in the switch below.
+         * Writing both here clobbered the HOTP counter with the Period. */
 
         gboolean skip = FALSE;
         guint32 algo = (guint32)json_integer_value (json_object_get(obj, "Algorithm"));
@@ -421,12 +422,15 @@ parse_authpro_json_data (const gchar *data,
         switch (type) {
             case 1:
                 otp->type = g_strdup ("HOTP");
+                otp->counter = json_integer_value (json_object_get (obj, "Counter"));
                 break;
             case 2:
                 otp->type = g_strdup ("TOTP");
+                otp->period = (guint32)json_integer_value (json_object_get (obj, "Period"));
                 break;
             case 4:
                 otp->type = g_strdup ("TOTP");
+                otp->period = (guint32)json_integer_value (json_object_get (obj, "Period"));
                 g_free (otp->issuer);
                 otp->issuer = g_strdup ("Steam");
                 break;
