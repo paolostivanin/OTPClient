@@ -92,9 +92,10 @@
   <releases>
     <release version="5.1.5" date="2026-07-16">
       <description>
-        <p>Bug-fix release. When the database lived on a filesystem that does not implement POSIX file locks, most notably the Flatpak XDG document-portal path (/run/user/UID/doc/) that the file chooser hands back, OTPClient 5.1.4 refused to open or create it and failed with "Failed to acquire database lock: Function not implemented". The lock file added in 5.1.4 is now treated as best-effort, so on such a filesystem the app continues without it instead of aborting.</p>
+        <p>Bug-fix release. A database stored on a filesystem that does not implement POSIX file locks, most notably the Flatpak XDG document-portal path (/run/user/UID/doc/) that the file chooser hands back, could not be opened or created and failed with "Failed to acquire database lock: Function not implemented"; the lock file added in 5.1.4 is now treated as best-effort. This release also stops the secure-memory pool from reserving the whole locked-memory budget, which had left the GTK password entry unable to lock its own buffer on every unlock.</p>
         <ul>
           <li>FIX: a database stored on a filesystem without lock support (the Flatpak document portal, and some NFS/SMB mounts) could not be opened or created, failing with "Failed to acquire database lock: Function not implemented". Locking is now best-effort so the database opens normally on those filesystems, while real locking is unchanged everywhere else (#466)</li>
+          <li>FIX: the secure-memory pool consumed the whole RLIMIT_MEMLOCK budget, so the GTK password entry could not lock its own buffer and warned "couldn't lock 16384 bytes of memory (gtk): Cannot allocate memory", falling back to unlocked memory for the typed password on every unlock; the pool now leaves headroom for it (Debian #1141809)</li>
         </ul>
       </description>
     </release>
