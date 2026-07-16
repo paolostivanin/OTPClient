@@ -90,6 +90,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.5" date="2026-07-16">
+      <description>
+        <p>Bug-fix release. When the database lived on a filesystem that does not implement POSIX file locks, most notably the Flatpak XDG document-portal path (/run/user/UID/doc/) that the file chooser hands back, OTPClient 5.1.4 refused to open or create it and failed with "Failed to acquire database lock: Function not implemented". The lock file added in 5.1.4 is now treated as best-effort, so on such a filesystem the app continues without it instead of aborting.</p>
+        <ul>
+          <li>FIX: a database stored on a filesystem without lock support (the Flatpak document portal, and some NFS/SMB mounts) could not be opened or created, failing with "Failed to acquire database lock: Function not implemented". Locking is now best-effort so the database opens normally on those filesystems, while real locking is unchanged everywhere else (#466)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.4" date="2026-07-10">
       <description>
         <p>Bug-fix release. Following the anonymous-token fix in 5.1.3, a database containing a token with an out-of-range digit count still refused to open, again locking users out of every other token. The load-time validator was stricter than the OTP engine and the app's own UI; the accepted ranges now match the engine (digits 4 to 10, period 1 to 120 seconds). Any token the engine still cannot use is set aside so the rest of the database opens, and is preserved for repair rather than dropped.</p>
