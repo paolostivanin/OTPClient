@@ -204,6 +204,38 @@ test_stale_snapshot_rejected (void)
     cleanup_db_data (first, dir, path);
 }
 
+static void
+test_lock_unsupported_fallback (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    /* Simulate a filesystem whose flock() fails with ENOSYS, e.g. the Flatpak
+     * document-portal FUSE mount (issue #466). The transaction must still
+     * succeed and write the database instead of aborting. */
+    db_test_set_unsupported_lock (TRUE);
+
+    /* The fallback warns exactly once per process; expect it on the first write. */
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*lock not supported*");
+
+    GError *err = NULL;
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_test_assert_expected_messages ();
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
+
+    /* A second write must also succeed and must NOT warn again (warn-once);
+     * an unexpected warning here would be fatal under the test harness. */
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 3);
+
+    db_test_set_unsupported_lock (FALSE);
+    cleanup_db_data (db_data, dir, path);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -216,6 +248,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/password-change-failure", test_password_change_failure_restores_key);
     g_test_add_func ("/db-transaction/kdf-failure", test_kdf_failure_restores_params);
     g_test_add_func ("/db-transaction/stale-snapshot", test_stale_snapshot_rejected);
+    g_test_add_func ("/db-transaction/lock-unsupported-fallback", test_lock_unsupported_fallback);
 
     return g_test_run ();
 }

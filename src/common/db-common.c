@@ -26,6 +26,7 @@ typedef struct {
 #ifdef OTPCLIENT_TESTING
 static gboolean test_fail_encrypt = FALSE;
 static gboolean test_fail_atomic_write = FALSE;
+static gboolean test_unsupported_lock = FALSE;
 
 void
 db_test_set_fail_encrypt (gboolean fail)
@@ -37,6 +38,12 @@ void
 db_test_set_fail_atomic_write (gboolean fail)
 {
     test_fail_atomic_write = fail;
+}
+
+void
+db_test_set_unsupported_lock (gboolean unsupported)
+{
+    test_unsupported_lock = unsupported;
 }
 #endif
 
@@ -299,6 +306,21 @@ atomic_write_database (const gchar  *path,
 }
 
 
+/* Wrapper around flock() so tests can force the "filesystem does not support
+ * locking" path (see db_test_set_unsupported_lock). */
+static int
+db_try_flock (int fd)
+{
+#ifdef OTPCLIENT_TESTING
+    if (test_unsupported_lock) {
+        errno = ENOSYS;
+        return -1;
+    }
+#endif
+    return flock (fd, LOCK_EX | LOCK_NB);
+}
+
+
 static gboolean
 lock_db (const gchar *db_path,
          DbLock      *lock,
@@ -317,7 +339,24 @@ lock_db (const gchar *db_path,
     }
 
     gint64 deadline = g_get_monotonic_time () + (2 * G_USEC_PER_SEC);
-    while (flock (lock->fd, LOCK_EX | LOCK_NB) != 0) {
+    while (db_try_flock (lock->fd) != 0) {
+        if (errno == ENOSYS || errno == EOPNOTSUPP) {
+            /* Some filesystems do not implement POSIX locks and fail with
+             * ENOSYS/EOPNOTSUPP, notably the Flatpak XDG document-portal FUSE
+             * mount (/run/user/<uid>/doc/) and some NFS/SMB setups. The lock is
+             * a best-effort guard against a second OTPClient instance writing
+             * concurrently, not a correctness requirement, so continue without
+             * it rather than making the database impossible to open (issue #466).
+             * Leave lock->fd open; unlock_db () cleans it up. Warn once so we do
+             * not spam on every write. */
+            static gboolean warned = FALSE;
+            if (!warned) {
+                g_warning ("Database lock not supported on this filesystem '%s'; "
+                           "continuing without a lock: %s", lock->path, g_strerror (errno));
+                warned = TRUE;
+            }
+            return TRUE;
+        }
         if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                          "Failed to acquire database lock '%s': %s", lock->path, g_strerror (errno));

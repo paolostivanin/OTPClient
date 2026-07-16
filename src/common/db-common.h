@@ -189,6 +189,7 @@ gchar  *db_copy_to              (const gchar  *src_path,
 #ifdef OTPCLIENT_TESTING
 void    db_test_set_fail_encrypt      (gboolean fail);
 void    db_test_set_fail_atomic_write (gboolean fail);
+void    db_test_set_unsupported_lock  (gboolean unsupported);
 #endif
 
 G_END_DECLS
