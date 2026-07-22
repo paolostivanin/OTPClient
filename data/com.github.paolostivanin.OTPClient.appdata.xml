@@ -90,6 +90,15 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.6" date="2026-07-22">
+      <description>
+        <p>Bug-fix release. Auto-Lock was effectively unusable: on any profile that enabled it without changing the timeout, the database re-locked about five seconds after every unlock, and the unlock prompt could not be dismissed and quit the whole application when closed, leaving Settings unreachable. The timeout now defaults to five minutes, and the unlock prompt is dismissable and returns to a locked screen instead of quitting.</p>
+        <ul>
+          <li>FIX: with Auto-Lock enabled but the timeout left at its default, the database re-locked roughly five seconds after each unlock. The idle timer counts seconds, but the default was 5 and documented as minutes; the default is now 300 seconds (five minutes), so profiles that never set a timeout pick up a sane value automatically (#467)</li>
+          <li>FIX: the unlock prompt could not be dismissed and closing it quit the whole application, so Settings could not be reached while locked. Dismissing it (Escape, the dialog close button, clicking outside, or the window close button) now drops to the locked screen and keeps the toolbar reachable; the toolbar lock button doubles as an unlock button while locked, and an explicit Quit button remains on the prompt (#467)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.5" date="2026-07-16">
       <description>
         <p>Bug-fix release. A database stored on a filesystem that does not implement POSIX file locks, most notably the Flatpak XDG document-portal path (/run/user/UID/doc/) that the file chooser hands back, could not be opened or created and failed with "Failed to acquire database lock: Function not implemented"; the lock file added in 5.1.4 is now treated as best-effort. This release also stops the secure-memory pool from reserving the whole locked-memory budget, which had left the GTK password entry unable to lock its own buffer on every unlock.</p>
