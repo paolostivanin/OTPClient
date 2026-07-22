@@ -1139,7 +1139,7 @@ otpclient_window_set_locked_indicator (OTPClientWindow *self,
 
     if (locked) {
         gtk_button_set_icon_name (GTK_BUTTON (self->lock_button), "changes-prevent-symbolic");
-        gtk_widget_set_tooltip_text (self->lock_button, _("Database is locked"));
+        gtk_widget_set_tooltip_text (self->lock_button, _("Unlock database"));
     } else {
         gtk_button_set_icon_name (GTK_BUTTON (self->lock_button), "system-lock-screen-symbolic");
         gtk_widget_set_tooltip_text (self->lock_button, _("Lock database"));
@@ -3532,7 +3532,14 @@ lock_button_clicked (GtkButton       *button,
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app != NULL)
+    if (app == NULL)
+        return;
+
+    /* Context-sensitive toolbar button: while locked it re-presents the unlock
+     * dialog, otherwise it locks the database (#467). */
+    if (otpclient_application_get_app_locked (app))
+        lock_app_present_unlock_dialog (app);
+    else
         g_action_group_activate_action (G_ACTION_GROUP (app), "lock", NULL);
 }
 

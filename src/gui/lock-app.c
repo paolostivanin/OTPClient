@@ -31,13 +31,20 @@ on_unlock_dialog_closed (AdwDialog *dialog,
     (void) dialog;
     OTPClientApplication *app = OTPCLIENT_APPLICATION (user_data);
 
-    /* set_can_close(FALSE) blocks user-initiated dismissal, but the dialog can
-     * still close on parent-window teardown or programmatic close. If the app
-     * is still locked when that happens, re-present a fresh dialog so the user
-     * can't end up with the locked indicator on and no way to unlock. */
-    if (otpclient_application_get_app_locked (app) &&
-        !otpclient_application_is_unlocking (app))
-        lock_app_present_unlock_dialog (app);
+    /* An unlock submit is in flight: on_unlock_done loads the DB on success or
+     * re-presents this dialog on failure. Don't pre-empt it. */
+    if (otpclient_application_is_unlocking (app))
+        return;
+
+    /* Closed right after a successful unlock: the DB is open, nothing to do. */
+    if (otpclient_application_is_db_unlocked (app))
+        return;
+
+    /* The user dismissed the prompt without unlocking (Escape, dialog X,
+     * click-outside, or the parent window's close button). Drop to the locked
+     * page instead of quitting or re-presenting, so the toolbar (Settings,
+     * unlock) stays reachable (#467). */
+    lock_app_enter_locked_state (app);
 }
 
 static void
@@ -59,6 +66,9 @@ lock_app_install_unlock_dialog_quit (PasswordDialog       *dlg,
     g_signal_connect_object (dlg, "quit-requested",
                              G_CALLBACK (on_unlock_dialog_quit_requested),
                              app, 0);
+    g_signal_connect_object (dlg, "closed",
+                             G_CALLBACK (on_unlock_dialog_closed),
+                             app, 0);
 }
 
 static void
@@ -72,7 +82,6 @@ present_unlock_dialog (OTPClientApplication *app)
                                                on_unlock_password,
                                                app);
     lock_app_install_unlock_dialog_quit (dlg, app);
-    g_signal_connect (dlg, "closed", G_CALLBACK (on_unlock_dialog_closed), app);
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
 }
 
@@ -100,7 +109,7 @@ on_unlock_password (const gchar  *current_password,
 }
 
 void
-lock_app_lock (OTPClientApplication *app)
+lock_app_enter_locked_state (OTPClientApplication *app)
 {
     if (otpclient_application_get_app_locked (app)) {
         if (otpclient_application_is_unlocking (app))
@@ -129,7 +138,19 @@ lock_app_lock (OTPClientApplication *app)
     }
 
     otpclient_application_purge_secrets (app);
-    if (win != NULL)
+}
+
+void
+lock_app_lock (OTPClientApplication *app)
+{
+    gboolean was_locked = otpclient_application_get_app_locked (app);
+
+    lock_app_enter_locked_state (app);
+
+    /* enter_locked_state is a no-op when already locked; only pop a fresh
+     * unlock dialog when this call actually transitioned into the locked
+     * state. */
+    if (!was_locked)
         present_unlock_dialog (app);
 }
 

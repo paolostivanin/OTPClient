@@ -170,12 +170,11 @@ on_unlock_clicked (GtkButton      *button,
     if (self->current_password_row != NULL)
         gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
 
-    /* Order matters: lock-state callers attach a "closed" handler that
-     * re-presents this dialog if the app is still locked when it fires. Run
-     * the callback first so it can flip app_locked to FALSE before the close
-     * triggers that handler - otherwise a successful unlock would race with a
-     * stale re-present. force_close bypasses can-close=FALSE (set by callers
-     * that want to block user-initiated dismissal). */
+    /* Order matters: lock-state callers attach a "closed" handler that drops
+     * the app to the locked page unless an unlock is in flight. Run the
+     * callback first so it marks the unlock in-progress before the close fires
+     * that handler, otherwise a successful unlock would race with a stray drop
+     * to the locked page. */
     adw_dialog_force_close (ADW_DIALOG (self));
 
     if (secure_current_pwd != NULL)
@@ -245,14 +244,6 @@ on_quit_button_clicked (GtkButton      *button,
     g_signal_emit (self, signals[SIGNAL_QUIT_REQUESTED], 0);
 }
 
-static void
-on_locked_close_attempt (AdwDialog      *dialog,
-                         PasswordDialog *self)
-{
-    (void) dialog;
-    g_signal_emit (self, signals[SIGNAL_QUIT_REQUESTED], 0);
-}
-
 void
 password_dialog_set_locked_mode (PasswordDialog *self)
 {
@@ -262,14 +253,14 @@ password_dialog_set_locked_mode (PasswordDialog *self)
         return;
     self->locked_mode = TRUE;
 
-    adw_dialog_set_can_close (ADW_DIALOG (self), FALSE);
-
+    /* The dialog stays dismissable (can_close defaults to TRUE): Escape, the
+     * dialog X, or the parent window's close button fire the normal "closed"
+     * signal, which lock-state callers use to drop to the locked page instead
+     * of quitting (#467). The Quit button remains the explicit way out. */
     GtkWidget *quit_button = gtk_button_new_with_label (_("Quit"));
     gtk_widget_add_css_class (quit_button, "flat");
     g_signal_connect (quit_button, "clicked", G_CALLBACK (on_quit_button_clicked), self);
     adw_header_bar_pack_start (ADW_HEADER_BAR (self->header), quit_button);
-
-    g_signal_connect (self, "close-attempt", G_CALLBACK (on_locked_close_attempt), self);
 }
 
 PasswordDialog *

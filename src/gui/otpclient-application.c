@@ -1289,6 +1289,15 @@ otpclient_application_is_unlocking (OTPClientApplication *self)
     return self->unlock_in_progress;
 }
 
+gboolean
+otpclient_application_is_db_unlocked (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return !self->app_locked
+           && self->db_data != NULL
+           && self->db_data->in_memory_json_data != NULL;
+}
+
 void
 otpclient_application_set_db_data (OTPClientApplication *self,
                                     DatabaseData         *db_data)

@@ -47,9 +47,9 @@
       <description>Whether to auto lock the application or not</description>
     </key>
     <key name="auto-lock-timeout" type="u">
-      <default>5</default>
+      <default>300</default>
       <summary>Auto lock timeout</summary>
-      <description>Lock the application on idle after the specified amount of minutes</description>
+      <description>Lock the application on idle after the specified amount of seconds</description>
     </key>
     <key name="secret-service" type="b">
       <default>false</default>

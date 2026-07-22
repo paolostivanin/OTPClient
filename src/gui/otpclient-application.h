@@ -25,6 +25,11 @@ void                  otpclient_application_switch_to_db (OTPClientApplication *
  * action that would free or replace db_data: the worker holds a raw
  * pointer to it and freeing under its feet is a use-after-free. */
 gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
+
+/* TRUE when a database is loaded and the app is not locked, i.e. OTP data is
+ * currently accessible. Used to tell a "successful unlock" dialog close apart
+ * from a user dismissal. */
+gboolean              otpclient_application_is_db_unlocked (OTPClientApplication *self);
 gboolean              otpclient_application_submit_unlock_password (
                                                            OTPClientApplication *self,
                                                            const gchar          *password,
