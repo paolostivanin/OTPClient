@@ -90,6 +90,15 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.7" date="2026-08-04">
+      <description>
+        <p>Minimize-to-tray is now offered in default builds. It had been an opt-in build flag because turning it on could strand the application: on a desktop with no system tray, closing the window hid it anyway and left OTPClient running invisibly, holding a decrypted database, with no icon to bring it back. The app now confirms a tray host is really there before it will hide to one, and restores the window if the tray goes away. The feature itself is still off by default in Settings.</p>
+        <ul>
+          <li>FIX: with minimize-to-tray enabled on a desktop that has no system tray (stock GNOME without the AppIndicator extension, i3bar, polybar), closing the window hid it with no icon to restore it, leaving an invisible process holding a decrypted database that only killall could stop. The window is now hidden only once a tray host has accepted the icon, and if the tray disappears while the window is hidden the window comes back (#405)</li>
+          <li>BUILD: ENABLE_MINIMIZE_TO_TRAY now defaults to ON, so distribution packages offer the feature without a custom build. The tray has not needed libayatana-appindicator since it moved to a direct StatusNotifierItem implementation over GDBus, so this adds no dependency. The minimize-to-tray setting itself is unchanged and still defaults to off, and its switch is greyed out where no tray was detected (#405)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.6" date="2026-07-22">
       <description>
         <p>Bug-fix release. Auto-Lock was effectively unusable: on any profile that enabled it without changing the timeout, the database re-locked about five seconds after every unlock, and the unlock prompt could not be dismissed and quit the whole application when closed, leaving Settings unreachable. The timeout now defaults to five minutes, and the unlock prompt is dismissable and returns to a locked screen instead of quitting.</p>
