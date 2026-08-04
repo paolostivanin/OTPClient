@@ -1,5 +1,6 @@
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 
+#include <unistd.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "tray.h"
@@ -7,6 +8,9 @@
 
 #define SNI_OBJECT_PATH    "/StatusNotifierItem"
 #define DBUSMENU_OBJECT_PATH "/StatusNotifierMenu"
+
+#define WATCHER_BUS_NAME     "org.kde.StatusNotifierWatcher"
+#define WATCHER_OBJECT_PATH  "/StatusNotifierWatcher"
 
 #define MENU_ID_SHOW  1
 #define MENU_ID_QUIT  2
@@ -65,28 +69,70 @@ static const gchar dbusmenu_introspection_xml[] =
     "  </interface>"
     "</node>";
 
+/* Whether a StatusNotifierWatcher (and, where it says so, a host behind it) is
+ * on the session bus. UNKNOWN covers the startup window before the name watcher
+ * has reported in: the UI treats it as "maybe", while the close-request handler
+ * keys off `published` and so stays fail-safe either way. */
+typedef enum
+{
+    TRAY_HOST_UNKNOWN = 0,
+    TRAY_HOST_AVAILABLE,
+    TRAY_HOST_UNAVAILABLE
+} TrayHostState;
+
 typedef struct
 {
     OTPClientApplication *app;
-    GDBusConnection *connection;
+    GDBusConnection *connection;        /* bus we published the item on */
+    GDBusConnection *watch_connection;  /* bus the watcher was spotted on */
     guint sni_registration_id;
     guint menu_registration_id;
     guint bus_name_id;
+    guint watcher_watch_id;
+    guint host_signal_id;
     gulong close_handler_id;
     gchar *bus_name;
-    gboolean active;
+    TrayHostState host;
+    gboolean desired;       /* the user's minimize-to-tray preference */
+    gboolean publishing;    /* bus name request in flight, not yet confirmed */
+    gboolean published;     /* the watcher accepted our item: a tray icon exists */
+    gboolean holding;       /* a g_application_hold of ours is outstanding */
+    gboolean window_hidden; /* we tucked the window away on close */
 } TrayData;
 
 static TrayData *tray_data = NULL;
 
+static void tray_publish   (TrayData *td);
+static void tray_unpublish (TrayData *td);
+
 static void
-show_window (OTPClientApplication *app)
+show_window (TrayData *td)
 {
-    GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (app));
+    td->window_hidden = FALSE;
+
+    GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (td->app));
     if (window != NULL)
     {
         gtk_widget_set_visible (GTK_WIDGET (window), TRUE);
         gtk_window_present (window);
+    }
+}
+
+/* The hold is what lets the app outlive its only window while it sits in the
+ * tray. It must track `published` exactly: holding without a visible icon
+ * leaves an unreachable process running with a decrypted database in memory. */
+static void
+tray_sync_hold (TrayData *td)
+{
+    if (td->published && !td->holding)
+    {
+        g_application_hold (G_APPLICATION (td->app));
+        td->holding = TRUE;
+    }
+    else if (!td->published && td->holding)
+    {
+        td->holding = FALSE;
+        g_application_release (G_APPLICATION (td->app));
     }
 }
 
@@ -113,7 +159,7 @@ sni_method_call (GDBusConnection       *connection,
     if (g_strcmp0 (method_name, "Activate") == 0 ||
         g_strcmp0 (method_name, "SecondaryActivate") == 0)
     {
-        show_window (td->app);
+        show_window (td);
         g_dbus_method_invocation_return_value (invocation, NULL);
     }
     else
@@ -148,7 +194,7 @@ sni_get_property (GDBusConnection  *connection,
     if (g_strcmp0 (property_name, "Title") == 0)
         return g_variant_new_string ("OTPClient");
     if (g_strcmp0 (property_name, "Status") == 0)
-        return g_variant_new_string (td->active ? "Active" : "Passive");
+        return g_variant_new_string (td->desired ? "Active" : "Passive");
     if (g_strcmp0 (property_name, "IconName") == 0)
         return g_variant_new_string ("com.github.paolostivanin.OTPClient");
     if (g_strcmp0 (property_name, "Menu") == 0)
@@ -237,7 +283,7 @@ dbusmenu_method_call (GDBusConnection       *connection,
         if (g_strcmp0 (event_id, "clicked") == 0)
         {
             if (id == MENU_ID_SHOW)
-                show_window (td->app);
+                show_window (td);
             else if (id == MENU_ID_QUIT)
                 g_application_quit (G_APPLICATION (td->app));
         }
@@ -297,16 +343,20 @@ on_close_request (GtkWindow *window,
 {
     TrayData *td = user_data;
 
-    if (td->active && otpclient_application_get_minimize_to_tray (td->app))
+    /* Only swallow the close when there is an icon to restore the window from.
+     * Without a live tray item the user would be left with an invisible,
+     * unquittable process, so fall through to the normal close instead. */
+    if (td->published && otpclient_application_get_minimize_to_tray (td->app))
     {
         gtk_widget_set_visible (GTK_WIDGET (window), FALSE);
+        td->window_hidden = TRUE;
         return TRUE;
     }
 
     return FALSE;
 }
 
-/* --- Bus name acquired / registration --- */
+/* --- Publishing the StatusNotifierItem --- */
 
 static void
 on_bus_acquired (GDBusConnection *connection,
@@ -364,6 +414,43 @@ on_bus_acquired (GDBusConnection *connection,
     }
 }
 
+/* Every async callback below re-reads the `tray_data` singleton instead of
+ * trusting user_data: cleanup NULLs it, so this doubles as a liveness check on
+ * the pointer the call was issued with. */
+static void
+on_item_registered (GObject      *source,
+                    GAsyncResult *res,
+                    gpointer      user_data)
+{
+    (void) user_data;
+
+    GError *err = NULL;
+    g_autoptr (GVariant) reply =
+        g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &err);
+
+    /* A disable or an unpublish while the call was in flight clears
+     * `publishing`, which makes this reply stale: acting on it would resurrect
+     * an item we already tore down, hold included. */
+    if (tray_data == NULL || !tray_data->publishing)
+    {
+        g_clear_error (&err);
+        return;
+    }
+
+    if (reply == NULL)
+    {
+        g_warning ("StatusNotifierWatcher refused our tray item: %s", err->message);
+        g_clear_error (&err);
+        tray_data->host = TRAY_HOST_UNAVAILABLE;
+        tray_unpublish (tray_data);
+        return;
+    }
+
+    tray_data->publishing = FALSE;
+    tray_data->published = TRUE;
+    tray_sync_hold (tray_data);
+}
+
 static void
 on_name_acquired (GDBusConnection *connection,
                   const gchar     *name,
@@ -371,16 +458,18 @@ on_name_acquired (GDBusConnection *connection,
 {
     (void) user_data;
 
-    /* Register with the StatusNotifierWatcher */
+    /* Ask the watcher to adopt the item, and this time listen to the answer:
+     * whether an icon actually exists decides whether closing the window is
+     * allowed to hide it. */
     g_dbus_connection_call (connection,
-                            "org.kde.StatusNotifierWatcher",
-                            "/StatusNotifierWatcher",
+                            WATCHER_BUS_NAME,
+                            WATCHER_OBJECT_PATH,
                             "org.kde.StatusNotifierWatcher",
                             "RegisterStatusNotifierItem",
                             g_variant_new ("(s)", name),
                             NULL,
                             G_DBUS_CALL_FLAGS_NONE,
-                            -1, NULL, NULL, NULL);
+                            -1, NULL, on_item_registered, NULL);
 }
 
 static void
@@ -392,7 +481,199 @@ on_name_lost (GDBusConnection *connection,
     (void) name;
     (void) user_data;
 
+    if (tray_data == NULL)
+        return;
+
     g_info ("Lost bus name for StatusNotifierItem");
+    tray_unpublish (tray_data);
+}
+
+static void
+tray_publish (TrayData *td)
+{
+    if (td->publishing || td->published)
+        return;
+    if (!td->desired || td->host != TRAY_HOST_AVAILABLE)
+        return;
+
+    td->publishing = TRUE;
+    td->bus_name_id =
+        g_bus_own_name (G_BUS_TYPE_SESSION,
+                        td->bus_name,
+                        G_BUS_NAME_OWNER_FLAGS_NONE,
+                        on_bus_acquired,
+                        on_name_acquired,
+                        on_name_lost,
+                        td,
+                        NULL);
+}
+
+static void
+tray_unpublish (TrayData *td)
+{
+    if (td->connection != NULL)
+    {
+        if (td->sni_registration_id != 0)
+        {
+            g_dbus_connection_unregister_object (td->connection, td->sni_registration_id);
+            td->sni_registration_id = 0;
+        }
+        if (td->menu_registration_id != 0)
+        {
+            g_dbus_connection_unregister_object (td->connection, td->menu_registration_id);
+            td->menu_registration_id = 0;
+        }
+        td->connection = NULL;
+    }
+
+    if (td->bus_name_id != 0)
+    {
+        g_bus_unown_name (td->bus_name_id);
+        td->bus_name_id = 0;
+    }
+
+    td->publishing = FALSE;
+    td->published = FALSE;
+    tray_sync_hold (td);
+
+    /* The panel can go away (extension toggled off, shell restarted) while the
+     * window is tucked into the tray. Bring it back rather than stranding it. */
+    if (td->window_hidden)
+        show_window (td);
+}
+
+/* --- StatusNotifierWatcher detection --- */
+
+static void
+tray_set_host_available (TrayData *td,
+                         gboolean  available)
+{
+    TrayHostState state = available ? TRAY_HOST_AVAILABLE : TRAY_HOST_UNAVAILABLE;
+
+    if (td->host == state)
+        return;
+
+    td->host = state;
+
+    if (available)
+        tray_publish (td);
+    else
+        tray_unpublish (td);
+}
+
+static void
+on_host_registered (GDBusConnection *connection,
+                    const gchar     *sender_name,
+                    const gchar     *object_path,
+                    const gchar     *interface_name,
+                    const gchar     *signal_name,
+                    GVariant        *parameters,
+                    gpointer         user_data)
+{
+    (void) connection;
+    (void) sender_name;
+    (void) object_path;
+    (void) interface_name;
+    (void) signal_name;
+    (void) parameters;
+
+    tray_set_host_available (user_data, TRUE);
+}
+
+static void
+on_host_property_read (GObject      *source,
+                       GAsyncResult *res,
+                       gpointer      user_data)
+{
+    (void) user_data;
+
+    GError *err = NULL;
+    g_autoptr (GVariant) reply =
+        g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &err);
+
+    /* watch_connection is cleared when the watcher goes away, so a NULL here
+     * means the watcher we were asking about is already gone. */
+    if (tray_data == NULL || tray_data->watch_connection == NULL)
+    {
+        g_clear_error (&err);
+        return;
+    }
+
+    gboolean host_registered = TRUE;
+
+    if (reply == NULL)
+    {
+        /* Not every watcher implements the property. Its presence on the bus is
+         * a good enough signal on its own, so don't refuse the feature over it. */
+        g_debug ("Could not read IsStatusNotifierHostRegistered: %s", err->message);
+        g_clear_error (&err);
+    }
+    else
+    {
+        g_autoptr (GVariant) value = NULL;
+        g_variant_get (reply, "(v)", &value);
+        if (g_variant_is_of_type (value, G_VARIANT_TYPE_BOOLEAN))
+            host_registered = g_variant_get_boolean (value);
+    }
+
+    tray_set_host_available (tray_data, host_registered);
+}
+
+static void
+on_watcher_appeared (GDBusConnection *connection,
+                     const gchar     *name,
+                     const gchar     *name_owner,
+                     gpointer         user_data)
+{
+    (void) name;
+
+    TrayData *td = user_data;
+    g_set_object (&td->watch_connection, connection);
+
+    /* A watcher can be up before any host has registered with it, so keep
+     * listening after the initial property read. */
+    td->host_signal_id =
+        g_dbus_connection_signal_subscribe (connection,
+                                            name_owner,
+                                            "org.kde.StatusNotifierWatcher",
+                                            "StatusNotifierHostRegistered",
+                                            WATCHER_OBJECT_PATH,
+                                            NULL,
+                                            G_DBUS_SIGNAL_FLAGS_NONE,
+                                            on_host_registered,
+                                            td,
+                                            NULL);
+
+    g_dbus_connection_call (connection,
+                            WATCHER_BUS_NAME,
+                            WATCHER_OBJECT_PATH,
+                            "org.freedesktop.DBus.Properties",
+                            "Get",
+                            g_variant_new ("(ss)", "org.kde.StatusNotifierWatcher",
+                                                   "IsStatusNotifierHostRegistered"),
+                            G_VARIANT_TYPE ("(v)"),
+                            G_DBUS_CALL_FLAGS_NONE,
+                            -1, NULL, on_host_property_read, NULL);
+}
+
+static void
+on_watcher_vanished (GDBusConnection *connection,
+                     const gchar     *name,
+                     gpointer         user_data)
+{
+    (void) connection;
+    (void) name;
+
+    TrayData *td = user_data;
+
+    if (td->host_signal_id != 0 && td->watch_connection != NULL)
+    {
+        g_dbus_connection_signal_unsubscribe (td->watch_connection, td->host_signal_id);
+        td->host_signal_id = 0;
+    }
+    g_clear_object (&td->watch_connection);
+
+    tray_set_host_available (td, FALSE);
 }
 
 /* --- Public API --- */
@@ -405,20 +686,11 @@ otpclient_tray_init (OTPClientApplication *app)
 
     tray_data = g_new0 (TrayData, 1);
     tray_data->app = app;
-    tray_data->active = otpclient_application_get_minimize_to_tray (app);
+    tray_data->host = TRAY_HOST_UNKNOWN;
+    tray_data->desired = otpclient_application_get_minimize_to_tray (app);
 
     tray_data->bus_name = g_strdup_printf ("org.kde.StatusNotifierItem-%d-1",
                                             getpid ());
-
-    tray_data->bus_name_id =
-        g_bus_own_name (G_BUS_TYPE_SESSION,
-                        tray_data->bus_name,
-                        G_BUS_NAME_OWNER_FLAGS_NONE,
-                        on_bus_acquired,
-                        on_name_acquired,
-                        on_name_lost,
-                        tray_data,
-                        NULL);
 
     GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (app));
     if (window != NULL)
@@ -428,8 +700,18 @@ otpclient_tray_init (OTPClientApplication *app)
                               G_CALLBACK (on_close_request), tray_data);
     }
 
-    if (tray_data->active)
-        g_application_hold (G_APPLICATION (app));
+    /* The item is published lazily, once a watcher is known to be there and the
+     * user has actually asked for minimize-to-tray. Registering unconditionally
+     * would park a Passive item in the tray overflow of every desktop that
+     * shows them, for a feature the user never enabled. */
+    tray_data->watcher_watch_id =
+        g_bus_watch_name (G_BUS_TYPE_SESSION,
+                          WATCHER_BUS_NAME,
+                          G_BUS_NAME_WATCHER_FLAGS_NONE,
+                          on_watcher_appeared,
+                          on_watcher_vanished,
+                          tray_data,
+                          NULL);
 }
 
 void
@@ -441,34 +723,40 @@ otpclient_tray_enable (OTPClientApplication *app)
         return;
     }
 
-    if (!tray_data->active)
-    {
-        tray_data->active = TRUE;
-        g_application_hold (G_APPLICATION (app));
+    if (tray_data->desired)
+        return;
 
-        if (tray_data->connection != NULL)
-        {
-            g_dbus_connection_emit_signal (tray_data->connection,
-                                           NULL,
-                                           SNI_OBJECT_PATH,
-                                           "org.kde.StatusNotifierItem",
-                                           "NewStatus",
-                                           g_variant_new ("(s)", "Active"),
-                                           NULL);
-        }
+    tray_data->desired = TRUE;
+
+    if (tray_data->published && tray_data->connection != NULL)
+    {
+        g_dbus_connection_emit_signal (tray_data->connection,
+                                       NULL,
+                                       SNI_OBJECT_PATH,
+                                       "org.kde.StatusNotifierItem",
+                                       "NewStatus",
+                                       g_variant_new ("(s)", "Active"),
+                                       NULL);
+    }
+    else
+    {
+        tray_publish (tray_data);
     }
 }
 
 void
 otpclient_tray_disable (OTPClientApplication *app)
 {
-    if (tray_data == NULL || !tray_data->active)
+    (void) app;
+
+    if (tray_data == NULL || !tray_data->desired)
         return;
 
-    tray_data->active = FALSE;
-    g_application_release (G_APPLICATION (app));
+    tray_data->desired = FALSE;
 
-    if (tray_data->connection != NULL)
+    /* Tell any host that cached the item before tearing it down, so it doesn't
+     * hold on to a stale Active entry. */
+    if (tray_data->published && tray_data->connection != NULL)
     {
         g_dbus_connection_emit_signal (tray_data->connection,
                                        NULL,
@@ -478,6 +766,14 @@ otpclient_tray_disable (OTPClientApplication *app)
                                        g_variant_new ("(s)", "Passive"),
                                        NULL);
     }
+
+    tray_unpublish (tray_data);
+}
+
+gboolean
+otpclient_tray_is_available (void)
+{
+    return tray_data != NULL && tray_data->host != TRAY_HOST_UNAVAILABLE;
 }
 
 void
@@ -493,21 +789,17 @@ otpclient_tray_cleanup (OTPClientApplication *app)
             g_signal_handler_disconnect (window, tray_data->close_handler_id);
     }
 
-    if (tray_data->connection != NULL)
-    {
-        if (tray_data->sni_registration_id != 0)
-            g_dbus_connection_unregister_object (tray_data->connection,
-                                                  tray_data->sni_registration_id);
-        if (tray_data->menu_registration_id != 0)
-            g_dbus_connection_unregister_object (tray_data->connection,
-                                                  tray_data->menu_registration_id);
-    }
+    if (tray_data->host_signal_id != 0 && tray_data->watch_connection != NULL)
+        g_dbus_connection_signal_unsubscribe (tray_data->watch_connection,
+                                              tray_data->host_signal_id);
+    g_clear_object (&tray_data->watch_connection);
 
-    if (tray_data->bus_name_id != 0)
-        g_bus_unown_name (tray_data->bus_name_id);
+    if (tray_data->watcher_watch_id != 0)
+        g_bus_unwatch_name (tray_data->watcher_watch_id);
 
-    if (tray_data->active)
-        g_application_release (G_APPLICATION (app));
+    /* Clears the hold too, so the teardown doesn't leave the app held. */
+    tray_data->window_hidden = FALSE;
+    tray_unpublish (tray_data);
 
     g_free (tray_data->bus_name);
     g_free (tray_data);

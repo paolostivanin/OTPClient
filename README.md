@@ -146,7 +146,7 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 | `BUILD_CLI`                | `ON`    | Build the command-line interface (`otpclient-cli`) and completions   |
 | `BUILD_SEARCH_PROVIDER`    | `ON`    | Build the GNOME Shell / KRunner D-Bus daemon                         |
 | `IS_FLATPAK`               | `OFF`   | Use the flatpak app's config folder for the database                 |
-| `ENABLE_MINIMIZE_TO_TRAY`  | `OFF`   | Enable minimize-to-tray support in the GUI                           |
+| `ENABLE_MINIMIZE_TO_TRAY`  | `ON`    | Offer minimize-to-tray in the GUI (needs a StatusNotifierWatcher)    |
 
 `Release` builds enable LTO and additional hardening flags
 (`-fcf-protection=full`, `-fzero-call-used-regs`, `-fstrict-flex-arrays=2`,

@@ -12,7 +12,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 option(IS_FLATPAK "Use flatpak app's config folder to store the database" OFF)
-option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" OFF)
+option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" ON)
 option(BUILD_GUI "Build the GUI" ON)
 option(BUILD_CLI "Build the CLI" ON)
 option(BUILD_SEARCH_PROVIDER "Build the D-Bus search provider" ON)

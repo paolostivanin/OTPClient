@@ -7,6 +7,9 @@
 #include "secret-schema.h"
 #include "settings-import-export.h"
 #include "otp-button-row.h"
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+#include "tray.h"
+#endif
 
 struct _SettingsDialog
 {
@@ -661,6 +664,14 @@ settings_dialog_new (OTPClientApplication *app)
                                otpclient_application_get_minimize_to_tray (app));
     g_signal_connect (self->minimize_to_tray_switch, "notify::active",
                       G_CALLBACK (on_minimize_to_tray_toggled), self);
+    /* Disable rather than clear the preference: someone who normally runs a
+     * desktop with a tray shouldn't lose the setting after one session without. */
+    if (!otpclient_tray_is_available ())
+    {
+        gtk_widget_set_sensitive (self->minimize_to_tray_switch, FALSE);
+        adw_action_row_set_subtitle (ADW_ACTION_ROW (self->minimize_to_tray_switch),
+                                     _("No system tray was detected on this desktop"));
+    }
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
 #endif
 
