@@ -93,11 +93,12 @@ typedef struct
     gulong close_handler_id;
     gchar *bus_name;
     TrayHostState host;
-    gboolean desired;       /* the user's minimize-to-tray preference */
-    gboolean publishing;    /* bus name request in flight, not yet confirmed */
-    gboolean published;     /* the watcher accepted our item: a tray icon exists */
-    gboolean holding;       /* a g_application_hold of ours is outstanding */
-    gboolean window_hidden; /* we tucked the window away on close */
+    gboolean desired;          /* the user's minimize-to-tray preference */
+    gboolean publishing;       /* bus name request in flight, not yet confirmed */
+    gboolean published;        /* the watcher accepted our item: a tray icon exists */
+    gboolean used_unique_name; /* we registered under :1.x, not the well-known name */
+    gboolean holding;          /* a g_application_hold of ours is outstanding */
+    gboolean window_hidden;    /* we tucked the window away on close */
 } TrayData;
 
 static TrayData *tray_data = NULL;
@@ -366,7 +367,9 @@ on_bus_acquired (GDBusConnection *connection,
     (void) name;
 
     TrayData *td = user_data;
-    td->connection = connection;
+    /* Our own reference: the connection has to outlive a refused name request,
+     * because that is exactly when the fallback below still needs it. */
+    g_set_object (&td->connection, connection);
 
     GError *err = NULL;
 
@@ -451,6 +454,25 @@ on_item_registered (GObject      *source,
     tray_sync_hold (tray_data);
 }
 
+/* Ask the watcher to adopt the item, and listen to the answer: whether an icon
+ * actually exists decides whether closing the window is allowed to hide it.
+ * `service` is the bus name the item can be reached at, either our well-known
+ * name or, where the bus refused to hand that out, the unique one. */
+static void
+tray_register_with_watcher (GDBusConnection *connection,
+                            const gchar     *service)
+{
+    g_dbus_connection_call (connection,
+                            WATCHER_BUS_NAME,
+                            WATCHER_OBJECT_PATH,
+                            "org.kde.StatusNotifierWatcher",
+                            "RegisterStatusNotifierItem",
+                            g_variant_new ("(s)", service),
+                            NULL,
+                            G_DBUS_CALL_FLAGS_NONE,
+                            -1, NULL, on_item_registered, NULL);
+}
+
 static void
 on_name_acquired (GDBusConnection *connection,
                   const gchar     *name,
@@ -458,18 +480,12 @@ on_name_acquired (GDBusConnection *connection,
 {
     (void) user_data;
 
-    /* Ask the watcher to adopt the item, and this time listen to the answer:
-     * whether an icon actually exists decides whether closing the window is
-     * allowed to hide it. */
-    g_dbus_connection_call (connection,
-                            WATCHER_BUS_NAME,
-                            WATCHER_OBJECT_PATH,
-                            "org.kde.StatusNotifierWatcher",
-                            "RegisterStatusNotifierItem",
-                            g_variant_new ("(s)", name),
-                            NULL,
-                            G_DBUS_CALL_FLAGS_NONE,
-                            -1, NULL, on_item_registered, NULL);
+    /* A NameAcquired that arrives after the fallback already registered us
+     * would put a second item in the tray. */
+    if (tray_data == NULL || tray_data->used_unique_name)
+        return;
+
+    tray_register_with_watcher (connection, name);
 }
 
 static void
@@ -484,6 +500,27 @@ on_name_lost (GDBusConnection *connection,
     if (tray_data == NULL)
         return;
 
+    /* GLib runs on_bus_acquired before this, so the item is already exported on
+     * a live connection and only the name is missing. Sandboxes are the usual
+     * reason: xdg-dbus-proxy answers RequestName with ServiceUnknown unless the
+     * Flatpak manifest grants --own-name, and every sandboxed app is pid 2, so
+     * the pid-derived name collides between apps anyway. The watcher does not
+     * need a well-known name, so register the unique one instead, which is what
+     * Qt's tray does (QDBusMenuConnection passes baseService()). */
+    if (tray_data->publishing && !tray_data->published &&
+        !tray_data->used_unique_name && tray_data->connection != NULL)
+    {
+        const gchar *unique = g_dbus_connection_get_unique_name (tray_data->connection);
+        if (unique != NULL)
+        {
+            tray_data->used_unique_name = TRUE;
+            g_info ("Could not own %s, registering the tray item as %s instead",
+                    tray_data->bus_name, unique);
+            tray_register_with_watcher (tray_data->connection, unique);
+            return;
+        }
+    }
+
     g_info ("Lost bus name for StatusNotifierItem");
     tray_unpublish (tray_data);
 }
@@ -497,10 +534,13 @@ tray_publish (TrayData *td)
         return;
 
     td->publishing = TRUE;
+    /* DO_NOT_QUEUE: a pid-derived name is not worth waiting in line for, and
+     * queueing is what would deliver a late NameAcquired on top of a fallback
+     * registration. Two sandboxed apps both at pid 2 now each get an icon. */
     td->bus_name_id =
         g_bus_own_name (G_BUS_TYPE_SESSION,
                         td->bus_name,
-                        G_BUS_NAME_OWNER_FLAGS_NONE,
+                        G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE,
                         on_bus_acquired,
                         on_name_acquired,
                         on_name_lost,
@@ -523,7 +563,7 @@ tray_unpublish (TrayData *td)
             g_dbus_connection_unregister_object (td->connection, td->menu_registration_id);
             td->menu_registration_id = 0;
         }
-        td->connection = NULL;
+        g_clear_object (&td->connection);
     }
 
     if (td->bus_name_id != 0)
@@ -534,6 +574,7 @@ tray_unpublish (TrayData *td)
 
     td->publishing = FALSE;
     td->published = FALSE;
+    td->used_unique_name = FALSE;
     tray_sync_hold (td);
 
     /* The panel can go away (extension toggled off, shell restarted) while the
