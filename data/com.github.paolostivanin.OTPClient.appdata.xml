@@ -90,6 +90,16 @@
   </content_rating>
 
   <releases>
+    <release version="5.1.8" date="2026-08-21">
+      <description>
+        <p>Bug-fix release. Minimize-to-tray did not work in the Flatpak: the switch was greyed out as if the desktop had no system tray, and granting the missing permission by hand still produced no icon. The sandbox refuses the process-derived bus name the tray asks to own, so the tray now registers with the tray host under its unique connection name instead, which needs no permission and works in any sandbox. The Flatpak was also missing the permissions Auto-Lock needs, so locking on screen lock and on suspend silently did nothing; those are fixed in the Flathub packaging.</p>
+        <ul>
+          <li>FIX: no tray icon appeared in sandboxed builds even with a tray host present, because the session bus refused the process-derived StatusNotifierItem name and the tray gave up. It now falls back to registering under its unique bus connection name, which is what Qt applications do, so the icon appears regardless of what the sandbox grants (Flathub #79)</li>
+          <li>FIX: two sandboxed applications could not both show a tray icon: every Flatpak process sees itself as pid 2, so the process-derived StatusNotifierItem names collided and whichever lost the race silently got none. Both now get an icon (Flathub #79)</li>
+          <li>PACKAGING: the Flatpak lacked the D-Bus permissions the tray and Auto-Lock need. Access to the StatusNotifierWatcher name un-greys the minimize-to-tray switch, which had reported "No system tray was detected on this desktop" on desktops that do run one, and access to logind and the desktop screensaver services makes Auto-Lock on screen lock and on suspend work; both had been no-ops, with "Could not subscribe to suspend events" the only clue (Flathub #79)</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.7" date="2026-08-04">
       <description>
         <p>Minimize-to-tray is now offered in default builds. It had been an opt-in build flag because turning it on could strand the application: on a desktop with no system tray, closing the window hid it anyway and left OTPClient running invisibly, holding a decrypted database, with no icon to bring it back. The app now confirms a tray host is really there before it will hide to one, and restores the window if the tray goes away. The feature itself is still off by default in Settings.</p>
