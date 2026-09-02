@@ -122,12 +122,18 @@ test_sni_surface (void)
     GDBusInterfaceInfo *iface = load_interface (tray_menu_model_sni_introspection_xml,
                                                 "org.kde.StatusNotifierItem");
 
-    /* Every declared property needs a branch in sni_get_property: GDBus asserts
-     * that a get_property returning NULL has set the error, so a property in
-     * the XML with no matching branch aborts the process on a plain Get(). */
+    /* Every declared property needs a branch in sni_get_property, and the count
+     * check is what keeps the two in step: a property added to the XML without
+     * one would make the getter return NULL with no error set, which trips a
+     * hard g_assert inside GDBus and aborts the process on a plain Get().
+     *
+     * Equally, nothing here may grow an IconPixmap, AttentionIconName or
+     * OverlayIconName. An empty pixmap array outranks IconName on some hosts
+     * and blanks the icon. */
     static const struct { const gchar *name, *sig; } props[] = {
         { "Category", "s" }, { "Id", "s" }, { "Title", "s" }, { "Status", "s" },
-        { "IconName", "s" }, { "Menu", "o" }, { "ItemIsMenu", "b" },
+        { "IconName", "s" }, { "IconThemePath", "s" }, { "Menu", "o" },
+        { "ItemIsMenu", "b" }, { "WindowId", "i" },
     };
 
     guint n_declared = 0;
@@ -142,10 +148,30 @@ test_sni_surface (void)
         g_assert_cmpstr (p->signature, ==, props[i].sig);
     }
 
-    /* Menu must be a real object path. Handing a host "/" makes it build a dead
-     * menu and then suppress its own right-click fallback. */
-    g_assert_nonnull (g_dbus_interface_info_lookup_method (iface, "Activate"));
-    g_assert_nonnull (g_dbus_interface_info_lookup_method (iface, "SecondaryActivate"));
+    /* ContextMenu is the host's fallback when it cannot use our dbusmenu, so
+     * without it a right-click does nothing at all on those hosts.
+     * ProvideXdgActivationToken is what lets Activate actually raise the window
+     * on Wayland rather than be refused as focus stealing. */
+    static const struct { const gchar *name, *in_sig; } methods[] = {
+        { "Activate", "(ii)" }, { "SecondaryActivate", "(ii)" },
+        { "ContextMenu", "(ii)" }, { "Scroll", "(is)" },
+        { "ProvideXdgActivationToken", "(s)" },
+    };
+    for (gsize i = 0; i < G_N_ELEMENTS (methods); i++)
+    {
+        g_assert_nonnull (g_dbus_interface_info_lookup_method (iface, methods[i].name));
+        g_autofree gchar *in = in_signature (iface, methods[i].name);
+        g_assert_cmpstr (in, ==, methods[i].in_sig);
+
+        g_autofree gchar *out = out_signature (iface, methods[i].name);
+        g_assert_cmpstr (out, ==, "()");
+    }
+
+    static const gchar *signals[] = { "NewTitle", "NewIcon", "NewAttentionIcon",
+                                      "NewOverlayIcon", "NewToolTip", "NewMenu",
+                                      "NewStatus" };
+    for (gsize i = 0; i < G_N_ELEMENTS (signals); i++)
+        g_assert_nonnull (g_dbus_interface_info_lookup_signal (iface, signals[i]));
 
     g_dbus_interface_info_unref (iface);
 }

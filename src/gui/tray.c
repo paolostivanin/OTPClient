@@ -40,6 +40,7 @@ typedef struct
     guint host_signal_id;
     gulong close_handler_id;
     gchar *bus_name;
+    gchar *activation_token;   /* handed to us by the host, good for one present */
     TrayHostState host;
     gboolean desired;          /* the user's minimize-to-tray preference */
     gboolean publishing;       /* bus name request in flight, not yet confirmed */
@@ -62,6 +63,15 @@ show_window (TrayData *td)
     GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (td->app));
     if (window != NULL)
     {
+        /* Without the host's activation token, Wayland's focus-stealing
+         * prevention refuses the raise and the window stays where it is. The
+         * token is single use, so consume it. */
+        if (td->activation_token != NULL)
+        {
+            gtk_window_set_startup_id (window, td->activation_token);
+            g_clear_pointer (&td->activation_token, g_free);
+        }
+
         gtk_widget_set_visible (GTK_WIDGET (window), TRUE);
         gtk_window_present (window);
     }
@@ -85,6 +95,21 @@ tray_sync_hold (TrayData *td)
     }
 }
 
+/* A property getter that returns NULL without setting the error trips a hard
+ * g_assert (error != NULL) inside GDBus's invoke_get_property_in_idle_cb, so a
+ * property added to the introspection XML without a matching branch below would
+ * abort the process on a plain Get(). Unreachable while the two stay in sync,
+ * which is what the introspection test is for, but the cost of being wrong is
+ * too high to leave it to a return NULL. */
+static GVariant *
+unknown_property (GError      **error,
+                  const gchar  *property_name)
+{
+    g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_PROPERTY,
+                 "Unknown property: %s", property_name);
+    return NULL;
+}
+
 /* --- StatusNotifierItem D-Bus interface --- */
 
 static void
@@ -101,7 +126,6 @@ sni_method_call (GDBusConnection       *connection,
     (void) sender;
     (void) object_path;
     (void) interface_name;
-    (void) parameters;
 
     TrayData *td = user_data;
 
@@ -109,6 +133,31 @@ sni_method_call (GDBusConnection       *connection,
         g_strcmp0 (method_name, "SecondaryActivate") == 0)
     {
         show_window (td);
+        g_dbus_method_invocation_return_value (invocation, NULL);
+    }
+    else if (g_strcmp0 (method_name, "ProvideXdgActivationToken") == 0)
+    {
+        /* Sent immediately before Activate, so just stash it for show_window. */
+        const gchar *token;
+        g_variant_get (parameters, "(&s)", &token);
+        g_free (td->activation_token);
+        td->activation_token = g_strdup (token);
+
+        g_dbus_method_invocation_return_value (invocation, NULL);
+    }
+    else if (g_strcmp0 (method_name, "ContextMenu") == 0)
+    {
+        /* Deliberately does nothing but succeed. The host owns the popup, and
+         * this is the fallback it uses when it cannot use our dbusmenu: xapp
+         * calls it for a secondary click whenever item->menu is NULL, and
+         * Waybar when its Version probe fails. Presenting the window from here
+         * would turn a right-click into an un-hide. */
+        g_dbus_method_invocation_return_value (invocation, NULL);
+    }
+    else if (g_strcmp0 (method_name, "Scroll") == 0)
+    {
+        /* Nothing sensible to scroll through, but answering beats UnknownMethod
+         * in the host's log on every wheel event over the icon. */
         g_dbus_method_invocation_return_value (invocation, NULL);
     }
     else
@@ -132,7 +181,6 @@ sni_get_property (GDBusConnection  *connection,
     (void) sender;
     (void) object_path;
     (void) interface_name;
-    (void) error;
 
     TrayData *td = user_data;
 
@@ -146,12 +194,18 @@ sni_get_property (GDBusConnection  *connection,
         return g_variant_new_string (td->desired ? "Active" : "Passive");
     if (g_strcmp0 (property_name, "IconName") == 0)
         return g_variant_new_string ("com.github.paolostivanin.OTPClient");
+    if (g_strcmp0 (property_name, "IconThemePath") == 0)
+        return g_variant_new_string ("");   /* our icon comes from the theme */
+    /* Never "/": xapp treats that as a valid menu, builds a dead one, and the
+     * non-NULL menu then suppresses its own ContextMenu fallback. */
     if (g_strcmp0 (property_name, "Menu") == 0)
         return g_variant_new_object_path (DBUSMENU_OBJECT_PATH);
     if (g_strcmp0 (property_name, "ItemIsMenu") == 0)
         return g_variant_new_boolean (FALSE);
+    if (g_strcmp0 (property_name, "WindowId") == 0)
+        return g_variant_new_int32 (0);     /* no X11 window to point at */
 
-    return NULL;
+    return unknown_property (error, property_name);
 }
 
 static const GDBusInterfaceVTable sni_vtable = {
@@ -329,7 +383,6 @@ dbusmenu_get_property (GDBusConnection  *connection,
     (void) sender;
     (void) object_path;
     (void) interface_name;
-    (void) error;
     (void) user_data;
 
     /* Version 3 is what routes clients to the *Group methods. Downgrading to 2
@@ -344,7 +397,7 @@ dbusmenu_get_property (GDBusConnection  *connection,
     if (g_strcmp0 (property_name, "Status") == 0)
         return g_variant_new_string ("normal");
 
-    return NULL;
+    return unknown_property (error, property_name);
 }
 
 static const GDBusInterfaceVTable dbusmenu_vtable = {
@@ -860,6 +913,7 @@ otpclient_tray_cleanup (OTPClientApplication *app)
     tray_unpublish (tray_data);
 
     g_free (tray_data->bus_name);
+    g_free (tray_data->activation_token);
     g_free (tray_data);
     tray_data = NULL;
 }
