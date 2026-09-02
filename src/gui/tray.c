@@ -31,8 +31,9 @@ typedef enum
 typedef struct
 {
     OTPClientApplication *app;
-    GDBusConnection *connection;        /* bus we published the item on */
-    GDBusConnection *watch_connection;  /* bus the watcher was spotted on */
+    GDBusConnection *connection;        /* private bus we published the item on */
+    GDBusConnection *watch_connection;  /* shared bus the watcher was spotted on */
+    GCancellable *cancellable;          /* covers every async step of one publish */
     guint sni_registration_id;
     guint menu_registration_id;
     guint bus_name_id;
@@ -41,9 +42,13 @@ typedef struct
     gulong close_handler_id;
     gchar *bus_name;
     gchar *activation_token;   /* handed to us by the host, good for one present */
+    /* Bumped by every publish and every unpublish. Async replies carry the
+     * value they were issued under, so a reply from cycle N is ignored during
+     * cycle N+1 instead of resurrecting an item we already tore down. */
+    guint publish_generation;
     TrayHostState host;
     gboolean desired;          /* the user's minimize-to-tray preference */
-    gboolean publishing;       /* bus name request in flight, not yet confirmed */
+    gboolean publishing;       /* publish in flight, not yet confirmed */
     gboolean published;        /* the watcher accepted our item: a tray icon exists */
     gboolean used_unique_name; /* we registered under :1.x, not the well-known name */
     gboolean holding;          /* a g_application_hold of ours is outstanding */
@@ -60,7 +65,9 @@ show_window (TrayData *td)
 {
     td->window_hidden = FALSE;
 
-    GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (td->app));
+    /* The main window specifically, not the active one: while we are tucked
+     * away nothing is active, and once something is, it may well be a dialog. */
+    GtkWindow *window = otpclient_application_get_window (td->app);
     if (window != NULL)
     {
         /* Without the host's activation token, Wayland's focus-stealing
@@ -109,6 +116,17 @@ unknown_property (GError      **error,
                  "Unknown property: %s", property_name);
     return NULL;
 }
+
+/* Neither vtable below checks `sender`, and that is deliberate rather than an
+ * oversight. The peer that calls Activate or Event is the tray *host*, and we
+ * have no way to learn its bus name: the watcher only hands out item names, a
+ * watcher need not be a host (Waybar next to a Plasma-owned watcher is the
+ * everyday case), and several hosts may drive the same item. Any allowlist
+ * narrow enough to be worth having would break those desktops. The exposure it
+ * would buy back is small in any case: a same-user peer that wants this process
+ * gone can send it a signal, and one that wants the window up can ask the
+ * shell. Nothing here reads a secret out over the bus either; the worst
+ * Activate does is put a window back on a screen its owner is sitting at. */
 
 /* --- StatusNotifierItem D-Bus interface --- */
 
@@ -429,82 +447,46 @@ on_close_request (GtkWindow *window,
 
 /* --- Publishing the StatusNotifierItem --- */
 
-static void
-on_bus_acquired (GDBusConnection *connection,
-                 const gchar     *name,
-                 gpointer         user_data)
-{
-    (void) name;
-
-    TrayData *td = user_data;
-    /* Our own reference: the connection has to outlive a refused name request,
-     * because that is exactly when the fallback below still needs it. */
-    g_set_object (&td->connection, connection);
-
-    GError *err = NULL;
-
-    g_autoptr (GDBusNodeInfo) sni_info =
-        g_dbus_node_info_new_for_xml (tray_menu_model_sni_introspection_xml, &err);
-    if (err != NULL)
-    {
-        g_warning ("Failed to parse SNI introspection: %s", err->message);
-        g_clear_error (&err);
-        return;
-    }
-
-    td->sni_registration_id =
-        g_dbus_connection_register_object (connection,
-                                           SNI_OBJECT_PATH,
-                                           sni_info->interfaces[0],
-                                           &sni_vtable,
-                                           td, NULL, &err);
-    if (err != NULL)
-    {
-        g_warning ("Failed to register SNI object: %s", err->message);
-        g_clear_error (&err);
-        return;
-    }
-
-    g_autoptr (GDBusNodeInfo) menu_info =
-        g_dbus_node_info_new_for_xml (tray_menu_model_dbusmenu_introspection_xml, &err);
-    if (err != NULL)
-    {
-        g_warning ("Failed to parse dbusmenu introspection: %s", err->message);
-        g_clear_error (&err);
-        return;
-    }
-
-    td->menu_registration_id =
-        g_dbus_connection_register_object (connection,
-                                           DBUSMENU_OBJECT_PATH,
-                                           menu_info->interfaces[0],
-                                           &dbusmenu_vtable,
-                                           td, NULL, &err);
-    if (err != NULL)
-    {
-        g_warning ("Failed to register dbusmenu object: %s", err->message);
-        g_clear_error (&err);
-    }
-}
+/* The item lives on a private connection to the session bus rather than on the
+ * shared one g_bus_get hands out, and that is what makes a tray icon removable
+ * at all.
+ *
+ * org.kde.StatusNotifierWatcher has RegisterStatusNotifierItem and no
+ * unregister counterpart, on any implementation: watchers drop an item when the
+ * bus name it was registered under loses its owner, and nothing else. Releasing
+ * a well-known name does that. The sandboxed path never gets a well-known name
+ * (see on_name_lost) and registers the connection's unique name instead, which
+ * lives exactly as long as the connection does. On the shared bus that means
+ * the process, so turning minimize-to-tray off inside Flatpak would leave a
+ * dead icon in the panel until the app exits. A connection of our own can be
+ * closed, which drops the unique name and the well-known one together, so one
+ * teardown works on both paths. */
 
 /* Every async callback below re-reads the `tray_data` singleton instead of
  * trusting user_data: cleanup NULLs it, so this doubles as a liveness check on
- * the pointer the call was issued with. */
+ * the pointer the call was issued with. What user_data carries instead is the
+ * publish generation the call went out under, because a reply belonging to a
+ * cycle that has already been torn down must not be acted on. */
+static gboolean
+publish_is_current (gpointer user_data)
+{
+    return tray_data != NULL
+           && tray_data->publishing
+           && tray_data->publish_generation == GPOINTER_TO_UINT (user_data);
+}
+
 static void
 on_item_registered (GObject      *source,
                     GAsyncResult *res,
                     gpointer      user_data)
 {
-    (void) user_data;
-
     GError *err = NULL;
     g_autoptr (GVariant) reply =
         g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &err);
 
-    /* A disable or an unpublish while the call was in flight clears
-     * `publishing`, which makes this reply stale: acting on it would resurrect
-     * an item we already tore down, hold included. */
-    if (tray_data == NULL || !tray_data->publishing)
+    /* Acting on a stale reply would resurrect an item we already tore down,
+     * hold included. */
+    if (!publish_is_current (user_data))
     {
         g_clear_error (&err);
         return;
@@ -529,10 +511,10 @@ on_item_registered (GObject      *source,
  * `service` is the bus name the item can be reached at, either our well-known
  * name or, where the bus refused to hand that out, the unique one. */
 static void
-tray_register_with_watcher (GDBusConnection *connection,
-                            const gchar     *service)
+tray_register_with_watcher (TrayData    *td,
+                            const gchar *service)
 {
-    g_dbus_connection_call (connection,
+    g_dbus_connection_call (td->connection,
                             WATCHER_BUS_NAME,
                             WATCHER_OBJECT_PATH,
                             "org.kde.StatusNotifierWatcher",
@@ -540,7 +522,8 @@ tray_register_with_watcher (GDBusConnection *connection,
                             g_variant_new ("(s)", service),
                             NULL,
                             G_DBUS_CALL_FLAGS_NONE,
-                            -1, NULL, on_item_registered, NULL);
+                            -1, td->cancellable, on_item_registered,
+                            GUINT_TO_POINTER (td->publish_generation));
 }
 
 static void
@@ -548,14 +531,15 @@ on_name_acquired (GDBusConnection *connection,
                   const gchar     *name,
                   gpointer         user_data)
 {
+    (void) connection;
     (void) user_data;
 
     /* A NameAcquired that arrives after the fallback already registered us
      * would put a second item in the tray. */
-    if (tray_data == NULL || tray_data->used_unique_name)
+    if (tray_data == NULL || !tray_data->publishing || tray_data->used_unique_name)
         return;
 
-    tray_register_with_watcher (connection, name);
+    tray_register_with_watcher (tray_data, name);
 }
 
 static void
@@ -570,13 +554,13 @@ on_name_lost (GDBusConnection *connection,
     if (tray_data == NULL)
         return;
 
-    /* GLib runs on_bus_acquired before this, so the item is already exported on
-     * a live connection and only the name is missing. Sandboxes are the usual
-     * reason: xdg-dbus-proxy answers RequestName with ServiceUnknown unless the
-     * Flatpak manifest grants --own-name, and every sandboxed app is pid 2, so
-     * the pid-derived name collides between apps anyway. The watcher does not
-     * need a well-known name, so register the unique one instead, which is what
-     * Qt's tray does (QDBusMenuConnection passes baseService()). */
+    /* The objects are exported before the name is ever requested, so at this
+     * point the item is reachable and only the name is missing. Sandboxes are
+     * the usual reason: xdg-dbus-proxy answers RequestName with ServiceUnknown
+     * unless the Flatpak manifest grants --own-name, and every sandboxed app is
+     * pid 2, so the pid-derived name collides between apps anyway. The watcher
+     * does not need a well-known name, so register the unique one instead,
+     * which is what Qt's tray does (QDBusMenuConnection passes baseService()). */
     if (tray_data->publishing && !tray_data->published &&
         !tray_data->used_unique_name && tray_data->connection != NULL)
     {
@@ -586,13 +570,124 @@ on_name_lost (GDBusConnection *connection,
             tray_data->used_unique_name = TRUE;
             g_info ("Could not own %s, registering the tray item as %s instead",
                     tray_data->bus_name, unique);
-            tray_register_with_watcher (tray_data->connection, unique);
+            tray_register_with_watcher (tray_data, unique);
             return;
         }
     }
 
     g_info ("Lost bus name for StatusNotifierItem");
     tray_unpublish (tray_data);
+}
+
+static gboolean
+tray_register_objects (TrayData        *td,
+                       GDBusConnection *connection)
+{
+    GError *err = NULL;
+
+    g_autoptr (GDBusNodeInfo) sni_info =
+        g_dbus_node_info_new_for_xml (tray_menu_model_sni_introspection_xml, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to parse SNI introspection: %s", err->message);
+        g_clear_error (&err);
+        return FALSE;
+    }
+
+    td->sni_registration_id =
+        g_dbus_connection_register_object (connection,
+                                           SNI_OBJECT_PATH,
+                                           sni_info->interfaces[0],
+                                           &sni_vtable,
+                                           td, NULL, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to register SNI object: %s", err->message);
+        g_clear_error (&err);
+        return FALSE;
+    }
+
+    g_autoptr (GDBusNodeInfo) menu_info =
+        g_dbus_node_info_new_for_xml (tray_menu_model_dbusmenu_introspection_xml, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to parse dbusmenu introspection: %s", err->message);
+        g_clear_error (&err);
+        return FALSE;
+    }
+
+    td->menu_registration_id =
+        g_dbus_connection_register_object (connection,
+                                           DBUSMENU_OBJECT_PATH,
+                                           menu_info->interfaces[0],
+                                           &dbusmenu_vtable,
+                                           td, NULL, &err);
+    if (err != NULL)
+    {
+        g_warning ("Failed to register dbusmenu object: %s", err->message);
+        g_clear_error (&err);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static void
+on_private_bus_ready (GObject      *source,
+                      GAsyncResult *res,
+                      gpointer      user_data)
+{
+    (void) source;
+
+    GError *err = NULL;
+    GDBusConnection *connection = g_dbus_connection_new_for_address_finish (res, &err);
+
+    if (!publish_is_current (user_data))
+    {
+        /* Cancelled or superseded. Close it rather than leaving a nameless
+         * connection of ours parked on the bus for the rest of the session. */
+        if (connection != NULL)
+        {
+            g_dbus_connection_close (connection, NULL, NULL, NULL);
+            g_object_unref (connection);
+        }
+        g_clear_error (&err);
+        return;
+    }
+
+    if (connection == NULL)
+    {
+        g_warning ("Could not open a bus connection for the tray item: %s", err->message);
+        g_clear_error (&err);
+        tray_unpublish (tray_data);
+        return;
+    }
+
+    /* Nothing about a tray icon is worth taking the process down for, and this
+     * connection is closed on every unpublish by design. */
+    g_dbus_connection_set_exit_on_close (connection, FALSE);
+    tray_data->connection = connection;
+
+    /* Export before asking for the name, the order GLib itself uses for
+     * g_bus_own_name, so that the fallback in on_name_lost has something to
+     * point the watcher at. */
+    if (!tray_register_objects (tray_data, connection))
+    {
+        tray_unpublish (tray_data);
+        return;
+    }
+
+    /* DO_NOT_QUEUE: a pid-derived name is not worth waiting in line for, and
+     * queueing is what would deliver a late NameAcquired on top of a fallback
+     * registration. Two sandboxed apps both at pid 2 now each get an icon. */
+    tray_data->bus_name_id =
+        g_bus_own_name_on_connection (connection,
+                                      tray_data->bus_name,
+                                      G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE,
+                                      on_name_acquired,
+                                      on_name_lost,
+                                      tray_data,
+                                      NULL);
 }
 
 static void
@@ -603,24 +698,53 @@ tray_publish (TrayData *td)
     if (!td->desired || td->host != TRAY_HOST_AVAILABLE)
         return;
 
+    /* Reads DBUS_SESSION_BUS_ADDRESS, no I/O, and a watcher was just seen on
+     * that very bus, so this only fails in ways worth a warning. */
+    GError *err = NULL;
+    g_autofree gchar *address =
+        g_dbus_address_get_for_bus_sync (G_BUS_TYPE_SESSION, NULL, &err);
+    if (address == NULL)
+    {
+        g_warning ("No session bus address for the tray item: %s", err->message);
+        g_clear_error (&err);
+        td->host = TRAY_HOST_UNAVAILABLE;
+        tray_unpublish (td);
+        return;
+    }
+
     td->publishing = TRUE;
-    /* DO_NOT_QUEUE: a pid-derived name is not worth waiting in line for, and
-     * queueing is what would deliver a late NameAcquired on top of a fallback
-     * registration. Two sandboxed apps both at pid 2 now each get an icon. */
-    td->bus_name_id =
-        g_bus_own_name (G_BUS_TYPE_SESSION,
-                        td->bus_name,
-                        G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE,
-                        on_bus_acquired,
-                        on_name_acquired,
-                        on_name_lost,
-                        td,
-                        NULL);
+    td->publish_generation++;
+    td->cancellable = g_cancellable_new ();
+
+    g_dbus_connection_new_for_address (address,
+                                       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT |
+                                       G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION,
+                                       NULL,
+                                       td->cancellable,
+                                       on_private_bus_ready,
+                                       GUINT_TO_POINTER (td->publish_generation));
 }
 
 static void
 tray_unpublish (TrayData *td)
 {
+    /* Whatever is still in flight belongs to a cycle that is over now. */
+    td->publish_generation++;
+    if (td->cancellable != NULL)
+    {
+        g_cancellable_cancel (td->cancellable);
+        g_clear_object (&td->cancellable);
+    }
+
+    /* Release the name before withdrawing the objects. The other order leaves a
+     * window in which the name still resolves and every call to it answers
+     * UnknownObject. */
+    if (td->bus_name_id != 0)
+    {
+        g_bus_unown_name (td->bus_name_id);
+        td->bus_name_id = 0;
+    }
+
     if (td->connection != NULL)
     {
         if (td->sni_registration_id != 0)
@@ -633,13 +757,15 @@ tray_unpublish (TrayData *td)
             g_dbus_connection_unregister_object (td->connection, td->menu_registration_id);
             td->menu_registration_id = 0;
         }
-        g_clear_object (&td->connection);
-    }
 
-    if (td->bus_name_id != 0)
-    {
-        g_bus_unown_name (td->bus_name_id);
-        td->bus_name_id = 0;
+        /* Closing is the part that actually removes the icon, for the reason at
+         * the top of this section. Flush first: close makes no promise about
+         * the outgoing queue, and a NewStatus the caller emitted a moment ago
+         * is still in it. Safe to do synchronously, every caller is on the main
+         * context and the write is to a local socket. */
+        g_dbus_connection_flush_sync (td->connection, NULL, NULL);
+        g_dbus_connection_close (td->connection, NULL, NULL, NULL);
+        g_clear_object (&td->connection);
     }
 
     td->publishing = FALSE;
@@ -803,7 +929,9 @@ otpclient_tray_init (OTPClientApplication *app)
     tray_data->bus_name = g_strdup_printf ("org.kde.StatusNotifierItem-%d-1",
                                             getpid ());
 
-    GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (app));
+    /* Same accessor as the disconnect in cleanup, and as show_window: the three
+     * have to agree on which window they mean, and the active one is not it. */
+    GtkWindow *window = otpclient_application_get_window (app);
     if (window != NULL)
     {
         tray_data->close_handler_id =
@@ -866,7 +994,9 @@ otpclient_tray_disable (OTPClientApplication *app)
     tray_data->desired = FALSE;
 
     /* Tell any host that cached the item before tearing it down, so it doesn't
-     * hold on to a stale Active entry. */
+     * hold on to a stale Active entry. tray_unpublish flushes this out before
+     * it closes the connection, otherwise the signal would still be sitting in
+     * the outgoing queue when the socket goes away. */
     if (tray_data->published && tray_data->connection != NULL)
     {
         g_dbus_connection_emit_signal (tray_data->connection,
@@ -895,7 +1025,10 @@ otpclient_tray_cleanup (OTPClientApplication *app)
 
     if (tray_data->close_handler_id != 0)
     {
-        GtkWindow *window = gtk_application_get_active_window (GTK_APPLICATION (app));
+        /* NULL here means GTK already destroyed the window and took the handler
+         * with it. Anything else would be the wrong window: disconnecting a
+         * handler id it never had is a critical. */
+        GtkWindow *window = otpclient_application_get_window (app);
         if (window != NULL)
             g_signal_handler_disconnect (window, tray_data->close_handler_id);
     }

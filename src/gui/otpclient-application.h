@@ -13,6 +13,12 @@ G_DECLARE_FINAL_TYPE (OTPClientApplication, otpclient_application, OTPCLIENT, AP
 
 OTPClientApplication *otpclient_application_new      (void);
 
+/* The main window, or NULL once GTK has destroyed it. Backed by the weak
+ * pointer set in startup(), so this doubles as a liveness check. Prefer it over
+ * gtk_application_get_active_window(), which reports whatever is focused and so
+ * can hand back a transient dialog, or NULL while the window is hidden. */
+GtkWindow            *otpclient_application_get_window  (OTPClientApplication *self);
+
 DatabaseData         *otpclient_application_get_db_data (OTPClientApplication *self);
 void                  otpclient_application_set_db_data (OTPClientApplication *self,
                                                          DatabaseData         *db_data);

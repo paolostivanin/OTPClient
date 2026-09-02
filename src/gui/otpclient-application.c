@@ -1282,6 +1282,13 @@ otpclient_application_get_db_data (OTPClientApplication *self)
     return self->db_data;
 }
 
+GtkWindow *
+otpclient_application_get_window (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), NULL);
+    return self->window != NULL ? GTK_WINDOW (self->window) : NULL;
+}
+
 gboolean
 otpclient_application_is_unlocking (OTPClientApplication *self)
 {
