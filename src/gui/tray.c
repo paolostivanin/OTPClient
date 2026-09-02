@@ -1,6 +1,7 @@
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 
 #include <unistd.h>
+#include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "tray.h"
@@ -12,6 +13,7 @@
 #define WATCHER_BUS_NAME     "org.kde.StatusNotifierWatcher"
 #define WATCHER_OBJECT_PATH  "/StatusNotifierWatcher"
 
+#define MENU_ID_ROOT  0
 #define MENU_ID_SHOW  1
 #define MENU_ID_QUIT  2
 
@@ -62,9 +64,36 @@ static const gchar dbusmenu_introspection_xml[] =
     "      <arg type='i' name='id' direction='in'/>"
     "      <arg type='b' name='needUpdate' direction='out'/>"
     "    </method>"
+    "    <method name='GetGroupProperties'>"
+    "      <arg type='ai' name='ids' direction='in'/>"
+    "      <arg type='as' name='propertyNames' direction='in'/>"
+    "      <arg type='a(ia{sv})' name='properties' direction='out'/>"
+    "    </method>"
+    "    <method name='GetProperty'>"
+    "      <arg type='i' name='id' direction='in'/>"
+    "      <arg type='s' name='name' direction='in'/>"
+    "      <arg type='v' name='value' direction='out'/>"
+    "    </method>"
+    "    <method name='EventGroup'>"
+    "      <arg type='a(isvu)' name='events' direction='in'/>"
+    "      <arg type='ai' name='idErrors' direction='out'/>"
+    "    </method>"
+    "    <method name='AboutToShowGroup'>"
+    "      <arg type='ai' name='ids' direction='in'/>"
+    "      <arg type='ai' name='updatesNeeded' direction='out'/>"
+    "      <arg type='ai' name='idErrors' direction='out'/>"
+    "    </method>"
     "    <signal name='LayoutUpdated'>"
     "      <arg type='u' name='revision'/>"
     "      <arg type='i' name='parent'/>"
+    "    </signal>"
+    "    <signal name='ItemsPropertiesUpdated'>"
+    "      <arg type='a(ia{sv})' name='updatedProps'/>"
+    "      <arg type='a(ias)' name='removedProps'/>"
+    "    </signal>"
+    "    <signal name='ItemActivationRequested'>"
+    "      <arg type='i' name='id'/>"
+    "      <arg type='u' name='timestamp'/>"
     "    </signal>"
     "  </interface>"
     "</node>";
@@ -214,42 +243,159 @@ static const GDBusInterfaceVTable sni_vtable = {
 
 /* --- DBusMenu D-Bus interface --- */
 
+/* NULL for anything that is not one of our leaves, which doubles as the
+ * "does this id exist" test. Translated on each call: gettext owns the result
+ * and it stays valid for the life of the process. */
+static const gchar *
+menu_label_for_id (gint32 id)
+{
+    switch (id)
+    {
+        case MENU_ID_SHOW: return _("Show OTPClient");
+        case MENU_ID_QUIT: return _("Quit");
+        default:           return NULL;
+    }
+}
+
+static gboolean
+menu_id_exists (gint32 id)
+{
+    return id == MENU_ID_ROOT || menu_label_for_id (id) != NULL;
+}
+
+/* The single source of truth for an item's properties, shared by GetLayout,
+ * GetGroupProperties and GetProperty. It always emits the item's *full* set:
+ * libdbusmenu's client replaces rather than merges what a properties reply
+ * carries, so anything left out is actively removed from the item, and a
+ * missing label falls back to the client's own "Label Empty" placeholder. */
+static void
+add_item_properties (GVariantBuilder *props,
+                     gint32           id)
+{
+    if (id == MENU_ID_ROOT)
+    {
+        /* Only the root is a submenu. Claiming children-display on a leaf makes
+         * libdbusmenu-gtk build an empty child menu for it and route clicks to
+         * AboutToShow instead of activating it, i.e. a dead entry. */
+        g_variant_builder_add (props, "{sv}", "children-display",
+                               g_variant_new_string ("submenu"));
+        return;
+    }
+
+    g_variant_builder_add (props, "{sv}", "type",
+                           g_variant_new_string ("standard"));
+    g_variant_builder_add (props, "{sv}", "label",
+                           g_variant_new_string (menu_label_for_id (id)));
+    g_variant_builder_add (props, "{sv}", "enabled",
+                           g_variant_new_boolean (TRUE));
+    g_variant_builder_add (props, "{sv}", "visible",
+                           g_variant_new_boolean (TRUE));
+}
+
 static GVariant *
-build_menu_item (gint32       id,
-                 const gchar *label,
-                 gboolean     is_root)
+build_menu_item (gint32 id)
 {
     GVariantBuilder props;
     g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-
-    if (!is_root)
-    {
-        g_variant_builder_add (&props, "{sv}", "label",
-                               g_variant_new_string (label));
-        g_variant_builder_add (&props, "{sv}", "enabled",
-                               g_variant_new_boolean (TRUE));
-        g_variant_builder_add (&props, "{sv}", "visible",
-                               g_variant_new_boolean (TRUE));
-    }
-    else
-    {
-        g_variant_builder_add (&props, "{sv}", "children-display",
-                               g_variant_new_string ("submenu"));
-    }
+    add_item_properties (&props, id);
 
     GVariantBuilder children;
     g_variant_builder_init (&children, G_VARIANT_TYPE ("av"));
 
-    if (is_root)
+    if (id == MENU_ID_ROOT)
     {
-        g_variant_builder_add (&children, "v",
-                               build_menu_item (MENU_ID_SHOW, "Show OTPClient", FALSE));
-        g_variant_builder_add (&children, "v",
-                               build_menu_item (MENU_ID_QUIT, "Quit", FALSE));
+        g_variant_builder_add (&children, "v", build_menu_item (MENU_ID_SHOW));
+        g_variant_builder_add (&children, "v", build_menu_item (MENU_ID_QUIT));
     }
 
-    return g_variant_new ("(ia{sv}av)", id,
-                           &props, &children);
+    return g_variant_new ("(ia{sv}av)", id, &props, &children);
+}
+
+static void
+append_item_properties (GVariantBuilder *out,
+                        gint32           id)
+{
+    if (!menu_id_exists (id))
+        return;
+
+    GVariantBuilder props;
+    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
+    add_item_properties (&props, id);
+
+    g_variant_builder_add (out, "(ia{sv})", id, &props);
+}
+
+/* propertyNames is deliberately ignored, here and in GetLayout: sending a
+ * superset is always allowed, every studied client copes, and KDE depends on
+ * the inline properties GetLayout returns. Honouring the filter is what would
+ * break them. */
+static GVariant *
+build_group_properties (GVariant *ids)
+{
+    GVariantBuilder out;
+    g_variant_builder_init (&out, G_VARIANT_TYPE ("a(ia{sv})"));
+
+    if (g_variant_n_children (ids) == 0)
+    {
+        /* Per the spec, an empty id list means every item. */
+        append_item_properties (&out, MENU_ID_ROOT);
+        append_item_properties (&out, MENU_ID_SHOW);
+        append_item_properties (&out, MENU_ID_QUIT);
+    }
+    else
+    {
+        GVariantIter iter;
+        gint32 id;
+
+        g_variant_iter_init (&iter, ids);
+        while (g_variant_iter_next (&iter, "i", &id))
+            append_item_properties (&out, id);
+    }
+
+    return g_variant_new ("(a(ia{sv}))", &out);
+}
+
+/* Returns a new reference, or NULL when the item or the property is unknown. */
+static GVariant *
+lookup_item_property (gint32       id,
+                      const gchar *name)
+{
+    if (!menu_id_exists (id))
+        return NULL;
+
+    GVariantBuilder props;
+    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
+    add_item_properties (&props, id);
+
+    g_autoptr (GVariant) dict = g_variant_ref_sink (g_variant_builder_end (&props));
+
+    return g_variant_lookup_value (dict, name, NULL);
+}
+
+static gboolean
+quit_in_idle (gpointer user_data)
+{
+    g_application_quit (G_APPLICATION (user_data));
+    return G_SOURCE_REMOVE;
+}
+
+/* Quitting is deferred to an idle so the method reply is on the wire first:
+ * libdbusmenu's Event call is not annotated NoReply and waits a second for it,
+ * so tearing the process down inline would stall the panel. */
+static void
+dbusmenu_dispatch_event (TrayData    *td,
+                         gint32       id,
+                         const gchar *event_id)
+{
+    /* KDE also sends "opened" and "closed" around the popup; those are not
+     * activations and must not trip the actions. */
+    if (g_strcmp0 (event_id, "clicked") != 0)
+        return;
+
+    if (id == MENU_ID_SHOW)
+        show_window (td);
+    else if (id == MENU_ID_QUIT)
+        g_idle_add (quit_in_idle, td->app);
 }
 
 static void
@@ -271,9 +417,32 @@ dbusmenu_method_call (GDBusConnection       *connection,
 
     if (g_strcmp0 (method_name, "GetLayout") == 0)
     {
-        GVariant *layout = build_menu_item (0, NULL, TRUE);
+        GVariant *layout = build_menu_item (MENU_ID_ROOT);
         g_dbus_method_invocation_return_value (invocation,
                                                g_variant_new ("(u@(ia{sv}av))", 1, layout));
+    }
+    else if (g_strcmp0 (method_name, "GetGroupProperties") == 0)
+    {
+        g_autoptr (GVariant) ids = g_variant_get_child_value (parameters, 0);
+        g_dbus_method_invocation_return_value (invocation, build_group_properties (ids));
+    }
+    else if (g_strcmp0 (method_name, "GetProperty") == 0)
+    {
+        gint32 id;
+        const gchar *name;
+        g_variant_get (parameters, "(i&s)", &id, &name);
+
+        g_autoptr (GVariant) value = lookup_item_property (id, name);
+        if (value == NULL)
+        {
+            g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
+                                                   G_DBUS_ERROR_INVALID_ARGS,
+                                                   "No property '%s' on menu item %d",
+                                                   name, id);
+            return;
+        }
+
+        g_dbus_method_invocation_return_value (invocation, g_variant_new ("(v)", value));
     }
     else if (g_strcmp0 (method_name, "Event") == 0)
     {
@@ -283,20 +452,69 @@ dbusmenu_method_call (GDBusConnection       *connection,
          * nothing here frees. */
         g_variant_get (parameters, "(i&s@vu)", &id, &event_id, NULL, NULL);
 
-        if (g_strcmp0 (event_id, "clicked") == 0)
-        {
-            if (id == MENU_ID_SHOW)
-                show_window (td);
-            else if (id == MENU_ID_QUIT)
-                g_application_quit (G_APPLICATION (td->app));
-        }
+        dbusmenu_dispatch_event (td, id, event_id);
 
         g_dbus_method_invocation_return_value (invocation, NULL);
+    }
+    else if (g_strcmp0 (method_name, "EventGroup") == 0)
+    {
+        g_autoptr (GVariant) events = g_variant_get_child_value (parameters, 0);
+
+        GVariantBuilder errors;
+        g_variant_builder_init (&errors, G_VARIANT_TYPE ("ai"));
+
+        GVariantIter iter;
+        GVariant *child = NULL;
+
+        g_variant_iter_init (&iter, events);
+        /* Iterating by value keeps each event tuple alive while event_id
+         * borrows from it. */
+        while ((child = g_variant_iter_next_value (&iter)) != NULL)
+        {
+            gint32 id;
+            const gchar *event_id;
+            g_variant_get (child, "(i&s@vu)", &id, &event_id, NULL, NULL);
+
+            if (menu_id_exists (id))
+                dbusmenu_dispatch_event (td, id, event_id);
+            else
+                g_variant_builder_add (&errors, "i", id);
+
+            g_variant_unref (child);
+        }
+
+        g_dbus_method_invocation_return_value (invocation,
+                                               g_variant_new ("(ai)", &errors));
     }
     else if (g_strcmp0 (method_name, "AboutToShow") == 0)
     {
         g_dbus_method_invocation_return_value (invocation,
                                                g_variant_new ("(b)", FALSE));
+    }
+    else if (g_strcmp0 (method_name, "AboutToShowGroup") == 0)
+    {
+        g_autoptr (GVariant) ids = g_variant_get_child_value (parameters, 0);
+
+        GVariantBuilder updates, errors;
+        g_variant_builder_init (&updates, G_VARIANT_TYPE ("ai"));
+        g_variant_builder_init (&errors, G_VARIANT_TYPE ("ai"));
+
+        GVariantIter iter;
+        gint32 id;
+
+        g_variant_iter_init (&iter, ids);
+        while (g_variant_iter_next (&iter, "i", &id))
+        {
+            if (!menu_id_exists (id))
+                g_variant_builder_add (&errors, "i", id);
+        }
+
+        /* The menu is static, so no item ever needs a layout refresh before it
+         * is shown and updatesNeeded stays empty. Note the reply is (aiai): a
+         * mismatched type here would make GDBus log and send no reply at all,
+         * hanging the panel for the full D-Bus timeout. */
+        g_dbus_method_invocation_return_value (invocation,
+                                               g_variant_new ("(aiai)", &updates, &errors));
     }
     else
     {
@@ -322,10 +540,15 @@ dbusmenu_get_property (GDBusConnection  *connection,
     (void) error;
     (void) user_data;
 
+    /* Version 3 is what routes clients to the *Group methods. Downgrading to 2
+     * would make the plain Event/AboutToShow pair live again and is a genuine
+     * one-line alternative, but it is a silent capability downgrade that the
+     * next reader would "fix" back to 3 and re-break the menu. */
     if (g_strcmp0 (property_name, "Version") == 0)
         return g_variant_new_uint32 (3);
     if (g_strcmp0 (property_name, "TextDirection") == 0)
-        return g_variant_new_string ("ltr");
+        return g_variant_new_string (gtk_widget_get_default_direction () == GTK_TEXT_DIR_RTL
+                                     ? "rtl" : "ltr");
     if (g_strcmp0 (property_name, "Status") == 0)
         return g_variant_new_string ("normal");
 
