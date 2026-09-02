@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-04 12:18+0200\n"
+"POT-Creation-Date: 2026-09-02 10:10+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,214 +18,214 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ../src/cli/main.c:46
+#: ../src/cli/main.c:47
 msgid ""
 "The import/export type for the database (to be used with --import/--export, "
 "mandatory). Must be either one of: "
 msgstr ""
 
-#: ../src/cli/main.c:52
+#: ../src/cli/main.c:53
 msgid ""
 "(optional) path to the database or name from --list-databases. Default value "
 "is taken from GSettings/otpclient.cfg"
 msgstr ""
 
-#: ../src/cli/main.c:53
+#: ../src/cli/main.c:54
 msgid "Show a token for a given account."
 msgstr ""
 
-#: ../src/cli/main.c:54
+#: ../src/cli/main.c:55
 msgid "Account name (to be used with --show, mandatory)"
 msgstr ""
 
-#: ../src/cli/main.c:55
+#: ../src/cli/main.c:56
 msgid "Issuer (to be used with --show, optional)"
 msgstr ""
 
-#: ../src/cli/main.c:56
+#: ../src/cli/main.c:57
 msgid ""
 "Match exactly the provided account/issuer (to be used with --show, optional)"
 msgstr ""
 
-#: ../src/cli/main.c:57
+#: ../src/cli/main.c:58
 msgid "Show also next OTP (to be used with --show, optional)"
 msgstr ""
 
-#: ../src/cli/main.c:58
+#: ../src/cli/main.c:59
 msgid "List all accounts and issuers for a given database."
 msgstr ""
 
-#: ../src/cli/main.c:59
+#: ../src/cli/main.c:60
 msgid "List all known databases from the configuration."
 msgstr ""
 
-#: ../src/cli/main.c:60
+#: ../src/cli/main.c:61
 msgid "List supported import/export types."
 msgstr ""
 
-#: ../src/cli/main.c:61
+#: ../src/cli/main.c:62
 msgid "Import a database."
 msgstr ""
 
-#: ../src/cli/main.c:62
+#: ../src/cli/main.c:63
 msgid "Export a database."
 msgstr ""
 
-#: ../src/cli/main.c:64
+#: ../src/cli/main.c:65
 msgid "File to import (to be used with --import, mandatory)."
 msgstr ""
 
-#: ../src/cli/main.c:66
+#: ../src/cli/main.c:67
 msgid ""
 "The output directory (defaults to the user's home. To be used with --export, "
 "optional)"
 msgstr ""
 
-#: ../src/cli/main.c:68
+#: ../src/cli/main.c:69
 msgid "(optional) Read database password from a file instead of stdin."
 msgstr ""
 
-#: ../src/cli/main.c:69
+#: ../src/cli/main.c:70
 msgid "Export application settings as JSON."
 msgstr ""
 
-#: ../src/cli/main.c:70
+#: ../src/cli/main.c:71
 msgid "Import application settings from a JSON file (requires --file)."
 msgstr ""
 
-#: ../src/cli/main.c:71
+#: ../src/cli/main.c:72
 msgid ""
 "Output format for --show, --list, --list-databases: table (default), json, "
 "csv."
 msgstr ""
 
-#: ../src/cli/main.c:72
+#: ../src/cli/main.c:73
 msgid "Show the program version."
 msgstr ""
 
-#: ../src/cli/main.c:77
+#: ../src/cli/main.c:78
 msgid ""
 "- Highly secure and easy to use OTP client that supports both TOTP and HOTP"
 msgstr ""
 
-#: ../src/cli/main.c:175 ../src/cli/main.c:207
+#: ../src/cli/main.c:176 ../src/cli/main.c:208
 #, c-format
 msgid "Error: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:182
+#: ../src/cli/main.c:183
 #, c-format
 msgid "Error writing file: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:188
+#: ../src/cli/main.c:189
 #, c-format
 msgid "Settings exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:201
+#: ../src/cli/main.c:202
 #, c-format
 msgid "Error reading file: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:214
+#: ../src/cli/main.c:215
 msgid "Settings imported successfully.\n"
 msgstr ""
 
-#: ../src/cli/main.c:226
+#: ../src/cli/main.c:224
 msgid ""
 "Couldn't get the memlock value, therefore secure memory cannot be allocated. "
 "Please have a look at the following page before re-running OTPClient:https://"
 "github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"
 msgstr ""
 
-#: ../src/cli/main.c:235
+#: ../src/cli/main.c:233
 #, c-format
 msgid "Error while initializing GCrypt: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:281
+#: ../src/cli/main.c:279
 #, c-format
 msgid "Unknown --output value '%s'. Expected: table, json, csv.\n"
 msgstr ""
 
-#: ../src/cli/main.c:285
+#: ../src/cli/main.c:283
 msgid ""
 "The --output option only applies to --show, --list, or --list-databases.\n"
 msgstr ""
 
-#: ../src/cli/main.c:292
+#: ../src/cli/main.c:290
 msgid ""
 "Please provide one action (--show, --list, --list-databases, --import, --"
 "export, --export-settings, --import-settings, or --list-types).\n"
 msgstr ""
 
-#: ../src/cli/main.c:297
+#: ../src/cli/main.c:295
 msgid "Please provide only one action at a time.\n"
 msgstr ""
 
-#: ../src/cli/main.c:305
+#: ../src/cli/main.c:303
 msgid "Please provide at least the account or issuer option.\n"
 msgstr ""
 
-#: ../src/cli/main.c:315
+#: ../src/cli/main.c:313
 msgid ""
 "The account/issuer filters and matching options can only be used with --"
 "show.\n"
 msgstr ""
 
-#: ../src/cli/main.c:322
+#: ../src/cli/main.c:320
 msgid "Please provide a file to import settings from (--file).\n"
 msgstr ""
 
-#: ../src/cli/main.c:334
+#: ../src/cli/main.c:332
 msgid "Please provide an import type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:338
+#: ../src/cli/main.c:336
 msgid "Please provide a valid import type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:342
+#: ../src/cli/main.c:340
 msgid "Please provide a file to import.\n"
 msgstr ""
 
-#: ../src/cli/main.c:349
+#: ../src/cli/main.c:347
 msgid "Please provide an export type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:353
+#: ../src/cli/main.c:351
 msgid "Please provide a valid export type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:364
+#: ../src/cli/main.c:362
 msgid "The --type option can only be used with --import or --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:370
+#: ../src/cli/main.c:368
 msgid ""
 "The --file option can only be used with --import, --import-settings, or --"
 "export-settings.\n"
 msgstr ""
 
-#: ../src/cli/main.c:375
+#: ../src/cli/main.c:373
 msgid "The --output-dir option can only be used with --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:407
+#: ../src/cli/main.c:405
 #, c-format
 msgid "Supported types: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:69
+#: ../src/cli/exec-action.c:81
 msgid "No databases found in the configuration.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:72
+#: ../src/cli/exec-action.c:84
 msgid "Known databases:\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:88
+#: ../src/cli/exec-action.c:100
 #, c-format
 msgid ""
 "Your system's secure memory limit (memlock: %d bytes) is not enough to "
@@ -237,56 +237,63 @@ msgid ""
 "OTPClient cannot change automatically."
 msgstr ""
 
-#: ../src/cli/exec-action.c:105
+#: ../src/cli/exec-action.c:117
 #, c-format
 msgid "Refusing to open password file '%s': it is a symbolic link.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:107
+#: ../src/cli/exec-action.c:119
 #, c-format
 msgid "Failed to open password file '%s': %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:113
+#: ../src/cli/exec-action.c:125
 #, c-format
 msgid "Failed to stat password file '%s': %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:118
+#: ../src/cli/exec-action.c:130
 #, c-format
 msgid "Refusing to open password file '%s': not a regular file.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:123
+#: ../src/cli/exec-action.c:135
 #, c-format
 msgid ""
 "Refusing to open password file '%s': mode %04o is readable or writable by "
 "group/other. Run `chmod 600 %s` and retry.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:142
+#: ../src/cli/exec-action.c:161
+#, c-format
+msgid ""
+"Warning: secret service lookup failed: %s\n"
+"Falling back to interactive password prompt.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:176
 msgid "Type the DB decryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:144
+#: ../src/cli/exec-action.c:178
 msgid "No password provided, exiting."
 msgstr ""
 
-#: ../src/cli/exec-action.c:157
+#: ../src/cli/exec-action.c:191
 msgid "Database file does not exist. Creating a new database...\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:160
+#: ../src/cli/exec-action.c:194
 #, c-format
 msgid "Error while creating new database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:165
+#: ../src/cli/exec-action.c:199
 #, c-format
 msgid "Database '%s' created successfully.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:166
+#: ../src/cli/exec-action.c:200
 msgid ""
 "\n"
 "ATTENTION: if you want to use this database by default, you must update the "
@@ -294,139 +301,153 @@ msgid ""
 "\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:171
+#: ../src/cli/exec-action.c:205
 msgid "Incorrect password."
 msgstr ""
 
-#: ../src/cli/exec-action.c:173
+#: ../src/cli/exec-action.c:207
 msgid "Error while loading the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:198
+#: ../src/cli/exec-action.c:217
+#, c-format
+msgid "Warning: %u token could not be loaded and was skipped.\n"
+msgid_plural "Warning: %u tokens could not be loaded and were skipped.\n"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ../src/cli/exec-action.c:237
+#, c-format
+msgid "Warning: failed to store password under db_path: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:238
+msgid "unknown error"
+msgstr ""
+
+#: ../src/cli/exec-action.c:258
 #, c-format
 msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:202
+#: ../src/cli/exec-action.c:264
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:209
+#: ../src/cli/exec-action.c:272
 msgid ""
 "An error occurred while importing, so nothing has been added to the database."
 msgstr ""
 
-#: ../src/cli/exec-action.c:212
+#: ../src/cli/exec-action.c:275
 msgid " The error is: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:230
+#: ../src/cli/exec-action.c:292
 #, c-format
 msgid "Error while updating the database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:237
+#: ../src/cli/exec-action.c:297
 #, c-format
-msgid "Error while reloading the database: %s\n"
+msgid "Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:242
-msgid "Data successfully imported.\n"
-msgstr ""
-
-#: ../src/cli/exec-action.c:252
+#: ../src/cli/exec-action.c:308
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:264 ../src/cli/exec-action.c:275
-#: ../src/cli/exec-action.c:286
+#: ../src/cli/exec-action.c:320 ../src/cli/exec-action.c:331
+#: ../src/cli/exec-action.c:342
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:297
+#: ../src/cli/exec-action.c:353
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:301
+#: ../src/cli/exec-action.c:359
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:309
+#: ../src/cli/exec-action.c:367
 msgid "Option not recognized: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:340
+#: ../src/cli/exec-action.c:406
 #, c-format
 msgid "Database '%s' not found in the known database list.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:348
+#: ../src/cli/exec-action.c:414
 #, c-format
 msgid "Database file/location (%s) does not exist.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:357
+#: ../src/cli/exec-action.c:423
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:360
+#: ../src/cli/exec-action.c:428
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: ../src/cli/exec-action.c:367
+#: ../src/cli/exec-action.c:436
+msgid "The database path must be a non-empty absolute path."
+msgstr ""
+
+#: ../src/cli/exec-action.c:441
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:418
+#: ../src/cli/exec-action.c:513
 #, c-format
 msgid "Warning: password was truncated at %zu bytes.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:422
+#: ../src/cli/exec-action.c:517
 msgid "Empty password not allowed"
 msgstr ""
 
-#: ../src/cli/get-data.c:101
+#: ../src/cli/get-data.c:124
 msgid ""
 "Couldn't find the data. Either the given data is wrong or is not in the "
 "database."
 msgstr ""
 
-#. Translators: please do not translate 'account'
-#: ../src/cli/get-data.c:104
+#: ../src/cli/get-data.c:127
 #, c-format
 msgid "Given account: %s"
 msgstr ""
 
-#. Translators: please do not translate 'issuer'
-#: ../src/cli/get-data.c:110
+#: ../src/cli/get-data.c:133
 #, c-format
 msgid "Given issuer: %s"
 msgstr ""
 
-#: ../src/cli/get-data.c:176
+#: ../src/cli/get-data.c:235
 msgid "Account | Issuer | Group\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:284
+#: ../src/cli/get-data.c:369
 #, c-format
 msgid "Current TOTP (valid for %d more second): %s\n"
 msgid_plural "Current TOTP (valid for %d more seconds): %s\n"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/cli/get-data.c:288
+#: ../src/cli/get-data.c:375
 #, c-format
 msgid "Next TOTP: %s\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:308
+#: ../src/cli/get-data.c:408
 #, c-format
 msgid "Current HOTP: %s\n"
 msgstr ""

@@ -206,6 +206,9 @@ on_screensaver_signal (GDBusConnection *connection,
         lock_app_lock (app);
 }
 
+/* Only reachable off the system bus, which the sandbox does not have; see the
+ * comment in lock_app_init_dbus_watchers. */
+#ifndef IS_FLATPAK
 static void
 on_prepare_for_sleep (GDBusConnection *connection,
                       const gchar     *sender_name,
@@ -229,6 +232,7 @@ on_prepare_for_sleep (GDBusConnection *connection,
     if (preparing && otpclient_application_get_auto_lock (app))
         lock_app_lock (app);
 }
+#endif
 
 static gboolean
 inactivity_check (gpointer user_data)
@@ -296,6 +300,23 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
         }
     }
 
+    /* Lock on suspend needs the system bus, which a Flatpak sandbox does not
+     * have. flatpak_run_add_system_dbus_args() binds /run/dbus/system_bus_socket
+     * only for unrestricted apps or when the app declares a system-bus policy,
+     * and flatpak_context_get_needs_system_bus_proxy() is literally
+     * "g_hash_table_size (context->system_bus_policy) > 0". So without a
+     * --system-talk-name there is no socket at all, not merely a policy that
+     * rejects us: /run/dbus does not exist and g_bus_get_sync fails with "No
+     * such file or directory".
+     *
+     * --system-talk-name=org.freedesktop.login1 is a hard flatpak-builder-lint
+     * error, so this cannot be granted. Do not attempt the connection there:
+     * it only produced a warning on every launch that no user could act on.
+     * The four session screensaver watchers above are all reachable inside the
+     * sandbox and cover the common case, someone walking away from the machine. */
+#ifdef IS_FLATPAK
+    g_debug ("Skipping suspend watch: the sandbox has no system bus");
+#else
     GError *bus_error = NULL;
     lock_data->system_bus = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, &bus_error);
     if (lock_data->system_bus != NULL) {
@@ -311,10 +332,13 @@ lock_app_init_dbus_watchers (OTPClientApplication *app)
             app,
             NULL);
     } else {
-        g_warning ("Could not subscribe to suspend events: %s",
-                   bus_error != NULL ? bus_error->message : "unknown error");
+        /* Not a warning: a container or a session without logind is a
+         * legitimate configuration, and the screensaver watchers still work. */
+        g_debug ("Could not subscribe to suspend events: %s",
+                 bus_error != NULL ? bus_error->message : "unknown error");
         g_clear_error (&bus_error);
     }
+#endif
 
     lock_data->inactivity_timer_id = g_timeout_add_seconds (1, inactivity_check, app);
 }

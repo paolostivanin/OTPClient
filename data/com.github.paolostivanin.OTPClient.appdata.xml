@@ -30,7 +30,7 @@
       <li>import and export of encrypted/plain Aegis backups</li>
       <li>import and export of encrypted/plain Authenticator Pro and 2FAS backups</li>
       <li>import and export of plain FreeOTP+ backups (key URI format)</li>
-      <li>import of Google Authenticator migration QR codes (file, screen, webcam, clipboard)</li>
+      <li>import of Google Authenticator migration QR codes (file, webcam, clipboard)</li>
       <li>integration with the OS secret service provider via libsecret (opt-in)</li>
       <li>local database encrypted with AES-256-GCM and Argon2id key derivation; plaintext lives only in libgcrypt secure memory while unlocked</li>
     </ul>
@@ -60,6 +60,10 @@
   <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
   <url type="bugtracker">https://github.com/paolostivanin/OTPClient/issues</url>
   <update_contact>info@paolostivanin.com</update_contact>
+  <developer id="com.paolostivanin">
+    <name>Paolo Stivanin</name>
+  </developer>
+  <!-- Kept alongside the element above for tooling that predates it. -->
   <developer_name>Paolo Stivanin</developer_name>
 
   <provides>
@@ -90,6 +94,26 @@
   </content_rating>
 
   <releases>
+    <release version="5.2.0" date="2026-09-02">
+      <description>
+        <p>The tray menu was empty on every desktop except KDE Plasma, and has been since the tray was rewritten: right-clicking the icon opened a blank rectangle on GNOME, Cinnamon, MATE, Xfce and Waybar alike. That is fixed. OTPClient can now also start minimized to the tray and start at login. Alongside those, a round of fixes for things that never worked inside the Flatpak sandbox: webcam QR scanning (which was in fact broken everywhere), the search provider's clipboard copy and its notification, database locking for databases picked from outside the sandbox, and the command line failing whenever the GUI happened to be running.</p>
+        <ul>
+          <li>FIX: the tray menu was an empty rectangle on every host built on libdbusmenu, which is GNOME with AppIndicator, Cinnamon, MATE, Xfce, Ayatana and Waybar. The tray declared dbusmenu version 3, which makes clients fetch labels with GetGroupProperties and dispatch clicks through EventGroup, and neither method existed, so both menu entries were silently dropped. The group methods are now implemented, and clicking an entry works rather than doing nothing (#470, Flathub #81)</li>
+          <li>NEW: start minimized to the tray, from Settings under Integration or with <code>otpclient --start-minimized</code>. It needs minimize-to-tray and a real system tray, and is ignored with the window shown normally when either is missing. The database is deliberately left locked, so the first time you bring the window up it asks for the password (#471)</li>
+          <li>NEW: start at login, from Settings under Integration. Native builds write an autostart entry; the Flatpak asks the desktop through the background portal, which a few desktops do not implement, and there the setting is greyed out. The entry follows the start-minimized preference</li>
+          <li>FIX: webcam QR scanning has never worked in the GTK4 rewrite, on any platform. The scanner opened a zbar preview window instead of the camera, then failed on every frame and reported a timeout. It now opens the camera, and no longer needs an X display to do it</li>
+          <li>FIX: in the Flatpak, activating a search result copied nothing. The daemon shells out to a clipboard tool and the runtime shipped none, so every candidate failed silently. The tools are now bundled, the Wayland session is detected from WAYLAND_DISPLAY rather than a variable the sandbox may not set, every available tool is tried instead of committing to one, and a failure is reported instead of being swallowed</li>
+          <li>FIX: <code>otpclient-cli</code> failed with "Application does not handle command line arguments" whenever the GUI was running, because both registered the same application id and the CLI became a remote of the GUI. This mattered rarely before and would have become permanent with start-at-login</li>
+          <li>FIX: databases opened from outside the Flatpak's own data directory were saved without any lock held. The document portal implements POSIX record locks and refuses flock outright, which is what the code used, so the "Database lock not supported on this filesystem" warning was reached on every save. Locking works again for those databases</li>
+          <li>FIX: a database picked from outside the sandbox could stop opening after a reboot, on btrfs and other filesystems whose device numbers are not stable, and the dialog then suggested two things that could not recover it. The dialog now says the sandbox lost access rather than that the file is missing, and offers to re-pick it</li>
+          <li>FIX: turning minimize-to-tray off inside the Flatpak left a dead icon in the panel until the app exited, because the sandboxed tray had no bus name it could release</li>
+          <li>FIX: the tray icon now says so when the database is locked, and the "Show OTPClient" entry raises the window on Wayland instead of being blocked by focus-stealing prevention</li>
+          <li>FIX: every Flatpak launch logged a warning about not being able to subscribe to suspend events. The system bus is not there to be reached, so the attempt is no longer made and no longer complained about. Locking on screen lock is unaffected</li>
+          <li>NOTE: the search provider is a separate process with its own lock state. A hidden or locked GUI does not stop search from working, and using search does not unlock or reveal the GUI</li>
+          <li>NOTE: if you use the system keyring to unlock automatically and turn start-minimized on, OTPClient will sit in the tray over a locked database rather than an open one. That is intentional, and it is the reason the first show asks for the password</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.1.8" date="2026-08-21">
       <description>
         <p>Bug-fix release. Minimize-to-tray did not work in the Flatpak: the switch was greyed out as if the desktop had no system tray, and granting the missing permission by hand still produced no icon. The sandbox refuses the process-derived bus name the tray asks to own, so the tray now registers with the tray host under its unique connection name instead, which needs no permission and works in any sandbox. The Flatpak was also missing the permissions Auto-Lock needs, so locking on screen lock silently did nothing; that is fixed in the Flathub packaging, though locking on suspend stays unavailable there.</p>

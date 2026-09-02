@@ -899,27 +899,51 @@ copy_via_klipper (GDBusConnection *conn,
 }
 
 
+/* XDG_SESSION_TYPE is not a reliable answer inside the sandbox: it is whatever
+ * the host session exported, and with --socket=fallback-x11 on a Wayland host
+ * there is no X socket in the sandbox at all, so guessing X11 there means the
+ * copy silently does nothing. WAYLAND_DISPLAY is set by flatpak itself whenever
+ * --socket=wayland is in effect, so trust that first and keep XDG_SESSION_TYPE
+ * as the fallback for native installs that do not export it. */
+static gboolean
+session_is_wayland (void)
+{
+    const gchar *wl_display = g_getenv ("WAYLAND_DISPLAY");
+    if (wl_display != NULL && wl_display[0] != '\0')
+        return TRUE;
+
+    const gchar *session = g_getenv ("XDG_SESSION_TYPE");
+    return session != NULL && g_ascii_strcasecmp (session, "wayland") == 0;
+}
+
+
 static gboolean
 copy_via_subprocess (const gchar *text)
 {
     /* On Wayland the X selection tools either fail outright or only address
      * XWayland's own selection - wl-copy is the only thing that talks to the
-     * compositor's data device. On X11 (or unknown sessions) try xclip first
-     * and fall back to xsel since distros ship one or the other by default. */
-    const gchar *session = g_getenv ("XDG_SESSION_TYPE");
-    gboolean is_wayland = (session != NULL && g_ascii_strcasecmp (session, "wayland") == 0);
+     * compositor's data device. On X11 try xclip first and fall back to xsel,
+     * since distros ship one or the other by default.
+     *
+     * Try every tool regardless of the guess, best guess first. Committing to
+     * one branch meant that a wrong guess produced no copy at all, and an
+     * XWayland session can legitimately have both working. */
     const gchar *argv_wl[]    = { "wl-copy", NULL };
     const gchar *argv_xclip[] = { "xclip", "-selection", "clipboard", NULL };
     const gchar *argv_xsel[]  = { "xsel", "--clipboard", "--input", NULL };
-    const gchar **candidates[2] = { NULL, NULL };
-    int n_candidates = 0;
-    if (is_wayland) {
-        candidates[n_candidates++] = argv_wl;
+
+    const gchar **candidates[3];
+    if (session_is_wayland ()) {
+        candidates[0] = argv_wl;
+        candidates[1] = argv_xclip;
+        candidates[2] = argv_xsel;
     } else {
-        candidates[n_candidates++] = argv_xclip;
-        candidates[n_candidates++] = argv_xsel;
+        candidates[0] = argv_xclip;
+        candidates[1] = argv_xsel;
+        candidates[2] = argv_wl;
     }
-    for (int i = 0; i < n_candidates; i++) {
+
+    for (int i = 0; i < (int) G_N_ELEMENTS (candidates); i++) {
         g_autoptr (GSubprocess) proc = g_subprocess_newv (candidates[i],
                 G_SUBPROCESS_FLAGS_STDIN_PIPE |
                 G_SUBPROCESS_FLAGS_STDOUT_SILENCE |
@@ -932,9 +956,16 @@ copy_via_subprocess (const gchar *text)
         g_autoptr (GBytes) input = g_bytes_new_with_free_func (
             secure_input, strlen (secure_input),
             (GDestroyNotify) gcry_free, secure_input);
-        if (g_subprocess_communicate (proc, input, NULL, NULL, NULL, NULL))
+        /* The exit status matters as much as the spawn: xsel with no X display
+         * starts fine and then fails, and treating that as success would stop
+         * us trying wl-copy. */
+        if (g_subprocess_communicate (proc, input, NULL, NULL, NULL, NULL) &&
+            g_subprocess_get_successful (proc))
             return TRUE;
     }
+
+    g_warning ("Could not copy the OTP to the clipboard: none of wl-copy, xclip "
+               "or xsel is available and working");
     return FALSE;
 }
 

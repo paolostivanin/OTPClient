@@ -7,6 +7,7 @@
 #include "secret-schema.h"
 #include "settings-import-export.h"
 #include "otp-button-row.h"
+#include "autostart.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
 #endif
@@ -30,8 +31,13 @@ struct _SettingsDialog
     GtkWidget *search_provider_keyword_entry;
     GtkWidget *clipboard_clear_combo;
     GtkWidget *hide_otps_switch;
+    GtkWidget *autostart_switch;
+    /* Set while the autostart row is being put back after a refusal, so the
+     * revert does not look like a fresh request. */
+    gboolean   autostart_updating;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
+    GtkWidget *start_minimized_switch;
 #endif
 };
 
@@ -239,6 +245,22 @@ on_clipboard_clear_changed (AdwComboRow    *combo,
 }
 
 #ifdef ENABLE_MINIMIZE_TO_TRAY
+/* Start-minimized only makes sense with somewhere to be minimized to: without a
+ * tray icon the window would never come back. Same policy as the row above,
+ * disable rather than clear, so one session on a tray-less desktop does not
+ * discard the preference. */
+static void
+sync_start_minimized_sensitivity (SettingsDialog *self)
+{
+    gboolean tray_available = otpclient_tray_is_available ();
+    gboolean minimize = adw_switch_row_get_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch));
+
+    gtk_widget_set_sensitive (self->start_minimized_switch, minimize && tray_available);
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->start_minimized_switch),
+                                 !tray_available ? _("No system tray was detected on this desktop")
+                                                 : (!minimize ? _("Requires Minimize to Tray") : ""));
+}
+
 static void
 on_minimize_to_tray_toggled (GObject        *obj,
                               GParamSpec     *pspec,
@@ -247,8 +269,90 @@ on_minimize_to_tray_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_minimize_to_tray (self->app, active);
+
+    /* Turning it off also turns start-minimized off, in the application. Mirror
+     * that here so the row does not keep showing a preference that is gone. */
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
+                               otpclient_application_get_start_minimized (self->app));
+    sync_start_minimized_sensitivity (self);
+}
+
+static void
+on_start_minimized_toggled (GObject        *obj,
+                            GParamSpec     *pspec,
+                            SettingsDialog *self)
+{
+    (void) pspec;
+    gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+    otpclient_application_set_start_minimized (self->app, active);
 }
 #endif
+
+/* The dialog can be closed while the portal is still thinking, so the reply
+ * carries its own reference to the application and only a weak one to the
+ * dialog. */
+typedef struct {
+    OTPClientApplication *app;
+    SettingsDialog       *dialog;
+    gboolean              wanted;
+} AutostartToggle;
+
+static void
+on_autostart_result (gboolean granted,
+                     gpointer user_data)
+{
+    AutostartToggle *toggle = user_data;
+
+    if (!granted)
+    {
+        /* Nothing can be read back, so the key must not claim more than the
+         * desktop actually did. This also covers a failed removal, where the
+         * entry is still there and the key had better say so. */
+        otpclient_application_set_autostart (toggle->app, !toggle->wanted);
+
+        if (toggle->dialog != NULL)
+        {
+            toggle->dialog->autostart_updating = TRUE;
+            adw_switch_row_set_active (ADW_SWITCH_ROW (toggle->dialog->autostart_switch),
+                                       !toggle->wanted);
+            toggle->dialog->autostart_updating = FALSE;
+            adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch),
+                                         _("The desktop refused to change the login-time launch"));
+        }
+    }
+    else if (toggle->dialog != NULL)
+    {
+        adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch), "");
+    }
+
+    if (toggle->dialog != NULL)
+        g_object_remove_weak_pointer (G_OBJECT (toggle->dialog), (gpointer *) &toggle->dialog);
+    g_object_unref (toggle->app);
+    g_free (toggle);
+}
+
+static void
+on_autostart_toggled (GObject        *obj,
+                      GParamSpec     *pspec,
+                      SettingsDialog *self)
+{
+    (void) pspec;
+    if (self->autostart_updating)
+        return;
+
+    gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+    otpclient_application_set_autostart (self->app, active);
+
+    AutostartToggle *toggle = g_new0 (AutostartToggle, 1);
+    toggle->app = g_object_ref (self->app);
+    toggle->dialog = self;
+    toggle->wanted = active;
+    g_object_add_weak_pointer (G_OBJECT (self), (gpointer *) &toggle->dialog);
+
+    /* On the host this answers before it returns, from inside this handler,
+     * which is what autostart_updating is for. */
+    autostart_apply (self->app, active, on_autostart_result, toggle);
+}
 
 static void
 on_show_validity_seconds_toggled (GObject        *obj,
@@ -662,8 +766,6 @@ settings_dialog_new (OTPClientApplication *app)
                                     _("Minimize to Tray"));
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch),
                                otpclient_application_get_minimize_to_tray (app));
-    g_signal_connect (self->minimize_to_tray_switch, "notify::active",
-                      G_CALLBACK (on_minimize_to_tray_toggled), self);
     /* Disable rather than clear the preference: someone who normally runs a
      * desktop with a tray shouldn't lose the setting after one session without. */
     if (!otpclient_tray_is_available ())
@@ -673,7 +775,39 @@ settings_dialog_new (OTPClientApplication *app)
                                      _("No system tray was detected on this desktop"));
     }
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
+
+    self->start_minimized_switch = adw_switch_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->start_minimized_switch),
+                                    _("Start Minimized"));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
+                               otpclient_application_get_start_minimized (app));
+    sync_start_minimized_sensitivity (self);
+    adw_preferences_group_add (integration_group, self->start_minimized_switch);
+
+    /* Both handlers connected only now: sync_start_minimized_sensitivity reads
+     * the minimize row, so neither switch may fire before both rows exist. */
+    g_signal_connect (self->minimize_to_tray_switch, "notify::active",
+                      G_CALLBACK (on_minimize_to_tray_toggled), self);
+    g_signal_connect (self->start_minimized_switch, "notify::active",
+                      G_CALLBACK (on_start_minimized_toggled), self);
 #endif
+
+    /* Not gated on the tray: starting at login is useful with or without one,
+     * and the two features are configured independently. */
+    self->autostart_switch = adw_switch_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->autostart_switch),
+                                    _("Start at Login"));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->autostart_switch),
+                               otpclient_application_get_autostart (app));
+    if (!autostart_is_supported ())
+    {
+        gtk_widget_set_sensitive (self->autostart_switch, FALSE);
+        adw_action_row_set_subtitle (ADW_ACTION_ROW (self->autostart_switch),
+                                     _("This desktop does not support starting apps at login"));
+    }
+    adw_preferences_group_add (integration_group, self->autostart_switch);
+    g_signal_connect (self->autostart_switch, "notify::active",
+                      G_CALLBACK (on_autostart_toggled), self);
 
     /* Backup group - covers both app preferences (GSettings JSON) and the
      * encrypted token database. The token rows dispatch to window actions so

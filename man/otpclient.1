@@ -1,13 +1,26 @@
-.TH OTPCLIENT 1 "May 2026" "otpclient" "OTPClient Manual"
+.TH OTPCLIENT 1 "September 2026" "otpclient" "OTPClient Manual"
 .SH NAME
 otpclient \- GTK4 / libadwaita client for TOTP and HOTP one-time passwords
 .SH SYNOPSIS
 .B otpclient
+[\fB\-\-start\-minimized\fR]
 .SH DESCRIPTION
 .B OTPClient
 is a GTK4 / libadwaita application that generates Time-based (TOTP) and
 HMAC-based (HOTP) one-time passwords. The encrypted token database is
 stored on disk using AES-256-GCM with an Argon2id-derived key.
+.SH OPTIONS
+.TP
+.B \-\-start\-minimized
+Start with the window hidden in the system tray instead of shown. The database
+is left locked, so the first time the window is shown it asks for the password.
+This affects the current launch only and does not change the
+.I start-minimized
+preference. It is ignored, with the window shown normally, when
+.I minimize-to-tray
+is off or no system tray was detected.
+.I \-\-start\-minimised
+is accepted as a spelling alias.
 .SH FEATURES
 .IP \(bu 3
 TOTP and HOTP support.
@@ -42,6 +55,13 @@ Flatpak configuration file (when running under Flatpak).
 .TP
 .I ~/.config/otpclient/otpclient.cfg
 Configuration file containing the path to the active database.
+.TP
+.I ~/.config/autostart/com.github.paolostivanin.OTPClient.desktop
+Written when \fIStart at Login\fR is enabled in
+.IR "Settings \-> Integration" .
+Under Flatpak the same file is written on the host by
+.IR org.freedesktop.portal.Background ,
+which not every desktop implements; the setting is greyed out where it does not.
 .TP
 GSettings schema
 .I com.github.paolostivanin.OTPClient

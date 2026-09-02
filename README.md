@@ -5,8 +5,8 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### Supported standards
 - TOTP and HOTP
-- Manual entry: digits 4-10, period 1-300 s
-- `otpauth://` URIs (import / display / QR): digits 6-8, period 1-300 s (per RFC 6238)
+- Manual entry: digits 4-10, period 1-120 s
+- `otpauth://` URIs (import / display / QR): digits 4-10, period 1-120 s
 - SHA1, SHA256, and SHA512 algorithms
 - Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 
@@ -32,6 +32,15 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   in memory immediately, but the encrypted re-save is deferred up to 5 seconds
   so a burst of clicks costs one disk write instead of N
 - Optional minimize-to-tray (build-time opt-in)
+- Optional start-minimized, from *Settings -> Integration* or with
+  `otpclient --start-minimized`. Requires minimize-to-tray and a system tray;
+  the database is left locked, so the first time you show the window it asks
+  for the password
+- Optional start-at-login, from *Settings -> Integration*. Native builds write
+  `~/.config/autostart/com.github.paolostivanin.OTPClient.desktop`; the Flatpak
+  goes through `org.freedesktop.portal.Background`, which a few desktops
+  (sway, Hyprland, river, LXQt, COSMIC, plain XFCE) do not implement, and there
+  the row is greyed out. The entry inherits the start-minimized preference
 
 ### Command-line interface (`otpclient-cli`)
 - `--show / --list` for scripting and shell integration

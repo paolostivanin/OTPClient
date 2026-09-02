@@ -9,6 +9,7 @@ GUI (C sources first, then merge UI files via -j):
 $ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=ngettext:1,2 \
     --add-comments=Translators --package-name=OTPClient -L C -o otpclient.pot \
     ../src/gui/main.c \
+    ../src/gui/autostart.c \
     ../src/gui/otpclient-application.c \
     ../src/gui/otpclient-window.c \
     ../src/gui/otp-entry.c \

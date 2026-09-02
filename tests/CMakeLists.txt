@@ -194,6 +194,17 @@ target_include_directories(test_memlock_sizing PRIVATE
 target_link_libraries(test_memlock_sizing ${COMMON_LIBS})
 add_test(NAME memlock_sizing COMMAND test_memlock_sizing)
 
+add_executable(test_tray_menu_model
+        test_tray_menu_model.c
+        ${PROJECT_SOURCE_DIR}/src/gui/tray-menu-model.c
+)
+otpclient_apply_target_settings(test_tray_menu_model)
+target_include_directories(test_tray_menu_model PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/gui
+)
+target_link_libraries(test_tray_menu_model ${COMMON_LIBS})
+add_test(NAME tray_menu_model COMMAND test_tray_menu_model)
+
 if(BUILD_GUI)
     add_executable(test_otp_entry
             test_otp_entry.c

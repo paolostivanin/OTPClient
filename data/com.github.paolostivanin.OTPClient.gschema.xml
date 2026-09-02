@@ -101,6 +101,16 @@
       <summary>Minimize to Tray</summary>
       <description>Minimize window to system tray instead of closing</description>
     </key>
+    <key name="start-minimized" type="b">
+      <default>false</default>
+      <summary>Start minimized to tray</summary>
+      <description>Start with the window hidden in the system tray instead of shown. Requires Minimize to Tray. If no tray accepts the icon, the window is shown normally.</description>
+    </key>
+    <key name="autostart" type="b">
+      <default>false</default>
+      <summary>Start at login</summary>
+      <description>Launch OTPClient automatically when you log in.</description>
+    </key>
     <key name="last-seen-version" type="s">
       <default>""</default>
       <summary>Last seen application version</summary>

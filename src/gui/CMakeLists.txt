@@ -14,13 +14,13 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/src/gui/ui/otp-button-row.css
 )
 
-file(GLOB GUI_HEADER_FILES
+file(GLOB GUI_HEADER_FILES CONFIGURE_DEPENDS
         *.h
         dialogs/*.h
         ../common/*.h
 )
 
-file(GLOB GUI_SOURCE_FILES
+file(GLOB GUI_SOURCE_FILES CONFIGURE_DEPENDS
         *.c
         dialogs/*.c
         ../common/*.c

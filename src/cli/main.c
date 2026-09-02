@@ -77,7 +77,19 @@ main (gint    argc,
 
     const gchar *ctx_text = _("- Highly secure and easy to use OTP client that supports both TOTP and HOTP");
 
-    GApplication *app = g_application_new ("com.github.paolostivanin.OTPClient", G_APPLICATION_HANDLES_COMMAND_LINE);
+    /* NON_UNIQUE because the GUI registers this exact application id. Without
+     * it, the CLI becomes a remote of a running GUI, which does not handle
+     * command lines, and every invocation dies with
+     *
+     *   GDBus.Error:org.freedesktop.DBus.Error.NotSupported:
+     *   Application does not handle command line arguments
+     *
+     * That has always been true, it was just masked by the GUI usually not
+     * running. The CLI is a one-shot tool with no reason to be single-instance
+     * anyway; it only needs GApplication for the option parsing. */
+    GApplication *app = g_application_new ("com.github.paolostivanin.OTPClient",
+                                           G_APPLICATION_HANDLES_COMMAND_LINE |
+                                           G_APPLICATION_NON_UNIQUE);
 
     g_application_add_main_option_entries (app, entries);
     g_application_set_option_context_parameter_string (app, ctx_text);
