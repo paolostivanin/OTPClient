@@ -32,6 +32,10 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   in memory immediately, but the encrypted re-save is deferred up to 5 seconds
   so a burst of clicks costs one disk write instead of N
 - Optional minimize-to-tray (build-time opt-in)
+- Optional start-minimized, from *Settings -> Integration* or with
+  `otpclient --start-minimized`. Requires minimize-to-tray and a system tray;
+  the database is left locked, so the first time you show the window it asks
+  for the password
 
 ### Command-line interface (`otpclient-cli`)
 - `--show / --list` for scripting and shell integration

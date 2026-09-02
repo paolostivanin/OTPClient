@@ -32,6 +32,7 @@ struct _SettingsDialog
     GtkWidget *hide_otps_switch;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
+    GtkWidget *start_minimized_switch;
 #endif
 };
 
@@ -239,6 +240,22 @@ on_clipboard_clear_changed (AdwComboRow    *combo,
 }
 
 #ifdef ENABLE_MINIMIZE_TO_TRAY
+/* Start-minimized only makes sense with somewhere to be minimized to: without a
+ * tray icon the window would never come back. Same policy as the row above,
+ * disable rather than clear, so one session on a tray-less desktop does not
+ * discard the preference. */
+static void
+sync_start_minimized_sensitivity (SettingsDialog *self)
+{
+    gboolean tray_available = otpclient_tray_is_available ();
+    gboolean minimize = adw_switch_row_get_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch));
+
+    gtk_widget_set_sensitive (self->start_minimized_switch, minimize && tray_available);
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->start_minimized_switch),
+                                 !tray_available ? _("No system tray was detected on this desktop")
+                                                 : (!minimize ? _("Requires Minimize to Tray") : ""));
+}
+
 static void
 on_minimize_to_tray_toggled (GObject        *obj,
                               GParamSpec     *pspec,
@@ -247,6 +264,22 @@ on_minimize_to_tray_toggled (GObject        *obj,
     (void) pspec;
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_minimize_to_tray (self->app, active);
+
+    /* Turning it off also turns start-minimized off, in the application. Mirror
+     * that here so the row does not keep showing a preference that is gone. */
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
+                               otpclient_application_get_start_minimized (self->app));
+    sync_start_minimized_sensitivity (self);
+}
+
+static void
+on_start_minimized_toggled (GObject        *obj,
+                            GParamSpec     *pspec,
+                            SettingsDialog *self)
+{
+    (void) pspec;
+    gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+    otpclient_application_set_start_minimized (self->app, active);
 }
 #endif
 
@@ -662,8 +695,6 @@ settings_dialog_new (OTPClientApplication *app)
                                     _("Minimize to Tray"));
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch),
                                otpclient_application_get_minimize_to_tray (app));
-    g_signal_connect (self->minimize_to_tray_switch, "notify::active",
-                      G_CALLBACK (on_minimize_to_tray_toggled), self);
     /* Disable rather than clear the preference: someone who normally runs a
      * desktop with a tray shouldn't lose the setting after one session without. */
     if (!otpclient_tray_is_available ())
@@ -673,6 +704,21 @@ settings_dialog_new (OTPClientApplication *app)
                                      _("No system tray was detected on this desktop"));
     }
     adw_preferences_group_add (integration_group, self->minimize_to_tray_switch);
+
+    self->start_minimized_switch = adw_switch_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->start_minimized_switch),
+                                    _("Start Minimized"));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
+                               otpclient_application_get_start_minimized (app));
+    sync_start_minimized_sensitivity (self);
+    adw_preferences_group_add (integration_group, self->start_minimized_switch);
+
+    /* Both handlers connected only now: sync_start_minimized_sensitivity reads
+     * the minimize row, so neither switch may fire before both rows exist. */
+    g_signal_connect (self->minimize_to_tray_switch, "notify::active",
+                      G_CALLBACK (on_minimize_to_tray_toggled), self);
+    g_signal_connect (self->start_minimized_switch, "notify::active",
+                      G_CALLBACK (on_start_minimized_toggled), self);
 #endif
 
     /* Backup group - covers both app preferences (GSettings JSON) and the

@@ -31,6 +31,10 @@ static const SettingDef exportable_settings[] = {
     { "validity-warning-color", SETTING_STRING },
     { "show-sidebar",           SETTING_BOOL },
     { "minimize-to-tray",       SETTING_BOOL },
+    /* Importing autostart: true does not create the autostart entry by itself;
+     * the startup re-assert in otpclient_application_startup picks it up. */
+    { "start-minimized",        SETTING_BOOL },
+    { "autostart",              SETTING_BOOL },
     { "hide-otps",              SETTING_BOOL },
     { NULL, 0 }
 };

@@ -94,6 +94,16 @@ gboolean              otpclient_application_get_minimize_to_tray (OTPClientAppli
 void                  otpclient_application_set_minimize_to_tray (OTPClientApplication *self,
                                                                    gboolean              minimize);
 
+/* Turning minimize-to-tray off also turns this off: hiding a window with no
+ * tray to hide it in is a window that never comes back. */
+gboolean              otpclient_application_get_start_minimized (OTPClientApplication *self);
+void                  otpclient_application_set_start_minimized (OTPClientApplication *self,
+                                                                 gboolean              minimized);
+
+gboolean              otpclient_application_get_autostart (OTPClientApplication *self);
+void                  otpclient_application_set_autostart (OTPClientApplication *self,
+                                                           gboolean              autostart);
+
 guint                 otpclient_application_get_clipboard_clear_timeout (OTPClientApplication *self);
 void                  otpclient_application_set_clipboard_clear_timeout (OTPClientApplication *self,
                                                                          guint                 timeout);
@@ -103,5 +113,11 @@ void                  otpclient_application_set_hide_otps (OTPClientApplication 
                                                            gboolean              hide);
 
 void                  otpclient_application_reload_settings (OTPClientApplication *self);
+
+/* The one way the window becomes visible: activate(), the tray's Show item and
+ * its Activate method, the tray's give-up paths, and the started-hidden
+ * deadline all come through here. Anything a normal startup does after showing
+ * the window belongs here too, or a start-minimized launch silently skips it. */
+void                  otpclient_application_present_window (OTPClientApplication *self);
 
 G_END_DECLS

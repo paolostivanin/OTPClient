@@ -3,11 +3,24 @@
 otpclient \- GTK4 / libadwaita client for TOTP and HOTP one-time passwords
 .SH SYNOPSIS
 .B otpclient
+[\fB\-\-start\-minimized\fR]
 .SH DESCRIPTION
 .B OTPClient
 is a GTK4 / libadwaita application that generates Time-based (TOTP) and
 HMAC-based (HOTP) one-time passwords. The encrypted token database is
 stored on disk using AES-256-GCM with an Argon2id-derived key.
+.SH OPTIONS
+.TP
+.B \-\-start\-minimized
+Start with the window hidden in the system tray instead of shown. The database
+is left locked, so the first time the window is shown it asks for the password.
+This affects the current launch only and does not change the
+.I start-minimized
+preference. It is ignored, with the window shown normally, when
+.I minimize-to-tray
+is off or no system tray was detected.
+.I \-\-start\-minimised
+is accepted as a spelling alias.
 .SH FEATURES
 .IP \(bu 3
 TOTP and HOTP support.

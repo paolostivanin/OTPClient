@@ -39,6 +39,7 @@ typedef struct
     guint bus_name_id;
     guint watcher_watch_id;
     guint host_signal_id;
+    guint hidden_deadline_id;  /* fail-safe for a started-hidden window */
     gulong close_handler_id;
     gchar *bus_name;
     gchar *activation_token;   /* handed to us by the host, good for one present */
@@ -64,6 +65,7 @@ static void
 show_window (TrayData *td)
 {
     td->window_hidden = FALSE;
+    g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
 
     /* The main window specifically, not the active one: while we are tucked
      * away nothing is active, and once something is, it may well be a dialog. */
@@ -79,8 +81,10 @@ show_window (TrayData *td)
             g_clear_pointer (&td->activation_token, g_free);
         }
 
-        gtk_widget_set_visible (GTK_WIDGET (window), TRUE);
-        gtk_window_present (window);
+        /* Through the funnel rather than presenting here: a started-hidden
+         * launch still owes the user an unlock prompt, and possibly a
+         * what's-new or missing-database dialog. */
+        otpclient_application_present_window (td->app);
     }
 }
 
@@ -206,8 +210,12 @@ sni_get_property (GDBusConnection  *connection,
         return g_variant_new_string ("ApplicationStatus");
     if (g_strcmp0 (property_name, "Id") == 0)
         return g_variant_new_string ("otpclient");
+    /* Hosts show Title as the icon's tooltip. Saying so is worth it on a
+     * start-minimized launch, where the database is deliberately left locked
+     * and clicking the icon asks for a password. */
     if (g_strcmp0 (property_name, "Title") == 0)
-        return g_variant_new_string ("OTPClient");
+        return g_variant_new_string (otpclient_application_get_app_locked (td->app)
+                                     ? _("OTPClient (locked)") : "OTPClient");
     if (g_strcmp0 (property_name, "Status") == 0)
         return g_variant_new_string (td->desired ? "Active" : "Passive");
     if (g_strcmp0 (property_name, "IconName") == 0)
@@ -504,6 +512,9 @@ on_item_registered (GObject      *source,
     tray_data->publishing = FALSE;
     tray_data->published = TRUE;
     tray_sync_hold (tray_data);
+
+    /* There is an icon now, so the started-hidden fail-safe has done its job. */
+    g_clear_handle_id (&tray_data->hidden_deadline_id, g_source_remove);
 }
 
 /* Ask the watcher to adopt the item, and listen to the answer: whether an icon
@@ -953,6 +964,53 @@ otpclient_tray_init (OTPClientApplication *app)
                           NULL);
 }
 
+/* Seconds to wait for an icon before giving up and showing the window. Long
+ * enough for a cold Plasma login, short enough that the user does not conclude
+ * the app failed to start. */
+#define START_HIDDEN_DEADLINE_SECONDS 10
+
+static gboolean
+on_start_hidden_deadline (gpointer user_data)
+{
+    TrayData *td = user_data;
+    td->hidden_deadline_id = 0;
+
+    if (td->window_hidden)
+    {
+        g_message ("No tray icon appeared within %d seconds; showing the window",
+                   START_HIDDEN_DEADLINE_SECONDS);
+        show_window (td);
+    }
+
+    return G_SOURCE_REMOVE;
+}
+
+void
+otpclient_tray_begin_hidden (OTPClientApplication *app)
+{
+    (void) app;
+
+    if (tray_data == NULL || tray_data->window_hidden)
+        return;
+
+    tray_data->window_hidden = TRUE;
+
+    /* Nearly every way this can fail already routes through tray_unpublish,
+     * which ends by showing a hidden window: the watcher name having no owner
+     * (g_bus_watch_name fires vanished at watch time in that case),
+     * IsStatusNotifierHostRegistered coming back false, and the watcher
+     * refusing our item. Those need no timer and self-heal immediately.
+     *
+     * What is left is a watcher that owns the name but never answers the
+     * property read and never emits StatusNotifierHostRegistered: host stays
+     * UNKNOWN, so nothing publishes and nothing unpublishes, and the window
+     * would sit hidden forever. This also covers the genuinely undetectable
+     * case where the watcher accepts the item and the panel never draws it. */
+    tray_data->hidden_deadline_id =
+        g_timeout_add_seconds (START_HIDDEN_DEADLINE_SECONDS,
+                               on_start_hidden_deadline, tray_data);
+}
+
 void
 otpclient_tray_enable (OTPClientApplication *app)
 {
@@ -1011,6 +1069,24 @@ otpclient_tray_disable (OTPClientApplication *app)
     tray_unpublish (tray_data);
 }
 
+void
+otpclient_tray_notify_locked_changed (OTPClientApplication *app)
+{
+    (void) app;
+
+    if (tray_data == NULL || !tray_data->published || tray_data->connection == NULL)
+        return;
+
+    /* NewTitle carries no payload; the host re-reads the property. */
+    g_dbus_connection_emit_signal (tray_data->connection,
+                                   NULL,
+                                   SNI_OBJECT_PATH,
+                                   "org.kde.StatusNotifierItem",
+                                   "NewTitle",
+                                   NULL,
+                                   NULL);
+}
+
 gboolean
 otpclient_tray_is_available (void)
 {
@@ -1040,6 +1116,8 @@ otpclient_tray_cleanup (OTPClientApplication *app)
 
     if (tray_data->watcher_watch_id != 0)
         g_bus_unwatch_name (tray_data->watcher_watch_id);
+
+    g_clear_handle_id (&tray_data->hidden_deadline_id, g_source_remove);
 
     /* Clears the hold too, so the teardown doesn't leave the app held. */
     tray_data->window_hidden = FALSE;

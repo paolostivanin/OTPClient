@@ -47,8 +47,35 @@ gboolean use_secret_service;
     gchar *validity_color;
     gchar *validity_warning_color;
     gboolean minimize_to_tray;
+    gboolean start_minimized;
+    gboolean autostart;
     guint clipboard_clear_timeout;
     gboolean hide_otps;
+
+    /* --start-minimized on this launch only. Deliberately not written back to
+     * GSettings: an autostart entry or a script must not mutate the user's
+     * preference. The effective value at startup is this OR the setting. */
+    gboolean start_minimized_override;
+
+    /* Resolved once in startup() and consumed by the first activate(). Without
+     * G_APPLICATION_HANDLES_COMMAND_LINE the options dict never reaches the
+     * primary instance, so a second `otpclient --start-minimized` arrives as a
+     * bare Activate. A persistent flag would make that second launch refuse to
+     * present too, leaving the user with no window and no feedback. */
+    gboolean pending_start_hidden;
+
+    /* The key request was skipped because we started hidden; the presentation
+     * funnel owes the user an unlock prompt the first time the window appears. */
+    gboolean unlock_deferred;
+
+    /* Same idea for the missing-database dialog: an AdwDialog presented on an
+     * unmapped window queues invisibly, which is worse than not presenting it. */
+    gchar *pending_db_missing_name;
+    gchar *pending_db_missing_path;
+
+    /* The what's-new check moved out of startup() into the funnel, so it has to
+     * remember that it already ran. */
+    gboolean whats_new_checked;
 
     /* Set TRUE while the password being used to unlock came from the v4
      * legacy keyring entry (issue #448). on_unlock_done consults it to
@@ -506,7 +533,18 @@ static void
 otpclient_application_activate (GApplication *application)
 {
     OTPClientApplication *self = OTPCLIENT_APPLICATION(application);
-    gtk_window_present (GTK_WINDOW(self->window));
+
+    if (self->pending_start_hidden)
+    {
+        /* One shot. The next activate, whether it is a second `otpclient` from
+         * a terminal or the tray's Show item, presents the window: that is also
+         * the user-discoverable recovery from a hidden window whose tray icon
+         * never appeared. */
+        self->pending_start_hidden = FALSE;
+        return;
+    }
+
+    otpclient_application_present_window (self);
 }
 
 static gboolean on_password_received (const gchar  *current_password,
@@ -1007,8 +1045,40 @@ maybe_migrate_v4_secret_service (OTPClientApplication *self)
     g_settings_set_boolean (self->settings, "secret-service-v4-migrated", TRUE);
 }
 
+/* Ask for the key that decrypts the database self->db_data points at, either
+ * from the keyring or from the user. Split out of init_database_prepare so a
+ * start-minimized launch can stop before it: the password dialog would attach
+ * to a window that was never shown, and even the keyring lookup can prompt
+ * (kwallet, or a keyring PAM did not unlock). */
 static void
-init_database (OTPClientApplication *self)
+init_database_request_key (OTPClientApplication *self)
+{
+    self->unlock_deferred = FALSE;
+
+    if (self->use_secret_service)
+    {
+        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
+                                on_secret_lookup_done,
+                                application_async_context_new (self),
+                                "string", self->db_data->db_path,
+                                NULL);
+    }
+    else
+    {
+        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
+                                                   on_password_received,
+                                                   self);
+        lock_app_install_unlock_dialog_quit (dlg, self);
+        adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+    }
+}
+
+/* Everything up to, but not including, asking for the key. Returns TRUE when
+ * self->db_data is set up and a key is the only thing missing; FALSE when there
+ * is nothing to unlock (no databases configured, crypto init failed, or the
+ * primary database is missing, which reports itself). */
+static gboolean
+init_database_prepare (OTPClientApplication *self)
 {
     gint32 memlock_value = 0;
     gint32 memlock_status = set_memlock_value (&memlock_value);
@@ -1024,7 +1094,7 @@ init_database (OTPClientApplication *self)
     {
         g_warning ("Failed to initialize crypto libraries: %s", init_err);
         g_free (init_err);
-        return;
+        return FALSE;
     }
 
     /* Load the full database list (handles v4 migration) */
@@ -1032,7 +1102,7 @@ init_database (OTPClientApplication *self)
     if (db_list == NULL || db_list->len == 0)
     {
         g_info ("No databases configured yet");
-        return;
+        return FALSE;
     }
 
     /* Populate sidebar with all known databases */
@@ -1069,10 +1139,21 @@ init_database (OTPClientApplication *self)
         G_LIST_MODEL (sidebar_store), (guint)primary_index);
     if (primary_sidebar_entry != NULL && database_entry_get_missing (primary_sidebar_entry))
     {
-        present_db_missing_dialog (self->window,
-                                   database_entry_get_name (primary_sidebar_entry),
-                                   database_entry_get_path (primary_sidebar_entry));
-        return;
+        if (self->pending_start_hidden)
+        {
+            /* Nothing is on screen to attach it to yet; the funnel presents it. */
+            g_clear_pointer (&self->pending_db_missing_name, g_free);
+            g_clear_pointer (&self->pending_db_missing_path, g_free);
+            self->pending_db_missing_name = g_strdup (database_entry_get_name (primary_sidebar_entry));
+            self->pending_db_missing_path = g_strdup (database_entry_get_path (primary_sidebar_entry));
+        }
+        else
+        {
+            present_db_missing_dialog (self->window,
+                                       database_entry_get_name (primary_sidebar_entry),
+                                       database_entry_get_path (primary_sidebar_entry));
+        }
+        return FALSE;
     }
 
     /* Set up the primary database for decryption */
@@ -1083,21 +1164,67 @@ init_database (OTPClientApplication *self)
 
     maybe_migrate_v4_secret_service (self);
 
-    if (self->use_secret_service)
+    return TRUE;
+}
+
+static void
+init_database (OTPClientApplication *self)
+{
+    if (init_database_prepare (self))
+        init_database_request_key (self);
+}
+
+void
+otpclient_application_present_window (OTPClientApplication *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+
+    /* The weak pointer nulls on destroy. Reachable now that "closed with no
+     * tray, then activated remotely" is a real sequence. */
+    if (self->window == NULL)
+        return;
+
+    gtk_widget_set_visible (GTK_WIDGET (self->window), TRUE);
+    gtk_window_present (GTK_WINDOW (self->window));
+
+    if (self->pending_db_missing_path != NULL)
     {
-        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
-                                on_secret_lookup_done,
-                                application_async_context_new (self),
-                                "string", self->db_data->db_path,
-                                NULL);
+        g_autofree gchar *name = g_steal_pointer (&self->pending_db_missing_name);
+        g_autofree gchar *path = g_steal_pointer (&self->pending_db_missing_path);
+        present_db_missing_dialog (self->window, name, path);
     }
-    else
+
+    /* Deferred from a hidden start: this is the first moment there is a window
+     * to attach a prompt to. */
+    if (self->unlock_deferred)
     {
-        PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                   on_password_received,
-                                                   self);
-        lock_app_install_unlock_dialog_quit (dlg, self);
-        adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+        self->unlock_deferred = FALSE;
+        if (otpclient_application_get_app_locked (self))
+            lock_app_present_unlock_dialog (self);
+        else if (self->db_data != NULL)
+            init_database_request_key (self);
+    }
+
+    /* Was in startup(), where it presented a dialog on a window that had not
+     * been presented yet. Note that last-seen-version is written whether or not
+     * the dialog is shown, so skipping this on a hidden start without moving it
+     * would burn that version's release notes forever. */
+    if (!self->whats_new_checked && self->settings != NULL)
+    {
+        self->whats_new_checked = TRUE;
+
+        g_autofree gchar *last_seen = g_settings_get_string (self->settings, "last-seen-version");
+        if (last_seen == NULL || last_seen[0] == '\0')
+        {
+            WhatsNewDialog *dlg = whats_new_dialog_new (TRUE);
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+        }
+        else if (version_xy_less_than (last_seen, PROJECT_VER))
+        {
+            WhatsNewDialog *dlg = whats_new_dialog_new (FALSE);
+            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
+        }
+        g_settings_set_string (self->settings, "last-seen-version", PROJECT_VER);
     }
 }
 
@@ -1142,6 +1269,58 @@ otpclient_application_shutdown (GApplication *application)
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (application);
 }
 
+/* Without G_APPLICATION_HANDLES_COMMAND_LINE the options dict is parsed in the
+ * process that was launched and never travels to the primary instance, so this
+ * only ever sets a flag on a process that is about to run startup() itself. The
+ * emission order is handle-local-options -> startup -> activate. */
+static gint
+otpclient_application_handle_local_options (GApplication *application,
+                                            GVariantDict *options)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (application);
+
+    if (g_variant_dict_contains (options, "start-minimized") ||
+        g_variant_dict_contains (options, "start-minimised"))
+        self->start_minimized_override = TRUE;
+
+    /* -1 means carry on with the normal startup. */
+    return G_APPLICATION_CLASS (otpclient_application_parent_class)
+             ->handle_local_options (application, options);
+}
+
+/* Should this launch keep the window hidden? Resolved once, in startup(), so
+ * activate() only has a boolean to consume. */
+static gboolean
+resolve_start_hidden (OTPClientApplication *self)
+{
+    if (!self->start_minimized_override && !self->start_minimized)
+        return FALSE;
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    /* Hard dependency, not cosmetic: tray_publish() returns early when
+     * minimize-to-tray is off, so tray_unpublish() is never reached either and
+     * nothing would ever un-hide the window. */
+    if (!self->minimize_to_tray)
+    {
+        g_debug ("Ignoring start-minimized: minimize to tray is disabled");
+        return FALSE;
+    }
+
+    if (!otpclient_tray_is_available ())
+    {
+        g_debug ("Ignoring start-minimized: no system tray on this session");
+        return FALSE;
+    }
+
+    return TRUE;
+#else
+    /* The option stays registered in builds without tray support so stale
+     * autostart entries and scripts keep parsing, but there is nowhere to hide. */
+    g_message ("Ignoring start-minimized: this build has no system tray support");
+    return FALSE;
+#endif
+}
+
 static void
 otpclient_application_startup (GApplication *application)
 {
@@ -1178,6 +1357,8 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_color = g_settings_get_string (self->settings, "validity-color");
         self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
         self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+        self->start_minimized = g_settings_get_boolean (self->settings, "start-minimized");
+        self->autostart = g_settings_get_boolean (self->settings, "autostart");
         self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
         self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
     } else {
@@ -1194,6 +1375,8 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_color = g_strdup ("#008000");
         self->validity_warning_color = g_strdup ("#ffa500");
         self->minimize_to_tray = FALSE;
+        self->start_minimized = FALSE;
+        self->autostart = FALSE;
         self->clipboard_clear_timeout = 30;
         self->hide_otps = TRUE;
     }
@@ -1227,20 +1410,32 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
     otpclient_tray_init (self);
 #endif
 
-    /* Show welcome or what's-new dialog on version change */
-    if (self->settings != NULL) {
-        g_autofree gchar *last_seen = g_settings_get_string (self->settings, "last-seen-version");
-        if (last_seen == NULL || last_seen[0] == '\0') {
-            WhatsNewDialog *dlg = whats_new_dialog_new (TRUE);
-            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
-        } else if (version_xy_less_than (last_seen, PROJECT_VER)) {
-            WhatsNewDialog *dlg = whats_new_dialog_new (FALSE);
-            adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
-        }
-        g_settings_set_string (self->settings, "last-seen-version", PROJECT_VER);
-    }
+    /* The welcome and what's-new dialogs used to be presented here, on a window
+     * that had not been shown yet. They now run from the presentation funnel. */
 
-    init_database (self);
+    self->pending_start_hidden = resolve_start_hidden (self);
+
+    if (self->pending_start_hidden)
+    {
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+        /* Tell the tray the window is already tucked away, so every path that
+         * gives up on an icon un-hides it again. */
+        otpclient_tray_begin_hidden (self);
+#endif
+        if (init_database_prepare (self))
+        {
+            /* Deliberately do not ask for the key: see the comment on
+             * init_database_request_key. The locked state is the only state
+             * this codebase models for "loaded but no key", and it makes the
+             * first show go through the already-tested unlock dialog. */
+            self->unlock_deferred = TRUE;
+            lock_app_enter_locked_state (self);
+        }
+    }
+    else
+    {
+        init_database (self);
+    }
 }
 
 static void
@@ -1263,6 +1458,8 @@ otpclient_application_dispose (GObject *object)
     g_clear_pointer (&self->search_provider_keyword, g_free);
     g_clear_pointer (&self->validity_color, g_free);
     g_clear_pointer (&self->validity_warning_color, g_free);
+    g_clear_pointer (&self->pending_db_missing_name, g_free);
+    g_clear_pointer (&self->pending_db_missing_path, g_free);
 
     if (self->db_data != NULL)
     {
@@ -1314,6 +1511,7 @@ otpclient_application_class_init (OTPClientApplicationClass *klass)
     application_class->activate = otpclient_application_activate;
     application_class->startup = otpclient_application_startup;
     application_class->shutdown = otpclient_application_shutdown;
+    application_class->handle_local_options = otpclient_application_handle_local_options;
     object_class->dispose = otpclient_application_dispose;
     object_class->get_property = otpclient_application_get_property;
     object_class->set_property = otpclient_application_set_property;
@@ -1337,6 +1535,18 @@ otpclient_application_init (OTPClientApplication *self)
     self->validity_color = NULL;
     self->validity_warning_color = NULL;
     self->lock_generation = 0;
+
+    /* No short option: otpclient-cli shares this application id and has its own
+     * short options, so a one-letter form here would only invite confusion. */
+    const GOptionEntry options[] = {
+        { "start-minimized", 0, G_OPTION_FLAG_NONE, G_OPTION_ARG_NONE, NULL,
+          _("Start with the window hidden in the system tray"), NULL },
+        /* Both the upstream report and Flathub #81 spell it with an s. */
+        { "start-minimised", 0, G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_NONE, NULL,
+          NULL, NULL },
+        { NULL }
+    };
+    g_application_add_main_option_entries (G_APPLICATION (self), options);
 }
 
 DatabaseData *
@@ -1496,7 +1706,12 @@ gboolean otpclient_application_get_app_locked (OTPClientApplication *self)
 void otpclient_application_set_app_locked (OTPClientApplication *self, gboolean locked)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (self->app_locked == locked)
+        return;
     self->app_locked = locked;
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    otpclient_tray_notify_locked_changed (self);
+#endif
 }
 
 gboolean otpclient_application_get_use_dark_theme (OTPClientApplication *self)
@@ -1613,12 +1828,45 @@ void otpclient_application_set_minimize_to_tray (OTPClientApplication *self, gbo
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "minimize-to-tray", minimize);
 
+    /* Start-minimized without a tray to hide in is a window that never appears,
+     * so it cannot outlive its prerequisite. */
+    if (!minimize && self->start_minimized)
+        otpclient_application_set_start_minimized (self, FALSE);
+
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     if (minimize)
         otpclient_tray_enable (self);
     else
         otpclient_tray_disable (self);
 #endif
+}
+
+gboolean otpclient_application_get_start_minimized (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->start_minimized;
+}
+
+void otpclient_application_set_start_minimized (OTPClientApplication *self, gboolean minimized)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->start_minimized = minimized;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "start-minimized", minimized);
+}
+
+gboolean otpclient_application_get_autostart (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->autostart;
+}
+
+void otpclient_application_set_autostart (OTPClientApplication *self, gboolean autostart)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->autostart = autostart;
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "autostart", autostart);
 }
 
 void otpclient_application_reload_settings (OTPClientApplication *self)
@@ -1642,6 +1890,8 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     g_free (self->validity_warning_color);
     self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
     self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
+    self->start_minimized = g_settings_get_boolean (self->settings, "start-minimized");
+    self->autostart = g_settings_get_boolean (self->settings, "autostart");
     self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
     gboolean old_hide_otps = self->hide_otps;
     self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
