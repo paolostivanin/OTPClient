@@ -279,7 +279,9 @@ dbusmenu_method_call (GDBusConnection       *connection,
     {
         gint32 id;
         const gchar *event_id;
-        g_variant_get (parameters, "(is@vu)", &id, &event_id, NULL, NULL);
+        /* "&s" borrows from `parameters`; plain "s" would hand back a dup that
+         * nothing here frees. */
+        g_variant_get (parameters, "(i&s@vu)", &id, &event_id, NULL, NULL);
 
         if (g_strcmp0 (event_id, "clicked") == 0)
         {
