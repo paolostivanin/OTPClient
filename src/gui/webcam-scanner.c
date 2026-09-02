@@ -30,15 +30,42 @@ webcam_scan_qrcode_cancellable (GCancellable *cancellable,
         return NULL;
     }
 
-    if (zbar_processor_init (proc, NULL, 1) != 0) {
+    /* "" rather than NULL, and no display. Both arguments matter and both were
+     * wrong, which is why webcam scanning had never once worked in this build:
+     *
+     * zbar_processor_init only creates a video source inside `if (dev)`, so
+     * with dev == NULL there was none, and the `if (!dev && !enable_display)
+     * goto done` shortcut did not fire either because the display was enabled.
+     * Init therefore returned 0, and every call after it failed on zbar's
+     * `if (!proc->video)` guard with "video input not initialized". An empty
+     * string is what zbarcam itself passes: zbar_video_open maps any dev whose
+     * first byte is below 0x10 to /dev/video0, so this asks for the default
+     * camera rather than hardcoding a path.
+     *
+     * enable_display = 1 asked for a zbar preview window, and zbar/window has
+     * backends for X11 and Windows only, no Wayland. Under Flatpak's
+     * fallback-x11 on a Wayland session there is no X display to open at all.
+     * The scan itself does not need a window; a GTK-rendered preview is a
+     * separate feature. */
+    if (zbar_processor_init (proc, "", 0) != 0) {
+        g_warning ("zbar could not open the camera: %s",
+                   zbar_processor_error_string (proc, 1));
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "%s", _("Failed to initialize zbar video device"));
         zbar_processor_destroy (proc);
         return NULL;
     }
 
-    zbar_processor_set_visible (proc, 1);
-    zbar_processor_set_active (proc, 1);
+    /* No zbar window to make visible any more, and the return value is worth
+     * having: this is the call that used to fail silently. */
+    if (zbar_processor_set_active (proc, 1) != 0) {
+        g_warning ("zbar could not start the capture: %s",
+                   zbar_processor_error_string (proc, 1));
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "%s", _("Failed to initialize zbar video device"));
+        zbar_processor_destroy (proc);
+        return NULL;
+    }
 
     /* Poll in short intervals so closing/locking the window releases the
      * camera promptly instead of waiting for one 30-second blocking call. */
