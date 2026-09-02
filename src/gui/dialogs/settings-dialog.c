@@ -7,6 +7,7 @@
 #include "secret-schema.h"
 #include "settings-import-export.h"
 #include "otp-button-row.h"
+#include "autostart.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
 #endif
@@ -30,6 +31,10 @@ struct _SettingsDialog
     GtkWidget *search_provider_keyword_entry;
     GtkWidget *clipboard_clear_combo;
     GtkWidget *hide_otps_switch;
+    GtkWidget *autostart_switch;
+    /* Set while the autostart row is being put back after a refusal, so the
+     * revert does not look like a fresh request. */
+    gboolean   autostart_updating;
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
     GtkWidget *start_minimized_switch;
@@ -282,6 +287,72 @@ on_start_minimized_toggled (GObject        *obj,
     otpclient_application_set_start_minimized (self->app, active);
 }
 #endif
+
+/* The dialog can be closed while the portal is still thinking, so the reply
+ * carries its own reference to the application and only a weak one to the
+ * dialog. */
+typedef struct {
+    OTPClientApplication *app;
+    SettingsDialog       *dialog;
+    gboolean              wanted;
+} AutostartToggle;
+
+static void
+on_autostart_result (gboolean granted,
+                     gpointer user_data)
+{
+    AutostartToggle *toggle = user_data;
+
+    if (!granted)
+    {
+        /* Nothing can be read back, so the key must not claim more than the
+         * desktop actually did. This also covers a failed removal, where the
+         * entry is still there and the key had better say so. */
+        otpclient_application_set_autostart (toggle->app, !toggle->wanted);
+
+        if (toggle->dialog != NULL)
+        {
+            toggle->dialog->autostart_updating = TRUE;
+            adw_switch_row_set_active (ADW_SWITCH_ROW (toggle->dialog->autostart_switch),
+                                       !toggle->wanted);
+            toggle->dialog->autostart_updating = FALSE;
+            adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch),
+                                         _("The desktop refused to change the login-time launch"));
+        }
+    }
+    else if (toggle->dialog != NULL)
+    {
+        adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch), "");
+    }
+
+    if (toggle->dialog != NULL)
+        g_object_remove_weak_pointer (G_OBJECT (toggle->dialog), (gpointer *) &toggle->dialog);
+    g_object_unref (toggle->app);
+    g_free (toggle);
+}
+
+static void
+on_autostart_toggled (GObject        *obj,
+                      GParamSpec     *pspec,
+                      SettingsDialog *self)
+{
+    (void) pspec;
+    if (self->autostart_updating)
+        return;
+
+    gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+    otpclient_application_set_autostart (self->app, active);
+
+    AutostartToggle *toggle = g_new0 (AutostartToggle, 1);
+    toggle->app = g_object_ref (self->app);
+    toggle->dialog = self;
+    toggle->wanted = active;
+    g_object_add_weak_pointer (G_OBJECT (self), (gpointer *) &toggle->dialog);
+
+    /* On the host this answers before it returns, from inside this handler,
+     * which is what autostart_updating is for. */
+    autostart_apply (self->app, active, on_autostart_result, toggle);
+}
 
 static void
 on_show_validity_seconds_toggled (GObject        *obj,
@@ -720,6 +791,23 @@ settings_dialog_new (OTPClientApplication *app)
     g_signal_connect (self->start_minimized_switch, "notify::active",
                       G_CALLBACK (on_start_minimized_toggled), self);
 #endif
+
+    /* Not gated on the tray: starting at login is useful with or without one,
+     * and the two features are configured independently. */
+    self->autostart_switch = adw_switch_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->autostart_switch),
+                                    _("Start at Login"));
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->autostart_switch),
+                               otpclient_application_get_autostart (app));
+    if (!autostart_is_supported ())
+    {
+        gtk_widget_set_sensitive (self->autostart_switch, FALSE);
+        adw_action_row_set_subtitle (ADW_ACTION_ROW (self->autostart_switch),
+                                     _("This desktop does not support starting apps at login"));
+    }
+    adw_preferences_group_add (integration_group, self->autostart_switch);
+    g_signal_connect (self->autostart_switch, "notify::active",
+                      G_CALLBACK (on_autostart_toggled), self);
 
     /* Backup group - covers both app preferences (GSettings JSON) and the
      * encrypted token database. The token rows dispatch to window actions so

@@ -18,6 +18,7 @@
 #include "db-common.h"
 #include "gquarks.h"
 #include "secret-schema.h"
+#include "autostart.h"
 #include "version.h"
 #ifdef ENABLE_MINIMIZE_TO_TRAY
 #include "tray.h"
@@ -1410,6 +1411,15 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
     otpclient_tray_init (self);
 #endif
 
+    /* Side-effect free, and it settles long before anyone can open Settings,
+     * which is the only place that needs the answer. */
+    autostart_init ();
+
+    /* Only when one of the two is on: asking for a background grant the user
+     * has no use for would create a permission entry out of nowhere. */
+    if (self->autostart || self->minimize_to_tray)
+        autostart_reassert (self);
+
     /* The welcome and what's-new dialogs used to be presented here, on a window
      * that had not been shown yet. They now run from the presentation funnel. */
 
@@ -1833,6 +1843,13 @@ void otpclient_application_set_minimize_to_tray (OTPClientApplication *self, gbo
     if (!minimize && self->start_minimized)
         otpclient_application_set_start_minimized (self, FALSE);
 
+    /* Closing to the tray means running with no window, and under Flatpak that
+     * is exactly what gets the process killed without a background grant. Ask
+     * now, while the user is looking at the switch they just flipped, rather
+     * than an hour later as a surprise notification. */
+    if (minimize)
+        autostart_ensure_background (self);
+
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     if (minimize)
         otpclient_tray_enable (self);
@@ -1853,6 +1870,12 @@ void otpclient_application_set_start_minimized (OTPClientApplication *self, gboo
     self->start_minimized = minimized;
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "start-minimized", minimized);
+
+    /* The flag is baked into the autostart entry's argv, so a change here has
+     * to be pushed out or the login-time launch keeps the old behaviour until
+     * the next re-assert. */
+    if (self->autostart)
+        autostart_apply (self, TRUE, NULL, NULL);
 }
 
 gboolean otpclient_application_get_autostart (OTPClientApplication *self)

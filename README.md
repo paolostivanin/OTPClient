@@ -36,6 +36,11 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   `otpclient --start-minimized`. Requires minimize-to-tray and a system tray;
   the database is left locked, so the first time you show the window it asks
   for the password
+- Optional start-at-login, from *Settings -> Integration*. Native builds write
+  `~/.config/autostart/com.github.paolostivanin.OTPClient.desktop`; the Flatpak
+  goes through `org.freedesktop.portal.Background`, which a few desktops
+  (sway, Hyprland, river, LXQt, COSMIC, plain XFCE) do not implement, and there
+  the row is greyed out. The entry inherits the start-minimized preference
 
 ### Command-line interface (`otpclient-cli`)
 - `--show / --list` for scripting and shell integration

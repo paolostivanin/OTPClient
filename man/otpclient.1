@@ -56,6 +56,13 @@ Flatpak configuration file (when running under Flatpak).
 .I ~/.config/otpclient/otpclient.cfg
 Configuration file containing the path to the active database.
 .TP
+.I ~/.config/autostart/com.github.paolostivanin.OTPClient.desktop
+Written when \fIStart at Login\fR is enabled in
+.IR "Settings \-> Integration" .
+Under Flatpak the same file is written on the host by
+.IR org.freedesktop.portal.Background ,
+which not every desktop implements; the setting is greyed out where it does not.
+.TP
 GSettings schema
 .I com.github.paolostivanin.OTPClient
 Stores user preferences (theme, auto-lock, notifications, KDF parameters, etc.).
