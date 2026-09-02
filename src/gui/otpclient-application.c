@@ -3,6 +3,7 @@
 #include <glib-unix.h>
 #include <adwaita.h>
 #include <string.h>
+#include <unistd.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otp-entry.h"
@@ -513,6 +514,35 @@ static gboolean on_password_received (const gchar  *current_password,
                                       gchar       **error_message,
                                       gpointer      user_data);
 
+/* Does this path live on the Flatpak document portal's FUSE mount, i.e. is it a
+ * database the user picked from outside the sandbox? */
+static gboolean
+db_path_is_document_portal (const gchar *db_path)
+{
+    if (db_path == NULL)
+        return FALSE;
+
+    g_autofree gchar *doc_dir = g_strconcat (g_get_user_runtime_dir (), "/doc/", NULL);
+    if (g_str_has_prefix (db_path, doc_dir))
+        return TRUE;
+
+    /* XDG_RUNTIME_DIR can be unset or point somewhere else; the mount itself is
+     * always at /run/user/<uid>/doc. */
+    g_autofree gchar *by_uid = g_strdup_printf ("/run/user/%u/doc/", (guint) getuid ());
+    return g_str_has_prefix (db_path, by_uid);
+}
+
+static void
+on_db_missing_response (AdwAlertDialog *dialog,
+                        const gchar    *response,
+                        gpointer        user_data)
+{
+    (void) dialog;
+
+    if (g_strcmp0 (response, "locate") == 0)
+        otpclient_window_present_open_database (OTPCLIENT_WINDOW (user_data));
+}
+
 static void
 present_db_missing_dialog (OTPClientWindow *win,
                            const gchar     *db_name,
@@ -521,19 +551,53 @@ present_db_missing_dialog (OTPClientWindow *win,
     if (win == NULL)
         return;
 
-    g_autofree gchar *body = g_strdup_printf (
-        _("“%s” could not be found at:\n%s\n\n"
-          "The file may have been moved or deleted. "
-          "Use the sidebar to switch to a different database, "
-          "or right-click the missing entry to remove it from the list."),
-        db_name != NULL ? db_name : "",
-        db_path != NULL ? db_path : "");
+    /* A database reached through the document portal can stop resolving while
+     * the file itself is untouched. The portal keys each exported file on the
+     * device and inode numbers of its parent, and anonymous device numbers
+     * (btrfs, ZFS, NFS, overlayfs, LVM-thin) are reassigned on every boot, so
+     * after a reboot the doc directory no longer matches and the path 404s.
+     * xdg-desktop-portal 1.22.0 switched to a file handle and is immune; every
+     * older host, which includes Debian stable and Ubuntu LTS, is not.
+     *
+     * Telling that user the file "may have been moved or deleted" sends them
+     * looking for a file that is exactly where they left it, and neither of the
+     * two suggestions recovers it. Picking the file again through the chooser
+     * mints a fresh doc id and is the only thing that works, so offer it. */
+    gboolean lost_access = db_path_is_document_portal (db_path);
+
+    g_autofree gchar *body = lost_access
+        ? g_strdup_printf (
+            _("“%s” is no longer reachable at:\n%s\n\n"
+              "The file itself is most likely fine. This happens when the sandbox "
+              "loses access to a file kept outside it, usually after a reboot. "
+              "Select the database again to restore access."),
+            db_name != NULL ? db_name : "",
+            db_path != NULL ? db_path : "")
+        : g_strdup_printf (
+            _("“%s” could not be found at:\n%s\n\n"
+              "The file may have been moved or deleted. "
+              "Use the sidebar to switch to a different database, "
+              "or right-click the missing entry to remove it from the list."),
+            db_name != NULL ? db_name : "",
+            db_path != NULL ? db_path : "");
 
     AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
-        adw_alert_dialog_new (_("Database File Not Found"), body));
-    adw_alert_dialog_add_response (dialog, "ok", _("OK"));
-    adw_alert_dialog_set_default_response (dialog, "ok");
-    adw_alert_dialog_set_close_response (dialog, "ok");
+        adw_alert_dialog_new (lost_access ? _("Database No Longer Accessible")
+                                          : _("Database File Not Found"), body));
+
+    if (lost_access) {
+        adw_alert_dialog_add_response (dialog, "cancel", _("Cancel"));
+        adw_alert_dialog_add_response (dialog, "locate", _("Locate…"));
+        adw_alert_dialog_set_response_appearance (dialog, "locate", ADW_RESPONSE_SUGGESTED);
+        adw_alert_dialog_set_default_response (dialog, "locate");
+        adw_alert_dialog_set_close_response (dialog, "cancel");
+        g_signal_connect_object (dialog, "response", G_CALLBACK (on_db_missing_response),
+                                 win, 0);
+    } else {
+        adw_alert_dialog_add_response (dialog, "ok", _("OK"));
+        adw_alert_dialog_set_default_response (dialog, "ok");
+        adw_alert_dialog_set_close_response (dialog, "ok");
+    }
 
     adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (win));
 }

@@ -4251,6 +4251,13 @@ open_db_button_clicked (GtkButton       *button,
     g_object_unref (dialog);
 }
 
+void
+otpclient_window_present_open_database (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    open_db_button_clicked (NULL, self);
+}
+
 static void
 action_restore_tokens (GtkWidget  *widget,
                        const char *action_name,
