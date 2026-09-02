@@ -187,9 +187,19 @@ gchar  *db_copy_to              (const gchar  *src_path,
                                  const gchar  *dst_path);
 
 #ifdef OTPCLIENT_TESTING
+/* Which lock attempts should report ENOSYS. BESIDE_DB models the case that
+ * actually happens, a database reached through the Flatpak document portal:
+ * the lock file next to it cannot be locked, while the fallback in the user
+ * data dir can. EVERYWHERE models an NFS home with no lock support at all. */
+typedef enum {
+    DB_TEST_LOCK_SUPPORTED = 0,
+    DB_TEST_LOCK_UNSUPPORTED_BESIDE_DB,
+    DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE
+} DbTestLockMode;
+
 void    db_test_set_fail_encrypt      (gboolean fail);
 void    db_test_set_fail_atomic_write (gboolean fail);
-void    db_test_set_unsupported_lock  (gboolean unsupported);
+void    db_test_set_lock_mode         (DbTestLockMode mode);
 #endif
 
 G_END_DECLS

@@ -204,19 +204,70 @@ test_stale_snapshot_rejected (void)
     cleanup_db_data (first, dir, path);
 }
 
+/* Number of *.lock files under XDG_DATA_HOME/otpclient/locks. */
+static guint
+count_fallback_locks (void)
+{
+    g_autofree gchar *dir = g_build_filename (g_get_user_data_dir (), "otpclient", "locks", NULL);
+    GDir *d = g_dir_open (dir, 0, NULL);
+    if (d == NULL)
+        return 0;
+
+    guint n = 0;
+    const gchar *name;
+    while ((name = g_dir_read_name (d)) != NULL) {
+        if (g_str_has_suffix (name, ".lock"))
+            n++;
+    }
+    g_dir_close (d);
+    return n;
+}
+
+/* A database on a filesystem that cannot lock, which is what the Flatpak
+ * document portal is: flock() there fails with ENOSYS (issue #466). The write
+ * must succeed, and the lock must be taken in the user data dir instead of
+ * being skipped, so a second OTPClient process is still kept out. */
 static void
-test_lock_unsupported_fallback (void)
+test_lock_unsupported_uses_fallback (void)
 {
     gchar *dir = NULL;
     gchar *path = NULL;
     DatabaseData *db_data = make_db_data (&dir, &path);
 
-    /* Simulate a filesystem whose flock() fails with ENOSYS, e.g. the Flatpak
-     * document-portal FUSE mount (issue #466). The transaction must still
-     * succeed and write the database instead of aborting. */
-    db_test_set_unsupported_lock (TRUE);
+    guint locks_before = count_fallback_locks ();
+    db_test_set_lock_mode (DB_TEST_LOCK_UNSUPPORTED_BESIDE_DB);
 
-    /* The fallback warns exactly once per process; expect it on the first write. */
+    /* No warning at all on this path: an unexpected one is fatal under the
+     * test harness, which is the assertion that the fallback really worked. */
+    GError *err = NULL;
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
+    g_assert_cmpuint (count_fallback_locks (), ==, locks_before + 1);
+
+    /* The lock file is keyed on the database path, so a second write reuses it
+     * rather than accumulating one file per save. */
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 3);
+    g_assert_cmpuint (count_fallback_locks (), ==, locks_before + 1);
+
+    db_test_set_lock_mode (DB_TEST_LOCK_SUPPORTED);
+    cleanup_db_data (db_data, dir, path);
+}
+
+/* Nowhere can lock, e.g. an NFS home with no lock daemon. The lock is a guard
+ * against a concurrent writer, not a correctness requirement, so the write must
+ * still go through, with one warning and not one per save. */
+static void
+test_lock_unsupported_everywhere_warns_once (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    db_test_set_lock_mode (DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE);
     g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*lock not supported*");
 
     GError *err = NULL;
@@ -226,19 +277,46 @@ test_lock_unsupported_fallback (void)
     g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
     g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
 
-    /* A second write must also succeed and must NOT warn again (warn-once);
-     * an unexpected warning here would be fatal under the test harness. */
+    /* Warn-once: a second warning here would be an unexpected message and fatal. */
     g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
     g_assert_no_error (err);
     g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 3);
 
-    db_test_set_unsupported_lock (FALSE);
+    db_test_set_lock_mode (DB_TEST_LOCK_SUPPORTED);
     cleanup_db_data (db_data, dir, path);
+}
+
+/* Remove the <data home>/otpclient/locks tree, then the data home itself. */
+static void
+cleanup_data_home (const gchar *data_home)
+{
+    g_autofree gchar *locks = g_build_filename (data_home, "otpclient", "locks", NULL);
+    GDir *d = g_dir_open (locks, 0, NULL);
+    if (d != NULL) {
+        const gchar *name;
+        while ((name = g_dir_read_name (d)) != NULL) {
+            g_autofree gchar *f = g_build_filename (locks, name, NULL);
+            g_unlink (f);
+        }
+        g_dir_close (d);
+    }
+    g_rmdir (locks);
+
+    g_autofree gchar *app_dir = g_build_filename (data_home, "otpclient", NULL);
+    g_rmdir (app_dir);
+    g_rmdir (data_home);
 }
 
 int
 main (int argc, char **argv)
 {
+    /* Before anything reads it: lock_db falls back to a lock file under the
+     * user data dir, and that should not land in whoever is running the tests. */
+    GError *tmp_err = NULL;
+    g_autofree gchar *data_home = g_dir_make_tmp ("otpclient-test-data-XXXXXX", &tmp_err);
+    g_assert_no_error (tmp_err);
+    g_setenv ("XDG_DATA_HOME", data_home, TRUE);
+
     g_test_init (&argc, &argv, NULL);
     gchar *init_err = init_libs (DEFAULT_MEMLOCK_VALUE);
     g_assert_null (init_err);
@@ -248,7 +326,10 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/password-change-failure", test_password_change_failure_restores_key);
     g_test_add_func ("/db-transaction/kdf-failure", test_kdf_failure_restores_params);
     g_test_add_func ("/db-transaction/stale-snapshot", test_stale_snapshot_rejected);
-    g_test_add_func ("/db-transaction/lock-unsupported-fallback", test_lock_unsupported_fallback);
+    g_test_add_func ("/db-transaction/lock-unsupported-fallback", test_lock_unsupported_uses_fallback);
+    g_test_add_func ("/db-transaction/lock-unsupported-everywhere", test_lock_unsupported_everywhere_warns_once);
 
-    return g_test_run ();
+    int ret = g_test_run ();
+    cleanup_data_home (data_home);
+    return ret;
 }

@@ -26,7 +26,7 @@ typedef struct {
 #ifdef OTPCLIENT_TESTING
 static gboolean test_fail_encrypt = FALSE;
 static gboolean test_fail_atomic_write = FALSE;
-static gboolean test_unsupported_lock = FALSE;
+static DbTestLockMode test_lock_mode = DB_TEST_LOCK_SUPPORTED;
 
 void
 db_test_set_fail_encrypt (gboolean fail)
@@ -41,9 +41,9 @@ db_test_set_fail_atomic_write (gboolean fail)
 }
 
 void
-db_test_set_unsupported_lock (gboolean unsupported)
+db_test_set_lock_mode (DbTestLockMode mode)
 {
-    test_unsupported_lock = unsupported;
+    test_lock_mode = mode;
 }
 #endif
 
@@ -307,29 +307,68 @@ atomic_write_database (const gchar  *path,
 
 
 /* Wrapper around flock() so tests can force the "filesystem does not support
- * locking" path (see db_test_set_unsupported_lock). */
+ * locking" path (see db_test_set_lock_mode). `is_fallback` says which of the two
+ * locations lock_db is trying, so a test can make only the one beside the
+ * database refuse, which is what the document portal actually does.
+ *
+ * Note that flock() is deliberate and must stay: the lock is owned by the open
+ * file description, so two threads in this process locking distinct descriptors
+ * still exclude each other. POSIX record locks (fcntl F_SETLK) are owned by the
+ * process and would not, so moving a database write onto a worker thread would
+ * quietly lose the protection if this were ported. */
 static int
-db_try_flock (int fd)
+db_try_flock (int      fd,
+              gboolean is_fallback)
 {
 #ifdef OTPCLIENT_TESTING
-    if (test_unsupported_lock) {
+    if (test_lock_mode == DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE ||
+        (test_lock_mode == DB_TEST_LOCK_UNSUPPORTED_BESIDE_DB && !is_fallback)) {
         errno = ENOSYS;
         return -1;
     }
+#else
+    (void) is_fallback;
 #endif
     return flock (fd, LOCK_EX | LOCK_NB);
 }
 
 
-static gboolean
-lock_db (const gchar *db_path,
-         DbLock      *lock,
-         GError     **err)
+/* A lock file for `db_path` that does not live next to the database, for use
+ * when the filesystem the database is on cannot lock. Keyed on the database
+ * path so two processes opening the same database agree on it, canonicalised
+ * first so that two spellings of one path do not disagree. NULL if the
+ * directory cannot be created. */
+static gchar *
+db_fallback_lock_path (const gchar *db_path)
 {
-    g_return_val_if_fail (lock != NULL, FALSE);
+    g_autofree gchar *dir = g_build_filename (g_get_user_data_dir (), "otpclient", "locks", NULL);
+    if (g_mkdir_with_parents (dir, 0700) != 0) {
+        g_warning ("Failed to create the lock directory '%s': %s", dir, g_strerror (errno));
+        return NULL;
+    }
 
-    lock->fd = -1;
-    lock->path = g_strconcat (db_path, ".lock", NULL);
+    g_autofree gchar *canonical = g_canonicalize_filename (db_path, NULL);
+    g_autofree gchar *digest = g_compute_checksum_for_string (G_CHECKSUM_SHA256, canonical, -1);
+    g_autofree gchar *name = g_strconcat (digest, ".lock", NULL);
+
+    return g_build_filename (dir, name, NULL);
+}
+
+
+/* Open `path` and take the write lock, waiting out a competing writer for up to
+ * two seconds. Takes ownership of `path` either way. `unsupported` is set when
+ * the filesystem has no lock implementation at all, which is not an error here:
+ * the caller decides whether to go looking elsewhere. The descriptor is left
+ * open in that case, so the caller must unlock_db before reusing `lock`. */
+static gboolean
+db_lock_take (DbLock    *lock,
+              gchar     *path,
+              gboolean   is_fallback,
+              gboolean  *unsupported,
+              GError   **err)
+{
+    *unsupported = FALSE;
+    lock->path = path;
     lock->fd = g_open (lock->path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
     if (lock->fd < 0) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
@@ -339,23 +378,10 @@ lock_db (const gchar *db_path,
     }
 
     gint64 deadline = g_get_monotonic_time () + (2 * G_USEC_PER_SEC);
-    while (db_try_flock (lock->fd) != 0) {
+    while (db_try_flock (lock->fd, is_fallback) != 0) {
         if (errno == ENOSYS || errno == EOPNOTSUPP) {
-            /* Some filesystems do not implement POSIX locks and fail with
-             * ENOSYS/EOPNOTSUPP, notably the Flatpak XDG document-portal FUSE
-             * mount (/run/user/<uid>/doc/) and some NFS/SMB setups. The lock is
-             * a best-effort guard against a second OTPClient instance writing
-             * concurrently, not a correctness requirement, so continue without
-             * it rather than making the database impossible to open (issue #466).
-             * Leave lock->fd open; unlock_db () cleans it up. Warn once so we do
-             * not spam on every write. */
-            static gboolean warned = FALSE;
-            if (!warned) {
-                g_warning ("Database lock not supported on this filesystem '%s'; "
-                           "continuing without a lock: %s", lock->path, g_strerror (errno));
-                warned = TRUE;
-            }
-            return TRUE;
+            *unsupported = TRUE;
+            return FALSE;
         }
         if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
             g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
@@ -370,6 +396,68 @@ lock_db (const gchar *db_path,
             return FALSE;
         }
         g_usleep (50 * 1000);
+    }
+    return TRUE;
+}
+
+
+static gboolean
+lock_db (const gchar *db_path,
+         DbLock      *lock,
+         GError     **err)
+{
+    g_return_val_if_fail (lock != NULL, FALSE);
+
+    lock->fd = -1;
+    lock->path = NULL;
+
+    gboolean unsupported = FALSE;
+    if (db_lock_take (lock, g_strconcat (db_path, ".lock", NULL), FALSE, &unsupported, err))
+        return TRUE;
+    if (!unsupported)
+        return FALSE;
+
+    /* The database is somewhere that cannot lock: the Flatpak document portal,
+     * which is where every database the user picked from outside the sandbox
+     * ends up, or an NFS/SMB mount without lock support. Since 5.1.5 (issue
+     * #466) that was tolerated and the write simply went unlocked, which is the
+     * wrong half of the problem to solve: sandboxed users are exactly the ones
+     * running a GUI, a CLI and a search provider off one database.
+     *
+     * The lock does not have to sit next to the database, though, it only has
+     * to be somewhere both processes agree on. Take it in our own data
+     * directory instead, which is a real filesystem and is shared between every
+     * instance of the app, Flatpak included.
+     *
+     * Switching the syscall would not have worked. The document portal does
+     * implement fcntl (F_SETLK) where it refuses flock outright, but it
+     * forwards the call to a descriptor the portal itself holds, and POSIX
+     * record locks belong to the process holding them, so every client's lock
+     * ends up owned by the one portal process and none of them ever conflict.
+     * Measured on xdg-desktop-portal 1.22.1: two processes both take F_WRLCK on
+     * the same document-portal inode and both are granted it, while the same
+     * test on a normal filesystem gives the second one EAGAIN. That would have
+     * traded an honest warning for a lock that silently protects nothing. */
+    unlock_db (lock);
+
+    g_autofree gchar *fallback = db_fallback_lock_path (db_path);
+    if (fallback != NULL) {
+        if (db_lock_take (lock, g_steal_pointer (&fallback), TRUE, &unsupported, err))
+            return TRUE;
+        if (!unsupported)
+            return FALSE;
+    }
+
+    /* Nowhere left to take it. The lock is a best-effort guard against a second
+     * OTPClient writing concurrently, not a correctness requirement, so carry
+     * on rather than make the database impossible to open. Any descriptor
+     * db_lock_take left open is cleaned up by the caller's unlock_db. Warn once
+     * so we do not spam on every write. */
+    static gboolean warned = FALSE;
+    if (!warned) {
+        g_warning ("Database lock not supported for '%s', and no fallback lock could be "
+                   "taken either; continuing without a lock", db_path);
+        warned = TRUE;
     }
     return TRUE;
 }
