@@ -5,6 +5,7 @@
 #include <gio/gio.h>
 #include <gtk/gtk.h>
 #include "tray.h"
+#include "tray-menu-model.h"
 #include "otpclient-application.h"
 
 #define SNI_OBJECT_PATH    "/StatusNotifierItem"
@@ -13,90 +14,8 @@
 #define WATCHER_BUS_NAME     "org.kde.StatusNotifierWatcher"
 #define WATCHER_OBJECT_PATH  "/StatusNotifierWatcher"
 
-#define MENU_ID_ROOT  0
 #define MENU_ID_SHOW  1
 #define MENU_ID_QUIT  2
-
-static const gchar sni_introspection_xml[] =
-    "<node>"
-    "  <interface name='org.kde.StatusNotifierItem'>"
-    "    <property name='Category' type='s' access='read'/>"
-    "    <property name='Id' type='s' access='read'/>"
-    "    <property name='Title' type='s' access='read'/>"
-    "    <property name='Status' type='s' access='read'/>"
-    "    <property name='IconName' type='s' access='read'/>"
-    "    <property name='Menu' type='o' access='read'/>"
-    "    <property name='ItemIsMenu' type='b' access='read'/>"
-    "    <method name='Activate'>"
-    "      <arg type='i' name='x' direction='in'/>"
-    "      <arg type='i' name='y' direction='in'/>"
-    "    </method>"
-    "    <method name='SecondaryActivate'>"
-    "      <arg type='i' name='x' direction='in'/>"
-    "      <arg type='i' name='y' direction='in'/>"
-    "    </method>"
-    "    <signal name='NewStatus'>"
-    "      <arg type='s' name='status'/>"
-    "    </signal>"
-    "  </interface>"
-    "</node>";
-
-static const gchar dbusmenu_introspection_xml[] =
-    "<node>"
-    "  <interface name='com.canonical.dbusmenu'>"
-    "    <property name='Version' type='u' access='read'/>"
-    "    <property name='TextDirection' type='s' access='read'/>"
-    "    <property name='Status' type='s' access='read'/>"
-    "    <method name='GetLayout'>"
-    "      <arg type='i' name='parentId' direction='in'/>"
-    "      <arg type='i' name='recursionDepth' direction='in'/>"
-    "      <arg type='as' name='propertyNames' direction='in'/>"
-    "      <arg type='u' name='revision' direction='out'/>"
-    "      <arg type='(ia{sv}av)' name='layout' direction='out'/>"
-    "    </method>"
-    "    <method name='Event'>"
-    "      <arg type='i' name='id' direction='in'/>"
-    "      <arg type='s' name='eventId' direction='in'/>"
-    "      <arg type='v' name='data' direction='in'/>"
-    "      <arg type='u' name='timestamp' direction='in'/>"
-    "    </method>"
-    "    <method name='AboutToShow'>"
-    "      <arg type='i' name='id' direction='in'/>"
-    "      <arg type='b' name='needUpdate' direction='out'/>"
-    "    </method>"
-    "    <method name='GetGroupProperties'>"
-    "      <arg type='ai' name='ids' direction='in'/>"
-    "      <arg type='as' name='propertyNames' direction='in'/>"
-    "      <arg type='a(ia{sv})' name='properties' direction='out'/>"
-    "    </method>"
-    "    <method name='GetProperty'>"
-    "      <arg type='i' name='id' direction='in'/>"
-    "      <arg type='s' name='name' direction='in'/>"
-    "      <arg type='v' name='value' direction='out'/>"
-    "    </method>"
-    "    <method name='EventGroup'>"
-    "      <arg type='a(isvu)' name='events' direction='in'/>"
-    "      <arg type='ai' name='idErrors' direction='out'/>"
-    "    </method>"
-    "    <method name='AboutToShowGroup'>"
-    "      <arg type='ai' name='ids' direction='in'/>"
-    "      <arg type='ai' name='updatesNeeded' direction='out'/>"
-    "      <arg type='ai' name='idErrors' direction='out'/>"
-    "    </method>"
-    "    <signal name='LayoutUpdated'>"
-    "      <arg type='u' name='revision'/>"
-    "      <arg type='i' name='parent'/>"
-    "    </signal>"
-    "    <signal name='ItemsPropertiesUpdated'>"
-    "      <arg type='a(ia{sv})' name='updatedProps'/>"
-    "      <arg type='a(ias)' name='removedProps'/>"
-    "    </signal>"
-    "    <signal name='ItemActivationRequested'>"
-    "      <arg type='i' name='id'/>"
-    "      <arg type='u' name='timestamp'/>"
-    "    </signal>"
-    "  </interface>"
-    "</node>";
 
 /* Whether a StatusNotifierWatcher (and, where it says so, a host behind it) is
  * on the session bus. UNKNOWN covers the startup window before the name watcher
@@ -243,133 +162,26 @@ static const GDBusInterfaceVTable sni_vtable = {
 
 /* --- DBusMenu D-Bus interface --- */
 
-/* NULL for anything that is not one of our leaves, which doubles as the
- * "does this id exist" test. Translated on each call: gettext owns the result
- * and it stays valid for the life of the process. */
-static const gchar *
-menu_label_for_id (gint32 id)
+/* The menu itself. The model in tray-menu-model.c turns this into every reply
+ * on the interface; the labels stay here so they can go through _() while the
+ * model stays free of GTK, gettext and the application object, and so the
+ * tests can drive it with their own fixtures. Built on first use because
+ * gettext needs the locale to be set up. */
+static const TrayMenuEntry *
+menu_entries (gsize *n_items)
 {
-    switch (id)
-    {
-        case MENU_ID_SHOW: return _("Show OTPClient");
-        case MENU_ID_QUIT: return _("Quit");
-        default:           return NULL;
-    }
-}
+    static TrayMenuEntry entries[2];
+    static gsize initialised = 0;
 
-static gboolean
-menu_id_exists (gint32 id)
-{
-    return id == MENU_ID_ROOT || menu_label_for_id (id) != NULL;
-}
-
-/* The single source of truth for an item's properties, shared by GetLayout,
- * GetGroupProperties and GetProperty. It always emits the item's *full* set:
- * libdbusmenu's client replaces rather than merges what a properties reply
- * carries, so anything left out is actively removed from the item, and a
- * missing label falls back to the client's own "Label Empty" placeholder. */
-static void
-add_item_properties (GVariantBuilder *props,
-                     gint32           id)
-{
-    if (id == MENU_ID_ROOT)
+    if (g_once_init_enter (&initialised))
     {
-        /* Only the root is a submenu. Claiming children-display on a leaf makes
-         * libdbusmenu-gtk build an empty child menu for it and route clicks to
-         * AboutToShow instead of activating it, i.e. a dead entry. */
-        g_variant_builder_add (props, "{sv}", "children-display",
-                               g_variant_new_string ("submenu"));
-        return;
+        entries[0] = (TrayMenuEntry) { MENU_ID_SHOW, _("Show OTPClient"), TRAY_MENU_ACTION_SHOW };
+        entries[1] = (TrayMenuEntry) { MENU_ID_QUIT, _("Quit"),           TRAY_MENU_ACTION_QUIT };
+        g_once_init_leave (&initialised, 1);
     }
 
-    g_variant_builder_add (props, "{sv}", "type",
-                           g_variant_new_string ("standard"));
-    g_variant_builder_add (props, "{sv}", "label",
-                           g_variant_new_string (menu_label_for_id (id)));
-    g_variant_builder_add (props, "{sv}", "enabled",
-                           g_variant_new_boolean (TRUE));
-    g_variant_builder_add (props, "{sv}", "visible",
-                           g_variant_new_boolean (TRUE));
-}
-
-static GVariant *
-build_menu_item (gint32 id)
-{
-    GVariantBuilder props;
-    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-    add_item_properties (&props, id);
-
-    GVariantBuilder children;
-    g_variant_builder_init (&children, G_VARIANT_TYPE ("av"));
-
-    if (id == MENU_ID_ROOT)
-    {
-        g_variant_builder_add (&children, "v", build_menu_item (MENU_ID_SHOW));
-        g_variant_builder_add (&children, "v", build_menu_item (MENU_ID_QUIT));
-    }
-
-    return g_variant_new ("(ia{sv}av)", id, &props, &children);
-}
-
-static void
-append_item_properties (GVariantBuilder *out,
-                        gint32           id)
-{
-    if (!menu_id_exists (id))
-        return;
-
-    GVariantBuilder props;
-    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-    add_item_properties (&props, id);
-
-    g_variant_builder_add (out, "(ia{sv})", id, &props);
-}
-
-/* propertyNames is deliberately ignored, here and in GetLayout: sending a
- * superset is always allowed, every studied client copes, and KDE depends on
- * the inline properties GetLayout returns. Honouring the filter is what would
- * break them. */
-static GVariant *
-build_group_properties (GVariant *ids)
-{
-    GVariantBuilder out;
-    g_variant_builder_init (&out, G_VARIANT_TYPE ("a(ia{sv})"));
-
-    if (g_variant_n_children (ids) == 0)
-    {
-        /* Per the spec, an empty id list means every item. */
-        append_item_properties (&out, MENU_ID_ROOT);
-        append_item_properties (&out, MENU_ID_SHOW);
-        append_item_properties (&out, MENU_ID_QUIT);
-    }
-    else
-    {
-        GVariantIter iter;
-        gint32 id;
-
-        g_variant_iter_init (&iter, ids);
-        while (g_variant_iter_next (&iter, "i", &id))
-            append_item_properties (&out, id);
-    }
-
-    return g_variant_new ("(a(ia{sv}))", &out);
-}
-
-/* Returns a new reference, or NULL when the item or the property is unknown. */
-static GVariant *
-lookup_item_property (gint32       id,
-                      const gchar *name)
-{
-    if (!menu_id_exists (id))
-        return NULL;
-
-    GVariantBuilder props;
-    g_variant_builder_init (&props, G_VARIANT_TYPE ("a{sv}"));
-    add_item_properties (&props, id);
-
-    g_autoptr (GVariant) dict = g_variant_ref_sink (g_variant_builder_end (&props));
-
-    return g_variant_lookup_value (dict, name, NULL);
+    *n_items = G_N_ELEMENTS (entries);
+    return entries;
 }
 
 static gboolean
@@ -383,19 +195,21 @@ quit_in_idle (gpointer user_data)
  * libdbusmenu's Event call is not annotated NoReply and waits a second for it,
  * so tearing the process down inline would stall the panel. */
 static void
-dbusmenu_dispatch_event (TrayData    *td,
-                         gint32       id,
-                         const gchar *event_id)
+tray_perform_action (TrayData      *td,
+                     TrayMenuAction action)
 {
-    /* KDE also sends "opened" and "closed" around the popup; those are not
-     * activations and must not trip the actions. */
-    if (g_strcmp0 (event_id, "clicked") != 0)
-        return;
-
-    if (id == MENU_ID_SHOW)
-        show_window (td);
-    else if (id == MENU_ID_QUIT)
-        g_idle_add (quit_in_idle, td->app);
+    switch (action)
+    {
+        case TRAY_MENU_ACTION_SHOW:
+            show_window (td);
+            break;
+        case TRAY_MENU_ACTION_QUIT:
+            g_idle_add (quit_in_idle, td->app);
+            break;
+        case TRAY_MENU_ACTION_NONE:
+        default:
+            break;
+    }
 }
 
 static void
@@ -415,16 +229,31 @@ dbusmenu_method_call (GDBusConnection       *connection,
 
     TrayData *td = user_data;
 
+    gsize n_items;
+    const TrayMenuEntry *items = menu_entries (&n_items);
+
     if (g_strcmp0 (method_name, "GetLayout") == 0)
     {
-        GVariant *layout = build_menu_item (MENU_ID_ROOT);
-        g_dbus_method_invocation_return_value (invocation,
-                                               g_variant_new ("(u@(ia{sv}av))", 1, layout));
+        gint32 parent_id, depth;
+        g_variant_get (parameters, "(ii@as)", &parent_id, &depth, NULL);
+
+        gboolean found = FALSE;
+        GVariant *reply = tray_menu_model_layout (items, n_items, parent_id, depth, &found);
+        if (!found)
+        {
+            g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
+                                                   G_DBUS_ERROR_INVALID_ARGS,
+                                                   "No menu item %d", parent_id);
+            return;
+        }
+
+        g_dbus_method_invocation_return_value (invocation, reply);
     }
     else if (g_strcmp0 (method_name, "GetGroupProperties") == 0)
     {
         g_autoptr (GVariant) ids = g_variant_get_child_value (parameters, 0);
-        g_dbus_method_invocation_return_value (invocation, build_group_properties (ids));
+        g_dbus_method_invocation_return_value (invocation,
+                                               tray_menu_model_group_properties (items, n_items, ids));
     }
     else if (g_strcmp0 (method_name, "GetProperty") == 0)
     {
@@ -432,7 +261,7 @@ dbusmenu_method_call (GDBusConnection       *connection,
         const gchar *name;
         g_variant_get (parameters, "(i&s)", &id, &name);
 
-        g_autoptr (GVariant) value = lookup_item_property (id, name);
+        g_autoptr (GVariant) value = tray_menu_model_property (items, n_items, id, name);
         if (value == NULL)
         {
             g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
@@ -452,39 +281,21 @@ dbusmenu_method_call (GDBusConnection       *connection,
          * nothing here frees. */
         g_variant_get (parameters, "(i&s@vu)", &id, &event_id, NULL, NULL);
 
-        dbusmenu_dispatch_event (td, id, event_id);
+        tray_perform_action (td, tray_menu_model_action_for_event (items, n_items, id, event_id));
 
         g_dbus_method_invocation_return_value (invocation, NULL);
     }
     else if (g_strcmp0 (method_name, "EventGroup") == 0)
     {
         g_autoptr (GVariant) events = g_variant_get_child_value (parameters, 0);
+        g_autoptr (GArray) actions = g_array_new (FALSE, FALSE, sizeof (TrayMenuAction));
 
-        GVariantBuilder errors;
-        g_variant_builder_init (&errors, G_VARIANT_TYPE ("ai"));
+        GVariant *reply = tray_menu_model_event_group (items, n_items, events, actions);
 
-        GVariantIter iter;
-        GVariant *child = NULL;
+        for (guint i = 0; i < actions->len; i++)
+            tray_perform_action (td, g_array_index (actions, TrayMenuAction, i));
 
-        g_variant_iter_init (&iter, events);
-        /* Iterating by value keeps each event tuple alive while event_id
-         * borrows from it. */
-        while ((child = g_variant_iter_next_value (&iter)) != NULL)
-        {
-            gint32 id;
-            const gchar *event_id;
-            g_variant_get (child, "(i&s@vu)", &id, &event_id, NULL, NULL);
-
-            if (menu_id_exists (id))
-                dbusmenu_dispatch_event (td, id, event_id);
-            else
-                g_variant_builder_add (&errors, "i", id);
-
-            g_variant_unref (child);
-        }
-
-        g_dbus_method_invocation_return_value (invocation,
-                                               g_variant_new ("(ai)", &errors));
+        g_dbus_method_invocation_return_value (invocation, reply);
     }
     else if (g_strcmp0 (method_name, "AboutToShow") == 0)
     {
@@ -494,27 +305,8 @@ dbusmenu_method_call (GDBusConnection       *connection,
     else if (g_strcmp0 (method_name, "AboutToShowGroup") == 0)
     {
         g_autoptr (GVariant) ids = g_variant_get_child_value (parameters, 0);
-
-        GVariantBuilder updates, errors;
-        g_variant_builder_init (&updates, G_VARIANT_TYPE ("ai"));
-        g_variant_builder_init (&errors, G_VARIANT_TYPE ("ai"));
-
-        GVariantIter iter;
-        gint32 id;
-
-        g_variant_iter_init (&iter, ids);
-        while (g_variant_iter_next (&iter, "i", &id))
-        {
-            if (!menu_id_exists (id))
-                g_variant_builder_add (&errors, "i", id);
-        }
-
-        /* The menu is static, so no item ever needs a layout refresh before it
-         * is shown and updatesNeeded stays empty. Note the reply is (aiai): a
-         * mismatched type here would make GDBus log and send no reply at all,
-         * hanging the panel for the full D-Bus timeout. */
         g_dbus_method_invocation_return_value (invocation,
-                                               g_variant_new ("(aiai)", &updates, &errors));
+                                               tray_menu_model_about_to_show_group (items, n_items, ids));
     }
     else
     {
@@ -599,7 +391,7 @@ on_bus_acquired (GDBusConnection *connection,
     GError *err = NULL;
 
     g_autoptr (GDBusNodeInfo) sni_info =
-        g_dbus_node_info_new_for_xml (sni_introspection_xml, &err);
+        g_dbus_node_info_new_for_xml (tray_menu_model_sni_introspection_xml, &err);
     if (err != NULL)
     {
         g_warning ("Failed to parse SNI introspection: %s", err->message);
@@ -621,7 +413,7 @@ on_bus_acquired (GDBusConnection *connection,
     }
 
     g_autoptr (GDBusNodeInfo) menu_info =
-        g_dbus_node_info_new_for_xml (dbusmenu_introspection_xml, &err);
+        g_dbus_node_info_new_for_xml (tray_menu_model_dbusmenu_introspection_xml, &err);
     if (err != NULL)
     {
         g_warning ("Failed to parse dbusmenu introspection: %s", err->message);
