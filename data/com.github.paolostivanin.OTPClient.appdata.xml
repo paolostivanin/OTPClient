@@ -30,7 +30,7 @@
       <li>import and export of encrypted/plain Aegis backups</li>
       <li>import and export of encrypted/plain Authenticator Pro and 2FAS backups</li>
       <li>import and export of plain FreeOTP+ backups (key URI format)</li>
-      <li>import of Google Authenticator migration QR codes (file, screen, webcam, clipboard)</li>
+      <li>import of Google Authenticator migration QR codes (file, webcam, clipboard)</li>
       <li>integration with the OS secret service provider via libsecret (opt-in)</li>
       <li>local database encrypted with AES-256-GCM and Argon2id key derivation; plaintext lives only in libgcrypt secure memory while unlocked</li>
     </ul>
@@ -60,6 +60,10 @@
   <url type="homepage">https://github.com/paolostivanin/OTPClient</url>
   <url type="bugtracker">https://github.com/paolostivanin/OTPClient/issues</url>
   <update_contact>info@paolostivanin.com</update_contact>
+  <developer id="com.paolostivanin">
+    <name>Paolo Stivanin</name>
+  </developer>
+  <!-- Kept alongside the element above for tooling that predates it. -->
   <developer_name>Paolo Stivanin</developer_name>
 
   <provides>

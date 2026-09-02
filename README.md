@@ -5,8 +5,8 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### Supported standards
 - TOTP and HOTP
-- Manual entry: digits 4-10, period 1-300 s
-- `otpauth://` URIs (import / display / QR): digits 6-8, period 1-300 s (per RFC 6238)
+- Manual entry: digits 4-10, period 1-120 s
+- `otpauth://` URIs (import / display / QR): digits 4-10, period 1-120 s
 - SHA1, SHA256, and SHA512 algorithms
 - Steam guard codes ([details](https://github.com/paolostivanin/OTPClient/wiki/Steam-Support))
 
