@@ -161,6 +161,52 @@ gui_misc_add_db_to_list (GListStore  *db_store,
     return TRUE;
 }
 
+gboolean
+gui_misc_replace_db_path (GListStore  *db_store,
+                          const gchar *old_path,
+                          const gchar *new_path)
+{
+    g_return_val_if_fail (G_IS_LIST_STORE (db_store), FALSE);
+    g_return_val_if_fail (old_path != NULL && new_path != NULL, FALSE);
+
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (db_store));
+    g_autoptr (DatabaseEntry) survivor = NULL;
+    for (guint i = 0; i < n; i++) {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (db_store), i);
+        if (g_strcmp0 (database_entry_get_path (entry), old_path) == 0) {
+            database_entry_set_path (entry, new_path);
+            database_entry_set_missing (entry, FALSE);
+            survivor = g_steal_pointer (&entry);
+            break;
+        }
+    }
+    if (survivor == NULL)
+        return FALSE;
+
+    /* Re-picking an already-listed path must not create a duplicate row. The
+     * survivor is held by pointer rather than by index because removing a
+     * duplicate that sits above it moves it. */
+    gboolean absorbed_primary = FALSE;
+    for (gint i = (gint) g_list_model_get_n_items (G_LIST_MODEL (db_store)) - 1; i >= 0; i--) {
+        g_autoptr (DatabaseEntry) entry = g_list_model_get_item (G_LIST_MODEL (db_store), (guint) i);
+        if (entry == survivor)
+            continue;
+        if (g_strcmp0 (database_entry_get_path (entry), new_path) == 0) {
+            absorbed_primary = absorbed_primary || database_entry_get_primary (entry);
+            g_list_store_remove (db_store, (guint) i);
+        }
+    }
+
+    /* The row that was the default is gone, but the database it stood for is
+     * not: it is the row that just moved onto its path. The star has to follow,
+     * or db-path goes on naming a database no row admits to being. */
+    if (absorbed_primary)
+        database_entry_set_primary (survivor, TRUE);
+
+    gui_misc_save_db_list (db_store);
+    return TRUE;
+}
+
 void
 gui_misc_remove_db_from_list (GListStore *db_store,
                               guint       index)

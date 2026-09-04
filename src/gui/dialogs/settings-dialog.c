@@ -38,6 +38,9 @@ struct _SettingsDialog
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
     GtkWidget *start_minimized_switch;
+    /* Same idea for the tray rows, which the application can move on its own
+     * when a background grant is refused after the fact. */
+    gboolean   tray_updating;
 #endif
 };
 
@@ -267,7 +270,15 @@ on_minimize_to_tray_toggled (GObject        *obj,
                               SettingsDialog *self)
 {
     (void) pspec;
+    if (self->tray_updating)
+        return;
+
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
+
+    /* A refusal left over from an earlier attempt described that attempt, not
+     * this one. The key watcher writes it again if this one is refused too. */
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (obj), "");
+
     otpclient_application_set_minimize_to_tray (self->app, active);
 
     /* Turning it off also turns start-minimized off, in the application. Mirror
@@ -277,58 +288,150 @@ on_minimize_to_tray_toggled (GObject        *obj,
     sync_start_minimized_sensitivity (self);
 }
 
+/* Under Flatpak the switch runs ahead of the answer: turning it on asks the
+ * portal for a background grant, and a refusal arrives seconds later and puts
+ * the key back. Watch the key rather than that one request, so the rows stay
+ * honest whichever path moved them, the refusal or a settings import. */
+static void
+on_minimize_to_tray_key_changed (GSettings      *settings,
+                                 const gchar    *key,
+                                 SettingsDialog *self)
+{
+    (void) settings;
+    (void) key;
+
+    gboolean minimize = otpclient_application_get_minimize_to_tray (self->app);
+    if (minimize == adw_switch_row_get_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch)))
+        return;
+
+    self->tray_updating = TRUE;
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch), minimize);
+    self->tray_updating = FALSE;
+
+    sync_start_minimized_sensitivity (self);
+
+    /* sync_start_minimized_sensitivity owns the start-minimized subtitle, so
+     * only the row that was actually refused says why. Cleared again on the way
+     * back up, for the import that turns the key on after a refusal. */
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->minimize_to_tray_switch),
+                                 !minimize ? _("The desktop refused to let the app run in the background")
+                                           : "");
+}
+
+/* Its own watcher rather than a line inside the one above, because the two keys
+ * are written by two separate g_settings_set calls and their notifications are
+ * free to arrive in either order. A row that followed the other key's
+ * notification would read the application a step before it had caught up, and
+ * on a rollback that leaves "Start Minimized" sitting there checked, greyed out
+ * over a key that says otherwise, until Settings is reopened. Each row follows
+ * its own key and the order stops mattering. */
+static void
+on_start_minimized_key_changed (GSettings      *settings,
+                                const gchar    *key,
+                                SettingsDialog *self)
+{
+    (void) settings;
+    (void) key;
+
+    gboolean minimized = otpclient_application_get_start_minimized (self->app);
+    if (minimized == adw_switch_row_get_active (ADW_SWITCH_ROW (self->start_minimized_switch)))
+        return;
+
+    self->tray_updating = TRUE;
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch), minimized);
+    self->tray_updating = FALSE;
+}
+
 static void
 on_start_minimized_toggled (GObject        *obj,
                             GParamSpec     *pspec,
                             SettingsDialog *self)
 {
     (void) pspec;
+    /* Not just redundant: the setter re-pushes the autostart entry, and this
+     * row is only moving to catch up with a change the application already
+     * made. */
+    if (self->tray_updating)
+        return;
+
     gboolean active = adw_switch_row_get_active (ADW_SWITCH_ROW (obj));
     otpclient_application_set_start_minimized (self->app, active);
 }
 #endif
 
 /* The dialog can be closed while the portal is still thinking, so the reply
- * carries its own reference to the application and only a weak one to the
- * dialog. */
+ * holds only a weak pointer to it. Nothing else is carried: the keys are put
+ * right by the reconciliation every request goes through, and the row follows
+ * the key. All this is here for is what the key cannot say: that the row is
+ * live again, that the last refusal is over, and which way the request that is
+ * answering went, since only one of the two directions moves a key. */
 typedef struct {
-    OTPClientApplication *app;
-    SettingsDialog       *dialog;
-    gboolean              wanted;
+    SettingsDialog *dialog;
+    gboolean        wanted;
 } AutostartToggle;
 
 static void
-on_autostart_result (gboolean granted,
-                     gpointer user_data)
+on_autostart_result (const AutostartResult *result,
+                     gpointer               user_data)
 {
     AutostartToggle *toggle = user_data;
 
-    if (!granted)
-    {
-        /* Nothing can be read back, so the key must not claim more than the
-         * desktop actually did. This also covers a failed removal, where the
-         * entry is still there and the key had better say so. */
-        otpclient_application_set_autostart (toggle->app, !toggle->wanted);
-
-        if (toggle->dialog != NULL)
-        {
-            toggle->dialog->autostart_updating = TRUE;
-            adw_switch_row_set_active (ADW_SWITCH_ROW (toggle->dialog->autostart_switch),
-                                       !toggle->wanted);
-            toggle->dialog->autostart_updating = FALSE;
-            adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch),
-                                         _("The desktop refused to change the login-time launch"));
-        }
-    }
-    else if (toggle->dialog != NULL)
-    {
-        adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch), "");
-    }
-
     if (toggle->dialog != NULL)
+    {
+        /* Only on success, and only from here. A refusal moves the key, and the
+         * watcher on that key writes the explanation, whichever of the two runs
+         * first. Writing it here as well would race with the watcher over an
+         * empty subtitle. */
+        if (!result->superseded && result->autostart)
+            adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch), "");
+
+        /* Switching it off and hearing nothing back is the one outcome with no
+         * key movement to announce it. An unanswered switch-on takes the claim
+         * back, which moves the key and brings the watcher along with it; an
+         * unanswered switch-off has nothing to correct, since the key already
+         * reads off, so the user is left looking at a switch saying the login
+         * entry is gone when nothing confirmed that. The retry is real, the
+         * reconciliation leaves a durable note the next launch acts on, so say
+         * that rather than borrowing the watcher's word "refused". */
+        else if (!result->superseded && !result->answered && !toggle->wanted)
+            adw_action_row_set_subtitle (ADW_ACTION_ROW (toggle->dialog->autostart_switch),
+                                         _("The desktop did not confirm this; it will be tried again at the next launch"));
+
+        /* Unconditional, superseded included. Whatever superseded this request
+         * may have been an internal one with no callback watching for its
+         * reply, and then nothing else would ever give the row back. Only ever
+         * reached from a toggle, which an unsupported desktop cannot produce:
+         * that switch is left insensitive at construction. */
+        gtk_widget_set_sensitive (GTK_WIDGET (toggle->dialog->autostart_switch), TRUE);
         g_object_remove_weak_pointer (G_OBJECT (toggle->dialog), (gpointer *) &toggle->dialog);
-    g_object_unref (toggle->app);
+    }
     g_free (toggle);
+}
+
+/* The key can move without this row touching it: an import writes it, and the
+ * per-launch re-assert clears it when the desktop has withdrawn permission.
+ * Watch the key, the same way the tray rows do. */
+static void
+on_autostart_key_changed (GSettings      *settings,
+                          const gchar    *key,
+                          SettingsDialog *self)
+{
+    (void) settings;
+    (void) key;
+
+    gboolean autostart = otpclient_application_get_autostart (self->app);
+    if (autostart == adw_switch_row_get_active (ADW_SWITCH_ROW (self->autostart_switch)))
+        return;
+
+    self->autostart_updating = TRUE;
+    adw_switch_row_set_active (ADW_SWITCH_ROW (self->autostart_switch), autostart);
+    self->autostart_updating = FALSE;
+
+    /* Symmetric, as with the tray row: the key coming back on means the last
+     * refusal no longer describes where the row stands. */
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->autostart_switch),
+                                 !autostart ? _("The desktop refused to change the login-time launch")
+                                            : "");
 }
 
 static void
@@ -344,10 +447,10 @@ on_autostart_toggled (GObject        *obj,
     otpclient_application_set_autostart (self->app, active);
 
     AutostartToggle *toggle = g_new0 (AutostartToggle, 1);
-    toggle->app = g_object_ref (self->app);
     toggle->dialog = self;
     toggle->wanted = active;
     g_object_add_weak_pointer (G_OBJECT (self), (gpointer *) &toggle->dialog);
+    gtk_widget_set_sensitive (GTK_WIDGET (self->autostart_switch), FALSE);
 
     /* On the host this answers before it returns, from inside this handler,
      * which is what autostart_updating is for. */
@@ -477,7 +580,8 @@ on_import_file_open_complete (GObject      *source,
         return;
     }
 
-    if (!import_settings_from_json (contents, &err)) {
+    gboolean touched_startup = FALSE;
+    if (!import_settings_from_json (contents, &touched_startup, &err)) {
         AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Import Failed"), err->message));
         adw_alert_dialog_add_response (alert, "ok", _("OK"));
         adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
@@ -490,6 +594,12 @@ on_import_file_open_complete (GObject      *source,
     /* Sync in-memory app state from GSettings and close the dialog so
      * the user sees fresh values when they reopen it. */
     otpclient_application_reload_settings (self->app);
+    /* Only when the file actually carried one of them: reconciling restates
+     * the startup keys at the desktop, and under Flatpak that is a portal
+     * request, which is not something to fire off after an import that had
+     * nothing to say about starting up. */
+    if (touched_startup)
+        otpclient_application_reconcile_startup_settings (self->app);
     adw_dialog_close (ADW_DIALOG (self));
 }
 
@@ -790,6 +900,18 @@ settings_dialog_new (OTPClientApplication *app)
                       G_CALLBACK (on_minimize_to_tray_toggled), self);
     g_signal_connect (self->start_minimized_switch, "notify::active",
                       G_CALLBACK (on_start_minimized_toggled), self);
+
+    /* Owned by the dialog and connected to it, so both go away together. */
+    g_autoptr (GSettings) tray_settings = gsettings_common_get_settings ();
+    if (tray_settings != NULL)
+    {
+        g_signal_connect_object (tray_settings, "changed::minimize-to-tray",
+                                 G_CALLBACK (on_minimize_to_tray_key_changed), self, 0);
+        g_signal_connect_object (tray_settings, "changed::start-minimized",
+                                 G_CALLBACK (on_start_minimized_key_changed), self, 0);
+        g_object_set_data_full (G_OBJECT (self), "tray-settings",
+                                g_steal_pointer (&tray_settings), g_object_unref);
+    }
 #endif
 
     /* Not gated on the tray: starting at login is useful with or without one,
@@ -808,6 +930,19 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_group_add (integration_group, self->autostart_switch);
     g_signal_connect (self->autostart_switch, "notify::active",
                       G_CALLBACK (on_autostart_toggled), self);
+
+    /* Same reasoning as the tray watcher, and its own GSettings because this
+     * row exists whether or not the tray was built in. autostart_reassert can
+     * clear the key from under an open dialog, after a settings import or when
+     * the launch-time re-assert is refused. */
+    g_autoptr (GSettings) autostart_settings = gsettings_common_get_settings ();
+    if (autostart_settings != NULL)
+    {
+        g_signal_connect_object (autostart_settings, "changed::autostart",
+                                 G_CALLBACK (on_autostart_key_changed), self, 0);
+        g_object_set_data_full (G_OBJECT (self), "autostart-settings",
+                                g_steal_pointer (&autostart_settings), g_object_unref);
+    }
 
     /* Backup group - covers both app preferences (GSettings JSON) and the
      * encrypted token database. The token rows dispatch to window actions so

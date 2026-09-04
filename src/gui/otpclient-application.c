@@ -300,6 +300,10 @@ application_async_context_free (ApplicationAsyncContext *ctx)
 typedef struct {
     GWeakRef app_ref;
     gboolean clear_legacy_on_success;
+    /* Set only by the relocation path: the db_path the entry used to be keyed
+     * by. Dropped once the password is safely under the new key, never before,
+     * so a failed store cannot leave the only copy nowhere. */
+    gchar   *clear_path_on_success;
 } StorePasswordContext;
 
 static gboolean
@@ -327,23 +331,33 @@ on_password_stored_gui (GObject      *source         __attribute__((unused)),
     StorePasswordContext *ctx = user_data;
     g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
     const gboolean clear_legacy = ctx->clear_legacy_on_success;
+    g_autofree gchar *clear_path = g_steal_pointer (&ctx->clear_path_on_success);
     g_weak_ref_clear (&ctx->app_ref);
     g_free (ctx);
 
     GError *err = NULL;
     secret_password_store_finish (result, &err);
 
-    if (self == NULL) {
-        g_clear_error (&err);
+    if (err != NULL) {
+        /* Both cleanups below are conditional on the store having worked, so
+         * an entry the user still needs survives the failure. */
+        if (self != NULL)
+            application_disable_secret_service_runtime (self, err->message);
+        g_error_free (err);
         return;
     }
 
-    if (err != NULL) {
-        application_disable_secret_service_runtime (self, err->message);
-        g_error_free (err);
-    } else if (clear_legacy) {
+    if (clear_legacy)
         otpclient_secret_clear_legacy_async ();
-    }
+
+    /* The keyring is keyed by absolute path, so a database that moved leaves
+     * its old entry behind: unreachable, and still holding the password. NULL
+     * user_data keeps a failure to a warning, as with the legacy clear. */
+    if (clear_path != NULL)
+        secret_password_clear (OTPCLIENT_SCHEMA, NULL,
+                               on_password_cleared, NULL,
+                               "string", clear_path,
+                               NULL);
 }
 
 static gboolean
@@ -576,10 +590,14 @@ on_db_missing_response (AdwAlertDialog *dialog,
                         const gchar    *response,
                         gpointer        user_data)
 {
-    (void) dialog;
+    if (g_strcmp0 (response, "locate") != 0)
+        return;
 
-    if (g_strcmp0 (response, "locate") == 0)
-        otpclient_window_present_open_database (OTPCLIENT_WINDOW (user_data));
+    /* Attached by present_db_missing_dialog: the path the sidebar still lists
+     * this database under, so the file the user picks takes over that entry
+     * instead of arriving as a second row pointing at the same database. */
+    const gchar *old_path = g_object_get_data (G_OBJECT (dialog), "db-path");
+    otpclient_window_present_open_database (OTPCLIENT_WINDOW (user_data), old_path);
 }
 
 static void
@@ -630,6 +648,7 @@ present_db_missing_dialog (OTPClientWindow *win,
         adw_alert_dialog_set_response_appearance (dialog, "locate", ADW_RESPONSE_SUGGESTED);
         adw_alert_dialog_set_default_response (dialog, "locate");
         adw_alert_dialog_set_close_response (dialog, "cancel");
+        g_object_set_data_full (G_OBJECT (dialog), "db-path", g_strdup (db_path), g_free);
         g_signal_connect_object (dialog, "response", G_CALLBACK (on_db_missing_response),
                                  win, 0);
     } else {
@@ -1415,10 +1434,27 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
      * which is the only place that needs the answer. */
     autostart_init ();
 
-    /* Only when one of the two is on: asking for a background grant the user
-     * has no use for would create a permission entry out of nowhere. */
-    if (self->autostart || self->minimize_to_tray)
+    /* Only when there is something to state or something to take back: asking
+     * for a background grant the user has no use for would create a permission
+     * entry out of nowhere.
+     *
+     * The last two cases are both "somebody wrote the keys behind the desktop's
+     * back". A leftover entry is visible on the host, where it is a file, and
+     * invisible under Flatpak, where it belongs to a config directory outside
+     * the sandbox; the pending key covers what cannot be seen, including the
+     * import that turns everything off, which is the one case where every other
+     * signal here reads as nothing to do. */
+    if (self->autostart || self->minimize_to_tray
+        || otpclient_application_get_startup_reconcile_pending (self)
+        || autostart_entry_may_exist ())
         autostart_reassert (self);
+
+    /* Nothing clears the marker here. Issuing a request is not the same as one
+     * being answered, and a launch that is killed, times out or finds no portal
+     * has settled nothing; clearing it on the way out would throw away the one
+     * retry that can ever take away an entry the sandbox cannot see. The
+     * reconciliation clears it on an answer, and on a desktop with no backend
+     * to answer, which is what stops it retrying forever. */
 
     /* The welcome and what's-new dialogs used to be presented here, on a window
      * that had not been shown yet. They now run from the presentation funnel. */
@@ -1598,6 +1634,40 @@ otpclient_application_set_db_data (OTPClientApplication *self,
     database_data_free (self->db_data);
 
     self->db_data = db_data;
+}
+
+void
+otpclient_application_relocate_stored_password (OTPClientApplication *self,
+                                                const gchar          *old_db_path)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_return_if_fail (old_db_path != NULL);
+
+    /* Nothing was ever stored, so there is nothing to move. */
+    if (!self->use_secret_service)
+        return;
+
+    if (self->db_data == NULL || self->db_data->key == NULL
+        || g_strcmp0 (old_db_path, self->db_data->db_path) == 0)
+        return;
+
+    /* The password has just been used to open the database, so it is verified,
+     * and the database it belongs to is now the active one: exactly the state
+     * in which on_unlock_done stores it. Without this, relocating leaves the
+     * entry keyed by a path nothing looks up again, and the next launch has no
+     * password to unlock with. */
+    StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
+    g_weak_ref_init (&ctx->app_ref, self);
+    ctx->clear_path_on_success = g_strdup (old_db_path);
+    secret_password_store (OTPCLIENT_SCHEMA,
+                           SECRET_COLLECTION_DEFAULT,
+                           "OTPClient database password",
+                           self->db_data->key,
+                           NULL,
+                           on_password_stored_gui,
+                           ctx,
+                           "string", self->db_data->db_path,
+                           NULL);
 }
 
 void
@@ -1825,6 +1895,20 @@ void otpclient_application_set_validity_warning_color (OTPClientApplication *sel
         g_settings_set_string (self->settings, "validity-warning-color", color);
 }
 
+void
+otpclient_application_report_startup_change (OTPClientApplication *self,
+                                             const gchar          *message)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+
+    /* The window is genuinely optional here: the same rollback happens at
+     * launch before anything is shown, and after a settings import that closed
+     * its own dialog. Losing the toast is the expected case rather than a
+     * failure, and the switches follow the keys whenever Settings is opened. */
+    if (self->window != NULL)
+        otpclient_window_show_error_toast (self->window, message);
+}
+
 gboolean otpclient_application_get_minimize_to_tray (OTPClientApplication *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
@@ -1843,19 +1927,24 @@ void otpclient_application_set_minimize_to_tray (OTPClientApplication *self, gbo
     if (!minimize && self->start_minimized)
         otpclient_application_set_start_minimized (self, FALSE);
 
-    /* Closing to the tray means running with no window, and under Flatpak that
-     * is exactly what gets the process killed without a background grant. Ask
-     * now, while the user is looking at the switch they just flipped, rather
-     * than an hour later as a surprise notification. */
-    if (minimize)
-        autostart_ensure_background (self);
-
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     if (minimize)
         otpclient_tray_enable (self);
     else
         otpclient_tray_disable (self);
 #endif
+
+    /* Closing to the tray means running with no window, and under Flatpak that
+     * is exactly what gets the process killed without a background grant. Ask
+     * now, while the user is looking at the switch they just flipped, rather
+     * than an hour later as a surprise notification.
+     *
+     * Last, and deliberately so. The request can fail before it returns, with
+     * no session bus for instance, and the rollback that follows re-enters this
+     * function with FALSE. Anything after the call would then run on a stale
+     * local argument and put the tray back up over a key that now says no. */
+    if (minimize)
+        autostart_ensure_background (self, NULL, NULL);
 }
 
 gboolean otpclient_application_get_start_minimized (OTPClientApplication *self)
@@ -1892,6 +1981,27 @@ void otpclient_application_set_autostart (OTPClientApplication *self, gboolean a
         g_settings_set_boolean (self->settings, "autostart", autostart);
 }
 
+gboolean
+otpclient_application_get_startup_reconcile_pending (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->settings != NULL
+           && g_settings_get_boolean (self->settings, "startup-reconcile-pending");
+}
+
+void
+otpclient_application_set_startup_reconcile_pending (OTPClientApplication *self,
+                                                     gboolean              pending)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+
+    /* Not mirrored into a field. It is read once per launch and written only by
+     * the reconciliation, so the key is the state and there is nothing for a
+     * cached copy to be right about. */
+    if (self->settings != NULL)
+        g_settings_set_boolean (self->settings, "startup-reconcile-pending", pending);
+}
+
 void otpclient_application_reload_settings (OTPClientApplication *self)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
@@ -1925,6 +2035,34 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     adw_style_manager_set_color_scheme (adw_style_manager_get_default (),
                                         self->use_dark_theme ? ADW_COLOR_SCHEME_FORCE_DARK
                                                              : ADW_COLOR_SCHEME_DEFAULT);
+}
+
+void
+otpclient_application_reconcile_startup_settings (OTPClientApplication *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+
+    /* reload_settings assigns the keys straight from GSettings, deliberately
+     * bypassing the setters and the side effects that make them real. This is
+     * where those side effects are caught up with after an import. */
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    if (self->minimize_to_tray)
+        otpclient_tray_enable (self);
+    else
+        otpclient_tray_disable (self);
+#endif
+
+    /* An import sets the startup keys behind the desktop's back, which is the
+     * same position a launch finds them in, so it wants the same treatment:
+     * state them, and take back whichever one is refused. There is no read-back
+     * API, so this has to run even when the import changed nothing, since the
+     * entry that is actually on disk is not something we can compare against. */
+    autostart_reassert (self);
+
+    /* The note the import left stands until the reconciliation retires it on an
+     * answer. Under Flatpak the request has barely left the process at this
+     * point, and clearing it here would mean an import that was refused, timed
+     * out, or was interrupted by a quit silently loses its retry. */
 }
 
 guint otpclient_application_get_clipboard_clear_timeout (OTPClientApplication *self)

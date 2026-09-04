@@ -25,8 +25,13 @@ GListStore         *otpclient_window_get_db_store    (OTPClientWindow *self);
 gint                otpclient_window_get_selected_db_index (OTPClientWindow *self);
 
 /* Open the file chooser the sidebar's Open button uses, so a caller outside the
- * window can route the user into the same picker -> password -> load pipeline. */
-void                otpclient_window_present_open_database (OTPClientWindow *self);
+ * window can route the user into the same picker -> password -> load pipeline.
+ *
+ * With replace_path set, the picked database takes over the sidebar entry that
+ * currently holds that path instead of being appended as a new one, which is
+ * how "Locate..." recovers a database whose file moved or lost its doc id. */
+void                otpclient_window_present_open_database (OTPClientWindow *self,
+                                                            const gchar     *replace_path);
 void                otpclient_window_select_database (OTPClientWindow *self,
                                                       gint             index);
 

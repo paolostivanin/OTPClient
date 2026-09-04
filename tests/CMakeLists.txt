@@ -6,6 +6,35 @@ set(TEST_COMMON_SOURCES
         ${PROJECT_SOURCE_DIR}/src/common/parse-uri.c
 )
 
+# A test that touches GSettings must find the schema from this checkout rather
+# than whatever the developer happens to have installed, and must never write to
+# the real one. Compile the schema into the build tree; the memory backend, set
+# by the tests themselves, keeps the writes where they belong.
+find_program(GLIB_COMPILE_SCHEMAS glib-compile-schemas)
+if(GLIB_COMPILE_SCHEMAS)
+    set(TEST_SCHEMA_DIR ${CMAKE_CURRENT_BINARY_DIR}/schemas)
+    add_custom_command(
+            OUTPUT ${TEST_SCHEMA_DIR}/gschemas.compiled
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${TEST_SCHEMA_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${PROJECT_SOURCE_DIR}/data/com.github.paolostivanin.OTPClient.gschema.xml
+                    ${TEST_SCHEMA_DIR}/
+            COMMAND ${GLIB_COMPILE_SCHEMAS} ${TEST_SCHEMA_DIR}
+            DEPENDS ${PROJECT_SOURCE_DIR}/data/com.github.paolostivanin.OTPClient.gschema.xml
+            COMMENT "Compiling the GSettings schema for the tests"
+    )
+    add_custom_target(test-schemas ALL DEPENDS ${TEST_SCHEMA_DIR}/gschemas.compiled)
+endif()
+
+# Point one test at the compiled schema. Without glib-compile-schemas the tests
+# that need it skip themselves, so this is allowed to do nothing.
+function(otpclient_use_test_schema test_name)
+    if(GLIB_COMPILE_SCHEMAS)
+        set_tests_properties(${test_name} PROPERTIES
+                ENVIRONMENT "GSETTINGS_SCHEMA_DIR=${TEST_SCHEMA_DIR}")
+    endif()
+endfunction()
+
 add_executable(test_parse_uri
         test_parse_uri.c
         ${TEST_COMMON_SOURCES}
@@ -194,6 +223,26 @@ target_include_directories(test_memlock_sizing PRIVATE
 target_link_libraries(test_memlock_sizing ${COMMON_LIBS})
 add_test(NAME memlock_sizing COMMAND test_memlock_sizing)
 
+add_executable(test_settings_import
+        test_settings_import.c
+        ${PROJECT_SOURCE_DIR}/src/common/common.c
+        ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+        ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+        ${PROJECT_SOURCE_DIR}/src/common/gsettings-common.c
+        ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+        ${PROJECT_SOURCE_DIR}/src/common/settings-import-export.c
+)
+otpclient_apply_target_settings(test_settings_import)
+target_include_directories(test_settings_import PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/common
+)
+target_link_libraries(test_settings_import
+        PkgConfig::JANSSON
+        ${COMMON_LIBS}
+)
+add_test(NAME settings_import COMMAND test_settings_import)
+otpclient_use_test_schema(settings_import)
+
 add_executable(test_tray_menu_model
         test_tray_menu_model.c
         ${PROJECT_SOURCE_DIR}/src/gui/tray-menu-model.c
@@ -224,6 +273,40 @@ if(BUILD_GUI)
             ${COMMON_LIBS}
     )
     add_test(NAME otp_entry COMMAND test_otp_entry)
+
+    add_executable(test_db_relocation
+            test_db_relocation.c
+            ${PROJECT_SOURCE_DIR}/src/gui/database-sidebar.c
+            ${PROJECT_SOURCE_DIR}/src/gui/gui-misc.c
+            ${PROJECT_SOURCE_DIR}/src/common/common.c
+            ${PROJECT_SOURCE_DIR}/src/common/file-size.c
+            ${PROJECT_SOURCE_DIR}/src/common/gquarks.c
+            ${PROJECT_SOURCE_DIR}/src/common/gsettings-common.c
+            ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
+    )
+    otpclient_apply_target_settings(test_db_relocation)
+    target_include_directories(test_db_relocation PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/common
+            ${PROJECT_SOURCE_DIR}/src/gui
+    )
+    target_link_libraries(test_db_relocation
+            PkgConfig::GTK4
+            ${COMMON_LIBS}
+    )
+    add_test(NAME db_relocation COMMAND test_db_relocation)
+
+    # No GTK and no D-Bus: the decision table is deliberately free of both.
+    add_executable(test_autostart_policy
+            test_autostart_policy.c
+            ${PROJECT_SOURCE_DIR}/src/gui/autostart-policy.c
+    )
+    otpclient_apply_target_settings(test_autostart_policy)
+    target_include_directories(test_autostart_policy PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/common
+            ${PROJECT_SOURCE_DIR}/src/gui
+    )
+    target_link_libraries(test_autostart_policy ${COMMON_LIBS})
+    add_test(NAME autostart_policy COMMAND test_autostart_policy)
 
     add_executable(test_google_migration
             test_google_migration.c

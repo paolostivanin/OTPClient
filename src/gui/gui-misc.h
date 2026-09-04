@@ -17,6 +17,10 @@ gboolean gui_misc_add_db_to_list         (GListStore  *db_store,
                                           const gchar *name,
                                           const gchar *path);
 
+gboolean gui_misc_replace_db_path        (GListStore  *db_store,
+                                          const gchar *old_path,
+                                          const gchar *new_path);
+
 void     gui_misc_remove_db_from_list    (GListStore *db_store,
                                           guint       index);
 

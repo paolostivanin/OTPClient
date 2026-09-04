@@ -110,7 +110,7 @@ database_entry_class_init (DatabaseEntryClass *klass)
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
     db_properties[DB_PROP_PATH] =
         g_param_spec_string ("path", NULL, NULL, NULL,
-                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
     db_properties[DB_PROP_PRIMARY] =
         g_param_spec_boolean ("primary", NULL, NULL, FALSE,
                               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
@@ -152,6 +152,20 @@ database_entry_get_path (DatabaseEntry *self)
 {
     g_return_val_if_fail (DATABASE_IS_ENTRY (self), NULL);
     return self->path;
+}
+
+void
+database_entry_set_path (DatabaseEntry *self,
+                         const gchar   *path)
+{
+    g_return_if_fail (DATABASE_IS_ENTRY (self));
+
+    if (g_strcmp0 (self->path, path) == 0)
+        return;
+
+    g_free (self->path);
+    self->path = g_strdup (path);
+    g_object_notify_by_pspec (G_OBJECT (self), db_properties[DB_PROP_PATH]);
 }
 
 void

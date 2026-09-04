@@ -14,6 +14,8 @@ DatabaseEntry  *database_entry_new            (const gchar *name,
 
 const gchar    *database_entry_get_name      (DatabaseEntry *self);
 const gchar    *database_entry_get_path      (DatabaseEntry *self);
+void            database_entry_set_path      (DatabaseEntry *self,
+                                              const gchar   *path);
 
 void            database_entry_set_name      (DatabaseEntry *self,
                                               const gchar   *name);

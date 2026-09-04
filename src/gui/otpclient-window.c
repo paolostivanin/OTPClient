@@ -1453,6 +1453,10 @@ static void on_db_entry_name_changed (DatabaseEntry *entry,
                                       GParamSpec    *pspec,
                                       AdwActionRow  *row);
 
+static void on_db_entry_path_changed (DatabaseEntry *entry,
+                                      GParamSpec    *pspec,
+                                      AdwActionRow  *row);
+
 static void
 on_db_entry_primary_changed (DatabaseEntry *entry,
                              GParamSpec    *pspec,
@@ -1541,6 +1545,9 @@ create_database_row (gpointer item,
 
     g_signal_connect_object (entry, "notify::name",
                              G_CALLBACK (on_db_entry_name_changed), row, 0);
+
+    g_signal_connect_object (entry, "notify::path",
+                             G_CALLBACK (on_db_entry_path_changed), row, 0);
 
     return GTK_WIDGET (row);
 }
@@ -2203,6 +2210,22 @@ split_view_sidebar_changed (AdwOverlaySplitView *view,
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->sidebar_toggle_button), show);
 }
 
+/* The key is otherwise read once, at construction, and written once, at close,
+ * so a settings import lands in GSettings and the open window never hears about
+ * it. Only the split view is moved here: the toggle button already follows it
+ * through notify::show-sidebar. */
+static void
+on_show_sidebar_key_changed (GSettings       *settings,
+                             const gchar     *key,
+                             OTPClientWindow *self)
+{
+    (void) key;
+
+    gboolean show = g_settings_get_boolean (settings, "show-sidebar");
+    if (show != adw_overlay_split_view_get_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view)))
+        adw_overlay_split_view_set_show_sidebar (ADW_OVERLAY_SPLIT_VIEW (self->split_view), show);
+}
+
 static gboolean
 on_close_request (GtkWindow       *window,
                   OTPClientWindow *self)
@@ -2737,6 +2760,11 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
 
 typedef struct {
     GWeakRef window_ref;
+    /* Only the open-database picker sets this: the path of the sidebar entry
+     * whose location is being re-picked, or NULL for a plain open. It rides
+     * along with the one picker invocation on purpose, so a cancelled chooser
+     * cannot leak the relocation intent into the next open. */
+    gchar *replace_path;
 } WindowAsyncContext;
 
 static WindowAsyncContext *
@@ -2753,6 +2781,7 @@ window_async_context_free (WindowAsyncContext *ctx)
     if (ctx == NULL)
         return;
     g_weak_ref_clear (&ctx->window_ref);
+    g_free (ctx->replace_path);
     g_free (ctx);
 }
 
@@ -3893,6 +3922,7 @@ on_new_db_password_received (const gchar  *current_password,
 typedef struct {
     GWeakRef window_ref;
     gchar *db_path;
+    gchar *replace_path;
 } NewDbContext;
 
 static void
@@ -3902,6 +3932,7 @@ new_db_context_free (NewDbContext *ctx)
         return;
     g_weak_ref_clear (&ctx->window_ref);
     g_free (ctx->db_path);
+    g_free (ctx->replace_path);
     g_free (ctx);
 }
 
@@ -4128,6 +4159,7 @@ on_open_db_file_selected (GObject      *source,
     NewDbContext *ctx = g_new0 (NewDbContext, 1);
     g_weak_ref_init (&ctx->window_ref, self);
     ctx->db_path = g_strdup (path);
+    ctx->replace_path = g_steal_pointer (&async_ctx->replace_path);
 
     PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                     on_open_db_password_received,
@@ -4147,6 +4179,7 @@ on_open_db_password_received (const gchar  *current_password,
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
     gchar *db_path = g_steal_pointer (&ctx->db_path);
+    g_autofree gchar *replace_path = g_steal_pointer (&ctx->replace_path);
     new_db_context_free (ctx);
 
     if (self == NULL || self->disposing || window_is_locked (self) ||
@@ -4197,14 +4230,37 @@ on_open_db_password_received (const gchar  *current_password,
 
     otpclient_application_set_db_data (app, db_data);
 
-    /* Add to sidebar. The first DB ever added is auto-set as primary by
-     * otpclient_window_add_database; opening an existing DB while one is
-     * already in the list does not change the default. */
-    g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_data->db_path);
-    otpclient_window_add_database (self, display_name, db_data->db_path);
+    gboolean replaced = FALSE;
+    if (replace_path != NULL) {
+        replaced = gui_misc_replace_db_path (self->db_store, replace_path, db_data->db_path);
+        g_autofree gchar *primary_path = gui_misc_get_db_path_from_cfg ();
+        if (replaced && g_strcmp0 (primary_path, replace_path) == 0)
+            gui_misc_save_db_path_to_cfg (db_data->db_path);
+        /* The sidebar and the config now point at the new location; the keyring
+         * still points at the old one, and it is keyed by path. Left alone, the
+         * recovery would hand back the database but silently cost the user
+         * their automatic unlock. */
+        if (replaced)
+            otpclient_application_relocate_stored_password (app, replace_path);
+    }
+    if (!replaced) {
+        g_autofree gchar *display_name = gui_misc_derive_db_display_name (db_data->db_path);
+        otpclient_window_add_database (self, display_name, db_data->db_path);
+    }
     otpclient_window_sync_active_flag (self);
-    otpclient_window_select_database (self,
-        (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1);
+    gint selected_index = (gint) g_list_model_get_n_items (G_LIST_MODEL (self->db_store)) - 1;
+    if (replaced) {
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
+        for (guint i = 0; i < n; i++) {
+            g_autoptr (DatabaseEntry) entry = g_list_model_get_item (
+                G_LIST_MODEL (self->db_store), i);
+            if (g_strcmp0 (database_entry_get_path (entry), db_data->db_path) == 0) {
+                selected_index = (gint) i;
+                break;
+            }
+        }
+    }
+    otpclient_window_select_database (self, selected_index);
 
     on_db_modified (self);
     otpclient_window_start_otp_timer (self);
@@ -4214,11 +4270,11 @@ on_open_db_password_received (const gchar  *current_password,
     return TRUE;
 }
 
-static void
-open_db_button_clicked (GtkButton       *button,
-                        OTPClientWindow *self)
+void
+otpclient_window_present_open_database (OTPClientWindow *self,
+                                        const gchar     *replace_path)
 {
-    (void) button;
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
 
     /* Same UAF guard as new_db_button_clicked: on_open_db_password_received
      * eventually calls set_db_data, which would free the in-flight db_data
@@ -4233,7 +4289,8 @@ open_db_button_clicked (GtkButton       *button,
     }
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
-    gtk_file_dialog_set_title (dialog, _("Open Database"));
+    gtk_file_dialog_set_title (dialog, replace_path != NULL ? _("Locate Database")
+                                                            : _("Open Database"));
 
     GtkFileFilter *filter = gtk_file_filter_new ();
     gtk_file_filter_set_name (filter, _("OTPClient Database (*.enc)"));
@@ -4244,18 +4301,22 @@ open_db_button_clicked (GtkButton       *button,
     g_object_unref (filter);
     g_object_unref (filters);
 
+    WindowAsyncContext *async_ctx = window_async_context_new (self);
+    async_ctx->replace_path = g_strdup (replace_path);
+
     g_clear_object (&self->file_dialog_cancellable);
     self->file_dialog_cancellable = g_cancellable_new ();
     gtk_file_dialog_open (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
-                          on_open_db_file_selected, window_async_context_new (self));
+                          on_open_db_file_selected, async_ctx);
     g_object_unref (dialog);
 }
 
-void
-otpclient_window_present_open_database (OTPClientWindow *self)
+static void
+open_db_button_clicked (GtkButton       *button,
+                        OTPClientWindow *self)
 {
-    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-    open_db_button_clicked (NULL, self);
+    (void) button;
+    otpclient_window_present_open_database (self, NULL);
 }
 
 static void
@@ -4592,6 +4653,19 @@ on_db_entry_name_changed (DatabaseEntry *entry,
                                    database_entry_get_name (entry));
 }
 
+/* The path is no longer fixed for the life of the row: relocating a database
+ * rewrites it in place, keeping the row and its name. Without this the sidebar
+ * goes on advertising the location the file has just been recovered from. */
+static void
+on_db_entry_path_changed (DatabaseEntry *entry,
+                          GParamSpec    *pspec,
+                          AdwActionRow  *row)
+{
+    (void) pspec;
+    const gchar *path = database_entry_get_path (entry);
+    adw_action_row_set_subtitle (row, path != NULL ? path : "");
+}
+
 /* Live-refresh the OTP-value cells when the "Hide OTPs by default" setting
  * changes. render_otp_value_label reads hide_otps at bind time; without this
  * hook, already-bound cells would stay stuck on the old value until they were
@@ -4696,6 +4770,8 @@ otpclient_window_init (OTPClientWindow *self)
                                    G_CALLBACK (refresh_backup_age_banner), self);
         g_signal_connect_swapped (self->settings, "changed::backup-banner-snoozed-until",
                                    G_CALLBACK (refresh_backup_age_banner), self);
+        g_signal_connect (self->settings, "changed::show-sidebar",
+                          G_CALLBACK (on_show_sidebar_key_changed), self);
     }
     else
     {

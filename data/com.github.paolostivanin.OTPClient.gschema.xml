@@ -111,6 +111,11 @@
       <summary>Start at login</summary>
       <description>Launch OTPClient automatically when you log in.</description>
     </key>
+    <key name="startup-reconcile-pending" type="b">
+      <default>false</default>
+      <summary>Startup settings still have to be stated to the desktop</summary>
+      <description>Set when something writes minimize-to-tray, start-minimized or autostart without being able to act on them, which is what a command-line settings import does: it can change what the keys say, but not the login-time entry or the background permission they stand for. The next graphical launch states them to the desktop and clears this. Not part of the exported settings, since it describes this installation rather than a preference.</description>
+    </key>
     <key name="last-seen-version" type="s">
       <default>""</default>
       <summary>Last seen application version</summary>

@@ -204,7 +204,8 @@ command_line (GApplication                *application __attribute__((unused)),
             g_free_cmdline_opts (cmdline_opts);
             return -1;
         }
-        if (!import_settings_from_json (contents, &err)) {
+        gboolean touched_startup = FALSE;
+        if (!import_settings_from_json (contents, &touched_startup, &err)) {
             g_application_command_line_printerr (cmdline, _("Error: %s\n"), err->message);
             g_clear_error (&err);
             g_free (contents);
@@ -213,6 +214,14 @@ command_line (GApplication                *application __attribute__((unused)),
         }
         g_free (contents);
         g_application_command_line_print (cmdline, "%s", _("Settings imported successfully.\n"));
+        /* Creating the login-time entry means talking to the desktop, and under
+         * Flatpak asking the portal for a background grant. Neither is
+         * something a CLI invocation can do, so say so rather than let the keys
+         * pass for settings that took effect. The import has left a durable
+         * note for the graphical app, so this is a wait rather than a chore. */
+        if (touched_startup)
+            g_application_command_line_print (cmdline, "%s",
+                _("Startup settings were imported but not applied yet; they take effect the next time the graphical app runs.\n"));
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }

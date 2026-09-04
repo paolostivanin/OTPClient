@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-02 10:10+0200\n"
+"POT-Creation-Date: 2026-09-03 18:34+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -108,7 +108,7 @@ msgid ""
 "- Highly secure and easy to use OTP client that supports both TOTP and HOTP"
 msgstr ""
 
-#: ../src/cli/main.c:176 ../src/cli/main.c:208
+#: ../src/cli/main.c:176 ../src/cli/main.c:209
 #, c-format
 msgid "Error: %s\n"
 msgstr ""
@@ -128,91 +128,97 @@ msgstr ""
 msgid "Error reading file: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:215
+#: ../src/cli/main.c:216
 msgid "Settings imported successfully.\n"
 msgstr ""
 
 #: ../src/cli/main.c:224
+msgid ""
+"Startup settings were imported but not applied yet; they take effect the "
+"next time the graphical app runs.\n"
+msgstr ""
+
+#: ../src/cli/main.c:233
 msgid ""
 "Couldn't get the memlock value, therefore secure memory cannot be allocated. "
 "Please have a look at the following page before re-running OTPClient:https://"
 "github.com/paolostivanin/OTPClient/wiki/Secure-Memory-Limitations"
 msgstr ""
 
-#: ../src/cli/main.c:233
+#: ../src/cli/main.c:242
 #, c-format
 msgid "Error while initializing GCrypt: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:279
+#: ../src/cli/main.c:288
 #, c-format
 msgid "Unknown --output value '%s'. Expected: table, json, csv.\n"
 msgstr ""
 
-#: ../src/cli/main.c:283
+#: ../src/cli/main.c:292
 msgid ""
 "The --output option only applies to --show, --list, or --list-databases.\n"
 msgstr ""
 
-#: ../src/cli/main.c:290
+#: ../src/cli/main.c:299
 msgid ""
 "Please provide one action (--show, --list, --list-databases, --import, --"
 "export, --export-settings, --import-settings, or --list-types).\n"
 msgstr ""
 
-#: ../src/cli/main.c:295
+#: ../src/cli/main.c:304
 msgid "Please provide only one action at a time.\n"
 msgstr ""
 
-#: ../src/cli/main.c:303
+#: ../src/cli/main.c:312
 msgid "Please provide at least the account or issuer option.\n"
 msgstr ""
 
-#: ../src/cli/main.c:313
+#: ../src/cli/main.c:322
 msgid ""
 "The account/issuer filters and matching options can only be used with --"
 "show.\n"
 msgstr ""
 
-#: ../src/cli/main.c:320
+#: ../src/cli/main.c:329
 msgid "Please provide a file to import settings from (--file).\n"
 msgstr ""
 
-#: ../src/cli/main.c:332
+#: ../src/cli/main.c:341
 msgid "Please provide an import type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:336
+#: ../src/cli/main.c:345
 msgid "Please provide a valid import type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:340
+#: ../src/cli/main.c:349
 msgid "Please provide a file to import.\n"
 msgstr ""
 
-#: ../src/cli/main.c:347
+#: ../src/cli/main.c:356
 msgid "Please provide an export type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:351
+#: ../src/cli/main.c:360
 msgid "Please provide a valid export type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:362
+#: ../src/cli/main.c:371
 msgid "The --type option can only be used with --import or --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:368
+#: ../src/cli/main.c:377
 msgid ""
 "The --file option can only be used with --import, --import-settings, or --"
 "export-settings.\n"
 msgstr ""
 
-#: ../src/cli/main.c:373
+#: ../src/cli/main.c:382
 msgid "The --output-dir option can only be used with --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:405
+#: ../src/cli/main.c:414
 #, c-format
 msgid "Supported types: %s\n"
 msgstr ""
@@ -421,11 +427,13 @@ msgid ""
 "database."
 msgstr ""
 
+#. Translators: please do not translate 'account'
 #: ../src/cli/get-data.c:127
 #, c-format
 msgid "Given account: %s"
 msgstr ""
 
+#. Translators: please do not translate 'issuer'
 #: ../src/cli/get-data.c:133
 #, c-format
 msgid "Given issuer: %s"

@@ -15,28 +15,34 @@ typedef enum {
 typedef struct {
     const gchar *key;
     SettingType  type;
+    /* The key records a wish, not a fact: what it asks for is a login-time
+     * entry or a background grant, both of which belong to the desktop and
+     * neither of which a GSettings write touches. Importing one of these
+     * leaves the key and the world disagreeing until somebody reconciles
+     * them, so the import says when it has written one. */
+    gboolean     startup;
 } SettingDef;
 
 static const SettingDef exportable_settings[] = {
-    { "show-next-otp",          SETTING_BOOL },
-    { "notification-enabled",   SETTING_BOOL },
-    { "search-column",          SETTING_INT },
-    { "dark-theme",             SETTING_BOOL },
-    { "auto-lock",              SETTING_BOOL },
-    { "auto-lock-timeout",      SETTING_UINT },
-    { "secret-service",         SETTING_BOOL },
-    { "search-provider-enabled",SETTING_BOOL },
-    { "show-validity-seconds",  SETTING_BOOL },
-    { "validity-color",         SETTING_STRING },
-    { "validity-warning-color", SETTING_STRING },
-    { "show-sidebar",           SETTING_BOOL },
-    { "minimize-to-tray",       SETTING_BOOL },
-    /* Importing autostart: true does not create the autostart entry by itself;
-     * the startup re-assert in otpclient_application_startup picks it up. */
-    { "start-minimized",        SETTING_BOOL },
-    { "autostart",              SETTING_BOOL },
-    { "hide-otps",              SETTING_BOOL },
-    { NULL, 0 }
+    { "show-next-otp",          SETTING_BOOL,   FALSE },
+    { "notification-enabled",   SETTING_BOOL,   FALSE },
+    { "search-column",          SETTING_INT,    FALSE },
+    { "dark-theme",             SETTING_BOOL,   FALSE },
+    { "auto-lock",              SETTING_BOOL,   FALSE },
+    { "auto-lock-timeout",      SETTING_UINT,   FALSE },
+    { "secret-service",         SETTING_BOOL,   FALSE },
+    { "search-provider-enabled",SETTING_BOOL,   FALSE },
+    { "search-provider-keyword",SETTING_STRING, FALSE },
+    { "show-validity-seconds",  SETTING_BOOL,   FALSE },
+    { "validity-color",         SETTING_STRING, FALSE },
+    { "validity-warning-color", SETTING_STRING, FALSE },
+    { "show-sidebar",           SETTING_BOOL,   FALSE },
+    { "clipboard-clear-timeout",SETTING_UINT,   FALSE },
+    { "minimize-to-tray",       SETTING_BOOL,   TRUE  },
+    { "start-minimized",        SETTING_BOOL,   TRUE  },
+    { "autostart",              SETTING_BOOL,   TRUE  },
+    { "hide-otps",              SETTING_BOOL,   FALSE },
+    { NULL, 0, FALSE }
 };
 
 
@@ -89,8 +95,13 @@ export_settings_to_json (GError **err)
 
 gboolean
 import_settings_from_json (const gchar *json_str,
+                           gboolean    *out_touched_startup,
                            GError     **err)
 {
+    gboolean touched_startup = FALSE;
+    if (out_touched_startup != NULL)
+        *out_touched_startup = FALSE;
+
     /* M6: every setting in `exportable_settings` is a small primitive (bool,
      * int, string), so a real backup is well under 1 KiB. Cap input at 1 MiB
      * so a malicious or accidental multi-gigabyte file can't drag jansson
@@ -136,35 +147,62 @@ import_settings_from_json (const gchar *json_str,
         if (val == NULL)
             continue;
 
+        /* Tracked rather than assumed from the key being present: a value of
+         * the wrong type is skipped, and reconciling over a key nobody managed
+         * to write would mean a portal round trip for nothing. */
+        gboolean applied = FALSE;
+
         switch (def->type) {
             case SETTING_BOOL:
-                if (json_is_boolean (val))
+                if (json_is_boolean (val)) {
                     g_settings_set_boolean (settings, def->key, json_boolean_value (val));
+                    applied = TRUE;
+                }
                 break;
             case SETTING_INT:
                 if (json_is_integer (val)) {
                     json_int_t v = json_integer_value (val);
-                    if (v >= G_MININT && v <= G_MAXINT)
+                    if (v >= G_MININT && v <= G_MAXINT) {
                         g_settings_set_int (settings, def->key, (gint) v);
-                    else
+                        applied = TRUE;
+                    } else {
                         g_warning ("Skipping out-of-range integer setting '%s'.", def->key);
+                    }
                 }
                 break;
             case SETTING_UINT:
                 if (json_is_integer (val)) {
                     json_int_t v = json_integer_value (val);
-                    if (v >= 0 && (guint64) v <= G_MAXUINT)
+                    if (v >= 0 && (guint64) v <= G_MAXUINT) {
                         g_settings_set_uint (settings, def->key, (guint) v);
-                    else
+                        applied = TRUE;
+                    } else {
                         g_warning ("Skipping out-of-range unsigned setting '%s'.", def->key);
+                    }
                 }
                 break;
             case SETTING_STRING:
-                if (json_is_string (val))
+                if (json_is_string (val)) {
                     g_settings_set_string (settings, def->key, json_string_value (val));
+                    applied = TRUE;
+                }
                 break;
         }
+
+        if (applied && def->startup)
+            touched_startup = TRUE;
     }
+
+    /* Persisted, not just returned. The CLI cannot act on these keys at all and
+     * the GUI can be killed between the write and the portal answering, so the
+     * one durable record that the desktop has not been told yet has to outlive
+     * the process that noticed. Cleared by the reconciliation, wherever it
+     * eventually happens. */
+    if (touched_startup)
+        g_settings_set_boolean (settings, "startup-reconcile-pending", TRUE);
+
+    if (out_touched_startup != NULL)
+        *out_touched_startup = touched_startup;
 
     json_decref (root);
     return TRUE;
