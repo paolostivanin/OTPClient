@@ -59,9 +59,17 @@ test_engine_valid_values_accepted (void)
 static void
 test_import_validator_matches_range (void)
 {
+    /* otp_t owns mutable string pointers, so use mutable test storage rather
+     * than assigning string literals to its fields. */
+    gchar type[] = "TOTP";
+    gchar account_name[] = "acc";
+    gchar issuer[] = "Example";
+    gchar secret[] = "JBSWY3DPEHPK3PXP";
+    gchar algo[] = "SHA1";
+
     for (guint d = OTP_DIGITS_MIN; d <= OTP_DIGITS_MAX; d++) {
-        otp_t otp = { .type = "TOTP", .account_name = "acc", .issuer = "Example",
-                      .secret = "JBSWY3DPEHPK3PXP", .digits = d, .algo = "SHA1" };
+        otp_t otp = { .type = type, .account_name = account_name, .issuer = issuer,
+                      .secret = secret, .digits = d, .algo = algo };
         otp.period = 30;
         GError *err = NULL;
         g_assert_true (otp_validate_import_token (&otp, &err));
@@ -69,8 +77,8 @@ test_import_validator_matches_range (void)
     }
     const guint periods[] = { OTP_PERIOD_MIN, 30, OTP_PERIOD_MAX };
     for (guint p = 0; p < G_N_ELEMENTS (periods); p++) {
-        otp_t otp = { .type = "TOTP", .account_name = "acc", .issuer = "Example",
-                      .secret = "JBSWY3DPEHPK3PXP", .digits = 6, .algo = "SHA1" };
+        otp_t otp = { .type = type, .account_name = account_name, .issuer = issuer,
+                      .secret = secret, .digits = 6, .algo = algo };
         otp.period = periods[p];
         GError *err = NULL;
         g_assert_true (otp_validate_import_token (&otp, &err));
