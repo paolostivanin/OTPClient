@@ -29,7 +29,10 @@ static GtkWidget *
 find_widget (GtkWidget *parent, GType type, const gchar *title)
 {
     if (g_type_is_a (G_OBJECT_TYPE (parent), type)) {
-        const gchar *label = GTK_IS_BUTTON (parent) ? gtk_button_get_label (GTK_BUTTON (parent))
+        /* Icon-only buttons, such as the token list's action button, have no
+         * label, so fall back to the icon name for those. */
+        const gchar *label = GTK_IS_BUTTON (parent)
+            ? (gtk_button_get_label (GTK_BUTTON (parent)) ?: gtk_button_get_icon_name (GTK_BUTTON (parent)))
             : ADW_IS_PREFERENCES_ROW (parent) ? adw_preferences_row_get_title (ADW_PREFERENCES_ROW (parent)) : NULL;
         if (title == NULL || g_strcmp0 (title, label) == 0)
             return parent;
@@ -79,7 +82,9 @@ test_hotp_and_clipboard (void)
     g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
     g_assert_cmpuint (otp_entry_get_counter (entry), ==, 0);
     g_assert_null (otp_entry_get_otp_value (entry));
-    GtkWidget *button = find_widget (GTK_WIDGET (win), GTK_TYPE_BUTTON, "Generate");
+    /* The Action column's button for an HOTP row: icon-only, so it is found by
+     * the icon that stands in for "Generate". */
+    GtkWidget *button = find_widget (GTK_WIDGET (win), GTK_TYPE_BUTTON, "view-refresh-symbolic");
     g_assert_nonnull (button);
     g_signal_emit_by_name (button, "clicked");
     g_assert_cmpstr (otp_entry_get_otp_value (entry), ==, "755224");

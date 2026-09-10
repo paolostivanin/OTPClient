@@ -140,7 +140,7 @@
     <key name="hide-otps" type="b">
       <default>true</default>
       <summary>Hide OTPs by default</summary>
-      <description>When enabled, OTP codes display a Hidden placeholder until Copy or Generate is activated. Selecting a row does not reveal or copy a code. A TOTP reveal lasts until the validity window rotates (then either auto-rolls to the next code when "show next OTP" is on, or hides). HOTP reveals are timed. Disabling this shows TOTP codes continuously; HOTP codes are shown only after successful generation.</description>
+      <description>When enabled, the OTP value cell stays empty until Copy or Generate is activated. Selecting a row does not reveal or copy a code. A TOTP reveal lasts until the validity window rotates (then either auto-rolls to the next code when "show next OTP" is on, or hides). HOTP reveals are timed. Disabling this shows TOTP codes continuously; HOTP codes are shown only after successful generation.</description>
     </key>
   </schema>
 </schemalist>

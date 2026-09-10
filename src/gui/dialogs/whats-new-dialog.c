@@ -101,9 +101,10 @@ static const PageInfo whats_new_pages[] = {
         N_("Copying Is Now Explicit"),
         N_("Selecting a token used to copy it. Clicking a row, or just "
            "arrowing past one, put a code on the clipboard.\n\n"
-           "Selection now only selects. Every row has its own Copy button, "
-           "and Enter or Ctrl+C does the same for the selected token while "
-           "the list has focus. Enter also works on a search result.")
+           "Selection now only selects. Every row has its own copy button in "
+           "the Action column, and the same action heads the row's right-click "
+           "menu. Enter or Ctrl+C does it for the selected token while the "
+           "list has focus. Enter also works on a search result.")
     },
     {
         "security-high-symbolic",

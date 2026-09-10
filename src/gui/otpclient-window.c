@@ -298,10 +298,16 @@ render_otp_value_label (GtkWidget *label,
     gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
     gboolean masked = hide && !otp_entry_get_revealed (entry);
 
+    /* When masked, the cell is left visually empty rather than carrying a word
+     * or a bullet placeholder - the row's other columns (account / issuer /
+     * validity) already make it obvious the entry exists, the Action column
+     * says what to do about it, and a blank value gives away no digit count.
+     * A placeholder would also not disambiguate anything: an HOTP that has
+     * never been generated is masked too, so it read the same either way. */
     if (masked)
     {
         gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
-        gtk_label_set_text (GTK_LABEL (label), _("Hidden"));
+        gtk_label_set_text (GTK_LABEL (label), "");
         return;
     }
 
@@ -1846,6 +1852,38 @@ on_token_action_clicked (GtkButton *button, GtkListItem *item)
         trigger_otp_action_for_entry (OTPCLIENT_WINDOW (root), OTP_ENTRY (gtk_list_item_get_item (item)));
 }
 
+/* The Action-column button and the context-menu item must agree on what the
+ * primary action is for a row, so both ask here. The type test matches the one
+ * in trigger_otp_action_for_entry, NULL check included: on a NULL type,
+ * g_ascii_strcasecmp() trips its g_return_val_if_fail() and returns 0, which
+ * reads as "equal", so a missing type would otherwise pass for HOTP. */
+static void
+token_action_for_entry (OTPEntry     *entry,
+                        const gchar **label_out,
+                        const gchar **icon_out)
+{
+    const gchar *type = entry != NULL ? otp_entry_get_otp_type (entry) : NULL;
+    gboolean hotp = type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0;
+
+    const gchar *label, *icon;
+
+    if (hotp && otp_entry_get_db_path (entry) != NULL) {
+        label = _("Open database");
+        icon = "document-open-symbolic";
+    } else if (hotp) {
+        label = _("Generate");
+        icon = "view-refresh-symbolic";
+    } else {
+        label = _("Copy");
+        icon = "edit-copy-symbolic";
+    }
+
+    if (label_out != NULL)
+        *label_out = label;
+    if (icon_out != NULL)
+        *icon_out = icon;
+}
+
 static void
 action_column_setup (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
 {
@@ -1864,11 +1902,20 @@ action_column_bind (GtkSignalListItemFactory *factory, GtkListItem *item, gpoint
     (void) factory;
     (void) data;
     OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (item));
-    const gchar *type = otp_entry_get_otp_type (entry);
-    gboolean hotp = type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0;
-    const gchar *label = hotp ? (otp_entry_get_db_path (entry) != NULL ? _("Open database") : _("Generate")) : _("Copy");
+    const gchar *label = NULL, *icon = NULL;
+    token_action_for_entry (entry, &label, &icon);
     GtkWidget *button = gtk_list_item_get_child (item);
-    gtk_button_set_label (GTK_BUTTON (button), label);
+    gtk_button_set_icon_name (GTK_BUTTON (button), icon);
+
+    /* pick_entry_at() resolves a click by walking the widget chain for this
+     * data. Only the text-column labels carry it, so without this a right-click
+     * landing on the Action cell fails to select the row. */
+    g_object_set_data (G_OBJECT (button), "otp-entry", entry);
+
+    /* The button shows an icon only, so the word lives in the tooltip and in the
+     * accessible name. */
+    gtk_accessible_update_property (GTK_ACCESSIBLE (button),
+                                    GTK_ACCESSIBLE_PROPERTY_LABEL, label, -1);
 
     /* Fall back to the issuer when the account is blank, otherwise the tooltip
      * reads "Copy: " and adds nothing to the button label. */
@@ -1890,6 +1937,10 @@ add_action_column (GtkColumnView *view)
     g_signal_connect (factory, "setup", G_CALLBACK (action_column_setup), NULL);
     g_signal_connect (factory, "bind", G_CALLBACK (action_column_bind), NULL);
     GtkColumnViewColumn *column = gtk_column_view_column_new (_("Action"), factory);
+    /* Icon buttons are all one size, so pin the width instead of letting the
+     * column stretch to whatever the widest row needs. */
+    gtk_column_view_column_set_fixed_width (column, 64);
+    gtk_column_view_column_set_resizable (column, FALSE);
     gtk_column_view_append_column (view, column);
     g_object_unref (column);
 }
@@ -3856,6 +3907,20 @@ on_token_right_click (GtkGestureClick *gesture,
                 g_menu_append_submenu (menu, NULL, link);
             g_object_unref (link);
         }
+    }
+
+    /* The row's primary action goes first. The label depends on the row, so it
+     * is built here rather than sitting in context-menus.ui. No accelerator is
+     * shown: Ctrl+C is scoped to a key controller on the token list, not
+     * registered as a window accel, so it stays out of the way of text entries. */
+    {
+        const gchar *action_label = NULL;
+        token_action_for_entry (OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection)),
+                                &action_label, NULL);
+        GMenu *action_section = g_menu_new ();
+        g_menu_append (action_section, action_label, "win.activate-token");
+        g_menu_prepend_section (menu, NULL, G_MENU_MODEL (action_section));
+        g_object_unref (action_section);
     }
 
     /* Build "Set Group" submenu dynamically */
