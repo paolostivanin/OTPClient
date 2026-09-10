@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 18:34+0200\n"
+"POT-Creation-Date: 2026-09-10 09:57+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -340,122 +340,130 @@ msgstr ""
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:272
+#: ../src/cli/exec-action.c:276
 msgid ""
 "An error occurred while importing, so nothing has been added to the database."
 msgstr ""
 
-#: ../src/cli/exec-action.c:275
+#: ../src/cli/exec-action.c:279
 msgid " The error is: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:292
+#: ../src/cli/exec-action.c:298
 #, c-format
 msgid "Error while updating the database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:297
+#: ../src/cli/exec-action.c:304
+msgid ""
+"Import completed with skipped invalid entries. Review the warnings before "
+"removing your original tokens."
+msgstr ""
+
+#: ../src/cli/exec-action.c:305
 #, c-format
 msgid "Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:308
+#: ../src/cli/exec-action.c:316
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:320 ../src/cli/exec-action.c:331
-#: ../src/cli/exec-action.c:342
+#: ../src/cli/exec-action.c:328 ../src/cli/exec-action.c:339
+#: ../src/cli/exec-action.c:350
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:353
+#: ../src/cli/exec-action.c:361
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:359
+#: ../src/cli/exec-action.c:367
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:367
+#: ../src/cli/exec-action.c:369
 msgid "Option not recognized: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:406
+#: ../src/cli/exec-action.c:408
 #, c-format
 msgid "Database '%s' not found in the known database list.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:414
+#: ../src/cli/exec-action.c:416
 #, c-format
 msgid "Database file/location (%s) does not exist.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:423
+#: ../src/cli/exec-action.c:425
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:428
+#: ../src/cli/exec-action.c:430
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: ../src/cli/exec-action.c:436
+#: ../src/cli/exec-action.c:438
 msgid "The database path must be a non-empty absolute path."
 msgstr ""
 
-#: ../src/cli/exec-action.c:441
+#: ../src/cli/exec-action.c:443
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:513
+#: ../src/cli/exec-action.c:515
 #, c-format
 msgid "Warning: password was truncated at %zu bytes.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:517
+#: ../src/cli/exec-action.c:519
 msgid "Empty password not allowed"
 msgstr ""
 
-#: ../src/cli/get-data.c:124
-msgid ""
-"Couldn't find the data. Either the given data is wrong or is not in the "
-"database."
+#: ../src/cli/get-data.c:36
+msgid "Invalid token"
 msgstr ""
 
-#. Translators: please do not translate 'account'
-#: ../src/cli/get-data.c:127
+#: ../src/cli/get-data.c:62
+msgid "Failed to save HOTP counters"
+msgstr ""
+
+#: ../src/cli/get-data.c:100
 #, c-format
-msgid "Given account: %s"
+msgid "Current HOTP: %s\n"
 msgstr ""
 
-#. Translators: please do not translate 'issuer'
-#: ../src/cli/get-data.c:133
-#, c-format
-msgid "Given issuer: %s"
-msgstr ""
-
-#: ../src/cli/get-data.c:235
-msgid "Account | Issuer | Group\n"
-msgstr ""
-
-#: ../src/cli/get-data.c:369
+#: ../src/cli/get-data.c:104
 #, c-format
 msgid "Current TOTP (valid for %d more second): %s\n"
 msgid_plural "Current TOTP (valid for %d more seconds): %s\n"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/cli/get-data.c:375
+#: ../src/cli/get-data.c:107
 #, c-format
 msgid "Next TOTP: %s\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:408
-#, c-format
-msgid "Current HOTP: %s\n"
+#: ../src/cli/get-data.c:114
+msgid "No matching token found."
+msgstr ""
+
+#: ../src/cli/get-data.c:166
+msgid "Account | Issuer | Group\n"
+msgstr ""
+
+#: ../src/cli/get-data.c:200
+msgid "Invalid TOTP time or period."
+msgstr ""
+
+#: ../src/cli/get-data.c:211
+msgid "Failed to generate TOTP."
 msgstr ""
