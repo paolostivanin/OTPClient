@@ -203,6 +203,7 @@ gui_misc_replace_db_path (GListStore  *db_store,
     if (absorbed_primary)
         database_entry_set_primary (survivor, TRUE);
 
+    gsettings_common_relocate_backup_history (old_path, new_path);
     gui_misc_save_db_list (db_store);
     return TRUE;
 }

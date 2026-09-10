@@ -6,6 +6,14 @@
 G_BEGIN_DECLS
 
 #define OTPCLIENT_SEARCH_KEYWORD_MAX_LEN 32
+#define OTPCLIENT_BACKUP_TIMES "database-backup-times"
+#define OTPCLIENT_BACKUP_SNOOZES "database-backup-snoozes"
+
+gint64 gsettings_common_get_database_time (GSettings *settings, const gchar *key,
+                                           const gchar *path);
+void gsettings_common_set_database_time (GSettings *settings, const gchar *key,
+                                         const gchar *path, gint64 timestamp);
+void gsettings_common_relocate_backup_history (const gchar *old_path, const gchar *new_path);
 
 typedef struct {
     gchar *name;

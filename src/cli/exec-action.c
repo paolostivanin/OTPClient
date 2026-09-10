@@ -267,8 +267,12 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
             }
         }
 
-        GSList *otps = get_data_from_provider (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, json_dumpb (db_data->in_memory_json_data, NULL, 0, 0), &err);
-        if (otps == NULL) {
+        g_autoptr (OtpImportDiagnostics) diagnostics = otp_import_diagnostics_new ();
+        GSList *otps = get_data_from_provider_full (cmdline_opts->import_type, cmdline_opts->import_file, pwd, db_data->max_file_size_from_memlock, json_dumpb (db_data->in_memory_json_data, NULL, 0, 0), diagnostics, &err);
+        g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
+        if (details[0] != '\0')
+            g_printerr ("%s\n", details);
+        if (otps == NULL || err != NULL) {
             const gchar *msg = _("An error occurred while importing, so nothing has been added to the database.");
             gchar *msg_with_err = NULL;
             if (err != NULL) {
@@ -280,6 +284,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 g_clear_error (&err);
             }
             gcry_free (pwd);
+            free_otps_gslist (otps, g_slist_length (otps));
 
             return FALSE;
         }
@@ -288,12 +293,15 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         OtpImportReport report = {0, 0, 0};
         db_import_otps (db_data, otps, &report, &err);
         free_otps_gslist (otps, g_slist_length (otps));
+        report.skipped_invalid += diagnostics->skipped_invalid;
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr (_("Error while updating the database: %s\n"), err->message);
             g_clear_error (&err);
             return FALSE;
         }
         g_clear_error (&err);
+        if (report.skipped_invalid > 0)
+            g_printerr ("%s\n", _("Import completed with skipped invalid entries. Review the warnings before removing your original tokens."));
         g_print (_("Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"),
                  report.added, report.skipped_duplicates, report.skipped_invalid);
     }
@@ -357,12 +365,6 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         } else {
             if (exported) {
                 g_print (_("Data successfully exported to: %s\n"), exported_file_path);
-                /* Mirror the GUI export path: stamp the GSettings key the
-                 * GUI's backup-age banner consults so the warning clears. */
-                {
-                    g_autoptr (GSettings) settings = g_settings_new ("com.github.paolostivanin.OTPClient");
-                    g_settings_set_int64 (settings, "last-export-time", (gint64) time (NULL));
-                }
             } else {
                 gchar *msg = g_strconcat (_("Option not recognized: "), cmdline_opts->export_type, NULL);
                 g_print ("%s\n", msg);

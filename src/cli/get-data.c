@@ -12,177 +12,108 @@ static gint compare_strings (const gchar    *s1,
                              const gchar    *s2,
                              gboolean        match_exactly);
 
-static gboolean emit_token (json_t         *obj,
-                            gboolean        show_next_token,
-                            OutputFormat    format,
-                            json_t         *json_out_array,
-                            gboolean       *hotp_changed,
-                            GString        *table_output);
+static gboolean fill_totp_row (json_t *obj, gboolean show_next, json_t *row);
 
 gboolean
-show_token (DatabaseData *db_data,
-            const gchar  *account,
-            const gchar  *issuer,
-            gboolean      match_exactly,
-            gboolean      show_next_token,
-            OutputFormat  format)
+show_token (DatabaseData *db_data, const gchar *account, const gchar *issuer,
+            gboolean match_exactly, gboolean show_next_token, OutputFormat format)
 {
+    json_t *rows = json_array ();
+    g_autoptr (GArray) indices = g_array_new (FALSE, FALSE, sizeof (gsize));
+    g_autoptr (GArray) positions = g_array_new (FALSE, FALSE, sizeof (gsize));
+    gboolean ok = TRUE;
     gsize index;
     json_t *obj;
-    gboolean found = FALSE;
-    gboolean had_error = FALSE;
-    gboolean hotp_changed = FALSE;
-    json_t *working_db = json_deep_copy (db_data->in_memory_json_data);
-    if (working_db == NULL)
-        return FALSE;
-
-    /* For machine-readable formats we collect rows first, then emit a single
-     * well-formed document at the end. */
-    json_t *json_rows = NULL;
-    GString *csv = NULL;
-    GString *table = NULL;
-    if (format == OUTPUT_FORMAT_JSON) {
-        json_rows = json_array ();
-    } else if (format == OUTPUT_FORMAT_CSV) {
-        csv = g_string_new ("type,account,issuer,current,validity_seconds,counter,next\n");
-    } else {
-        table = g_string_new (NULL);
-    }
-
-    json_array_foreach (working_db, index, obj) {
-        const gchar *account_from_db = json_string_value (json_object_get (obj, "label"));
-        const gchar *issuer_from_db = NULL;
-        if (issuer != NULL) {
-            issuer_from_db = json_string_value (json_object_get (obj, "issuer"));
-        }
-        gboolean match = FALSE;
-        if (account_from_db != NULL && issuer_from_db != NULL && account != NULL) {
-            match = (compare_strings (account_from_db, account, match_exactly) == 0 &&
-                     compare_strings (issuer_from_db, issuer, match_exactly) == 0);
-        } else if (account_from_db != NULL && account != NULL) {
-            match = (compare_strings (account_from_db, account, match_exactly) == 0);
-        } else if (issuer_from_db != NULL && issuer != NULL) {
-            match = (compare_strings (issuer_from_db, issuer, match_exactly) == 0);
-        }
-        if (!match)
+    json_array_foreach (db_data->in_memory_json_data, index, obj) {
+        const gchar *label = json_string_value (json_object_get (obj, "label"));
+        const gchar *iss = json_string_value (json_object_get (obj, "issuer"));
+        if ((account == NULL && issuer == NULL) ||
+            (account != NULL && (label == NULL || compare_strings (label, account, match_exactly) != 0)) ||
+            (issuer != NULL && (iss == NULL || compare_strings (iss, issuer, match_exactly) != 0)))
             continue;
-
-        if (format == OUTPUT_FORMAT_CSV) {
-            /* Build a transient json row, then serialize from it for consistency. */
-            json_t *row = json_object ();
-            if (!emit_token (obj, show_next_token, OUTPUT_FORMAT_JSON, row,
-                             &hotp_changed, NULL)) {
-                had_error = TRUE;
-                json_decref (row);
-                continue;
-            }
-
-            csv_append_field (csv, json_string_value (json_object_get (row, "type")));
-            g_string_append_c (csv, ',');
-            csv_append_field (csv, json_string_value (json_object_get (row, "account")));
-            g_string_append_c (csv, ',');
-            csv_append_field (csv, json_string_value (json_object_get (row, "issuer")));
-            g_string_append_c (csv, ',');
-            csv_append_field (csv, json_string_value (json_object_get (row, "current")));
-            g_string_append_c (csv, ',');
-            json_t *vs = json_object_get (row, "validity_seconds");
-            if (json_is_integer (vs)) {
-                g_string_append_printf (csv, "%lld", (long long) json_integer_value (vs));
-            }
-            g_string_append_c (csv, ',');
-            json_t *ctr = json_object_get (row, "counter");
-            if (json_is_integer (ctr)) {
-                g_string_append_printf (csv, "%lld", (long long) json_integer_value (ctr));
-            }
-            g_string_append_c (csv, ',');
-            csv_append_field (csv, json_string_value (json_object_get (row, "next")));
-            g_string_append_c (csv, '\n');
-            json_decref (row);
-        } else {
-            if (!emit_token (obj, show_next_token, format, json_rows,
-                             &hotp_changed, table)) {
-                had_error = TRUE;
-                continue;
-            }
-        }
-        found = TRUE;
-    }
-
-    if (!found) {
-        if (format == OUTPUT_FORMAT_JSON) {
-            g_print ("[]\n");
-            json_decref (json_rows);
-            json_decref (working_db);
-            return FALSE;
-        }
-        if (format == OUTPUT_FORMAT_CSV) {
-            g_print ("%s", csv->str);
-            g_string_free (csv, TRUE);
-            json_decref (working_db);
-            return FALSE;
-        }
-        g_printerr ("%s\n", _("Couldn't find the data. Either the given data is wrong or is not in the database."));
-
-        // Translators: please do not translate 'account'
-        GString *msg = g_string_new (_("Given account: %s"));
-        g_string_replace (msg, "%s", account != NULL ? account : "<none>", 0);
-        g_printerr ("%s\n", msg->str);
-        g_string_free (msg, TRUE);
-
-        // Translators: please do not translate 'issuer'
-        msg = g_string_new (_("Given issuer: %s"));
-        g_string_replace (msg, "%s", issuer != NULL ? issuer : "<none>", 0);
-        g_printerr ("%s\n", msg->str);
-        g_string_free (msg, TRUE);
-        g_string_free (table, TRUE);
-        json_decref (working_db);
-        return FALSE;
-    }
-
-    if (hotp_changed) {
-        json_decref (db_data->in_memory_json_data);
-        db_data->in_memory_json_data = working_db;
-        working_db = NULL;
         GError *err = NULL;
-        update_db (db_data, &err);
-        if (err != NULL) {
-            g_printerr ("[ERROR] %s\n", err->message);
+        if (!otp_validate_token_object (obj, index, &err)) {
+            g_printerr ("%s\n", err != NULL ? err->message : _("Invalid token"));
             g_clear_error (&err);
-            if (json_rows != NULL)
-                json_decref (json_rows);
-            if (csv != NULL)
-                g_string_free (csv, TRUE);
-            if (table != NULL)
-                g_string_free (table, TRUE);
-            return FALSE;
+            ok = FALSE;
+            break;
+        }
+        const gchar *type = json_string_value (json_object_get (obj, "type"));
+        json_t *row = json_object ();
+        json_object_set_new (row, "type", json_string (type));
+        json_object_set_new (row, "account", json_string (label ? label : ""));
+        json_object_set_new (row, "issuer", json_string (iss ? iss : ""));
+        if (g_ascii_strcasecmp (type, "HOTP") == 0) {
+            gsize pos = json_array_size (rows);
+            g_array_append_val (indices, index);
+            g_array_append_val (positions, pos);
+        } else if (!fill_totp_row (obj, show_next_token, row)) {
+            ok = FALSE;
+        }
+        json_array_append_new (rows, row);
+        if (!ok)
+            break;
+    }
+    if (ok && indices->len > 0) {
+        GError *err = NULL;
+        g_autoptr (GPtrArray) results = db_generate_hotp (db_data,
+            (const gsize *) indices->data, indices->len, &err);
+        if (results == NULL) {
+            g_printerr ("%s\n", err != NULL ? err->message : _("Failed to save HOTP counters"));
+            g_clear_error (&err);
+            ok = FALSE;
+        } else {
+            for (guint i = 0; i < results->len; i++) {
+                DbHotpResult *result = g_ptr_array_index (results, i);
+                json_t *row = json_array_get (rows, g_array_index (positions, gsize, i));
+                json_object_set_new (row, "current", json_string (result->code));
+                json_object_set_new (row, "counter", json_integer ((json_int_t) result->next_counter));
+            }
         }
     }
-    if (working_db != NULL)
-        json_decref (working_db);
-
-    if (had_error) {
-        if (json_rows != NULL)
-            json_decref (json_rows);
-        if (csv != NULL)
-            g_string_free (csv, TRUE);
-        if (table != NULL)
-            g_string_free (table, TRUE);
+    if (!ok) {
+        json_decref (rows);
         return FALSE;
     }
-
+    gboolean found = json_array_size (rows) > 0;
     if (format == OUTPUT_FORMAT_JSON) {
-        char *dumped = json_dumps (json_rows, JSON_INDENT (2));
-        g_print ("%s\n", dumped);
-        gcry_free (dumped);
-        json_decref (json_rows);
-    } else if (format == OUTPUT_FORMAT_CSV) {
-        g_print ("%s", csv->str);
-        g_string_free (csv, TRUE);
+        gchar *output = json_dumps (rows, JSON_INDENT (2));
+        g_print ("%s\n", output);
+        sensitive_secure_free (output);
     } else {
-        g_print ("%s", table->str);
-        g_string_free (table, TRUE);
+        GString *output = g_string_new (format == OUTPUT_FORMAT_CSV
+            ? "type,account,issuer,current,validity_seconds,counter,next\n" : "");
+        json_t *row;
+        json_array_foreach (rows, index, row) {
+            if (format == OUTPUT_FORMAT_CSV) {
+                const gchar *fields[] = {"type", "account", "issuer", "current", "validity_seconds", "counter", "next"};
+                for (guint i = 0; i < G_N_ELEMENTS (fields); i++) {
+                    if (i > 0) g_string_append_c (output, ',');
+                    json_t *value = json_object_get (row, fields[i]);
+                    if (json_is_integer (value))
+                        g_string_append_printf (output, "%lld", (long long) json_integer_value (value));
+                    else
+                        csv_append_field (output, json_string_value (value));
+                }
+                g_string_append_c (output, '\n');
+            } else if (json_object_get (row, "counter") != NULL) {
+                g_string_append_printf (output, _("Current HOTP: %s\n"), json_string_value (json_object_get (row, "current")));
+            } else {
+                gint remaining = (gint) json_integer_value (json_object_get (row, "validity_seconds"));
+                g_string_append_printf (output,
+                    ngettext ("Current TOTP (valid for %d more second): %s\n", "Current TOTP (valid for %d more seconds): %s\n", remaining),
+                    remaining, json_string_value (json_object_get (row, "current")));
+                const gchar *next = json_string_value (json_object_get (row, "next"));
+                if (next != NULL) g_string_append_printf (output, _("Next TOTP: %s\n"), next);
+            }
+        }
+        g_print ("%s", output->str);
+        sensitive_g_free (g_string_free (output, FALSE));
     }
-    return TRUE;
+    if (!found)
+        g_printerr ("%s\n", _("No matching token found."));
+    json_decref (rows);
+    return found;
 }
 
 
@@ -256,168 +187,34 @@ compare_strings (const gchar *s1,
 }
 
 
-/* Emit one --show row. For TABLE format, prints to stdout in the legacy layout.
- * For JSON format, populates `dest`: if `dest` is an array, appends a new object;
- * if it's an object, fills it in place. */
 static gboolean
-emit_token (json_t       *obj,
-            gboolean      show_next_token,
-            OutputFormat  format,
-            json_t       *dest,
-            gboolean     *hotp_changed,
-            GString      *table_output)
+fill_totp_row (json_t *obj, gboolean show_next, json_t *row)
 {
-    GError *validation_err = NULL;
-    if (!otp_validate_token_object (obj, 0, &validation_err)) {
-        if (format == OUTPUT_FORMAT_TABLE)
-            g_printerr ("[ERROR] Invalid token: %s\n",
-                        validation_err != NULL ? validation_err->message : "unknown validation error");
-        g_clear_error (&validation_err);
-        return FALSE;
-    }
-
-    cotp_error_t cotp_err;
-    const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
-    const gchar *label = json_string_value (json_object_get (obj, "label"));
     const gchar *secret = json_string_value (json_object_get (obj, "secret"));
-    gint digits = (gint)json_integer_value (json_object_get (obj, "digits"));
+    const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+    gint period = (gint) json_integer_value (json_object_get (obj, "period"));
+    gint digits = (gint) json_integer_value (json_object_get (obj, "digits"));
     gint algo = get_algo_int_from_str (json_string_value (json_object_get (obj, "algo")));
-    const gchar *type = json_string_value (json_object_get (obj, "type"));
-    if (type == NULL) {
-        if (format == OUTPUT_FORMAT_TABLE)
-            g_printerr ("[ERROR] Token has no type field, skipping.\n");
+    time_t now = time (NULL);
+    if (now < 0 || period <= 0 || (guint64) now + period > (guint64) LONG_MAX) {
+        g_printerr ("%s\n", _("Invalid TOTP time or period."));
         return FALSE;
     }
-    if (secret == NULL) {
-        if (format == OUTPUT_FORMAT_TABLE)
-            g_printerr ("[ERROR] Token has no secret field, skipping.\n");
-        return FALSE;
+    gboolean steam = issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0;
+    for (guint i = 0; i < (show_next ? 2u : 1u); i++) {
+        cotp_error_t err;
+        long timestamp = (long) now + i * period;
+        gchar *code = steam ? get_steam_totp_at (secret, timestamp, period, &err)
+                            : get_totp_at (secret, timestamp, digits, period, algo, &err);
+        if (code == NULL || err != NO_ERROR) {
+            sensitive_free (code);
+            g_printerr ("%s\n", _("Failed to generate TOTP."));
+            return FALSE;
+        }
+        json_object_set_new (row, i == 0 ? "current" : "next", json_string (code));
+        sensitive_free (code);
     }
-
-    json_t *row = NULL;
-    if (format == OUTPUT_FORMAT_JSON) {
-        row = json_is_array (dest) ? json_object () : dest;
-        json_object_set_new (row, "type", json_string (type));
-        json_object_set_new (row, "account", json_string (label ? label : ""));
-        json_object_set_new (row, "issuer", json_string (issuer ? issuer : ""));
-    }
-
-    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
-        gint period = (gint)json_integer_value (json_object_get (obj, "period"));
-        if (period <= 0 || period > 300) {
-            if (format == OUTPUT_FORMAT_TABLE)
-                g_printerr ("[ERROR] TOTP token has an invalid period, skipping.\n");
-            if (row != NULL && json_is_array (dest)) json_decref (row);
-            return FALSE;
-        }
-        time_t now = time (NULL);
-        if (now < 0 || (guint64) now > (guint64) LONG_MAX ||
-            (guint64) now + period > (guint64) LONG_MAX) {
-            if (format == OUTPUT_FORMAT_TABLE)
-                g_printerr ("[ERROR] Current timestamp is outside libcotp's supported range.\n");
-            if (row != NULL && json_is_array (dest)) json_decref (row);
-            return FALSE;
-        }
-        long current_ts = (long) now;
-        gint token_validity = period - (gint) (current_ts % period);
-        gchar *current_totp = NULL;
-        gchar *next_totp = NULL;
-        if ((issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0) ? TRUE : FALSE) {
-            current_totp = get_steam_totp_at (secret, current_ts, period, &cotp_err);
-            if (cotp_err != NO_ERROR) {
-                if (format == OUTPUT_FORMAT_TABLE)
-                    g_printerr ("[ERROR] Failed to generate Steam TOTP (error %d).\n", cotp_err);
-                sensitive_free (current_totp);
-                if (row != NULL && json_is_array (dest)) json_decref (row);
-                return FALSE;
-            }
-            if (show_next_token) {
-                next_totp = get_steam_totp_at (secret, current_ts + period, period, &cotp_err);
-                if (cotp_err != NO_ERROR) {
-                    if (format == OUTPUT_FORMAT_TABLE)
-                        g_printerr ("[ERROR] Failed to generate next Steam TOTP (error %d).\n", cotp_err);
-                    sensitive_free (current_totp);
-                    sensitive_free (next_totp);
-                    if (row != NULL && json_is_array (dest)) json_decref (row);
-                    return FALSE;
-                }
-            }
-        } else {
-            current_totp = get_totp_at (secret, current_ts, digits, period, algo, &cotp_err);
-            if (cotp_err != NO_ERROR) {
-                if (format == OUTPUT_FORMAT_TABLE)
-                    g_printerr ("[ERROR] Failed to generate TOTP (error %d).\n", cotp_err);
-                sensitive_free (current_totp);
-                if (row != NULL && json_is_array (dest)) json_decref (row);
-                return FALSE;
-            }
-            if (show_next_token) {
-                next_totp = get_totp_at (secret, current_ts + period, digits, period, algo, &cotp_err);
-                if (cotp_err != NO_ERROR) {
-                    if (format == OUTPUT_FORMAT_TABLE)
-                        g_printerr ("[ERROR] Failed to generate next TOTP (error %d).\n", cotp_err);
-                    sensitive_free (current_totp);
-                    sensitive_free (next_totp);
-                    if (row != NULL && json_is_array (dest)) json_decref (row);
-                    return FALSE;
-                }
-            }
-        }
-        if (format == OUTPUT_FORMAT_TABLE) {
-            g_string_append_printf (
-                table_output,
-                ngettext ("Current TOTP (valid for %d more second): %s\n",
-                          "Current TOTP (valid for %d more seconds): %s\n",
-                          token_validity),
-                token_validity, current_totp);
-            if (show_next_token)
-                g_string_append_printf (table_output,
-                                        _("Next TOTP: %s\n"), next_totp);
-        } else if (row != NULL) {
-            json_object_set_new (row, "current", json_string (current_totp));
-            json_object_set_new (row, "validity_seconds", json_integer (token_validity));
-            if (show_next_token && next_totp != NULL)
-                json_object_set_new (row, "next", json_string (next_totp));
-        }
-        sensitive_free (current_totp);
-        sensitive_free (next_totp);
-    } else {
-        json_t *counter_obj = json_object_get (obj, "counter");
-        if (!json_is_integer (counter_obj)) {
-            if (format == OUTPUT_FORMAT_TABLE)
-                g_printerr ("[ERROR] HOTP token has no valid counter field, skipping.\n");
-            if (row != NULL && json_is_array (dest)) json_decref (row);
-            return FALSE;
-        }
-        gint64 counter = json_integer_value (counter_obj);
-        if (counter < 0 || (guint64) counter >= OTP_HOTP_COUNTER_MAX) {
-            if (format == OUTPUT_FORMAT_TABLE)
-                g_printerr ("[ERROR] HOTP counter is out of range, skipping.\n");
-            if (row != NULL && json_is_array (dest)) json_decref (row);
-            return FALSE;
-        }
-        gchar *hotp = get_hotp (secret, counter, digits, algo, &cotp_err);
-        if (cotp_err != NO_ERROR) {
-            if (format == OUTPUT_FORMAT_TABLE)
-                g_printerr ("[ERROR] Failed to generate HOTP (error %d).\n", cotp_err);
-            sensitive_free (hotp);
-            if (row != NULL && json_is_array (dest)) json_decref (row);
-            return FALSE;
-        }
-        if (format == OUTPUT_FORMAT_TABLE) {
-            g_string_append_printf (table_output, _("Current HOTP: %s\n"), hotp);
-        } else if (row != NULL) {
-            json_object_set_new (row, "current", json_string (hotp));
-            json_object_set_new (row, "counter", json_integer (counter + 1));
-        }
-        sensitive_free (hotp);
-        json_object_set_new (obj, "counter", json_integer (counter + 1));
-        if (hotp_changed != NULL)
-            *hotp_changed = TRUE;
-    }
-
-    if (row != NULL && json_is_array (dest))
-        json_array_append_new (dest, row);
+    json_object_set_new (row, "validity_seconds", json_integer (period - now % period));
     return TRUE;
 }
 

@@ -12,9 +12,12 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 
 ### GUI
 - Token list with drag-and-drop reordering
-- OTPs are hidden by default (cell stays blank); click a row to copy and briefly
-  reveal the code, then it re-hides automatically. Reveal duration and the
-  hide-by-default behavior are configurable in *Settings -> Display*
+- OTPs are hidden by default. Select a row, then use **Copy** (TOTP) or
+  **Generate** (HOTP) to copy and briefly reveal its code. Enter and Ctrl+C
+  activate the selected token when the token list has focus; Enter also works
+  from search. Selection and keyboard navigation never consume HOTP codes.
+  Hidden codes show a "Hidden" placeholder. Display behavior is configurable
+  in *Settings -> Display*
 - Multiple encrypted databases listed in the sidebar. The first database
   you create becomes the default - it loads automatically on startup and is
   marked with a star. Clicking another row switches the currently open
@@ -27,10 +30,14 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - Add tokens by scanning a QR code from an image file, the webcam, or the clipboard, or by entering the secret manually
 - QR code display for any token (re-pairing or sharing across devices)
 - Idle and screensaver auto-lock with configurable timeout
-- Configurable clipboard wipe; clipboard is also cleared on lock and app exit
-- HOTP counter writes are coalesced: clicking an HOTP row advances the counter
-  in memory immediately, but the encrypted re-save is deferred up to 5 seconds
-  so a burst of clicks costs one disk write instead of N
+- Configurable clipboard wipe, also applied on lock and exit while OTPClient
+  still owns the clipboard. Copying something elsewhere cancels the wipe and
+  automatic next-code copying.
+- HOTP counters are saved before a code is shown or copied. The GUI and CLI
+  share the same counter convention. A HOTP result from another database opens
+  that database first; unlock it and explicitly generate the code there.
+- Locking closes sensitive dialogs and clears their QR codes, secrets, and
+  passwords, including when an outstanding file chooser retains the dialog
 - Optional minimize-to-tray (build-time opt-in)
 - Optional start-minimized, from *Settings -> Integration* or with
   `otpclient --start-minimized`. Requires minimize-to-tray and a system tray;
@@ -58,10 +65,11 @@ via system notification, and copies it to the clipboard (via Klipper's D-Bus
 interface on KDE Plasma; via `wl-copy` on Wayland or `xclip` / `xsel` on X11
 elsewhere - those tools must be installed for the clipboard step to work
 outside KDE). The OTP value never appears in the search-result preview, so
-other processes on the session bus cannot poll for it. Setting the keyword to
-an empty string disables the provider entirely: every query is refused, since
-the keyword is the only gate against arbitrary local D-Bus clients enumerating
-accounts.
+the preview does not expose codes. The provider requires Secret Service access
+and a saved database password. Disabling the provider, clearing its keyword,
+or disabling Secret Service immediately invalidates its caches and activation
+IDs. Keyword changes take effect without restarting. The keyword filters
+queries; it is not a password or an authentication mechanism.
 
 > **KDE activation latency:** when activating a result from the Plasma
 > application launcher (Kickoff, opened with the Meta key) by pressing
@@ -78,6 +86,20 @@ Migration to and from other authenticator apps:
 - [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) (plain, key URI format)
 - Google migration QR codes (import only)
 
+Encrypted exports require a nonempty password. Existing encrypted exports with
+empty passwords can still be imported. Partial imports report the number and
+reasons for skipped entries; review those warnings before deleting the source.
+The CLI keeps a successful exit status when valid entries were imported and
+prints warnings to stderr. Entirely invalid input fails without changing tokens.
+
+### HOTP upgrade compatibility
+The stored counter means the next unused code in both interfaces. Older GUI
+versions stored the last generated counter, while the CLI stored the next one.
+Existing values are preserved because the last writer cannot be inferred. If an
+existing HOTP account rejects its first code after upgrading, generate the next
+code or resynchronize its counter with the provider. Newly imported counters
+are interpreted as the next unused value.
+
 ### Backup & restore
 **Settings -> Backup** has four buttons covering both your app preferences (saved
 as JSON) and your tokens (a byte-for-byte copy of the encrypted database, written
@@ -85,12 +107,17 @@ with `0600` perms). *Restore tokens* opens the saved file as an additional
 database in the sidebar - the previously-active database stays on disk untouched,
 so restore is non-destructive.
 
-A reminder banner appears on the main window when no token backup has ever been
-taken, or when the last one is more than 30 days old. Its **Back up Now** button
+A reminder banner appears when no backup is recorded for the active database,
+or when its last recorded backup is more than 30 days old. Backup history and
+snoozes are tracked separately for each database. The older global timestamp
+could not identify which database it referred to, so it is not carried over:
+after upgrading, every database reads "No backup recorded" until you take one,
+and any active snooze is reset. Its **Back up Now** button
 runs the same flow as *Settings -> Backup -> Back up tokens*. The reminder can be
 snoozed for 7 days from the primary menu (**Snooze Backup Reminder**), and it
 hides automatically once a backup completes. The Export menu (Ctrl+E) is for
-migration to other apps and does **not** count as a backup.
+migration to other apps and does **not** count as a backup. CLI migration exports
+follow the same rule.
 
 ## Security
 
@@ -126,9 +153,10 @@ What is **not** defended against:
   master key and decrypted database are wiped from process memory, so a
   cold-boot or DMA attack against a locked instance does not recover them.
 
-The search-provider daemon caches its own derived key and entry list with a
-60 s TTL plus per-database file-monitor invalidation, independent of the
-GUI's lock state.
+The search-provider daemon has a 60-second entry-list cache and a derived-key
+cache cleared after five minutes of inactivity, with per-database file-monitor
+invalidation. Both are independent of the GUI lock and are cleared when provider
+access is disabled.
 
 ## Installation
 OTPClient is available as a Flatpak and in several distro repositories. See the
@@ -180,6 +208,13 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 
 GTK, libadwaita, gdk-pixbuf, zbar, protobuf-c, and qrencode are only required
 when `BUILD_GUI=ON`.
+
+The integration tests (`BUILD_TESTING=ON`, the default) additionally use Python 3,
+`dbus-daemon`, and `glib-compile-schemas`, and the GUI one uses `Xvfb`. None of
+these are build requirements: a missing tool skips the test that needs it, and
+CMake reports which ones it skipped. Use `-DBUILD_TESTING=OFF` to leave the tests
+out altogether. Tests run against private settings, databases, a D-Bus session,
+and a virtual display, never the ones you are logged into.
 
 **Note:** The system memlock limit should be at least 64 MB. Lower values may
 cause issues when handling many tokens, especially when importing third-party

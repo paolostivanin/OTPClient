@@ -1,4 +1,5 @@
 #define _DEFAULT_SOURCE
+#include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include <string.h>
 #include "export-dialog.h"
@@ -46,6 +47,23 @@ wipe_password_row (GtkWidget *row)
     gtk_editable_set_text (GTK_EDITABLE (row), "");
 }
 
+static gboolean
+export_password_valid (ExportDialog *self)
+{
+    if (!gtk_widget_get_visible (self->password_row))
+        return TRUE;
+    const gchar *password = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
+    const gchar *confirm = gtk_editable_get_text (GTK_EDITABLE (self->password_confirm_row));
+    return password[0] != '\0' && g_strcmp0 (password, confirm) == 0;
+}
+
+static void
+on_password_changed (GtkEditable *editable, ExportDialog *self)
+{
+    (void) editable;
+    gtk_widget_set_sensitive (self->export_button, export_password_valid (self));
+}
+
 static void
 on_format_changed (AdwComboRow  *combo_row,
                    GParamSpec   *pspec,
@@ -63,6 +81,7 @@ on_format_changed (AdwComboRow  *combo_row,
     gtk_widget_set_visible (self->password_row, needs_password);
     gtk_widget_set_visible (self->password_confirm_row, needs_password);
     adw_banner_set_revealed (ADW_BANNER (self->plain_warning), is_plain);
+    on_password_changed (NULL, self);
 }
 
 static void
@@ -71,22 +90,30 @@ on_file_dialog_save_complete (GObject      *source,
                               gpointer      user_data)
 {
     g_autoptr (ExportDialog) self = EXPORT_DIALOG (user_data);
-    GApplication *default_app = g_application_get_default ();
-    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
-        ? OTPCLIENT_APPLICATION (default_app) : NULL;
-    if (app == NULL || otpclient_application_get_app_locked (app) ||
-        otpclient_application_get_db_data (app) != self->db_data)
-        return;
     GtkFileDialog *dialog = GTK_FILE_DIALOG (source);
 
     GError *err = NULL;
     GFile *file = gtk_file_dialog_save_finish (dialog, result, &err);
+    if (sensitive_dialog_is_closed (ADW_DIALOG (self))) {
+        g_clear_object (&file);
+        g_clear_error (&err);
+        return;
+    }
     if (file == NULL)
     {
         g_clear_error (&err);
         return;
     }
 
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app) : NULL;
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data)
+    {
+        g_object_unref (file);
+        return;
+    }
     g_autofree gchar *path = g_file_get_path (file);
     g_object_unref (file);
 
@@ -96,7 +123,7 @@ on_file_dialog_save_complete (GObject      *source,
     {
         password = gtk_editable_get_text (GTK_EDITABLE (self->password_row));
         const gchar *confirm = gtk_editable_get_text (GTK_EDITABLE (self->password_confirm_row));
-        if (g_strcmp0 (password, confirm) != 0)
+        if (password[0] == '\0' || g_strcmp0 (password, confirm) != 0)
         {
             gtk_label_set_text (GTK_LABEL (self->error_label), _("Passwords do not match"));
             gtk_widget_set_visible (self->error_label, TRUE);
@@ -135,8 +162,8 @@ on_file_dialog_save_complete (GObject      *source,
     /* Clear password entry widgets after use */
     if (gtk_widget_get_visible (self->password_row))
     {
-        gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
-        gtk_editable_set_text (GTK_EDITABLE (self->password_confirm_row), "");
+        wipe_password_row (self->password_row);
+        wipe_password_row (self->password_confirm_row);
     }
 
     if (error_msg != NULL)
@@ -149,8 +176,7 @@ on_file_dialog_save_complete (GObject      *source,
 
     /* This dialog now only handles third-party migration formats, so a
      * successful export does NOT count as a token-database backup - the
-     * banner stays nagging until the user uses Settings -> Backup -> "Back
-     * up tokens" (which bumps last-export-time itself). */
+     * reminder is updated by Settings -> Backup -> "Back up tokens". */
 
     adw_dialog_close (ADW_DIALOG (self));
 }
@@ -161,11 +187,14 @@ on_export_clicked (GtkButton    *button,
 {
     (void) button;
 
+    if (sensitive_dialog_is_closed (ADW_DIALOG (self)) || !export_password_valid (self))
+        return;
+
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Export tokens"));
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
-    gtk_file_dialog_save (dialog, win, NULL,
+    gtk_file_dialog_save (dialog, win, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
                           on_file_dialog_save_complete, g_object_ref (self));
     g_object_unref (dialog);
 }
@@ -287,5 +316,8 @@ export_dialog_new (DatabaseData *db_data,
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), scrolled);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
+    g_signal_connect (self->password_row, "changed", G_CALLBACK (on_password_changed), self);
+    g_signal_connect (self->password_confirm_row, "changed", G_CALLBACK (on_password_changed), self);
+    sensitive_dialog_setup (ADW_DIALOG (self), NULL);
     return self;
 }

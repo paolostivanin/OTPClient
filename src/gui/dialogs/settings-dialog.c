@@ -618,7 +618,7 @@ on_import_settings_clicked (GtkWidget      *button __attribute__((unused)),
 }
 
 /* The token rows just dispatch to window actions so the file-picker, password
- * prompt, db_copy_to call, and last-export-time bump all live in one place
+ * prompt, db_copy_to call, and per-database backup timestamp all live in one place
  * (otpclient-window.c) and are shared with the backup-age banner. */
 static void
 on_backup_tokens_clicked (GtkWidget      *button __attribute__((unused)),

@@ -1,6 +1,7 @@
 #define _DEFAULT_SOURCE
 #include <cotp.h>
 #include <gcrypt.h>
+#include <glib/gi18n.h>
 #include <string.h>
 #include "google-migration.h"
 #include "google-migration.pb-c.h"
@@ -27,11 +28,11 @@ free_otp (otp_t *otp)
 }
 
 GSList *
-google_migration_decode (const gchar  *uri,
+google_migration_decode_full (const gchar  *uri,
                          guint        *invalid_count,
                          guint        *batch_size,
                          guint        *batch_index,
-                         GError      **error)
+                         OtpImportDiagnostics *diagnostics, GError **error)
 {
     g_return_val_if_fail (error == NULL || *error == NULL, NULL);
     if (invalid_count != NULL)
@@ -106,6 +107,7 @@ google_migration_decode (const gchar  *uri,
         if (src == NULL || src->secret.data == NULL || src->secret.len == 0 ||
             src->name == NULL || src->name[0] == '\0') {
             invalid++;
+            otp_import_diagnostics_add (diagnostics, (guint) i, _("Invalid or unsupported Google migration token."));
             continue;
         }
 
@@ -130,6 +132,7 @@ google_migration_decode (const gchar  *uri,
             default:
                 free_otp (otp);
                 invalid++;
+            otp_import_diagnostics_add (diagnostics, (guint) i, _("Invalid or unsupported Google migration token."));
                 continue;
         }
 
@@ -147,6 +150,7 @@ google_migration_decode (const gchar  *uri,
             default:
                 free_otp (otp);
                 invalid++;
+            otp_import_diagnostics_add (diagnostics, (guint) i, _("Invalid or unsupported Google migration token."));
                 continue;
         }
 
@@ -159,6 +163,7 @@ google_migration_decode (const gchar  *uri,
             sensitive_free (base32);
             free_otp (otp);
             invalid++;
+            otp_import_diagnostics_add (diagnostics, (guint) i, _("Invalid or unsupported Google migration token."));
             continue;
         }
         otp->secret = secure_strdup (base32);
@@ -172,6 +177,7 @@ google_migration_decode (const gchar  *uri,
             g_clear_error (&validation_error);
             free_otp (otp);
             invalid++;
+            otp_import_diagnostics_add (diagnostics, (guint) i, _("Invalid or unsupported Google migration token."));
             continue;
         }
         result = g_slist_append (result, otp);
@@ -185,4 +191,11 @@ google_migration_decode (const gchar  *uri,
                      "Google migration payload contains no valid tokens.");
     }
     return result;
+}
+
+GSList *
+google_migration_decode (const gchar *uri, guint *invalid_count, guint *batch_size,
+                         guint *batch_index, GError **error)
+{
+    return google_migration_decode_full (uri, invalid_count, batch_size, batch_index, NULL, error);
 }

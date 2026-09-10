@@ -1,3 +1,6 @@
+#include "otp-validation.h"
+#include "import-diagnostics.h"
+#include "get-providers-data.h"
 #include <glib.h>
 #include <gio/gio.h>
 #include <jansson.h>
@@ -12,10 +15,10 @@
 
 
 GSList *
-get_freeotpplus_data (const gchar  *path,
+get_freeotpplus_data_full (const gchar  *path,
                       gint32        max_file_size,
                       gsize         db_size,
-                      GError      **err)
+                      OtpImportDiagnostics *diagnostics, GError      **err)
 {
     int safe_fd = path_open_safe_regular_file (path, err);
     if (safe_fd < 0) {
@@ -35,7 +38,7 @@ get_freeotpplus_data (const gchar  *path,
         return NULL;
     }
     g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
-    GSList *otps = get_otpauth_data (fd_path, max_file_size, err);
+    GSList *otps = get_otpauth_data_full (fd_path, max_file_size, diagnostics, err);
     close (safe_fd);
     return otps;
 }
@@ -79,4 +82,10 @@ export_freeotpplus (const gchar *export_path,
     gchar *ret = (err != NULL) ? g_strdup (err->message) : NULL;
     g_clear_error (&err);
     return ret;
+}
+
+GSList *
+get_freeotpplus_data (const gchar *path, gint32 max_file_size, gsize db_size, GError **err)
+{
+    return get_freeotpplus_data_full (path, max_file_size, db_size, NULL, err);
 }

@@ -1,0 +1,5 @@
+# Process-lifetime font and renderer caches reported by the isolated GTK test.
+# Keep application/GLib/GTK allocations unsuppressed.
+leak:libfontconfig.so
+leak:libEGL_mesa.so
+leak:libgallium-

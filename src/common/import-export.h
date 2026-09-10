@@ -1,6 +1,7 @@
 #pragma once
 
 #include <jansson.h>
+#include "import-diagnostics.h"
 
 G_BEGIN_DECLS
 
@@ -20,6 +21,13 @@ GSList *get_data_from_provider (const gchar  *action_name,
                                 gint32        max_file_size_from_memlock,
                                 gsize         db_size,
                                 GError      **err);
+
+GSList *get_data_from_provider_full (const gchar  *action_name,
+                                const gchar  *filename,
+                                const gchar  *pwd,
+                                gint32        max_file_size_from_memlock,
+                                gsize         db_size,
+                                OtpImportDiagnostics *diagnostics, GError      **err);
 
 gchar  *export_freeotpplus     (const gchar      *export_path,
                                 json_t           *json_db_data);

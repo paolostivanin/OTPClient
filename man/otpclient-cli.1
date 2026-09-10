@@ -150,6 +150,13 @@ Output format for
 Accepted values:
 .BR table " (default), " json " or " csv .
 JSON output is a single document; CSV output starts with a header row.
+Diagnostics go to stderr. HOTP counters are saved before output; the counter
+field contains the next unused counter, matching the GUI.
+.PP
+Partial token imports report invalid and duplicate counts. Valid records are
+imported with exit status zero and warnings on stderr; entirely invalid input
+fails without changing the database. Migration exports do not update database
+backup reminders.
 .SH EXAMPLES
 .TP
 List every account/issuer pair in the default database:

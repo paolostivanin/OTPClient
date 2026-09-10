@@ -84,11 +84,10 @@ typedef struct {
 
 static GHashTable *g_activation_caps = NULL;
 
-/* Trigger keyword loaded once at startup. The daemon ignores any query whose
- * first whitespace-separated token doesn't equal g_keyword (case-insensitive).
- * An empty keyword disables the filter and falls back to plain substring
- * matching. Changes to the GSettings key only take effect after the daemon
- * is restarted. */
+/* Settings changes invalidate both cached data and pending deliveries. */
+static GSettings *provider_settings;
+static guint64 delivery_generation;
+static gboolean provider_access_allowed (void);
 static gchar *g_keyword = NULL;
 static gchar *g_keyword_fold = NULL;
 
@@ -738,6 +737,52 @@ load_keyword_config (void)
 }
 
 
+static gboolean
+provider_access_allowed (void)
+{
+    return gsettings_common_get_search_provider_enabled () &&
+           gsettings_common_get_use_secret_service () &&
+           g_keyword_fold != NULL && g_keyword_fold[0] != '\0';
+}
+
+static void
+on_provider_settings_changed (GSettings *settings, const gchar *key, gpointer data)
+{
+    (void) settings;
+    (void) data;
+    if (!g_str_equal (key, "search-provider-enabled") &&
+        !g_str_equal (key, "search-provider-keyword") &&
+        !g_str_equal (key, "secret-service"))
+        return;
+    delivery_generation++;
+    load_keyword_config ();
+    g_clear_pointer (&cached_entries, g_ptr_array_unref);
+    cached_at = 0;
+    kdf_cache_clear ();
+    activation_capabilities_clear ();
+    clear_file_monitors ();
+}
+
+static void
+return_disabled_result (const gchar *method, GDBusMethodInvocation *inv)
+{
+    const gchar *type = NULL;
+    if (g_str_equal (method, "GetInitialResultSet") || g_str_equal (method, "GetSubsearchResultSet"))
+        type = "as";
+    else if (g_str_equal (method, "GetResultMetas"))
+        type = "aa{sv}";
+    else if (g_str_equal (method, "Match"))
+        type = "a(sssida{sv})";
+    else if (g_str_equal (method, "Actions"))
+        type = "a(sss)";
+    if (type != NULL) {
+        GVariant *empty = g_variant_new_array (g_variant_type_element (G_VARIANT_TYPE (type)), NULL, 0);
+        g_dbus_method_invocation_return_value (inv, g_variant_new_tuple (&empty, 1));
+    } else {
+        g_dbus_method_invocation_return_value (inv, NULL);
+    }
+}
+
 /* Returns TRUE and writes the post-keyword tail into *out_terms (caller frees
  * with g_strfreev) when the first non-empty term equals the configured
  * keyword AND there is at least one further non-empty term. Returns FALSE and
@@ -812,7 +857,7 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
      * after the DB has changed. The trade vs caching the OTP value: heap
      * inspection of the daemon never reveals an active OTP. */
     if (entry == NULL || entry->db_path == NULL) return NULL;
-    if (!gsettings_common_get_use_secret_service ()) return NULL;
+    if (!provider_access_allowed ()) return NULL;
 
     GError *ss_err = NULL;
     /* Issue #448: v4 fallback so a v4 upgrader who has not opened the GUI
@@ -855,12 +900,18 @@ compute_otp_for_entry (const OtpSearchEntry *entry)
 }
 
 
+typedef struct {
+    gchar *text;
+    guint64 generation;
+} ClipboardDelivery;
+
 static void
 klipper_copy_done (GObject      *source,
                    GAsyncResult *res,
                    gpointer      user_data)
 {
-    gchar *text = user_data;   /* secure_strdup copy kept for the fallback path */
+    ClipboardDelivery *delivery = user_data;
+    gchar *text = delivery->text;
     g_autoptr (GError) error = NULL;
     g_autoptr (GVariant) reply =
         g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, &error);
@@ -868,11 +919,13 @@ klipper_copy_done (GObject      *source,
      * the clipboard) but did not reply in time, so do NOT also copy via the CLI
      * tools. Any other error means Klipper is genuinely unreachable: fall back
      * so users without Klipper still get the code. */
-    if (reply == NULL && text != NULL &&
+    if (delivery->generation == delivery_generation && provider_access_allowed () &&
+        reply == NULL && text != NULL &&
         !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_TIMED_OUT))
         copy_via_subprocess (text);
     if (text != NULL)
         sensitive_secure_free (text);
+    g_free (delivery);
 }
 
 
@@ -890,12 +943,14 @@ copy_via_klipper (GDBusConnection *conn,
         copy_via_subprocess (text);
         return;
     }
-    gchar *text_copy = secure_strdup (text);   /* freed in klipper_copy_done */
+    ClipboardDelivery *delivery = g_new0 (ClipboardDelivery, 1);
+    delivery->text = secure_strdup (text);
+    delivery->generation = delivery_generation;
     g_dbus_connection_call (conn,
             "org.kde.klipper", "/klipper", "org.kde.klipper.klipper",
             "setClipboardContents", g_variant_new ("(s)", text),
             NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL,
-            klipper_copy_done, text_copy);
+            klipper_copy_done, delivery);
 }
 
 
@@ -981,6 +1036,9 @@ copy_to_clipboard (GDBusConnection *conn,
                    const gchar     *text,
                    gboolean         is_kde)
 {
+    if (!provider_access_allowed ())
+        return;
+
     if (text == NULL || text[0] == '\0') return;
     if (is_kde) {
         copy_via_klipper (conn, text);   /* async; falls back internally */
@@ -994,6 +1052,9 @@ static void
 send_notification (const gchar *label,
                    const gchar *otp_value)
 {
+    if (!provider_access_allowed ())
+        return;
+
     if (!otp_value) return;
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
     if (!conn) return;
@@ -1032,6 +1093,10 @@ handle_gnome_call (GDBusConnection       *conn,
                    gpointer               data)
 {
     (void)sender; (void)path; (void)iface; (void)data;
+    if (!provider_access_allowed ()) {
+        return_disabled_result (method, inv);
+        return;
+    }
     g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
@@ -1142,6 +1207,10 @@ handle_krunner_call (GDBusConnection       *conn,
                      gpointer               data)
 {
     (void)sender; (void)path; (void)iface; (void)data;
+    if (!provider_access_allowed ()) {
+        return_disabled_result (method, inv);
+        return;
+    }
     g_last_activity_us = g_get_monotonic_time ();
 
     if (g_strcmp0 (method, "Match") == 0) {
@@ -1280,6 +1349,9 @@ main (int    argc,
         return 0;
 
     load_keyword_config ();
+    provider_settings = gsettings_common_get_settings ();
+    if (provider_settings != NULL)
+        g_signal_connect (provider_settings, "changed", G_CALLBACK (on_provider_settings_changed), NULL);
 
     if (!force_kde && !force_gnome) {
         const gchar *desktop = g_getenv ("XDG_CURRENT_DESKTOP");
@@ -1325,6 +1397,7 @@ main (int    argc,
     kdf_cache_clear ();
     rate_buckets_clear ();
     activation_capabilities_clear ();
+    g_clear_object (&provider_settings);
     g_clear_pointer (&g_keyword, g_free);
     g_clear_pointer (&g_keyword_fold, g_free);
     g_main_loop_unref (main_loop);

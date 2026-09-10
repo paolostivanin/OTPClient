@@ -16,6 +16,7 @@ $ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=ngettext:1,2 \
     ../src/gui/otp-entry.c \
     ../src/gui/otp-button-row.c \
     ../src/gui/database-sidebar.c \
+    ../src/gui/google-migration.c \
     ../src/gui/gui-misc.c \
     ../src/gui/lock-app.c \
     ../src/gui/qrcode-parser.c \
@@ -29,6 +30,7 @@ $ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=ngettext:1,2 \
     ../src/gui/dialogs/manual-add-dialog.c \
     ../src/gui/dialogs/password-dialog.c \
     ../src/gui/dialogs/qr-display-dialog.c \
+    ../src/gui/dialogs/sensitive-dialog.c \
     ../src/gui/dialogs/settings-dialog.c \
     ../src/gui/dialogs/whats-new-dialog.c \
     ../src/common/aegis.c \

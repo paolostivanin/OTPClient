@@ -74,4 +74,7 @@ gboolean     otp_entry_get_roll_consumed  (OTPEntry *self);
 void         otp_entry_mark_roll_consumed (OTPEntry *self);
 void         otp_entry_reset_roll         (OTPEntry *self);
 
+const gchar *otp_entry_get_db_path (OTPEntry *self);
+void otp_entry_set_db_path (OTPEntry *self, const gchar *path);
+
 G_END_DECLS

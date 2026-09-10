@@ -1,4 +1,5 @@
 #define _DEFAULT_SOURCE
+#include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include <gcrypt.h>
 #include <string.h>
@@ -379,5 +380,6 @@ password_dialog_new (PasswordDialogMode     mode,
 
     g_signal_connect (self, "map", G_CALLBACK (on_dialog_map), self);
 
+    sensitive_dialog_setup (ADW_DIALOG (self), NULL);
     return self;
 }

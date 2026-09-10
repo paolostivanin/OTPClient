@@ -16,6 +16,7 @@
 #include "db-common.h"
 #include "file-size.h"
 #include "otp-validation.h"
+#include <cotp.h>
 
 
 typedef struct {
@@ -769,6 +770,11 @@ db_transaction (DatabaseData   *db_data,
         json_decref (candidate);
         return FALSE;
     }
+    if (json_equal (candidate, db_data->in_memory_json_data)) {
+        unlock_db (&lock);
+        json_decref (candidate);
+        return TRUE;
+    }
     if (exists && !backup_db (db_data->db_path, err)) {
         unlock_db (&lock);
         json_decref (candidate);
@@ -795,6 +801,71 @@ db_transaction (DatabaseData   *db_data,
     return TRUE;
 }
 
+
+static void
+hotp_result_free (gpointer data)
+{
+    DbHotpResult *result = data;
+    sensitive_secure_free (result->code);
+    g_free (result);
+}
+
+typedef struct {
+    const gsize *indices;
+    gsize count;
+    GPtrArray *results;
+} HotpMutation;
+
+static gboolean
+generate_hotp_mutation (json_t *candidate, gpointer data, GError **err)
+{
+    HotpMutation *mutation = data;
+    for (gsize i = 0; i < mutation->count; i++) {
+        json_t *token = json_array_get (candidate, mutation->indices[i]);
+        if (!otp_validate_token_object (token, mutation->indices[i], err))
+            return FALSE;
+        const gchar *type = json_string_value (json_object_get (token, "type"));
+        gint64 counter = json_integer_value (json_object_get (token, "counter"));
+        if (g_ascii_strcasecmp (type, "HOTP") != 0 || counter < 0 ||
+            (guint64) counter >= OTP_HOTP_COUNTER_MAX) {
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                 "Token is not HOTP or its counter is exhausted.");
+            return FALSE;
+        }
+        cotp_error_t cotp_err;
+        gchar *code = get_hotp (json_string_value (json_object_get (token, "secret")),
+                                counter, (gint) json_integer_value (json_object_get (token, "digits")),
+                                get_algo_int_from_str (json_string_value (json_object_get (token, "algo"))),
+                                &cotp_err);
+        if (code == NULL || cotp_err != NO_ERROR) {
+            sensitive_free (code);
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_FAILED, "Failed to generate HOTP.");
+            return FALSE;
+        }
+        DbHotpResult *result = g_new0 (DbHotpResult, 1);
+        result->code = secure_strdup (code);
+        sensitive_free (code);
+        result->next_counter = (guint64) counter + 1;
+        g_ptr_array_add (mutation->results, result);
+        if (result->code == NULL ||
+            json_object_set_new (token, "counter", json_integer (counter + 1)) != 0) {
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Failed to allocate HOTP result.");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+GPtrArray *
+db_generate_hotp (DatabaseData *db_data, const gsize *indices, gsize n_indices, GError **err)
+{
+    g_return_val_if_fail (indices != NULL || n_indices == 0, NULL);
+    g_autoptr (GPtrArray) results = g_ptr_array_new_with_free_func (hotp_result_free);
+    HotpMutation mutation = {indices, n_indices, results};
+    if (n_indices > 0 && !db_transaction (db_data, generate_hotp_mutation, &mutation, err))
+        return NULL;
+    return g_steal_pointer (&results);
+}
 
 gboolean
 db_change_password (DatabaseData  *db_data,
@@ -924,8 +995,8 @@ import_otps_mutation (json_t   *candidate,
                                       otp->secret, otp->digits, otp->algo,
                                       otp->period, otp->counter, otp->group);
         if (obj == NULL) {
-            report->skipped_invalid++;
-            continue;
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "Failed to allocate imported token.");
+            return FALSE;
         }
 
         if (candidate_contains_object (candidate, obj)) {
@@ -1840,7 +1911,7 @@ perform_backup_restore (const gchar *path,
                          "Failed to chmod 0600 on %s: %s", dst_path, g_strerror (errno));
             copied = FALSE;
         } else {
-            g_print("%s\n", is_backup ? _("Backup copy successfully created.") : _("Backup copy successfully restored."));
+            /* Callers own user-facing status; shared writes keep stdout clean. */
         }
     }
 

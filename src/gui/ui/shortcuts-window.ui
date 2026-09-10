@@ -106,6 +106,18 @@
                 </child>
                 <child>
                   <object class="AdwActionRow">
+                    <property name="title" translatable="yes">Copy or Generate Selected OTP</property>
+                    <property name="subtitle" translatable="yes">In the token list; Enter also works in search</property>
+                    <child type="suffix">
+                      <object class="GtkShortcutLabel">
+                        <property name="accelerator">&lt;Control&gt;c</property>
+                        <property name="valign">center</property>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="AdwActionRow">
                     <property name="title" translatable="yes">Hide OTPs and Unselect</property>
                     <property name="use-markup">False</property>
                     <child type="suffix">

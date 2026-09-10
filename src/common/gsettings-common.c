@@ -3,6 +3,55 @@
 
 #define OTPCLIENT_SCHEMA_ID "com.github.paolostivanin.OTPClient"
 
+gint64
+gsettings_common_get_database_time (GSettings *settings, const gchar *key, const gchar *path)
+{
+    if (settings == NULL || path == NULL) return 0;
+    g_autofree gchar *normalized = g_canonicalize_filename (path, NULL);
+    g_autoptr (GVariant) value = g_settings_get_value (settings, key);
+    gint64 timestamp = 0;
+    g_variant_lookup (value, normalized, "x", &timestamp);
+    return MAX (timestamp, 0);
+}
+
+void
+gsettings_common_set_database_time (GSettings *settings, const gchar *key,
+                                    const gchar *path, gint64 timestamp)
+{
+    if (settings == NULL || path == NULL) return;
+    g_autofree gchar *normalized = g_canonicalize_filename (path, NULL);
+    g_autoptr (GVariant) old = g_settings_get_value (settings, key);
+    GVariantBuilder builder;
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("a{sx}"));
+    GVariantIter iter;
+    const gchar *entry;
+    gint64 time;
+    g_variant_iter_init (&iter, old);
+    while (g_variant_iter_next (&iter, "{&sx}", &entry, &time)) {
+        if (!g_str_equal (entry, normalized))
+            g_variant_builder_add (&builder, "{sx}", entry, time);
+    }
+    if (timestamp > 0)
+        g_variant_builder_add (&builder, "{sx}", normalized, timestamp);
+    g_settings_set_value (settings, key, g_variant_builder_end (&builder));
+}
+
+void
+gsettings_common_relocate_backup_history (const gchar *old_path, const gchar *new_path)
+{
+    g_autofree gchar *old = g_canonicalize_filename (old_path, NULL);
+    g_autofree gchar *next = g_canonicalize_filename (new_path, NULL);
+    if (g_str_equal (old, next)) return;
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
+    const gchar *keys[] = {OTPCLIENT_BACKUP_TIMES, OTPCLIENT_BACKUP_SNOOZES};
+    for (guint i = 0; i < G_N_ELEMENTS (keys); i++) {
+        gint64 timestamp = MAX (gsettings_common_get_database_time (settings, keys[i], old),
+                                gsettings_common_get_database_time (settings, keys[i], next));
+        gsettings_common_set_database_time (settings, keys[i], next, timestamp);
+        gsettings_common_set_database_time (settings, keys[i], old, 0);
+    }
+}
+
 
 void
 db_list_entry_free (DbListEntry *entry)

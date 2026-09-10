@@ -10,6 +10,7 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (ImportDialog, import_dialog, IMPORT, DIALOG, AdwDialog)
 
 typedef struct {
+    const gchar *details; /* Borrowed for the duration of the callback. */
     guint added;       /* tokens appended to the database */
     guint skipped;     /* duplicates or invalid records ignored */
     guint skipped_duplicates;

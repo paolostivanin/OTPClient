@@ -17,6 +17,7 @@
 #include "dialogs/qr-display-dialog.h"
 #include "dialogs/settings-dialog.h"
 #include "dialogs/password-dialog.h"
+#include "dialogs/sensitive-dialog.h"
 #include "gui-misc.h"
 #include "lock-app.h"
 #include "secret-schema.h"
@@ -25,7 +26,8 @@
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
 
-static void schedule_hotp_flush (OTPClientWindow *self);
+static void trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry);
+static void add_action_column (GtkColumnView *view);
 static void refresh_otp_value_cells (OTPClientWindow *self);
 static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
 static void otpclient_window_constructed (GObject *object);
@@ -296,14 +298,10 @@ render_otp_value_label (GtkWidget *label,
     gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
     gboolean masked = hide && !otp_entry_get_revealed (entry);
 
-    /* When masked, the cell is left visually empty rather than a bullet
-     * placeholder - the row's other columns (account / issuer / validity)
-     * already make it obvious the entry exists, and a blank value reads as
-     * "click to reveal" without giving away the digit count. */
     if (masked)
     {
         gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
-        gtk_label_set_text (GTK_LABEL (label), "");
+        gtk_label_set_text (GTK_LABEL (label), _("Hidden"));
         return;
     }
 
@@ -547,6 +545,7 @@ add_text_column (GtkColumnView *view,
     }
 
     gtk_column_view_append_column (view, view_column);
+    g_object_unref (view_column);
 }
 
 static void
@@ -563,6 +562,7 @@ add_validity_column (GtkColumnView *view)
     gtk_column_view_column_set_resizable (view_column, FALSE);
 
     gtk_column_view_append_column (view, view_column);
+    g_object_unref (view_column);
 }
 
 static gboolean
@@ -775,8 +775,9 @@ cross_db_load_thread (GTask        *task,
             if (group != NULL)
                 otp_entry_set_group (entry, group);
             otp_entry_set_db_name (entry, dbe->name);
+            otp_entry_set_db_path (entry, dbe->path);
             /* OTP is computed lazily - see otp_text_column_bind /
-             * on_otp_selection_changed. Computing every cross-DB entry's OTP
+             * trigger_otp_action_for_entry. Computing every cross-DB entry's OTP
              * upfront wastes cycles when the user only opens search to find
              * one token. */
             g_list_store_append (result, entry);
@@ -999,8 +1000,11 @@ refresh_backup_age_banner (OTPClientWindow *self)
     if (n_items == 0)
         goto apply;
 
-    gint64 last_export = g_settings_get_int64 (self->settings, "last-export-time");
-    gint64 snoozed_until = g_settings_get_int64 (self->settings, "backup-banner-snoozed-until");
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db == NULL) goto apply;
+    gint64 last_export = gsettings_common_get_database_time (self->settings, OTPCLIENT_BACKUP_TIMES, db->db_path);
+    gint64 snoozed_until = gsettings_common_get_database_time (self->settings, OTPCLIENT_BACKUP_SNOOZES, db->db_path);
     gint64 now = (gint64) g_get_real_time () / G_USEC_PER_SEC;
     const gint64 warn_secs = (gint64) BACKUP_AGE_WARN_DAYS * 24 * 60 * 60;
 
@@ -1010,7 +1014,7 @@ refresh_backup_age_banner (OTPClientWindow *self)
     if (last_export == 0)
     {
         adw_banner_set_title (ADW_BANNER (self->backup_age_banner),
-                              _("You haven't saved a backup of your encrypted database yet - keep a copy somewhere safe."));
+                              _("No backup recorded for this database. Keep an encrypted copy somewhere safe."));
         reveal = TRUE;
     }
     else if (last_export > now)
@@ -1225,6 +1229,7 @@ setup_otp_view (OTPClientWindow *self)
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Issuer"), OTP_COLUMN_ISSUER);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("OTP Value"), OTP_COLUMN_VALUE);
     add_validity_column (GTK_COLUMN_VIEW (self->otp_list));
+    add_action_column (GTK_COLUMN_VIEW (self->otp_list));
 
     GtkSorter *column_sorter = gtk_column_view_get_sorter (GTK_COLUMN_VIEW (self->otp_list));
     self->sort_model = gtk_sort_list_model_new (g_object_ref (G_LIST_MODEL (self->filter_model)),
@@ -1344,16 +1349,8 @@ search_text_changed (GtkEntry        *entry,
     /* Auto-select when search narrows to a single result */
     guint n = g_list_model_get_n_items (G_LIST_MODEL (win->filter_model));
     if (n == 1)
-    {
-        win->suppress_selection_action = TRUE;
         gtk_single_selection_set_selected (win->otp_selection, 0);
-        win->suppress_selection_action = FALSE;
-    }
 }
-
-static void on_otp_selection_changed (GtkSingleSelection *selection,
-                                      GParamSpec         *pspec,
-                                      OTPClientWindow    *self);
 
 static guint find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry);
 
@@ -1363,13 +1360,10 @@ search_entry_activate (GtkEntry        *entry,
 {
     (void) entry;
 
-    /* Enter in search bar: copy selected OTP and close search.
-     * Suppress selection actions while closing the search bar so the
-     * filter change does not re-trigger a copy/notification. */
-    on_otp_selection_changed (self->otp_selection, NULL, self);
-    self->suppress_selection_action = TRUE;
+    /* Enter activates the selected token and closes search. */
+    trigger_otp_action_for_entry (self, OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection)));
+
     gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (self->search_bar), FALSE);
-    self->suppress_selection_action = FALSE;
 }
 
 static void
@@ -1675,20 +1669,31 @@ otpclient_window_select_database (OTPClientWindow *self,
         gtk_list_box_select_row (GTK_LIST_BOX (self->database_list), row);
 }
 
+static void
+clipboard_forget (OTPClientWindow *self)
+{
+    if (self->clipboard_clear_timer_id != 0) {
+        g_source_remove (self->clipboard_clear_timer_id);
+        self->clipboard_clear_timer_id = 0;
+    }
+    g_clear_object (&self->clipboard_content);
+    g_weak_ref_set (&self->clipboard_owner_entry, NULL);
+}
+
+static void
+on_clipboard_changed (GdkClipboard *clipboard, OTPClientWindow *self)
+{
+    if (self->clipboard_content != NULL &&
+        gdk_clipboard_get_content (clipboard) != self->clipboard_content)
+        clipboard_forget (self);
+}
+
 static gboolean
 clipboard_clear_cb (gpointer user_data)
 {
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    /* M1: gdk_display_get_default() can return NULL during shutdown / Wayland
-     * compositor restart. Mirror the NULL-safety from clear_clipboard_now
-     * so the timer firing in those windows doesn't crash. */
-    GdkDisplay *display = gdk_display_get_default ();
-    if (display != NULL) {
-        GdkClipboard *clipboard = gdk_display_get_clipboard (display);
-        if (clipboard != NULL)
-            gdk_clipboard_set_text (clipboard, "");
-    }
+    OTPClientWindow *self = user_data;
     self->clipboard_clear_timer_id = 0;
+    otpclient_window_clear_clipboard_now (self);
     return G_SOURCE_REMOVE;
 }
 
@@ -1696,19 +1701,12 @@ void
 otpclient_window_clear_clipboard_now (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-
-    if (self->clipboard_clear_timer_id != 0)
-    {
-        g_source_remove (self->clipboard_clear_timer_id);
-        self->clipboard_clear_timer_id = 0;
-    }
-
     GdkDisplay *display = gdk_display_get_default ();
-    if (display == NULL)
-        return;
-    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
-    if (clipboard != NULL)
-        gdk_clipboard_set_text (clipboard, "");
+    GdkClipboard *clipboard = display != NULL ? gdk_display_get_clipboard (display) : NULL;
+    if (clipboard != NULL && self->clipboard_content != NULL &&
+        gdk_clipboard_get_content (clipboard) == self->clipboard_content)
+        gdk_clipboard_set_content (clipboard, NULL);
+    clipboard_forget (self);
 }
 
 /* Push the entry's current OTP to the clipboard, mark the entry as the
@@ -1731,7 +1729,12 @@ copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
     GdkClipboard *clipboard = gdk_display_get_clipboard (display);
     if (clipboard == NULL)
         return;
-    gdk_clipboard_set_text (clipboard, otp_value);
+    g_clear_object (&self->clipboard_content);
+    self->clipboard_content = gdk_content_provider_new_typed (G_TYPE_STRING, otp_value);
+    if (!gdk_clipboard_set_content (clipboard, self->clipboard_content)) {
+        clipboard_forget (self);
+        return;
+    }
 
     g_weak_ref_set (&self->clipboard_owner_entry, entry);
 
@@ -1755,10 +1758,8 @@ copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
     }
 }
 
-/* Body of the OTP-activate action: HOTP counter advance, clipboard copy,
- * reveal-on-hide, clipboard-clear schedule, and notification. Factored out
- * of on_otp_selection_changed so a primary-click on the already-selected
- * row can re-trigger it (notify::selected only fires on actual change). */
+/* Explicit activation persists HOTP counters before revealing or copying,
+ * then schedules clipboard cleanup and notification. */
 static void
 trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
 {
@@ -1768,41 +1769,38 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
 
-    /* For HOTP tokens, increment counter and regenerate OTP on each activation.
-     * Skip for cross-DB entries since their database is not actively loaded. */
+    if (window_is_locked (self) || app == NULL)
+        return;
+    /* g_ascii_strcasecmp() g_return_val_if_fail()s to 0, which reads as "equal",
+     * so a missing type would be mistaken for HOTP and would open a database
+     * transaction on a TOTP row. Guard rather than trust the setter. */
     const gchar *type = otp_entry_get_otp_type (entry);
-    gboolean is_hotp = (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0);
-    if (is_hotp && app != NULL && otp_entry_get_db_name (entry) == NULL)
-    {
-        DatabaseData *db_data = otpclient_application_get_db_data (app);
-        if (db_data != NULL && db_data->in_memory_json_data != NULL)
-        {
-            guint json_pos = find_store_pos_for_entry (self, entry);
-            if (json_pos != GTK_INVALID_LIST_POSITION)
-            {
-                guint64 new_counter = otp_entry_get_counter (entry) + 1;
-                otp_entry_set_counter (entry, new_counter);
-                otp_entry_update_otp (entry);
-
-                json_t *token_obj = json_array_get (db_data->in_memory_json_data, json_pos);
-                if (token_obj != NULL)
-                {
-                    json_object_set_new (token_obj, "counter", json_integer ((json_int_t) new_counter));
-                    /* Defer the disk write to lock / shutdown, flush_pending_writes() picks it up.
-                     * Also arm a debounced timer so a hard crash within HOTP_FLUSH_DEBOUNCE_SECONDS
-                     * (rather than a clean shutdown) still persists the new counter. */
-                    self->hotp_counter_dirty = TRUE;
-                    schedule_hotp_flush (self);
-                }
-            }
-        }
+    gboolean is_hotp = type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0;
+    if (is_hotp && otp_entry_get_db_path (entry) != NULL) {
+        g_autofree gchar *path = g_strdup (otp_entry_get_db_path (entry));
+        if (!otpclient_application_is_unlocking (app))
+            otpclient_application_switch_to_db (app, path);
+        return;
     }
-
-    /* For cross-DB entries, the cached OTP may be missing (never computed)
-     * or stale (TOTP rotated since the row was first bound). Recompute now
-     * so the user always copies a fresh code. */
-    if (otp_entry_get_db_name (entry) != NULL)
+    if (is_hotp) {
+        DatabaseData *db = otpclient_application_get_db_data (app);
+        guint pos = find_store_pos_for_entry (self, entry);
+        if (db == NULL || pos == GTK_INVALID_LIST_POSITION)
+            return;
+        gsize index = pos;
+        GError *err = NULL;
+        g_autoptr (GPtrArray) results = db_generate_hotp (db, &index, 1, &err);
+        if (results == NULL) {
+            show_error_toast (self, "%s", err != NULL ? err->message : _("Failed to save HOTP counter"));
+            g_clear_error (&err);
+            return;
+        }
+        DbHotpResult *result = g_ptr_array_index (results, 0);
+        otp_entry_set_counter (entry, result->next_counter);
+        otp_entry_set_otp_value (entry, result->code);
+    } else {
         otp_entry_update_otp (entry);
+    }
 
     const gchar *otp_value = otp_entry_get_otp_value (entry);
     if (otp_value == NULL || otp_value[0] == '\0')
@@ -1832,28 +1830,85 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
 }
 
 static void
-on_otp_selection_changed (GtkSingleSelection *selection,
-                          GParamSpec         *pspec,
-                          OTPClientWindow    *self)
+action_activate_token (GtkWidget *widget, const gchar *name, GVariant *parameter)
 {
-    (void) pspec;
+    (void) name;
+    (void) parameter;
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    trigger_otp_action_for_entry (self, OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection)));
+}
 
-    /* Refuse to reveal or copy any OTP while the database is locked. The
-     * locked-page swap normally hides the list, but a stray selection signal
-     * during the lock transition could still fire - bail before reading the
-     * cached OTP value. */
-    if (window_is_locked (self))
-        return;
+static void
+on_token_action_clicked (GtkButton *button, GtkListItem *item)
+{
+    GtkRoot *root = gtk_widget_get_root (GTK_WIDGET (button));
+    if (OTPCLIENT_IS_WINDOW (root))
+        trigger_otp_action_for_entry (OTPCLIENT_WINDOW (root), OTP_ENTRY (gtk_list_item_get_item (item)));
+}
 
-    guint pos = gtk_single_selection_get_selected (selection);
-    if (pos == GTK_INVALID_LIST_POSITION)
-        return;
+static void
+action_column_setup (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
+{
+    (void) factory;
+    (void) data;
+    GtkWidget *button = gtk_button_new ();
+    gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class (button, "flat");
+    g_signal_connect_object (button, "clicked", G_CALLBACK (on_token_action_clicked), item, 0);
+    gtk_list_item_set_child (item, button);
+}
 
-    if (self->suppress_selection_action)
-        return;
+static void
+action_column_bind (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
+{
+    (void) factory;
+    (void) data;
+    OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (item));
+    const gchar *type = otp_entry_get_otp_type (entry);
+    gboolean hotp = type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0;
+    const gchar *label = hotp ? (otp_entry_get_db_path (entry) != NULL ? _("Open database") : _("Generate")) : _("Copy");
+    GtkWidget *button = gtk_list_item_get_child (item);
+    gtk_button_set_label (GTK_BUTTON (button), label);
 
-    OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (selection));
-    trigger_otp_action_for_entry (self, entry);
+    /* Fall back to the issuer when the account is blank, otherwise the tooltip
+     * reads "Copy: " and adds nothing to the button label. */
+    const gchar *subject = otp_entry_get_account (entry);
+    if (subject == NULL || *subject == '\0')
+        subject = otp_entry_get_issuer (entry);
+    if (subject != NULL && *subject != '\0') {
+        g_autofree gchar *tip = g_strdup_printf ("%s: %s", label, subject);
+        gtk_widget_set_tooltip_text (button, tip);
+    } else {
+        gtk_widget_set_tooltip_text (button, label);
+    }
+}
+
+static void
+add_action_column (GtkColumnView *view)
+{
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
+    g_signal_connect (factory, "setup", G_CALLBACK (action_column_setup), NULL);
+    g_signal_connect (factory, "bind", G_CALLBACK (action_column_bind), NULL);
+    GtkColumnViewColumn *column = gtk_column_view_column_new (_("Action"), factory);
+    gtk_column_view_append_column (view, column);
+    g_object_unref (column);
+}
+
+static gboolean
+on_token_key_pressed (GtkEventControllerKey *controller, guint keyval,
+                      guint keycode, GdkModifierType state, gpointer data)
+{
+    (void) controller;
+    (void) keycode;
+    gboolean activate = ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) &&
+                         (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) ||
+                        ((keyval == GDK_KEY_c || keyval == GDK_KEY_C) &&
+                         (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK);
+    if (!activate)
+        return FALSE;
+    OTPClientWindow *self = data;
+    trigger_otp_action_for_entry (self, OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection)));
+    return TRUE;
 }
 
 /* ── Drag-and-drop helpers ─────────────────────────────────────────── */
@@ -1941,39 +1996,6 @@ pick_entry_at (OTPClientWindow *self, double x, double y, GtkWidget **row_out)
         *row_out = row;
 
     return entry;
-}
-
-/* GtkSingleSelection::notify::selected only fires when the selected index
- * changes. Re-clicking the already-selected row doesn't change the index,
- * so on_otp_selection_changed never runs and the user gets no copy /
- * HOTP-advance. Use a capture-phase primary-click gesture to detect the
- * re-click case before built-in selection logic runs, then fire the same
- * action helper directly. */
-static void
-on_otp_list_primary_pressed (GtkGestureClick *gesture,
-                             gint             n_press,
-                             double           x,
-                             double           y,
-                             gpointer         user_data)
-{
-    (void) gesture;
-    (void) n_press;
-
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-
-    if (window_is_locked (self))
-        return;
-
-    OTPEntry *picked = pick_entry_at (self, x, y, NULL);
-    if (picked == NULL)
-        return;
-
-    OTPEntry *selected = OTP_ENTRY (
-        gtk_single_selection_get_selected_item (self->otp_selection));
-    if (selected != picked)
-        return;  /* selection will change; notify::selected handles it */
-
-    trigger_otp_action_for_entry (self, picked);
 }
 
 static void
@@ -2249,6 +2271,10 @@ static void
 otpclient_window_dispose (GObject *object)
 {
     OTPClientWindow *win = OTPCLIENT_WINDOW(object);
+    if (win->disposing) {
+        G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
+        return;
+    }
     win->disposing = TRUE;
 
     if (win->cross_db_cancellable != NULL)
@@ -2259,9 +2285,6 @@ otpclient_window_dispose (GObject *object)
         g_cancellable_cancel (win->clipboard_cancellable);
     if (win->file_dialog_cancellable != NULL)
         g_cancellable_cancel (win->file_dialog_cancellable);
-
-    /* Persist any deferred HOTP counter advances before tearing down. */
-    otpclient_window_flush_pending_writes (win, NULL);
 
     if (win->deleted_token != NULL)
     {
@@ -2274,7 +2297,9 @@ otpclient_window_dispose (GObject *object)
      * in the system clipboard until the user's next copy. */
     otpclient_window_clear_clipboard_now (win);
 
-    g_weak_ref_clear (&win->clipboard_owner_entry);
+    GdkDisplay *clipboard_display = gdk_display_get_default ();
+    if (clipboard_display != NULL)
+        g_signal_handlers_disconnect_by_data (gdk_display_get_clipboard (clipboard_display), win);
 
     if (win->otp_refresh_timer_id != 0)
     {
@@ -2322,55 +2347,12 @@ otpclient_window_dispose (GObject *object)
     G_OBJECT_CLASS (otpclient_window_parent_class)->dispose (object);
 }
 
-gboolean
-otpclient_window_flush_pending_writes (OTPClientWindow *self,
-                                       GError         **error)
+static void
+otpclient_window_finalize (GObject *object)
 {
-    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), FALSE);
-    g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-
-    if (self->hotp_flush_timeout_id != 0)
-    {
-        g_source_remove (self->hotp_flush_timeout_id);
-        self->hotp_flush_timeout_id = 0;
-    }
-
-    if (!self->hotp_counter_dirty)
-        return TRUE;
-
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL)
-        return FALSE;
-
-    DatabaseData *db_data = otpclient_application_get_db_data (app);
-    if (db_data == NULL || db_data->in_memory_json_data == NULL)
-        return FALSE;
-
-    GError *local_error = NULL;
-    update_db (db_data, &local_error);
-    if (local_error != NULL)
-    {
-        if (error != NULL)
-            g_propagate_error (error, local_error);
-        else {
-            g_warning ("Failed to persist deferred HOTP counters: %s",
-                       local_error->message);
-            g_clear_error (&local_error);
-        }
-        return FALSE;
-    }
-    self->hotp_counter_dirty = FALSE;
-    return TRUE;
-}
-
-static gboolean
-hotp_flush_debounce_cb (gpointer user_data)
-{
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-    self->hotp_flush_timeout_id = 0;
-    otpclient_window_flush_pending_writes (self, NULL);
-    return G_SOURCE_REMOVE;
+    OTPClientWindow *self = OTPCLIENT_WINDOW (object);
+    g_weak_ref_clear (&self->clipboard_owner_entry);
+    G_OBJECT_CLASS (otpclient_window_parent_class)->finalize (object);
 }
 
 void
@@ -2378,15 +2360,21 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
 
+    /* Snapshot the stack: closing dialogs changes the live model. Clear now,
+     * even if an asynchronous file chooser still holds a dialog reference. */
+    g_autoptr (GListModel) dialogs = adw_application_window_get_dialogs (ADW_APPLICATION_WINDOW (self));
+    g_autoptr (GPtrArray) closing = g_ptr_array_new_with_free_func (g_object_unref);
+    for (guint i = 0; i < g_list_model_get_n_items (dialogs); i++)
+        g_ptr_array_add (closing, g_list_model_get_item (dialogs, i));
+    for (guint i = closing->len; i > 0; i--) {
+        AdwDialog *dialog = g_ptr_array_index (closing, i - 1);
+        sensitive_dialog_clear (dialog);
+        adw_dialog_force_close (dialog);
+    }
+
     otpclient_window_stop_otp_timer (self);
     otpclient_window_clear_clipboard_now (self);
     otpclient_window_clear_displayed_otps (self);
-
-    if (self->hotp_flush_timeout_id != 0) {
-        g_source_remove (self->hotp_flush_timeout_id);
-        self->hotp_flush_timeout_id = 0;
-    }
-    self->hotp_counter_dirty = FALSE;
 
     if (self->deleted_token != NULL) {
         json_decref (self->deleted_token);
@@ -2425,16 +2413,6 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
     }
     if (self->search_entry != NULL)
         gtk_editable_set_text (GTK_EDITABLE (self->search_entry), "");
-}
-
-static void
-schedule_hotp_flush (OTPClientWindow *self)
-{
-    if (self->hotp_flush_timeout_id != 0)
-        return;
-    self->hotp_flush_timeout_id =
-        g_timeout_add_seconds (HOTP_FLUSH_DEBOUNCE_SECONDS,
-                                hotp_flush_debounce_cb, self);
 }
 
 GListStore *
@@ -2579,9 +2557,7 @@ on_db_modified (gpointer user_data)
 
     GListStore *store = self->otp_store;
 
-    /* Suppress selection-change side effects (clipboard copy, notifications)
-     * while we tear down and rebuild the store. */
-    self->suppress_selection_action = TRUE;
+
 
     g_list_store_remove_all (store);
 
@@ -2622,7 +2598,6 @@ on_db_modified (gpointer user_data)
 
     rebuild_group_list (self);
 
-    self->suppress_selection_action = FALSE;
 }
 
 static void
@@ -2671,6 +2646,23 @@ on_import_done (const ImportSummary *summary,
         msg = combined;
     }
 
+    if (summary->skipped_invalid > 0) {
+        AdwDialog *dialog = adw_alert_dialog_new (_("Import completed with skipped entries"), msg);
+        adw_alert_dialog_add_response (ADW_ALERT_DIALOG (dialog), "close", _("Close"));
+        GtkWidget *scrolled = gtk_scrolled_window_new ();
+        gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+        gtk_scrolled_window_set_max_content_height (GTK_SCROLLED_WINDOW (scrolled), 250);
+        gtk_scrolled_window_set_propagate_natural_height (GTK_SCROLLED_WINDOW (scrolled), TRUE);
+        GtkWidget *details = gtk_label_new (summary->details);
+        gtk_label_set_wrap (GTK_LABEL (details), TRUE);
+        gtk_label_set_selectable (GTK_LABEL (details), TRUE);
+        gtk_label_set_xalign (GTK_LABEL (details), 0);
+        gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), details);
+        adw_alert_dialog_set_extra_child (ADW_ALERT_DIALOG (dialog), scrolled);
+        adw_dialog_present (dialog, GTK_WIDGET (self));
+        return;
+    }
+
     AdwToast *toast = adw_toast_new (msg);
     adw_toast_set_timeout (toast, 6);
     adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
@@ -2717,16 +2709,17 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
         return;
     }
 
+    g_autoptr (OtpImportDiagnostics) diagnostics = otp_import_diagnostics_new ();
     GSList *otps = NULL;
     guint invalid = 0;
     guint batch_size = 1;
     guint batch_index = 0;
     GError *decode_error = NULL;
     if (g_str_has_prefix (otpauth_uri, "otpauth-migration://"))
-        otps = google_migration_decode (otpauth_uri, &invalid, &batch_size,
-                                        &batch_index, &decode_error);
+        otps = google_migration_decode_full (otpauth_uri, &invalid, &batch_size,
+                                        &batch_index, diagnostics, &decode_error);
     else
-        set_otps_from_uris (otpauth_uri, &otps);
+        set_otps_from_uris_full (otpauth_uri, &otps, diagnostics);
     sensitive_g_free (otpauth_uri);
 
     if (otps == NULL) {
@@ -2738,24 +2731,23 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
     }
 
     GError *err = NULL;
-    OtpImportReport report = {0, 0, invalid};
+    OtpImportReport report = {0};
     db_import_otps (db_data, otps, &report, &err);
     free_otps_gslist (otps, g_slist_length (otps));
     if (err != NULL) {
         show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
         g_clear_error (&err);
-    } else if (report.added == 0) {
-        if (report.skipped_duplicates > 0)
-            show_error_toast (self, "%s", _("This token already exists"));
-        else
-            show_error_toast (self, "%s", _("QR code contains an invalid OTP token"));
-    } else if (batch_size > 1) {
-        g_autofree gchar *message = g_strdup_printf (
-            _("Imported batch %u of %u. Scan the remaining Google migration QR codes."),
-            batch_index + 1, batch_size);
-        otpclient_window_show_error_toast (self, message);
+        return;
     }
-    on_db_modified (self);
+    g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
+    ImportSummary summary = {
+        .added = report.added,
+        .skipped_duplicates = report.skipped_duplicates,
+        .skipped_invalid = report.skipped_invalid + diagnostics->skipped_invalid,
+        .skipped = report.skipped_duplicates + report.skipped_invalid + diagnostics->skipped_invalid,
+        .batch_size = batch_size, .batch_index = batch_index, .details = details,
+    };
+    on_import_done (&summary, self);
 }
 
 typedef struct {
@@ -2765,6 +2757,7 @@ typedef struct {
      * along with the one picker invocation on purpose, so a cancelled chooser
      * cannot leak the relocation intent into the next open. */
     gchar *replace_path;
+    gchar *backup_source;
 } WindowAsyncContext;
 
 static WindowAsyncContext *
@@ -2782,6 +2775,7 @@ window_async_context_free (WindowAsyncContext *ctx)
         return;
     g_weak_ref_clear (&ctx->window_ref);
     g_free (ctx->replace_path);
+    g_free (ctx->backup_source);
     g_free (ctx);
 }
 
@@ -3065,6 +3059,18 @@ on_backup_tokens_save_complete (GObject      *source,
         return;
     }
 
+    /* The database was locked or switched while the file chooser was open. Say
+     * so: the user picked a filename and would otherwise see nothing happen,
+     * and silently backing up a different database than the one they started
+     * from would be worse. */
+    if (otpclient_application_get_app_locked (app) ||
+        g_strcmp0 (db_data->db_path, ctx->backup_source) != 0) {
+        show_error_toast (self, "%s",
+                          _("The database changed while the file chooser was open. Backup cancelled."));
+        window_async_context_free (ctx);
+        return;
+    }
+
     g_autofree gchar *error_msg = db_copy_to (db_data->db_path, path);
     if (error_msg != NULL) {
         show_error_toast (self, "%s", error_msg);
@@ -3072,11 +3078,10 @@ on_backup_tokens_save_complete (GObject      *source,
         return;
     }
 
-    /* Bump last-export-time so the backup-age banner hides immediately
-     * (refresh_backup_age_banner reads this on next refresh). */
-    if (self->settings != NULL)
-        g_settings_set_int64 (self->settings, "last-export-time",
-                              (gint64) g_get_real_time () / G_USEC_PER_SEC);
+    gsettings_common_set_database_time (self->settings, OTPCLIENT_BACKUP_TIMES,
+                                         ctx->backup_source, g_get_real_time () / G_USEC_PER_SEC);
+    gsettings_common_set_database_time (self->settings, OTPCLIENT_BACKUP_SNOOZES,
+                                         ctx->backup_source, 0);
 
     refresh_backup_age_banner (self);
 
@@ -3119,8 +3124,10 @@ action_backup_tokens (GtkWidget  *widget,
 
     g_clear_object (&self->file_dialog_cancellable);
     self->file_dialog_cancellable = g_cancellable_new ();
+    WindowAsyncContext *ctx = window_async_context_new (self);
+    ctx->backup_source = g_strdup (db_data->db_path);
     gtk_file_dialog_save (dialog, GTK_WINDOW (self), self->file_dialog_cancellable,
-                          on_backup_tokens_save_complete, window_async_context_new (self));
+                          on_backup_tokens_save_complete, ctx);
     g_object_unref (dialog);
 }
 
@@ -3138,7 +3145,10 @@ action_snooze_backup_banner (GtkWidget  *widget,
 
     gint64 now = (gint64) g_get_real_time () / G_USEC_PER_SEC;
     gint64 until = now + (gint64) BACKUP_BANNER_SNOOZE_DAYS * 24 * 60 * 60;
-    g_settings_set_int64 (self->settings, "backup-banner-snoozed-until", until);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db != NULL)
+        gsettings_common_set_database_time (self->settings, OTPCLIENT_BACKUP_SNOOZES, db->db_path, until);
     refresh_backup_age_banner (self);
 }
 
@@ -3814,9 +3824,7 @@ on_token_right_click (GtkGestureClick *gesture,
                 G_LIST_MODEL (self->otp_selection), i);
             if (e == picked)
             {
-                self->suppress_selection_action = TRUE;
                 gtk_single_selection_set_selected (self->otp_selection, i);
-                self->suppress_selection_action = FALSE;
                 break;
             }
         }
@@ -4733,6 +4741,10 @@ otpclient_window_init (OTPClientWindow *self)
     gtk_widget_init_template (GTK_WIDGET(self));
 
     g_weak_ref_init (&self->clipboard_owner_entry, NULL);
+    GdkDisplay *display = gdk_display_get_default ();
+    if (display != NULL)
+        g_signal_connect_object (gdk_display_get_clipboard (display), "changed",
+                                 G_CALLBACK (on_clipboard_changed), self, 0);
 
     GtkWidget *spinner;
 #if ADW_CHECK_VERSION(1, 6, 0)
@@ -4766,9 +4778,9 @@ otpclient_window_init (OTPClientWindow *self)
         /* Banner state depends on these keys - refresh whenever they change
          * (e.g. when the export dialog records a fresh export, or the user
          * snoozes the reminder). */
-        g_signal_connect_swapped (self->settings, "changed::last-export-time",
+        g_signal_connect_swapped (self->settings, "changed::database-backup-times",
                                    G_CALLBACK (refresh_backup_age_banner), self);
-        g_signal_connect_swapped (self->settings, "changed::backup-banner-snoozed-until",
+        g_signal_connect_swapped (self->settings, "changed::database-backup-snoozes",
                                    G_CALLBACK (refresh_backup_age_banner), self);
         g_signal_connect (self->settings, "changed::show-sidebar",
                           G_CALLBACK (on_show_sidebar_key_changed), self);
@@ -4800,7 +4812,6 @@ otpclient_window_init (OTPClientWindow *self)
     g_signal_connect (self, "close-request", G_CALLBACK (on_close_request), self);
     g_signal_connect (self->split_view, "notify::show-sidebar", G_CALLBACK (split_view_sidebar_changed), self);
     g_signal_connect (self->sidebar_toggle_button, "clicked", G_CALLBACK (sidebar_toggle_clicked), self);
-    g_signal_connect (self->otp_selection, "notify::selected", G_CALLBACK (on_otp_selection_changed), self);
     g_signal_connect (self->search_entry, "activate", G_CALLBACK (search_entry_activate), self);
 g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked), self);
     g_signal_connect (self->new_db_button, "clicked", G_CALLBACK (new_db_button_clicked), self);
@@ -4817,14 +4828,10 @@ g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked)
     g_signal_connect (right_click, "pressed", G_CALLBACK (on_token_right_click), self);
     gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (right_click));
 
-    /* Primary-click on the already-selected row: GtkSingleSelection won't
-     * emit notify::selected (no change), so attach a capture-phase gesture
-     * to detect the re-click and re-fire the OTP action. */
-    GtkGesture *primary_click = gtk_gesture_click_new ();
-    gtk_gesture_single_set_button (GTK_GESTURE_SINGLE (primary_click), GDK_BUTTON_PRIMARY);
-    gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (primary_click), GTK_PHASE_CAPTURE);
-    g_signal_connect (primary_click, "pressed", G_CALLBACK (on_otp_list_primary_pressed), self);
-    gtk_widget_add_controller (self->otp_list, GTK_EVENT_CONTROLLER (primary_click));
+    GtkEventController *token_keys = gtk_event_controller_key_new ();
+    gtk_event_controller_set_propagation_phase (token_keys, GTK_PHASE_CAPTURE);
+    g_signal_connect (token_keys, "key-pressed", G_CALLBACK (on_token_key_pressed), self);
+    gtk_widget_add_controller (self->otp_list, token_keys);
 
     /* Right-click context menu on database sidebar */
     GtkGesture *db_right_click = gtk_gesture_click_new ();
@@ -4848,6 +4855,7 @@ static void
 otpclient_window_class_init (OTPClientWindowClass *klass)
 {
     G_OBJECT_CLASS(klass)->dispose = otpclient_window_dispose;
+    G_OBJECT_CLASS(klass)->finalize = otpclient_window_finalize;
     G_OBJECT_CLASS(klass)->constructed = otpclient_window_constructed;
 
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
@@ -4897,6 +4905,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.snooze-backup-banner", NULL, action_snooze_backup_banner);
     gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_comma, GDK_CONTROL_MASK, "win.settings", NULL);
+    gtk_widget_class_install_action (widget_class, "win.activate-token", NULL, action_activate_token);
     gtk_widget_class_install_action (widget_class, "win.edit-token", NULL, action_edit_token);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_F2, 0, "win.edit-token", NULL);
     gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);

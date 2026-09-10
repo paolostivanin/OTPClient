@@ -35,6 +35,91 @@ function(otpclient_use_test_schema test_name)
     endif()
 endfunction()
 
+# Same deal for the build-time edge: there is no test-schemas target to depend on
+# when the compiler is missing.
+function(otpclient_depend_on_test_schema target_name)
+    if(GLIB_COMPILE_SCHEMAS)
+        add_dependencies(${target_name} test-schemas)
+    endif()
+endfunction()
+
+# The integration tests below drive the real binaries under a private session bus
+# and, for the GUI, a virtual display. None of that is needed to build or run
+# OTPClient itself, so a missing tool has to skip the test rather than fail the
+# configure step: a packager should not need Xvfb to produce a release build.
+find_package(Python3 COMPONENTS Interpreter)
+find_program(TEST_DBUS_DAEMON dbus-daemon)
+find_program(TEST_XVFB Xvfb)
+
+set(ISOLATED_SESSION_READY TRUE)
+if(NOT Python3_Interpreter_FOUND OR NOT TEST_DBUS_DAEMON OR NOT GLIB_COMPILE_SCHEMAS)
+    set(ISOLATED_SESSION_READY FALSE)
+    message(STATUS "Not registering the isolated-session tests (review_flows, gui_flows, "
+            "search_provider_settings): they need Python 3, dbus-daemon, and glib-compile-schemas")
+endif()
+
+# Exercise user flows against the same implementation as the shipped binaries.
+file(GLOB REVIEW_COMMON_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/common/*.c)
+add_executable(test_review_flows test_review_flows.c ${REVIEW_COMMON_SOURCES})
+otpclient_apply_target_settings(test_review_flows)
+target_compile_definitions(test_review_flows PRIVATE OTPCLIENT_TESTING
+        REVIEW_TEST_SOURCE="${PROJECT_SOURCE_DIR}/tests")
+target_include_directories(test_review_flows PRIVATE ${PROJECT_SOURCE_DIR}/src/common)
+target_link_libraries(test_review_flows ${COMMON_LIBS})
+otpclient_depend_on_test_schema(test_review_flows)
+if(BUILD_CLI)
+    target_compile_definitions(test_review_flows PRIVATE REVIEW_CLI_PATH="$<TARGET_FILE:OTPClient-cli>")
+    add_dependencies(test_review_flows OTPClient-cli)
+endif()
+if(ISOLATED_SESSION_READY)
+    add_test(NAME review_flows COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/isolated-session.py --headless $<TARGET_FILE:test_review_flows>)
+    otpclient_use_test_schema(review_flows)
+endif()
+
+if(BUILD_SEARCH_PROVIDER)
+    add_executable(test_search_provider_settings test_search_provider_settings.c
+            ${REVIEW_COMMON_SOURCES})
+    otpclient_apply_target_settings(test_search_provider_settings)
+    target_include_directories(test_search_provider_settings PRIVATE ${PROJECT_SOURCE_DIR}/src/common)
+    target_link_libraries(test_search_provider_settings ${COMMON_LIBS})
+    otpclient_depend_on_test_schema(test_search_provider_settings)
+    if(ISOLATED_SESSION_READY)
+        add_test(NAME search_provider_settings COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/isolated-session.py --headless $<TARGET_FILE:test_search_provider_settings>)
+        otpclient_use_test_schema(search_provider_settings)
+    endif()
+endif()
+
+if(BUILD_GUI)
+    get_target_property(REVIEW_GUI_SOURCES OTPClient SOURCES)
+    list(FILTER REVIEW_GUI_SOURCES EXCLUDE REGEX "/main\\.c$")
+    add_executable(test_gui_flows test_gui_flows.c ${REVIEW_GUI_SOURCES})
+    add_dependencies(test_gui_flows OTPClient)
+    otpclient_apply_target_settings(test_gui_flows)
+    target_compile_definitions(test_gui_flows PRIVATE OTPCLIENT_TESTING)
+    if(BUILD_CLI)
+        target_compile_definitions(test_gui_flows PRIVATE REVIEW_CLI_PATH="$<TARGET_FILE:OTPClient-cli>")
+        add_dependencies(test_gui_flows OTPClient-cli)
+    endif()
+    target_include_directories(test_gui_flows PRIVATE ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/gui)
+    target_link_libraries(test_gui_flows PkgConfig::GTK4 PkgConfig::ADWAITA PkgConfig::GDKPIXBUF
+            PkgConfig::ZBAR PkgConfig::PROTOC PkgConfig::LIBQRENCODE ${COMMON_LIBS})
+    otpclient_depend_on_test_schema(test_gui_flows)
+    if(ISOLATED_SESSION_READY AND TEST_XVFB)
+        add_test(NAME gui_flows COMMAND ${Python3_EXECUTABLE}
+                ${PROJECT_SOURCE_DIR}/tests/isolated-session.py --gui $<TARGET_FILE:test_gui_flows>)
+        set_tests_properties(gui_flows PROPERTIES TIMEOUT 100)
+        otpclient_use_test_schema(gui_flows)
+        if(SANITIZE)
+            set_property(TEST gui_flows APPEND PROPERTY ENVIRONMENT
+                    "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tests/gui-lsan.supp")
+        endif()
+    elseif(ISOLATED_SESSION_READY)
+        message(STATUS "Not registering the gui_flows test: Xvfb was not found")
+    endif()
+endif()
+
 add_executable(test_parse_uri
         test_parse_uri.c
         ${TEST_COMMON_SOURCES}
@@ -294,6 +379,8 @@ if(BUILD_GUI)
             ${COMMON_LIBS}
     )
     add_test(NAME db_relocation COMMAND test_db_relocation)
+    otpclient_use_test_schema(db_relocation)
+    otpclient_depend_on_test_schema(test_db_relocation)
 
     # No GTK and no D-Bus: the decision table is deliberately free of both.
     add_executable(test_autostart_policy

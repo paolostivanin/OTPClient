@@ -1,3 +1,4 @@
+#include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include "edit-token-dialog.h"
 #include "common.h"
@@ -102,6 +103,13 @@ on_save_clicked (GtkButton       *button,
 
     if (self->callback != NULL)
         self->callback (self->callback_data);
+}
+
+static void
+clear_snapshot (AdwDialog *dialog)
+{
+    EditTokenDialog *self = EDIT_TOKEN_DIALOG (dialog);
+    g_clear_pointer (&self->original_token, json_decref);
 }
 
 static void
@@ -238,5 +246,6 @@ edit_token_dialog_new (json_t            *token_obj,
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), scrolled);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
+    sensitive_dialog_setup (ADW_DIALOG (self), clear_snapshot);
     return self;
 }

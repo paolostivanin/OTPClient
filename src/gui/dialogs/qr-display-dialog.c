@@ -1,3 +1,4 @@
+#include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include <qrencode.h>
 #include "qr-display-dialog.h"
@@ -104,5 +105,6 @@ qr_display_dialog_new (const gchar *otpauth_uri,
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), clamp);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
+    sensitive_dialog_setup (ADW_DIALOG (self), NULL);
     return self;
 }

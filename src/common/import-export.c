@@ -3,23 +3,31 @@
 #include "get-providers-data.h"
 
 GSList *
-get_data_from_provider (const gchar  *action_name,
+get_data_from_provider_full (const gchar  *action_name,
                         const gchar  *filename,
                         const gchar  *pwd,
                         gint32        max_file_size_from_memlock,
                         gsize         db_size,
-                        GError      **err)
+                        OtpImportDiagnostics *diagnostics, GError      **err)
 {
     GSList *content = NULL;
     if (g_strcmp0 (action_name, FREEOTPPLUS_PLAIN_ACTION_NAME) == 0) {
-        content = get_freeotpplus_data (filename, max_file_size_from_memlock, db_size, err);
+        content = get_freeotpplus_data_full (filename, max_file_size_from_memlock, db_size, diagnostics, err);
     } else if (g_strcmp0 (action_name, AEGIS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AEGIS_ENC_ACTION_NAME) == 0) {
-        content = get_aegis_data (filename, pwd, max_file_size_from_memlock, db_size, err);
+        content = get_aegis_data_full (filename, pwd, max_file_size_from_memlock, db_size, diagnostics, err);
     } else if (g_strcmp0 (action_name, AUTHPRO_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, AUTHPRO_ENC_ACTION_NAME) == 0) {
-        content = get_authpro_data (filename, pwd, max_file_size_from_memlock, db_size, err);
+        content = get_authpro_data_full (filename, pwd, max_file_size_from_memlock, db_size, diagnostics, err);
     } else if (g_strcmp0 (action_name, TWOFAS_PLAIN_ACTION_NAME) == 0 || g_strcmp0 (action_name, TWOFAS_ENC_ACTION_NAME) == 0) {
-        content = get_twofas_data (filename, pwd, db_size, err);
+        content = get_twofas_data_full (filename, pwd, db_size, diagnostics, err);
     }
 
     return content;
+}
+
+GSList *
+get_data_from_provider (const gchar *action_name, const gchar *filename, const gchar *pwd,
+                        gint32 max_file_size_from_memlock, gsize db_size, GError **err)
+{
+    return get_data_from_provider_full (action_name, filename, pwd, max_file_size_from_memlock,
+                                        db_size, NULL, err);
 }

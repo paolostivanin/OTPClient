@@ -1,3 +1,4 @@
+#include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include <gcrypt.h>
 #include "manual-add-dialog.h"
@@ -410,5 +411,6 @@ manual_add_dialog_new (DatabaseData      *db_data,
     adw_toolbar_view_set_content (ADW_TOOLBAR_VIEW (toolbar_view), scrolled);
     adw_dialog_set_child (ADW_DIALOG (self), toolbar_view);
 
+    sensitive_dialog_setup (ADW_DIALOG (self), NULL);
     return self;
 }

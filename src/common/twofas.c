@@ -1,5 +1,8 @@
-#define _DEFAULT_SOURCE
 #define _GNU_SOURCE
+#define _DEFAULT_SOURCE
+#include "otp-validation.h"
+#include "import-diagnostics.h"
+#include "get-providers-data.h"
 #include <string.h>
 #include <stdlib.h>
 #include <glib.h>
@@ -26,10 +29,10 @@ typedef struct twofas_data_t {
 
 static GSList   *get_otps_from_encrypted_backup (const gchar       *path,
                                                  const gchar       *password,
-                                                 GError           **err);
+                                                 OtpImportDiagnostics *diagnostics, GError           **err);
 
 static GSList   *get_otps_from_plain_backup     (const gchar       *path,
-                                                 GError           **err);
+                                                 OtpImportDiagnostics *diagnostics, GError           **err);
 
 static gboolean  is_schema_supported            (const gchar       *path,
                                                  GError           **err);
@@ -49,14 +52,14 @@ static gchar    *get_reference_data             (guchar            *derived_key,
 
 static GSList   *parse_twofas_json_data         (const gchar       *data,
                                                  GHashTable        *group_map,
-                                                 GError           **err);
+                                                 OtpImportDiagnostics *diagnostics, GError           **err);
 
 
 GSList *
-get_twofas_data (const gchar  *path,
+get_twofas_data_full (const gchar  *path,
                  const gchar  *password,
                  gsize         db_size,
-                 GError      **err)
+                 OtpImportDiagnostics *diagnostics, GError      **err)
 {
     int safe_fd = path_open_safe_regular_file (path, err);
     if (safe_fd < 0) {
@@ -78,8 +81,8 @@ get_twofas_data (const gchar  *path,
     }
 
     g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
-    GSList *otps = (password != NULL) ? get_otps_from_encrypted_backup (fd_path, password, err)
-                                       : get_otps_from_plain_backup (fd_path, err);
+    GSList *otps = (password != NULL) ? get_otps_from_encrypted_backup (fd_path, password, diagnostics, err)
+                                       : get_otps_from_plain_backup (fd_path, diagnostics, err);
     close (safe_fd);
     return otps;
 }
@@ -90,6 +93,9 @@ export_twofas (const gchar *export_path,
                const gchar *password,
                json_t      *json_db_data)
 {
+    if (password != NULL && password[0] == '\0')
+        return g_strdup (_("Encryption password must not be empty."));
+
     GError *err = NULL;
     json_t *root = NULL;
     json_t *enc_root = NULL;
@@ -336,7 +342,7 @@ end:
 static GSList *
 get_otps_from_encrypted_backup (const gchar       *path,
                                 const gchar       *password,
-                                GError           **err)
+                                OtpImportDiagnostics *diagnostics, GError           **err)
 {
     if (!is_schema_supported (path, err)) {
         return NULL;
@@ -393,7 +399,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
         return NULL;
     }
     if (twofas_data->json_data != NULL) {
-        otps = parse_twofas_json_data (twofas_data->json_data, group_map, err);
+        otps = parse_twofas_json_data (twofas_data->json_data, group_map, diagnostics, err);
         gcry_free (twofas_data->json_data);
     }
     g_strfreev (b64_encoded_data);
@@ -409,7 +415,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
 
 static GSList *
 get_otps_from_plain_backup (const gchar  *path,
-                            GError      **err)
+                            OtpImportDiagnostics *diagnostics, GError      **err)
 {
     if (!is_schema_supported (path, err)) {
         return NULL;
@@ -418,7 +424,7 @@ get_otps_from_plain_backup (const gchar  *path,
     json_error_t j_err;
     json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
     if (!json) {
-        g_printerr ("Error loading json: %s\n", j_err.text);
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Error loading JSON: %s", j_err.text);
         return NULL;
     }
 
@@ -436,14 +442,14 @@ get_otps_from_plain_backup (const gchar  *path,
     }
 
     json_t *services_obj = json_object_get (json, "services");
-    if (services_obj == NULL) {
+    if (!json_is_array (services_obj)) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed 2FAS backup: missing 'services' array.");
         g_hash_table_destroy (group_map);
         json_decref (json);
         return NULL;
     }
     gchar *dumped_json = json_dumps (services_obj, 0);
-    GSList *otps = parse_twofas_json_data (dumped_json, group_map, err);
+    GSList *otps = parse_twofas_json_data (dumped_json, group_map, diagnostics, err);
     gcry_free (dumped_json);
     g_hash_table_destroy (group_map);
     json_decref (json);
@@ -648,12 +654,18 @@ get_reference_data (guchar *derived_key,
 static GSList *
 parse_twofas_json_data (const gchar *data,
                         GHashTable  *group_map,
-                        GError     **err)
+                        OtpImportDiagnostics *diagnostics, GError     **err)
 {
     json_error_t jerr;
     json_t *array = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
     if (array == NULL) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "%s", jerr.text);
+        return NULL;
+    }
+    if (!json_is_array (array)) {
+        g_set_error_literal (err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "Malformed 2FAS backup: services must be an array.");
+        json_decref (array);
         return NULL;
     }
 
@@ -667,7 +679,11 @@ parse_twofas_json_data (const gchar *data,
         json_t *otp_obj = json_object_get (obj, "otp");
         if (otp_obj == NULL) {
             g_printerr ("Skipping malformed 2FAS entry (missing 'otp' object)\n");
+            gcry_free (otp->secret);
+            g_free (otp->issuer);
+            g_free (otp->account_name);
             g_free (otp);
+            otp_import_diagnostics_add (diagnostics, i, _("Missing required 2FAS token fields."));
             continue;
         }
         otp->issuer = g_strdup (json_string_value (json_object_get (otp_obj, "issuer")));
@@ -708,6 +724,14 @@ parse_twofas_json_data (const gchar *data,
             skip = TRUE;
         }
 
+        GError *validation_error = NULL;
+        otp_repair_anonymous_import_token (otp, i);
+        if (!skip && !otp_validate_import_token (otp, &validation_error))
+            skip = TRUE;
+        if (skip)
+            otp_import_diagnostics_add (diagnostics, i, validation_error != NULL
+                ? validation_error->message : _("Missing or unsupported token type/algorithm."));
+        g_clear_error (&validation_error);
         if (!skip) {
             const gchar *group_id = json_string_value (json_object_get (obj, "groupId"));
             if (group_id != NULL && group_map != NULL) {
@@ -730,4 +754,10 @@ parse_twofas_json_data (const gchar *data,
     json_decref (array);
 
     return otps;
+}
+
+GSList *
+get_twofas_data (const gchar *path, const gchar *password, gsize db_size, GError **err)
+{
+    return get_twofas_data_full (path, password, db_size, NULL, err);
 }

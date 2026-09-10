@@ -122,6 +122,17 @@ typedef struct {
     guint skipped_invalid;
 } OtpImportReport;
 
+typedef struct {
+    gchar *code; /* Secure memory; owned by the result array. */
+    guint64 next_counter;
+} DbHotpResult;
+
+/* Generates in index order and commits all counter advances atomically.
+ * Returns an owned array of DbHotpResult, or NULL with no advances on failure.
+ * Nothing may deliver a generated code before this operation succeeds. */
+GPtrArray *db_generate_hotp (DatabaseData *db_data, const gsize *indices,
+                             gsize n_indices, GError **err);
+
 
 DatabaseData *database_data_new  (const gchar  *db_path,
                                   gint32        max_file_size_from_memlock);

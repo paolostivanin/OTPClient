@@ -92,3 +92,37 @@ pool to the whole `RLIMIT_MEMLOCK` budget: it must always leave
 password-entry buffer. It covers a generous budget (full 64 MiB pool), the
 `RLIM_INFINITY` case (no overflow), the threshold and floor boundaries, and the
 typical 8 MiB systemd limit that triggered the report.
+
+## CLI, GUI, and desktop-search regressions
+
+These tests need Python 3, `dbus-daemon`, and `glib-compile-schemas`; the GUI one
+also needs `Xvfb`. A missing tool skips the affected test rather than failing the
+CMake configure step, so a build without them still works. The integration runner
+creates a private session bus without
+service activation directories, a virtual display for GTK, and temporary
+configuration/data directories. It never uses the developer's keyring,
+clipboard, databases, or desktop services.
+
+`test_review_flows` verifies HOTP generation and persistence as one transaction,
+including failed writes and stale database snapshots; encrypted export password
+validation and round trips; partial-import diagnostics; per-database backup
+history; and actual CLI JSON/CSV output and import exit statuses.
+
+`test_gui_flows` exercises the real GTK application: selecting a row consumes no
+HOTP, explicit generation persists before copying, switching to the CLI produces
+the next code, external clipboard changes cancel OTPClient's ownership, locking
+clears sensitive dialogs even when references remain, and cross-database HOTP
+activation opens the owning database.
+
+`test_search_provider_settings` calls both real D-Bus interfaces against synthetic
+cached metadata. Disabling search or Secret Service immediately revokes results
+and cached keys; re-enabling and changing the keyword work without a restart.
+
+`fixtures/empty-password-aegis`, `-authpro`, and `-twofas` were generated using the
+pre-fix Aegis, Authenticator Pro, and 2FAS exporters. They contain only the public
+RFC 4226 HOTP test secret and verify that existing empty-password exports remain
+importable now that new encrypted exports require a password.
+
+The GUI sanitizer test uses `gui-lsan.supp` for process-lifetime Fontconfig and
+Mesa allocations. Application, GLib, and GTK leaks remain unsuppressed; address
+and undefined-behavior checks stay enabled throughout.

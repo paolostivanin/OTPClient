@@ -39,10 +39,13 @@ static const PageInfo welcome_pages[] = {
         N_("OTPs Are Hidden by Default"),
         N_("Codes are hidden in the list to prevent "
            "shoulder-surfing and accidental screenshot leaks.\n\n"
-           "Click a row to copy the OTP - it will briefly appear "
-           "so you can verify what was copied, then re-hide. "
-           "Adjust the reveal duration or turn this off entirely "
-           "in Settings -> Display.")
+           "Selecting a row does not reveal or copy anything. Use the "
+           "row's Copy button, or press Enter or Ctrl+C on the selected "
+           "token, and the code is copied and briefly shown so you can "
+           "check it. HOTP rows have a Generate button instead, because "
+           "producing a code consumes a counter.\n\n"
+           "Turn this off in Settings -> Display to keep TOTP codes "
+           "visible at all times.")
     },
     {
         "drive-harddisk-symbolic",
@@ -77,7 +80,7 @@ static const PageInfo welcome_pages[] = {
         N_("Secret Service integration can store your database password "
            "in the system keyring so the app unlocks automatically after login. "
            "It is disabled by default.\n\n"
-           "You can enable it and configure auto-lock in Settings \u2192 Security.")
+           "You can enable it and configure auto-lock in Settings -> Security.")
     },
     {
         "preferences-system-symbolic",
@@ -85,7 +88,7 @@ static const PageInfo welcome_pages[] = {
         N_("All preferences are in the Settings dialog, including "
            "countdown colors and clipboard auto-clear.\n\n"
            "Back up and restore both your application preferences and your "
-           "token database from Settings \u2192 Backup, or via the CLI with "
+           "token database from Settings -> Backup, or via the CLI with "
            "--export-settings and --import-settings.")
     },
 };
@@ -94,74 +97,78 @@ static const PageInfo welcome_pages[] = {
 
 static const PageInfo whats_new_pages[] = {
     {
-        "com.github.paolostivanin.OTPClient",
-        N_("A Brand New Look"),
-        N_("OTPClient has been completely redesigned with GTK4 "
-           "and libadwaita.\n\n"
-           "The interface is faster, follows modern GNOME conventions, "
-           "and supports both light and dark themes natively.")
-    },
-    {
-        "view-conceal-symbolic",
-        N_("OTPs Are Now Hidden by Default"),
-        N_("Codes used to be visible at all times. They are now hidden "
-           "so a glance at your screen, a screenshot, or "
-           "an Alt+Tab thumbnail no longer leaks them.\n\n"
-           "Click a row to copy the OTP - it briefly appears so you "
-           "can verify what was copied, then re-hides. To restore the "
-           "previous always-visible behavior, toggle Hide OTPs by "
-           "Default off in Settings -> Display.")
-    },
-    {
-        "folder-symbolic",
-        N_("Token Groups"),
-        N_("Organize your tokens into groups for quick access.\n\n"
-           "Use the dropdown in the header bar to filter by group. "
-           "Right-click a token to assign it, or search with "
-           "the \u201cgroup:\u201d prefix.")
-    },
-    {
-        "drive-harddisk-symbolic",
-        N_("Multiple Databases"),
-        N_("You can now manage multiple encrypted databases from the "
-           "sidebar.\n\n"
-           "The first database you create is the default - it loads on "
-           "startup and is marked with a star. The currently open database "
-           "is shown in bold. Right-click a database to rename it, set it "
-           "as the default, or remove it from the list.")
-    },
-    {
-        "preferences-desktop-keyboard-symbolic",
-        N_("Keyboard Shortcuts"),
-        N_("Common actions now have keyboard shortcuts: Ctrl+N to add, "
-           "Ctrl+F to search, F2 to edit, and more.\n\n"
-           "Press Ctrl+? to see all available shortcuts.")
-    },
-    {
-        "system-search-symbolic",
-        N_("Desktop Search"),
-        N_("Search from GNOME or KDE to find tokens across all "
-           "your databases.\n\n"
-           "In-app search also works across databases. Cross-database "
-           "results show the database name and are read-only.")
+        "edit-copy-symbolic",
+        N_("Copying Is Now Explicit"),
+        N_("Selecting a token used to copy it. Clicking a row, or just "
+           "arrowing past one, put a code on the clipboard.\n\n"
+           "Selection now only selects. Every row has its own Copy button, "
+           "and Enter or Ctrl+C does the same for the selected token while "
+           "the list has focus. Enter also works on a search result.")
     },
     {
         "security-high-symbolic",
-        N_("Security & Settings"),
-        N_("Secret Service integration (keyring) is now disabled by default. "
-           "You can enable it in Settings \u2192 Security.\n\n"
-           "Settings have moved to GSettings (migrated automatically). "
-           "Back up and restore preferences and your token database from "
-           "Settings \u2192 Backup.")
+        N_("HOTP Counters Reach Disk First"),
+        N_("HOTP rows have a Generate button rather than Copy, because "
+           "producing a code consumes a counter. That counter is now "
+           "written to the encrypted database as a single transaction "
+           "before the code is shown, so a crash can no longer hand out a "
+           "code the database does not know it issued.\n\n"
+           "The stored counter now means the next unused code in both the "
+           "app and the command line. Existing counters are left untouched, "
+           "so if an HOTP account rejects its first code after this update, "
+           "generate the next one or resynchronize it with the provider.")
     },
     {
-        "starred-symbolic",
-        N_("And More"),
-        N_("Customize countdown colors in Settings. Drag and drop to "
-           "reorder tokens. Undo accidental deletions with a toast "
-           "notification.\n\n"
-           "Import encrypted backups directly in the app with "
-           "inline password fields.")
+        "edit-paste-symbolic",
+        N_("The Clipboard Is Left Alone"),
+        N_("Locking or quitting used to wipe the clipboard even if you had "
+           "copied something else in the meantime, destroying unrelated "
+           "data.\n\n"
+           "OTPClient now clears the clipboard only while it still owns "
+           "what it put there. Copying anything else cancels the pending "
+           "wipe.")
+    },
+    {
+        "system-lock-screen-symbolic",
+        N_("Locking Clears More"),
+        N_("A displayed QR code, a typed secret, an export password, or an "
+           "unlock prompt used to survive a lock, still on screen and still "
+           "in memory.\n\n"
+           "Locking now closes those dialogs, wipes their fields and QR "
+           "codes, and cancels anything still in flight, even when a file "
+           "chooser is holding a dialog open.")
+    },
+    {
+        "folder-download-symbolic",
+        N_("Clearer Imports, Safer Exports"),
+        N_("A partial import used to quietly bring in fewer tokens than the "
+           "file contained. It now reports how many entries were skipped "
+           "and why, one by one, so you can check before deleting the "
+           "original.\n\n"
+           "New encrypted migration exports require a password. Exports you "
+           "already made without one still import.")
+    },
+    {
+        "drive-harddisk-symbolic",
+        N_("Backup Reminders Per Database"),
+        N_("The backup reminder tracked a single timestamp that could not "
+           "say which database it referred to, and exporting for another "
+           "app counted as a backup, which suppressed real reminders.\n\n"
+           "History and snoozes are now kept per database, and exports no "
+           "longer count. The old timestamp could not be attributed to a "
+           "database, so every database starts at \u201cNo backup recorded\u201d "
+           "and any active snooze is reset.")
+    },
+    {
+        "preferences-system-symbolic",
+        N_("Tray, Startup, and Desktop Search"),
+        N_("The tray menu was an empty rectangle everywhere except KDE "
+           "Plasma. It works now, and OTPClient can start minimized to the "
+           "tray and start at login, from Settings -> Integration.\n\n"
+           "Search provider settings apply immediately instead of needing a "
+           "logout, and turning the provider off revokes its cached keys "
+           "right away. Webcam scanning, copying from search, and database "
+           "locking also work inside the Flatpak now.")
     },
 };
 

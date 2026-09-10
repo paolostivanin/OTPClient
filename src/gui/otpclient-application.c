@@ -1248,30 +1248,13 @@ otpclient_application_present_window (OTPClientApplication *self)
     }
 }
 
-static void
-clear_session_clipboard (void)
-{
-    /* Best-effort: requires a default GdkDisplay, which is only present after
-     * the app activates. Outside that window the clipboard is naturally empty. */
-    GdkDisplay *display = gdk_display_get_default ();
-    if (display == NULL)
-        return;
-    GdkClipboard *clipboard = gdk_display_get_clipboard (display);
-    if (clipboard != NULL)
-        gdk_clipboard_set_text (clipboard, "");
-}
-
 static gboolean
 otpclient_application_signal_quit (gpointer user_data)
 {
     GApplication *app = G_APPLICATION (user_data);
     OTPClientApplication *self = OTPCLIENT_APPLICATION (app);
-    /* Persist any deferred HOTP counter advances before bailing - otherwise
-     * a SIGTERM (e.g. from the session manager during logout) loses them
-     * and the next startup serves stale codes. */
     if (self->window != NULL)
-        otpclient_window_flush_pending_writes (self->window, NULL);
-    clear_session_clipboard ();
+        otpclient_window_clear_clipboard_now (self->window);
     g_application_quit (app);
     return G_SOURCE_REMOVE;
 }
@@ -1279,13 +1262,10 @@ otpclient_application_signal_quit (gpointer user_data)
 static void
 otpclient_application_shutdown (GApplication *application)
 {
-    /* Covers the normal-exit case (Quit action, window close, app.quit). The
-     * signal path goes through clear_session_clipboard before calling quit,
-     * but doing it here too is idempotent. */
+    /* Clear only clipboard content still owned by this window. */
     OTPClientApplication *self = OTPCLIENT_APPLICATION (application);
     if (self->window != NULL)
-        otpclient_window_flush_pending_writes (self->window, NULL);
-    clear_session_clipboard ();
+        otpclient_window_clear_clipboard_now (self->window);
     G_APPLICATION_CLASS (otpclient_application_parent_class)->shutdown (application);
 }
 
@@ -1420,7 +1400,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
     self->window = OTPCLIENT_WINDOW(otpclient_window_new (self));
     /* GTK owns the window; we just hold an observer pointer. The weak ref
      * gets self->window cleared to NULL on finalize, so signal_quit() and
-     * shutdown() (which both call flush_pending_writes via this pointer)
+     * shutdown() (which both clear our clipboard via this pointer)
      * don't dereference a dangling object after an X-button close. */
     g_object_add_weak_pointer (G_OBJECT (self->window), (gpointer *) &self->window);
 
@@ -1680,11 +1660,9 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
     if (self->db_data != NULL && g_strcmp0 (self->db_data->db_path, db_path) == 0)
         return;
 
-    /* Persist any deferred HOTP writes from the outgoing DB while the
-     * key is still in memory, then tear the window state down. */
+    /* Clear the outgoing database state before opening the new database. */
     if (self->window != NULL)
     {
-        otpclient_window_flush_pending_writes (self->window, NULL);
         otpclient_window_stop_otp_timer (self->window);
         otpclient_window_clear_clipboard_now (self->window);
         otpclient_window_invalidate_cross_db (self->window);

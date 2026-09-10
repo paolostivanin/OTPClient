@@ -30,16 +30,22 @@ Only the versions listed below receive security updates.
   swap or written to a hibernation image, and they are wiped with `explicit_bzero`
   before being freed. On lock (manual, idle auto-lock, screensaver, or system suspend
   via logind) the master key and the decrypted database are purged from memory;
-  unlocking re-derives the key rather than comparing a resident copy.
+  unlocking re-derives the key rather than comparing a resident copy. Sensitive
+  dialogs are closed and their fields, QR textures, and snapshots are cleared;
+  pending dialog operations are canceled.
 - **Process hardening:** `PR_SET_DUMPABLE=0` and `RLIMIT_CORE=0` are set at startup so a
   crash will not produce a core file containing secrets. Builds enable a stack
   protector, `_FORTIFY_SOURCE=3`, full RELRO with BIND_NOW, and PIE, plus optional
   control-flow protection, register clearing, strict flexible-array bounds, and
   automatic variable initialization when the toolchain supports them.
 - **Clipboard:** copied OTPs are wiped after a configurable timeout, on database lock,
-  and on exit (including SIGINT, SIGTERM, and SIGHUP).
-- **Search provider (opt-in):** the desktop search provider is gated behind a trigger
-  keyword and is off until configured. Activation IDs are single-use, random 128-bit
+  and on exit (including SIGINT, SIGTERM, and SIGHUP), provided OTPClient still
+  owns the clipboard. Another application's clipboard content is left intact.
+- **Exports:** newly created encrypted migration exports require a nonempty password.
+- **Search provider:** desktop search requires Secret Service access, a saved database
+  password, an enabled provider, and a nonempty trigger keyword. Settings changes
+  take effect live and revoke cached data and pending activation IDs. The keyword
+  is a query filter, not authentication. Activation IDs are single-use, random 128-bit
   capability tokens with a 30-second TTL; OTP delivery is rate-limited through a single
   global bucket; and the derived key and caches are wiped after a period of inactivity.
 - **Out of scope:** a same-UID attacker with `ptrace` or `/proc/PID/mem` access can read

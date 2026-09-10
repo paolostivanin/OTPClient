@@ -74,7 +74,7 @@ lock_app_install_unlock_dialog_quit (PasswordDialog       *dlg,
 static void
 present_unlock_dialog (OTPClientApplication *app)
 {
-    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    GtkWindow *win = otpclient_application_get_window (app);
     if (win == NULL)
         return;
 
@@ -119,18 +119,9 @@ lock_app_enter_locked_state (OTPClientApplication *app)
 
     otpclient_application_set_app_locked (app, TRUE);
 
-    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    GtkWindow *win = otpclient_application_get_window (app);
     if (win != NULL && OTPCLIENT_IS_WINDOW (win))
     {
-        /* Persist any deferred HOTP counter advances while we still hold the key. */
-        GError *flush_error = NULL;
-        if (!otpclient_window_flush_pending_writes (OTPCLIENT_WINDOW (win),
-                                                    &flush_error) &&
-            flush_error != NULL) {
-            otpclient_window_show_error_toast (OTPCLIENT_WINDOW (win),
-                                                flush_error->message);
-            g_clear_error (&flush_error);
-        }
         otpclient_window_secure_lock_cleanup (OTPCLIENT_WINDOW (win));
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), TRUE);
         otpclient_window_set_db_actions_enabled (OTPCLIENT_WINDOW (win), FALSE);
@@ -159,7 +150,7 @@ lock_app_unlock (OTPClientApplication *app)
 {
     otpclient_application_set_app_locked (app, FALSE);
 
-    GtkWindow *win = gtk_application_get_active_window (GTK_APPLICATION (app));
+    GtkWindow *win = otpclient_application_get_window (app);
     if (win != NULL && OTPCLIENT_IS_WINDOW (win))
     {
         otpclient_window_set_locked_indicator (OTPCLIENT_WINDOW (win), FALSE);

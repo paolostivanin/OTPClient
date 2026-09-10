@@ -5,7 +5,6 @@
 
 G_BEGIN_DECLS
 
-#define HOTP_FLUSH_DEBOUNCE_SECONDS 5
 
 /* HOTP has no periodic rotation, so a reveal cannot be tied to a validity
  * window. Use a short fixed timeout that matches the typical use case
@@ -97,6 +96,7 @@ struct _OTPClientWindow
 
     /* Clipboard auto-clear */
     guint clipboard_clear_timer_id;
+    GdkContentProvider *clipboard_content;
 
     /* Tracks which OTPEntry currently owns the clipboard contents. Used by
      * otp_refresh_tick to decide whether a TOTP rotation should auto-recopy
@@ -104,20 +104,11 @@ struct _OTPClientWindow
      * or just hide. Weak so the entry can still be freed normally. */
     GWeakRef clipboard_owner_entry;
 
-    /* Suppress clipboard copy + notification for programmatic selection changes */
-    gboolean suppress_selection_action;
-
     /* Undo delete */
     json_t *deleted_token;
     guint   deleted_token_pos;
 
-    /* Deferred HOTP counter persistence: counters are advanced in the
-     * in-memory JSON immediately, but the (expensive) re-encrypt + rewrite
-     * is held off until the next lock / shutdown so a burst of HOTP clicks
-     * costs one disk write instead of N. A debounced timer caps the window
-     * of loss to a few seconds in case of a hard crash (kill -9, OOM). */
-    gboolean hotp_counter_dirty;
-    guint    hotp_flush_timeout_id;
+
 };
 
 G_END_DECLS

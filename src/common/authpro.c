@@ -1,5 +1,8 @@
-#define _DEFAULT_SOURCE
 #define _GNU_SOURCE
+#define _DEFAULT_SOURCE
+#include "otp-validation.h"
+#include "import-diagnostics.h"
+#include "get-providers-data.h"
 #include <string.h>
 #include <stdlib.h>
 #include <glib.h>
@@ -17,21 +20,21 @@ static GSList *get_otps_from_encrypted_backup (const gchar       *path,
                                                gint32             max_file_size,
                                                GFile             *in_file,
                                                GFileInputStream  *in_stream,
-                                               GError           **err);
+                                               OtpImportDiagnostics *diagnostics, GError           **err);
 
 static GSList *get_otps_from_plain_backup     (const gchar       *path,
-                                               GError           **err);
+                                               OtpImportDiagnostics *diagnostics, GError           **err);
 
 static GSList *parse_authpro_json_data        (const gchar       *data,
-                                               GError           **err);
+                                               OtpImportDiagnostics *diagnostics, GError           **err);
 
 
 GSList *
-get_authpro_data (const gchar  *path,
+get_authpro_data_full (const gchar  *path,
                   const gchar  *password,
                   gint32        max_file_size,
                   gsize         db_size,
-                  GError      **err)
+                  OtpImportDiagnostics *diagnostics, GError      **err)
 {
     int safe_fd = path_open_safe_regular_file (path, err);
     if (safe_fd < 0) {
@@ -63,11 +66,11 @@ get_authpro_data (const gchar  *path,
 
     GSList *otps;
     if (password != NULL) {
-        otps = get_otps_from_encrypted_backup (fd_path, password, max_file_size, in_file, in_stream, err);
+        otps = get_otps_from_encrypted_backup (fd_path, password, max_file_size, in_file, in_stream, diagnostics, err);
     } else {
         g_object_unref (in_stream);
         g_object_unref (in_file);
-        otps = get_otps_from_plain_backup (fd_path, err);
+        otps = get_otps_from_plain_backup (fd_path, diagnostics, err);
     }
     close (safe_fd);
     return otps;
@@ -79,6 +82,9 @@ export_authpro (const gchar *export_path,
                 const gchar *password,
                 json_t      *json_db_data)
 {
+    if (password != NULL && password[0] == '\0')
+        return g_strdup (_("Encryption password must not be empty."));
+
     GError *err = NULL;
     json_t *root = NULL;
     GFile *out_gfile = NULL;
@@ -281,7 +287,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
                                 gint32             max_file_size,
                                 GFile             *in_file,
                                 GFileInputStream  *in_stream,
-                                GError           **err)
+                                OtpImportDiagnostics *diagnostics, GError           **err)
 {
     guchar header[16];
     gsize bytes_done = 0;
@@ -301,7 +307,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
         return NULL;
     }
 
-    GSList *otps = parse_authpro_json_data (decrypted_json, err);
+    GSList *otps = parse_authpro_json_data (decrypted_json, diagnostics, err);
     gcry_free (decrypted_json);
 
     return otps;
@@ -310,7 +316,7 @@ get_otps_from_encrypted_backup (const gchar       *path,
 
 static GSList *
 get_otps_from_plain_backup (const gchar  *path,
-                            GError      **err)
+                            OtpImportDiagnostics *diagnostics, GError      **err)
 {
     json_error_t j_err;
     json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
@@ -324,7 +330,7 @@ get_otps_from_plain_backup (const gchar  *path,
     gchar *dumped_json = json_dumps (json, 0);
     json_decref (json);
 
-    GSList *otps = parse_authpro_json_data (dumped_json, err);
+    GSList *otps = parse_authpro_json_data (dumped_json, diagnostics, err);
     gcry_free (dumped_json);
 
     return otps;
@@ -333,7 +339,7 @@ get_otps_from_plain_backup (const gchar  *path,
 
 static GSList *
 parse_authpro_json_data (const gchar *data,
-                         GError     **err)
+                         OtpImportDiagnostics *diagnostics, GError     **err)
 {
     json_error_t jerr;
     json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK, &jerr);
@@ -343,7 +349,7 @@ parse_authpro_json_data (const gchar *data,
     }
 
     json_t *array = json_object_get (root, "Authenticators");
-    if (array == NULL) {
+    if (!json_is_array (array)) {
         // jerr is stale here (json_loads succeeded above); reusing jerr.text
         // produced a misleading or empty error message.
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
@@ -388,6 +394,7 @@ parse_authpro_json_data (const gchar *data,
         const gchar *secret_str = json_string_value (json_object_get (obj, "Secret"));
         if (secret_str == NULL) {
             g_printerr ("Skipping AuthPro entry with missing secret\n");
+            otp_import_diagnostics_add (diagnostics, i, _("Missing required Authenticator Pro token fields."));
             continue;
         }
 
@@ -440,6 +447,14 @@ parse_authpro_json_data (const gchar *data,
                 break;
         }
 
+        GError *validation_error = NULL;
+        otp_repair_anonymous_import_token (otp, i);
+        if (!skip && !otp_validate_import_token (otp, &validation_error))
+            skip = TRUE;
+        if (skip)
+            otp_import_diagnostics_add (diagnostics, i, validation_error != NULL
+                ? validation_error->message : _("Missing or unsupported token type/algorithm."));
+        g_clear_error (&validation_error);
         if (!skip) {
             const gchar *cat_name = g_hash_table_lookup (secret_cat_map, secret_str);
             otp->group = (cat_name != NULL) ? g_strdup (cat_name) : NULL;
@@ -460,4 +475,10 @@ parse_authpro_json_data (const gchar *data,
     json_decref (root);
 
     return otps;
+}
+
+GSList *
+get_authpro_data (const gchar *path, const gchar *password, gint32 max_file_size, gsize db_size, GError **err)
+{
+    return get_authpro_data_full (path, password, max_file_size, db_size, NULL, err);
 }

@@ -69,7 +69,7 @@
     <key name="search-provider-keyword" type="s">
       <default>"otp"</default>
       <summary>Search provider trigger keyword</summary>
-      <description>The first token of a desktop search query must equal this keyword for OTPClient to return any results (e.g. "otp github"). An empty string disables the search provider entirely: every query is refused. This is a security gate - without it, any process on the session bus could enumerate accounts and trigger OTP delivery via notification. Changes take effect after the search provider is restarted (typically by logging out and back in).</description>
+      <description>The first token of a desktop search query must equal this keyword for OTPClient to return any results (e.g. "otp github"). An empty string disables the search provider entirely: every query is refused. Changes take effect immediately and invalidate previous activation IDs. The keyword is a query filter, not authentication.</description>
     </key>
     <key name="show-validity-seconds" type="b">
       <default>false</default>
@@ -94,7 +94,7 @@
     <key name="clipboard-clear-timeout" type="u">
       <default>30</default>
       <summary>Clipboard clear timeout</summary>
-      <description>Seconds after which the clipboard is automatically cleared after copying an OTP code. Set to 0 to disable.</description>
+      <description>Seconds after which OTPClient clears its own copied OTP. Copying something else cancels the timer. Set to 0 to disable.</description>
     </key>
     <key name="minimize-to-tray" type="b">
       <default>false</default>
@@ -121,21 +121,26 @@
       <summary>Last seen application version</summary>
       <description>Tracks the last version the user has seen, used to show What's New dialogs on upgrade</description>
     </key>
-    <key name="last-export-time" type="x">
-      <default>0</default>
-      <summary>Last successful export timestamp</summary>
-      <description>Unix timestamp of the most recent successful export, used to remind the user to take periodic backups. 0 means never exported.</description>
+    <key name="database-backup-times" type="a{sx}">
+      <default>{}</default>
+      <summary>Last encrypted database backup by database path</summary>
+      <description>Records successful explicit database copies. Migration exports do not count. Missing history means no backup is recorded for this database.</description>
     </key>
-    <key name="backup-banner-snoozed-until" type="x">
-      <default>0</default>
-      <summary>Backup-age banner snooze deadline</summary>
-      <description>Unix timestamp until which the backup-age banner is suppressed. Set when the user explicitly snoozes the reminder.</description>
+    <key name="database-backup-snoozes" type="a{sx}">
+      <default>{}</default>
+      <summary>Backup reminder snooze deadlines by database path</summary>
+      <description>Unix timestamps until which the backup reminder is suppressed, per database path. Set when the user explicitly snoozes the reminder.</description>
     </key>
+    <!-- Removed in 5.2.0: last-export-time and backup-banner-snoozed-until.
+         Both were single global timestamps that could not say which database
+         they described, and last-export-time conflated migration exports with
+         real backups. Superseded by database-backup-times and
+         database-backup-snoozes. Any leftover values in a user's dconf
+         database are orphans and are simply ignored. -->
     <key name="hide-otps" type="b">
       <default>true</default>
       <summary>Hide OTPs by default</summary>
-      <description>When enabled, OTP codes are hidden in the list and only revealed when a row is clicked. A TOTP reveal lasts until the validity window rotates (then either auto-rolls to the next code when "show next OTP" is on, or hides). HOTP reveals are timed. Disabling this restores the legacy always-visible behavior.</description>
+      <description>When enabled, OTP codes display a Hidden placeholder until Copy or Generate is activated. Selecting a row does not reveal or copy a code. A TOTP reveal lasts until the validity window rotates (then either auto-rolls to the next code when "show next OTP" is on, or hides). HOTP reveals are timed. Disabling this shows TOTP codes continuously; HOTP codes are shown only after successful generation.</description>
     </key>
   </schema>
 </schemalist>
-

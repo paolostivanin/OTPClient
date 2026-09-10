@@ -205,8 +205,8 @@ static const gchar *const not_exportable[] = {
     "last-seen-version",
     /* Backup nagging state, about this machine's backups rather than about how
      * the user wants the app to behave. */
-    "last-export-time",
-    "backup-banner-snoozed-until",
+    "database-backup-times",
+    "database-backup-snoozes",
     NULL
 };
 

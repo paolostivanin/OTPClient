@@ -15,6 +15,46 @@
 #include "common.h"
 #include "file-size.h"
 #include "gquarks.h"
+#include "import-diagnostics.h"
+
+OtpImportDiagnostics *
+otp_import_diagnostics_new (void)
+{
+    OtpImportDiagnostics *diagnostics = g_new0 (OtpImportDiagnostics, 1);
+    diagnostics->issues = g_ptr_array_new_with_free_func (g_free);
+    return diagnostics;
+}
+
+void
+otp_import_diagnostics_free (OtpImportDiagnostics *diagnostics)
+{
+    if (diagnostics == NULL) return;
+    g_ptr_array_unref (diagnostics->issues);
+    g_free (diagnostics);
+}
+
+void
+otp_import_diagnostics_add (OtpImportDiagnostics *diagnostics, guint source_index,
+                            const gchar *reason)
+{
+    if (diagnostics == NULL) return;
+    diagnostics->skipped_invalid++;
+    g_ptr_array_add (diagnostics->issues,
+                     g_strdup_printf (_("Entry %u: %s"), source_index + 1, reason));
+}
+
+gchar *
+otp_import_diagnostics_format (const OtpImportDiagnostics *diagnostics)
+{
+    GString *text = g_string_new (NULL);
+    if (diagnostics != NULL) {
+        for (guint i = 0; i < diagnostics->issues->len; i++) {
+            if (i > 0) g_string_append_c (text, '\n');
+            g_string_append (text, g_ptr_array_index (diagnostics->issues, i));
+        }
+    }
+    return g_string_free (text, FALSE);
+}
 
 
 gint32

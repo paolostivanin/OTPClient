@@ -19,6 +19,7 @@ struct _OTPEntry
     gchar *algorithm;    /* "SHA1", "SHA256", "SHA512" */
     guint32 digits;
     gchar *secret;       /* base32-encoded, held in gcrypt secure memory */
+    gchar *db_path;
     gchar *db_name;      /* non-NULL when entry comes from another database */
     gchar *group;        /* NULL means ungrouped */
 
@@ -60,6 +61,7 @@ enum
     PROP_ALGORITHM,
     PROP_DIGITS,
     PROP_SECRET,
+    PROP_DB_PATH,
     PROP_DB_NAME,
     PROP_GROUP,
     PROP_REVEALED,
@@ -108,6 +110,7 @@ otp_entry_finalize (GObject *object)
     }
 
     g_clear_pointer (&self->db_name, g_free);
+    g_clear_pointer (&self->db_path, g_free);
     g_clear_pointer (&self->group, g_free);
 
     g_clear_pointer (&self->account_lower, g_free);
@@ -153,6 +156,9 @@ otp_entry_get_property (GObject    *object,
             break;
         case PROP_SECRET:
             g_value_set_string (value, self->secret);
+            break;
+        case PROP_DB_PATH:
+            g_value_set_string (value, self->db_path);
             break;
         case PROP_DB_NAME:
             g_value_set_string (value, self->db_name);
@@ -217,6 +223,10 @@ otp_entry_set_property (GObject      *object,
                 gcry_free (self->secret);
             self->secret = secure_strdup (g_value_get_string (value));
             break;
+        case PROP_DB_PATH:
+            g_free (self->db_path);
+            self->db_path = g_value_dup_string (value);
+            break;
         case PROP_DB_NAME:
             g_free (self->db_name);
             self->db_name = g_value_dup_string (value);
@@ -271,6 +281,9 @@ otp_entry_class_init (OTPEntryClass *klass)
     properties[PROP_SECRET] =
         g_param_spec_string ("secret", NULL, NULL, NULL,
                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS);
+    properties[PROP_DB_PATH] =
+        g_param_spec_string ("db-path", NULL, NULL, NULL,
+                             G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
     properties[PROP_DB_NAME] =
         g_param_spec_string ("db-name", NULL, NULL, NULL,
                              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | G_PARAM_EXPLICIT_NOTIFY);
@@ -464,7 +477,8 @@ otp_entry_update_otp (OTPEntry *self)
     }
     else
     {
-        otp = get_hotp (self->secret, self->counter, self->digits, algo, &err);
+        /* HOTP is generated only by a committed database transaction. */
+        return;
     }
 
     if (otp != NULL && err == NO_ERROR)
@@ -663,4 +677,18 @@ otp_entry_set_group (OTPEntry    *self,
     g_free (self->group_lower);
     self->group_lower = strdown_or_empty (self->group);
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_GROUP]);
+}
+
+const gchar *
+otp_entry_get_db_path (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), NULL);
+    return self->db_path;
+}
+
+void
+otp_entry_set_db_path (OTPEntry *self, const gchar *path)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+    g_object_set (self, "db-path", path, NULL);
 }

@@ -1,20 +1,21 @@
 #define _DEFAULT_SOURCE
 #include <string.h>
 #include <glib.h>
+#include <glib/gi18n.h>
 #include "common.h"
 #include "file-size.h"
 #include "gquarks.h"
 #include "otp-validation.h"
+#include "parse-uri.h"
 
 static void   parse_uri            (const gchar   *uri,
-                                    GSList       **otps);
+                                    GSList       **otps, OtpImportDiagnostics *diagnostics, guint source_index);
 
 static void   free_parsed_otp      (otp_t         *otp);
 
 
 void
-set_otps_from_uris (const gchar   *otpauth_uris,
-                    GSList       **otps)
+set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiagnostics *diagnostics)
 {
     gchar **uris = g_strsplit (otpauth_uris, "\n", -1);
     guint i = 0, uris_len = g_strv_length (uris);
@@ -23,7 +24,9 @@ set_otps_from_uris (const gchar   *otpauth_uris,
         for (; i < uris_len; i++) {
             haystack = g_strrstr (uris[i], "otpauth");
             if (haystack != NULL) {
-                parse_uri (haystack, otps);
+                parse_uri (haystack, otps, diagnostics, i);
+            } else if (g_strstrip (uris[i])[0] != '\0' && uris[i][0] != '#') {
+                otp_import_diagnostics_add (diagnostics, i, _("Not an OTP URI."));
             }
         }
     }
@@ -108,9 +111,9 @@ get_otpauth_uri (json_t *obj)
 
 
 GSList *
-get_otpauth_data (const gchar  *path,
+get_otpauth_data_full (const gchar  *path,
                   gint32        max_file_size,
-                  GError      **err)
+                  OtpImportDiagnostics *diagnostics, GError      **err)
 {
     GSList *otps = NULL;
     goffset fs = get_file_size (path);
@@ -141,7 +144,7 @@ get_otpauth_data (const gchar  *path,
     explicit_bzero (file_buf, fs);
     g_free (file_buf);
 
-    set_otps_from_uris (sec_buf, &otps);
+    set_otps_from_uris_full (sec_buf, &otps, diagnostics);
 
     gcry_free (sec_buf);
 
@@ -156,20 +159,24 @@ get_otpauth_data (const gchar  *path,
 
 static void
 parse_uri (const gchar   *uri,
-           GSList       **otps)
+           GSList       **otps, OtpImportDiagnostics *diagnostics, guint source_index)
 {
     if (uri == NULL || g_ascii_strncasecmp (uri, "otpauth://", 10) != 0) {
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
     if (strnlen (uri, MAX_OTPAUTH_URI_LEN + 1) > MAX_OTPAUTH_URI_LEN) {
         g_warning ("Skipping otpauth URI larger than %d bytes.", MAX_OTPAUTH_URI_LEN);
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
 
     g_autoptr (GError) uri_err = NULL;
     GUri *parsed = g_uri_parse (uri, G_URI_FLAGS_NONE, &uri_err);
-    if (parsed == NULL)
+    if (parsed == NULL) {
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
+    }
 
     const gchar *scheme = g_uri_get_scheme (parsed);
     const gchar *type_host = g_uri_get_host (parsed);
@@ -179,12 +186,14 @@ parse_uri (const gchar   *uri,
         type_host == NULL || path == NULL || path[0] != '/' || path[1] == '\0' ||
         query == NULL || query[0] == '\0') {
         g_uri_unref (parsed);
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
 
     g_autofree gchar *label_unescaped = g_uri_unescape_string (path + 1, NULL);
     if (label_unescaped == NULL) {
         g_uri_unref (parsed);
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
 
@@ -193,6 +202,7 @@ parse_uri (const gchar   *uri,
                                                         &uri_err);
     if (params == NULL) {
         g_uri_unref (parsed);
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
 
@@ -207,6 +217,7 @@ parse_uri (const gchar   *uri,
     } else {
         free_parsed_otp (otp);
         g_uri_unref (parsed);
+        otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
         return;
     }
 
@@ -266,8 +277,8 @@ parse_uri (const gchar   *uri,
      * commit path leaves it as-is once it carries a label. */
     otp_repair_anonymous_import_token (otp, g_slist_length (*otps));
     if (!otp_validate_import_token (otp, &validation_err)) {
-        if (validation_err != NULL)
-            g_clear_error (&validation_err);
+        otp_import_diagnostics_add (diagnostics, source_index, validation_err != NULL ? validation_err->message : _("Invalid token."));
+        g_clear_error (&validation_err);
         free_parsed_otp (otp);
     } else {
         *otps = g_slist_append (*otps, otp);
@@ -288,4 +299,16 @@ free_parsed_otp (otp_t *otp)
     gcry_free (otp->secret);
     g_free (otp->group);
     g_free (otp);
+}
+
+void
+set_otps_from_uris (const gchar *uris, GSList **otps)
+{
+    set_otps_from_uris_full (uris, otps, NULL);
+}
+
+GSList *
+get_otpauth_data (const gchar *path, gint32 max_file_size, GError **err)
+{
+    return get_otpauth_data_full (path, max_file_size, NULL, err);
 }

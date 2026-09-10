@@ -1,5 +1,8 @@
-#define _DEFAULT_SOURCE
 #define _GNU_SOURCE
+#define _DEFAULT_SOURCE
+#include "otp-validation.h"
+#include "import-diagnostics.h"
+#include "get-providers-data.h"
 #include <string.h>
 #include <stdlib.h>
 #include <glib.h>
@@ -27,15 +30,15 @@
 
 
 static GSList   *get_otps_from_plain_backup     (const gchar  *path,
-                                                 GError      **err);
+                                                 OtpImportDiagnostics *diagnostics, GError      **err);
 
 static GSList   *get_otps_from_encrypted_backup (const gchar  *path,
                                                  const gchar  *password,
                                                  gint32        max_file_size,
-                                                 GError      **err);
+                                                 OtpImportDiagnostics *diagnostics, GError      **err);
 
 static GSList   *parse_aegis_json_data          (const gchar  *data,
-                                                 GError      **err);
+                                                 OtpImportDiagnostics *diagnostics, GError      **err);
 
 static gboolean  is_file_otpauth_txt            (const gchar  *file_path,
                                                  GError      **err);
@@ -56,11 +59,11 @@ valid_scrypt_n (json_int_t n)
 
 
 GSList *
-get_aegis_data (const gchar     *path,
+get_aegis_data_full (const gchar     *path,
                 const gchar     *password,
                 gint32           max_file_size,
                 gsize            db_size,
-                GError         **err)
+                OtpImportDiagnostics *diagnostics, GError         **err)
 {
     int safe_fd = path_open_safe_regular_file (path, err);
     if (safe_fd < 0) {
@@ -82,8 +85,8 @@ get_aegis_data (const gchar     *path,
     }
 
     g_autofree gchar *fd_path = g_strdup_printf ("/proc/self/fd/%d", safe_fd);
-    GSList *otps = (password != NULL) ? get_otps_from_encrypted_backup (fd_path, password, max_file_size, err)
-                                       : get_otps_from_plain_backup (fd_path, err);
+    GSList *otps = (password != NULL) ? get_otps_from_encrypted_backup (fd_path, password, max_file_size, diagnostics, err)
+                                       : get_otps_from_plain_backup (fd_path, diagnostics, err);
     close (safe_fd);
     return otps;
 }
@@ -91,13 +94,13 @@ get_aegis_data (const gchar     *path,
 
 static GSList *
 get_otps_from_plain_backup (const gchar  *path,
-                           GError      **err)
+                           OtpImportDiagnostics *diagnostics, GError      **err)
 {
     GSList *otps = NULL;
     if (is_file_otpauth_txt (path, err)) {
         gint32 max_file_size = 0;
         set_memlock_value (&max_file_size);
-        otps = get_otpauth_data (path, max_file_size, err);
+        otps = get_otpauth_data_full (path, max_file_size, diagnostics, err);
     } else {
         json_error_t j_err;
         json_t *json = json_load_file (path, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &j_err);
@@ -117,7 +120,7 @@ get_otps_from_plain_backup (const gchar  *path,
         gchar *cleaned_db = remove_icons_from_db (dumped_json, FALSE);
         gcry_free (dumped_json);
 
-        otps = parse_aegis_json_data (cleaned_db, err);
+        otps = parse_aegis_json_data (cleaned_db, diagnostics, err);
         g_free (cleaned_db);
     }
     return otps;
@@ -128,7 +131,7 @@ static GSList *
 get_otps_from_encrypted_backup (const gchar          *path,
                                 const gchar          *password,
                                 gint32                max_file_size,
-                                GError              **err)
+                                OtpImportDiagnostics *diagnostics, GError              **err)
 {
     GSList            *otps          = NULL;
     json_t            *json          = NULL;
@@ -287,7 +290,7 @@ get_otps_from_encrypted_backup (const gchar          *path,
     }
 
     cleaned_db = remove_icons_from_db (decrypted_db, TRUE);
-    otps = parse_aegis_json_data (cleaned_db, err);
+    otps = parse_aegis_json_data (cleaned_db, diagnostics, err);
 
 cleanup:
     g_free (salt);
@@ -317,6 +320,9 @@ export_aegis (const gchar   *export_path,
               const gchar   *password,
               json_t        *json_db_data)
 {
+    if (password != NULL && password[0] == '\0')
+        return g_strdup (_("Encryption password must not be empty."));
+
     GError *err = NULL;
     json_t *root = NULL;
     json_t *aegis_header_obj = NULL;
@@ -565,14 +571,14 @@ export_aegis (const gchar   *export_path,
         goto cleanup_and_exit;
     }
 
-    gsize jbuf_size = json_dumpb (root, NULL, 0, 0);
+    gsize jbuf_size = json_dumpb (root, NULL, 0, JSON_COMPACT);
     if (jbuf_size == 0) {
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Couldn't determine serialized root size.");
         goto cleanup_and_exit;
     }
     jbuf = g_malloc0 (jbuf_size);
-    if (json_dumpb (root, jbuf, jbuf_size, JSON_COMPACT) == -1) {
+    if (json_dumpb (root, jbuf, jbuf_size, JSON_COMPACT) != jbuf_size) {
         g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "couldn't dump json data to buffer");
         goto cleanup_and_exit;
     }
@@ -612,7 +618,7 @@ cleanup_and_exit:
 
 static GSList *
 parse_aegis_json_data (const gchar *data,
-                       GError     **err)
+                       OtpImportDiagnostics *diagnostics, GError     **err)
 {
     json_error_t jerr;
     json_t *root = json_loads (data, JSON_DISABLE_EOF_CHECK | JSON_ALLOW_NUL, &jerr);
@@ -622,7 +628,7 @@ parse_aegis_json_data (const gchar *data,
     }
 
     json_t *array = json_object_get (root, "entries");
-    if (array == NULL) {
+    if (!json_is_array (array)) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Malformed Aegis backup: missing 'entries' array.");
         json_decref (root);
         return NULL;
@@ -639,7 +645,10 @@ parse_aegis_json_data (const gchar *data,
         json_t *info_obj = json_object_get (obj, "info");
         if (info_obj == NULL) {
             g_printerr ("Skipping malformed Aegis entry (missing 'info' object)\n");
+            g_free (otp->issuer);
+            g_free (otp->account_name);
             g_free (otp);
+            otp_import_diagnostics_add (diagnostics, i, _("Missing required Aegis token fields."));
             continue;
         }
         otp->secret = secure_strdup (json_string_value (json_object_get (info_obj, "secret")));
@@ -683,6 +692,14 @@ parse_aegis_json_data (const gchar *data,
             skip = TRUE;
         }
 
+        GError *validation_error = NULL;
+        otp_repair_anonymous_import_token (otp, i);
+        if (!skip && !otp_validate_import_token (otp, &validation_error))
+            skip = TRUE;
+        if (skip)
+            otp_import_diagnostics_add (diagnostics, i, validation_error != NULL
+                ? validation_error->message : _("Missing or unsupported token type/algorithm."));
+        g_clear_error (&validation_error);
         if (!skip) {
             const gchar *group_val = json_string_value (json_object_get (obj, "group"));
             otp->group = (group_val != NULL) ? g_strdup (group_val) : NULL;
@@ -748,4 +765,10 @@ remove_icons_from_db (const gchar *decrypted_db,
     g_regex_unref (regex);
 
     return cleaned_db;
+}
+
+GSList *
+get_aegis_data (const gchar *path, const gchar *password, gint32 max_file_size, gsize db_size, GError **err)
+{
+    return get_aegis_data_full (path, password, max_file_size, db_size, NULL, err);
 }
