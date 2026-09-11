@@ -1962,6 +1962,23 @@ on_token_key_pressed (GtkEventControllerKey *controller, guint keyval,
     return TRUE;
 }
 
+/* Double-click: the row turns the second press into list.activate-item and the
+ * column view re-emits it here. Enter is bound to the same action, but
+ * on_token_key_pressed sees it first in the capture phase and returns TRUE, so
+ * the keybinding never runs and one press stays one activation. Resolve the
+ * entry from the position handed to us rather than from the selection: the two
+ * agree, since activation selects the row first, but the position is the one
+ * that says which row was clicked. */
+static void
+on_token_row_activated (GtkColumnView *view, guint position, gpointer data)
+{
+    (void) view;
+    OTPClientWindow *self = data;
+    g_autoptr (OTPEntry) entry = OTP_ENTRY (
+        g_list_model_get_item (G_LIST_MODEL (self->otp_selection), position));
+    trigger_otp_action_for_entry (self, entry);
+}
+
 /* ── Drag-and-drop helpers ─────────────────────────────────────────── */
 
 static guint
@@ -4897,6 +4914,9 @@ g_signal_connect (self->lock_button, "clicked", G_CALLBACK (lock_button_clicked)
     gtk_event_controller_set_propagation_phase (token_keys, GTK_PHASE_CAPTURE);
     g_signal_connect (token_keys, "key-pressed", G_CALLBACK (on_token_key_pressed), self);
     gtk_widget_add_controller (self->otp_list, token_keys);
+
+    /* Double-click a row for the same copy-or-generate the Action button does */
+    g_signal_connect (self->otp_list, "activate", G_CALLBACK (on_token_row_activated), self);
 
     /* Right-click context menu on database sidebar */
     GtkGesture *db_right_click = gtk_gesture_click_new ();

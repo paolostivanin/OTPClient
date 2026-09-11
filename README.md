@@ -14,9 +14,9 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - Token list with drag-and-drop reordering
 - OTPs are hidden by default. Each row's button in the **Action** column copies
   (TOTP) or generates (HOTP) its code and briefly reveals it, and the same action
-  heads the row's right-click menu. Enter and Ctrl+C
-  activate the selected token when the token list has focus; Enter also works
-  from search. Selection and keyboard navigation never consume HOTP codes.
+  heads the row's right-click menu. Double-clicking a row does the same, as do
+  Enter and Ctrl+C when the token list has focus; Enter also works from search.
+  Selection and keyboard navigation never consume HOTP codes.
   Hidden codes leave the value cell empty. Display behavior is configurable
   in *Settings -> Display*
 - Multiple encrypted databases listed in the sidebar. The first database

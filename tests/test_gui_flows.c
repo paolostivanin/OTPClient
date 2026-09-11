@@ -197,6 +197,27 @@ test_cross_database_hotp_opens_database (void)
     review_fixture_clear (&first);
 }
 
+/* A double-click on a row is turned by GTK into list.activate-item, which the
+ * column view re-emits as ::activate. Xvfb gives us no portable way to
+ * synthesize the two presses, so emit what GTK would and check that the row
+ * the position points at is the one that gets copied and revealed. */
+static void
+test_double_click_activates_row (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    otpclient_application_set_hide_otps (app, TRUE);
+    g_assert_cmpuint (otp_entry_get_counter (entry), ==, 0);
+    g_assert_false (otp_entry_get_revealed (entry));
+    g_signal_emit_by_name (win->otp_list, "activate", 0u);
+    g_assert_cmpstr (otp_entry_get_otp_value (entry), ==, "755224");
+    g_assert_cmpuint (otp_entry_get_counter (entry), ==, 1);
+    g_assert_true (otp_entry_get_revealed (entry));
+    g_assert_nonnull (win->clipboard_content);
+    otpclient_window_clear_clipboard_now (win);
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -218,6 +239,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/hotp-and-clipboard", test_hotp_and_clipboard);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
+    g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);
