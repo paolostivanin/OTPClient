@@ -40,10 +40,10 @@ static const PageInfo welcome_pages[] = {
         N_("Codes are hidden in the list to prevent "
            "shoulder-surfing and accidental screenshot leaks.\n\n"
            "Selecting a row does not reveal or copy anything. Use the "
-           "row's Copy button, or press Enter or Ctrl+C on the selected "
-           "token, and the code is copied and briefly shown so you can "
-           "check it. HOTP rows have a Generate button instead, because "
-           "producing a code consumes a counter.\n\n"
+           "row's Copy button, double-click the row, or press Enter or "
+           "Ctrl+C on the selected token, and the code is copied and "
+           "briefly shown so you can check it. HOTP rows have a Generate "
+           "button instead, because producing a code consumes a counter.\n\n"
            "Turn this off in Settings -> Display to keep TOTP codes "
            "visible at all times.")
     },
@@ -103,8 +103,11 @@ static const PageInfo whats_new_pages[] = {
            "arrowing past one, put a code on the clipboard.\n\n"
            "Selection now only selects. Every row has its own copy button in "
            "the Action column, and the same action heads the row's right-click "
-           "menu. Enter or Ctrl+C does it for the selected token while the "
-           "list has focus. Enter also works on a search result.")
+           "menu. Double-clicking a row does the same, as do Enter and Ctrl+C "
+           "while the list has focus. Enter also works on a search result.\n\n"
+           "The validity countdown followed the selection for the same reason, "
+           "and no longer does either: every TOTP showing a code shows how long "
+           "it has left.")
     },
     {
         "security-high-symbolic",

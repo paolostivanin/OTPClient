@@ -218,6 +218,65 @@ test_double_click_activates_row (void)
     review_fixture_clear (&fixture);
 }
 
+/* Count the rows currently showing a countdown. The cell is the level bar's
+ * parent box: which of its two children is on depends on the "show validity
+ * seconds" preference, but the box itself is hidden outright when there is no
+ * countdown to show. Counting rather than finding the first one keeps the
+ * assertion honest when the column view is holding a recycled, unbound row. */
+static guint
+visible_validity_cells (GtkWidget *parent)
+{
+    guint n = 0;
+    if (GTK_IS_LEVEL_BAR (parent)) {
+        GtkWidget *box = gtk_widget_get_parent (parent);
+        if (box != NULL && gtk_widget_get_visible (box))
+            n++;
+    }
+    for (GtkWidget *child = gtk_widget_get_first_child (parent); child != NULL;
+         child = gtk_widget_get_next_sibling (child))
+        n += visible_validity_cells (child);
+    return n;
+}
+
+/* The countdown belongs to the code it counts down, not to the cursor.
+ * Selection used to gate it, back when selecting a row was what revealed a
+ * code, and it no longer does either: a visible TOTP keeps its bar with
+ * nothing selected, a masked one has none, and HOTP never gets one because its
+ * code lasts until consumed rather than until the clock rolls over. */
+static void
+test_validity_follows_the_code (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) hotp = attach_fixture (&fixture);
+
+    /* Codes visible for every row, and row 0 (the HOTP) still selected. */
+    otpclient_application_set_hide_otps (app, FALSE);
+    settle ();
+    g_assert_cmpuint (visible_validity_cells (GTK_WIDGET (win)), ==, 0);
+
+    g_list_store_remove_all (win->otp_store);
+    g_autoptr (OTPEntry) totp = otp_entry_new ("bob", "Example", NULL, "TOTP", 30, 0,
+                                               "SHA1", 6, REVIEW_SECRET);
+    otp_entry_update_otp (totp);
+    g_list_store_append (win->otp_store, totp);
+    gtk_single_selection_set_selected (win->otp_selection, GTK_INVALID_LIST_POSITION);
+    settle ();
+    g_assert_cmpuint (visible_validity_cells (GTK_WIDGET (win)), ==, 1);
+
+    /* Masking the code takes the countdown with it, and revealing the row
+     * brings it back, both without the selection changing. */
+    otpclient_application_set_hide_otps (app, TRUE);
+    settle ();
+    g_assert_cmpuint (visible_validity_cells (GTK_WIDGET (win)), ==, 0);
+
+    otp_entry_set_revealed (totp, TRUE);
+    settle ();
+    g_assert_cmpuint (visible_validity_cells (GTK_WIDGET (win)), ==, 1);
+
+    otp_entry_set_revealed (totp, FALSE);
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -240,6 +299,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
+    g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

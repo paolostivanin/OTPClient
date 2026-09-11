@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 07:38+0200\n"
+"POT-Creation-Date: 2026-09-11 10:10+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -41,9 +41,9 @@ msgid ""
 "Error: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-application.c:270 ../src/gui/otpclient-window.c:2885
-#: ../src/gui/otpclient-window.c:2945 ../src/gui/otpclient-window.c:2993
-#: ../src/gui/otpclient-window.c:3002 ../src/gui/dialogs/settings-dialog.c:157
+#: ../src/gui/otpclient-application.c:270 ../src/gui/otpclient-window.c:2904
+#: ../src/gui/otpclient-window.c:2964 ../src/gui/otpclient-window.c:3012
+#: ../src/gui/otpclient-window.c:3021 ../src/gui/dialogs/settings-dialog.c:157
 msgid "unknown error"
 msgstr ""
 
@@ -85,9 +85,9 @@ msgstr ""
 msgid "Database File Not Found"
 msgstr ""
 
-#: ../src/gui/otpclient-application.c:646 ../src/gui/otpclient-window.c:3378
-#: ../src/gui/otpclient-window.c:3613 ../src/gui/otpclient-window.c:3851
-#: ../src/gui/otpclient-window.c:4604 ../src/gui/otpclient-window.c:4724
+#: ../src/gui/otpclient-application.c:646 ../src/gui/otpclient-window.c:3397
+#: ../src/gui/otpclient-window.c:3632 ../src/gui/otpclient-window.c:3870
+#: ../src/gui/otpclient-window.c:4623 ../src/gui/otpclient-window.c:4743
 msgid "Cancel"
 msgstr ""
 
@@ -95,7 +95,7 @@ msgstr ""
 msgid "Locate…"
 msgstr ""
 
-#: ../src/gui/otpclient-application.c:655 ../src/gui/otpclient-window.c:3593
+#: ../src/gui/otpclient-application.c:655 ../src/gui/otpclient-window.c:3612
 #: ../src/gui/dialogs/settings-dialog.c:161
 #: ../src/gui/dialogs/settings-dialog.c:523
 #: ../src/gui/dialogs/settings-dialog.c:531
@@ -104,7 +104,7 @@ msgstr ""
 msgid "OK"
 msgstr ""
 
-#: ../src/gui/otpclient-application.c:810 ../src/gui/otpclient-window.c:4312
+#: ../src/gui/otpclient-application.c:810 ../src/gui/otpclient-window.c:4331
 #, c-format
 msgid "Could not open database: %s"
 msgstr ""
@@ -116,8 +116,8 @@ msgid_plural "%u tokens could not be loaded and were kept for repair"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-application.c:892 ../src/gui/otpclient-window.c:3480
-#: ../src/gui/otpclient-window.c:4125 ../src/gui/otpclient-window.c:4303
+#: ../src/gui/otpclient-application.c:892 ../src/gui/otpclient-window.c:3499
+#: ../src/gui/otpclient-window.c:4144 ../src/gui/otpclient-window.c:4322
 #: ../src/gui/dialogs/import-dialog.c:99
 #: ../src/gui/dialogs/password-dialog.c:106
 #: ../src/gui/dialogs/password-dialog.c:120
@@ -132,361 +132,361 @@ msgstr ""
 msgid "Start with the window hidden in the system tray"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:561
+#: ../src/gui/otpclient-window.c:580
 msgid "Validity"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1023
+#: ../src/gui/otpclient-window.c:1042
 msgid ""
 "No backup recorded for this database. Keep an encrypted copy somewhere safe."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1035
+#: ../src/gui/otpclient-window.c:1054
 #, c-format
 msgid "Your last database backup is %d day old."
 msgid_plural "Your last database backup is %d days old."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:1152
+#: ../src/gui/otpclient-window.c:1171
 msgid "Unlock database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1155 ../src/gui/ui/window.ui:43
+#: ../src/gui/otpclient-window.c:1174 ../src/gui/ui/window.ui:43
 msgid "Lock database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1234
+#: ../src/gui/otpclient-window.c:1253
 msgid "Account"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1235
+#: ../src/gui/otpclient-window.c:1254
 #: ../src/gui/dialogs/edit-token-dialog.c:184
 #: ../src/gui/dialogs/manual-add-dialog.c:314
 msgid "Issuer"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1236
+#: ../src/gui/otpclient-window.c:1255
 msgid "OTP Value"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1430 ../src/gui/otpclient-window.c:4191
-#: ../src/gui/otpclient-window.c:4377
+#: ../src/gui/otpclient-window.c:1449 ../src/gui/otpclient-window.c:4210
+#: ../src/gui/otpclient-window.c:4396
 msgid "Please wait, the database is still being unlocked."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1518
+#: ../src/gui/otpclient-window.c:1537
 msgid "Default database (loaded on startup)"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1524
+#: ../src/gui/otpclient-window.c:1543
 msgid "Database file not found"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1759
+#: ../src/gui/otpclient-window.c:1778
 #, c-format
 msgid "OTP for %s copied to clipboard"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1800
+#: ../src/gui/otpclient-window.c:1819
 msgid "Failed to save HOTP counter"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1871
+#: ../src/gui/otpclient-window.c:1890
 msgid "Open database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1874
+#: ../src/gui/otpclient-window.c:1893
 msgid "Generate"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1877
+#: ../src/gui/otpclient-window.c:1896
 msgid "Copy"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:1939
+#: ../src/gui/otpclient-window.c:1958
 msgid "Action"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2242
+#: ../src/gui/otpclient-window.c:2261
 #, c-format
 msgid "Failed to save reordered tokens: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2535 ../src/gui/otpclient-window.c:4885
+#: ../src/gui/otpclient-window.c:2554 ../src/gui/otpclient-window.c:4903
 msgid "All"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2538 ../src/gui/otpclient-window.c:2552
-#: ../src/gui/otpclient-window.c:4886
+#: ../src/gui/otpclient-window.c:2557 ../src/gui/otpclient-window.c:2571
+#: ../src/gui/otpclient-window.c:4904
 msgid "Ungrouped"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2684
+#: ../src/gui/otpclient-window.c:2703
 msgid "No tokens were imported."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2686
+#: ../src/gui/otpclient-window.c:2705
 #, c-format
 msgid "Imported %u token."
 msgid_plural "Imported %u tokens."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2690
+#: ../src/gui/otpclient-window.c:2709
 #, c-format
 msgid "Imported %u, skipped %u duplicate and %u invalid."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2695
+#: ../src/gui/otpclient-window.c:2714
 #, c-format
 msgid "Imported %u, skipped %u invalid."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2698
+#: ../src/gui/otpclient-window.c:2717
 #, c-format
 msgid "Skipped %u duplicate."
 msgid_plural "Skipped %u duplicates."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2702
+#: ../src/gui/otpclient-window.c:2721
 #, c-format
 msgid "Imported %u, skipped %u duplicate."
 msgid_plural "Imported %u, skipped %u duplicates."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/gui/otpclient-window.c:2710
+#: ../src/gui/otpclient-window.c:2729
 #, c-format
 msgid "Imported batch %u of %u. Scan the remaining Google migration QR codes."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2718
+#: ../src/gui/otpclient-window.c:2737
 msgid "Import completed with skipped entries"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2719
+#: ../src/gui/otpclient-window.c:2738
 msgid "Close"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2796
+#: ../src/gui/otpclient-window.c:2815
 msgid "QR code is not an OTP URI"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2806
+#: ../src/gui/otpclient-window.c:2825
 #, c-format
 msgid "Failed to add scanned token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2885 ../src/gui/otpclient-window.c:3001
+#: ../src/gui/otpclient-window.c:2904 ../src/gui/otpclient-window.c:3020
 #, c-format
 msgid "Could not read QR code: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2905
+#: ../src/gui/otpclient-window.c:2924
 msgid "Select QR Code Image"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2908
+#: ../src/gui/otpclient-window.c:2927
 msgid "Image Files"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2944
+#: ../src/gui/otpclient-window.c:2963
 #, c-format
 msgid "Webcam scan failed: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:2992
+#: ../src/gui/otpclient-window.c:3011
 #, c-format
 msgid "No image on clipboard: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3023
+#: ../src/gui/otpclient-window.c:3042
 msgid "No display available"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3029
+#: ../src/gui/otpclient-window.c:3048
 msgid "Clipboard is not available"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3125 ../src/gui/otpclient-window.c:3178
+#: ../src/gui/otpclient-window.c:3144 ../src/gui/otpclient-window.c:3197
 msgid "No database is currently open."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3137
+#: ../src/gui/otpclient-window.c:3156
 msgid "The database changed while the file chooser was open. Backup cancelled."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3156
+#: ../src/gui/otpclient-window.c:3175
 msgid "Token database backed up"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3183 ../src/gui/dialogs/settings-dialog.c:968
+#: ../src/gui/otpclient-window.c:3202 ../src/gui/dialogs/settings-dialog.c:968
 msgid "Back up tokens"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3301
+#: ../src/gui/otpclient-window.c:3320
 #, c-format
 msgid "Failed to restore deleted token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3344
+#: ../src/gui/otpclient-window.c:3363
 #, c-format
 msgid "Failed to delete token: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3354
+#: ../src/gui/otpclient-window.c:3373
 msgid "Token deleted"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3355
+#: ../src/gui/otpclient-window.c:3374
 msgid "Undo"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3374
+#: ../src/gui/otpclient-window.c:3393
 msgid "Delete Token?"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3375
+#: ../src/gui/otpclient-window.c:3394
 msgid "This action cannot be undone."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3379 ../src/gui/ui/context-menus.ui:20
+#: ../src/gui/otpclient-window.c:3398 ../src/gui/ui/context-menus.ui:20
 msgid "Delete"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3489
+#: ../src/gui/otpclient-window.c:3508
 #, c-format
 msgid "Could not open target database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3505
+#: ../src/gui/otpclient-window.c:3524
 #, c-format
 msgid "Could not write token to target database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3524
+#: ../src/gui/otpclient-window.c:3543
 #, c-format
 msgid ""
 "Could not remove the token from the source database: %s. The token now "
 "exists in both databases; please remove the duplicate manually."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3591 ../src/gui/otpclient-window.c:3612
+#: ../src/gui/otpclient-window.c:3610 ../src/gui/otpclient-window.c:3631
 msgid "Move Token"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3592
+#: ../src/gui/otpclient-window.c:3611
 msgid "No other databases available. Open or create another database first."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3608
+#: ../src/gui/otpclient-window.c:3627
 #, c-format
 msgid "Select the database to move \"%s\" to:"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3609
+#: ../src/gui/otpclient-window.c:3628
 msgid "token"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3707
+#: ../src/gui/otpclient-window.c:3726
 #, c-format
 msgid "Failed to change group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3750
+#: ../src/gui/otpclient-window.c:3769
 #, c-format
 msgid "Failed to remove token from group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3819
+#: ../src/gui/otpclient-window.c:3838
 #, c-format
 msgid "Failed to assign group: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3850
+#: ../src/gui/otpclient-window.c:3869
 msgid "New Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3850
+#: ../src/gui/otpclient-window.c:3869
 msgid "Enter a name for the new group:"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3851
+#: ../src/gui/otpclient-window.c:3870
 msgid "Add"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3856
+#: ../src/gui/otpclient-window.c:3875
 msgid "Group name"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3987
+#: ../src/gui/otpclient-window.c:4006
 msgid "New Group…"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3988
+#: ../src/gui/otpclient-window.c:4007
 msgid "Remove from Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:3994
+#: ../src/gui/otpclient-window.c:4013
 msgid "Set Group"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4138
+#: ../src/gui/otpclient-window.c:4157
 #, c-format
 msgid "Could not create database: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4153
+#: ../src/gui/otpclient-window.c:4172
 #, c-format
 msgid "Created database but could not reload it: %s"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4196
+#: ../src/gui/otpclient-window.c:4215
 msgid "Create New Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4382
+#: ../src/gui/otpclient-window.c:4401
 msgid "Locate Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4383 ../src/gui/ui/window.ui:234
+#: ../src/gui/otpclient-window.c:4402 ../src/gui/ui/window.ui:234
 msgid "Open Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4386
+#: ../src/gui/otpclient-window.c:4405
 msgid "OTPClient Database (*.enc)"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4427 ../src/gui/dialogs/settings-dialog.c:974
+#: ../src/gui/otpclient-window.c:4446 ../src/gui/dialogs/settings-dialog.c:974
 msgid "Restore tokens"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4430
+#: ../src/gui/otpclient-window.c:4449
 msgid "OTPClient Database (*.enc, *.bak)"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4603
+#: ../src/gui/otpclient-window.c:4622
 msgid "Rename Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4605 ../src/gui/ui/context-menus.ui:28
+#: ../src/gui/otpclient-window.c:4624 ../src/gui/ui/context-menus.ui:28
 msgid "Rename"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4719
+#: ../src/gui/otpclient-window.c:4738
 #, c-format
 msgid ""
 "Remove \"%s\" from the database list?\n"
 "The database file will not be deleted."
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4723
+#: ../src/gui/otpclient-window.c:4742
 msgid "Remove Database"
 msgstr ""
 
-#: ../src/gui/otpclient-window.c:4725
+#: ../src/gui/otpclient-window.c:4744
 msgid "Remove"
 msgstr ""
 
@@ -1132,9 +1132,9 @@ msgid ""
 "screenshot leaks.\n"
 "\n"
 "Selecting a row does not reveal or copy anything. Use the row's Copy button, "
-"or press Enter or Ctrl+C on the selected token, and the code is copied and "
-"briefly shown so you can check it. HOTP rows have a Generate button instead, "
-"because producing a code consumes a counter.\n"
+"double-click the row, or press Enter or Ctrl+C on the selected token, and "
+"the code is copied and briefly shown so you can check it. HOTP rows have a "
+"Generate button instead, because producing a code consumes a counter.\n"
 "\n"
 "Turn this off in Settings -> Display to keep TOTP codes visible at all times."
 msgstr ""
@@ -1213,16 +1213,19 @@ msgid ""
 "one, put a code on the clipboard.\n"
 "\n"
 "Selection now only selects. Every row has its own copy button in the Action "
-"column, and the same action heads the row's right-click menu. Enter or "
-"Ctrl+C does it for the selected token while the list has focus. Enter also "
-"works on a search result."
+"column, and the same action heads the row's right-click menu. Double-"
+"clicking a row does the same, as do Enter and Ctrl+C while the list has "
+"focus. Enter also works on a search result.\n"
+"\n"
+"The validity countdown followed the selection for the same reason, and no "
+"longer does either: every TOTP showing a code shows how long it has left."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:111
+#: ../src/gui/dialogs/whats-new-dialog.c:114
 msgid "HOTP Counters Reach Disk First"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:112
+#: ../src/gui/dialogs/whats-new-dialog.c:115
 msgid ""
 "HOTP rows have a Generate button rather than Copy, because producing a code "
 "consumes a counter. That counter is now written to the encrypted database as "
@@ -1235,11 +1238,11 @@ msgid ""
 "resynchronize it with the provider."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:124
+#: ../src/gui/dialogs/whats-new-dialog.c:127
 msgid "The Clipboard Is Left Alone"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:125
+#: ../src/gui/dialogs/whats-new-dialog.c:128
 msgid ""
 "Locking or quitting used to wipe the clipboard even if you had copied "
 "something else in the meantime, destroying unrelated data.\n"
@@ -1248,11 +1251,11 @@ msgid ""
 "there. Copying anything else cancels the pending wipe."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:134
+#: ../src/gui/dialogs/whats-new-dialog.c:137
 msgid "Locking Clears More"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:135
+#: ../src/gui/dialogs/whats-new-dialog.c:138
 msgid ""
 "A displayed QR code, a typed secret, an export password, or an unlock prompt "
 "used to survive a lock, still on screen and still in memory.\n"
@@ -1262,11 +1265,11 @@ msgid ""
 "dialog open."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:144
+#: ../src/gui/dialogs/whats-new-dialog.c:147
 msgid "Clearer Imports, Safer Exports"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:145
+#: ../src/gui/dialogs/whats-new-dialog.c:148
 msgid ""
 "A partial import used to quietly bring in fewer tokens than the file "
 "contained. It now reports how many entries were skipped and why, one by one, "
@@ -1276,11 +1279,11 @@ msgid ""
 "without one still import."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:154
+#: ../src/gui/dialogs/whats-new-dialog.c:157
 msgid "Backup Reminders Per Database"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:155
+#: ../src/gui/dialogs/whats-new-dialog.c:158
 msgid ""
 "The backup reminder tracked a single timestamp that could not say which "
 "database it referred to, and exporting for another app counted as a backup, "
@@ -1291,11 +1294,11 @@ msgid ""
 "starts at “No backup recorded” and any active snooze is reset."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:165
+#: ../src/gui/dialogs/whats-new-dialog.c:168
 msgid "Tray, Startup, and Desktop Search"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:166
+#: ../src/gui/dialogs/whats-new-dialog.c:169
 msgid ""
 "The tray menu was an empty rectangle everywhere except KDE Plasma. It works "
 "now, and OTPClient can start minimized to the tray and start at login, from "
@@ -1307,16 +1310,16 @@ msgid ""
 "Flatpak now."
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:182
+#: ../src/gui/dialogs/whats-new-dialog.c:185
 msgid "Done"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:184
-#: ../src/gui/dialogs/whats-new-dialog.c:304
+#: ../src/gui/dialogs/whats-new-dialog.c:187
+#: ../src/gui/dialogs/whats-new-dialog.c:307
 msgid "Next"
 msgstr ""
 
-#: ../src/gui/dialogs/whats-new-dialog.c:289
+#: ../src/gui/dialogs/whats-new-dialog.c:292
 msgid "Back"
 msgstr ""
 

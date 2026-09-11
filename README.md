@@ -17,7 +17,9 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   heads the row's right-click menu. Double-clicking a row does the same, as do
   Enter and Ctrl+C when the token list has focus; Enter also works from search.
   Selection and keyboard navigation never consume HOTP codes.
-  Hidden codes leave the value cell empty. Display behavior is configurable
+  Hidden codes leave the value cell empty, and the **Validity** countdown
+  follows the code: every TOTP that is showing one has a countdown, whether or
+  not its row is selected. Display behavior is configurable
   in *Settings -> Display*
 - Multiple encrypted databases listed in the sidebar. The first database
   you create becomes the default - it loads automatically on startup and is

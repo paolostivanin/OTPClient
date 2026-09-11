@@ -30,7 +30,6 @@ static void trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry
 static void add_action_column (GtkColumnView *view);
 static void refresh_otp_value_cells (OTPClientWindow *self);
 static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
-static void otpclient_window_constructed (GObject *object);
 static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry);
 static void refresh_search_cache (OTPClientWindow *self);
 
@@ -140,6 +139,38 @@ validity_update_display (ValidityWidgets *widgets)
     }
 }
 
+/* The countdown tracks the visibility of the code it counts down, and nothing
+ * else. It is shown whenever the value cell is showing a TOTP: either "Hide
+ * OTPs by default" is off, or it is on and this row is currently revealed.
+ *
+ * Selection deliberately does not enter into it. It used to: before selection
+ * became inert, selecting a row was what revealed and copied its code, so
+ * "selected" and "showing a code" were the same state. They no longer are, and
+ * gating on selection left a countdown missing next to a perfectly visible
+ * code - most obviously after the row's own Action button revealed one, since
+ * the button claims the gesture and the row never gets selected.
+ *
+ * HOTP is excluded. Its codes are not on a wallclock schedule, they last until
+ * consumed, so the period the bar would animate is meaningless. */
+static gboolean
+validity_should_show (GtkListItem *list_item)
+{
+    OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (list_item));
+    if (entry == NULL)
+        return FALSE;
+
+    /* g_ascii_strcasecmp is not NULL-safe and a NULL type must not read as
+     * HOTP - same guard as trigger_otp_action_for_entry. */
+    const gchar *type = otp_entry_get_otp_type (entry);
+    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0)
+        return FALSE;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
+    gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
+
+    return !hide || otp_entry_get_revealed (entry);
+}
+
 static gboolean
 validity_tick (gpointer data)
 {
@@ -158,8 +189,9 @@ validity_tick (gpointer data)
     if (widgets == NULL)
         return G_SOURCE_REMOVE;
 
-    if (!gtk_list_item_get_selected (list_item))
+    if (!validity_should_show (list_item))
     {
+        gtk_widget_set_visible (widgets->box, FALSE);
         widgets->timeout_id = 0;
         return G_SOURCE_REMOVE;
     }
@@ -180,10 +212,7 @@ validity_tick (gpointer data)
 }
 
 /* Decide whether the validity bar/seconds should be visible right now and
- * (re)arm or stop the per-row timer accordingly. The bar only makes sense
- * when the OTP is also visible - when "Hide OTPs by default" is on and the
- * row is not currently revealed, the cell is blank and a countdown next to
- * empty space is just visual noise. */
+ * (re)arm or stop the per-row timer accordingly. */
 static void
 validity_apply_visibility (GtkListItem *list_item)
 {
@@ -194,13 +223,8 @@ validity_apply_visibility (GtkListItem *list_item)
     if (widgets == NULL)
         return;
 
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (g_application_get_default ());
     OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (list_item));
-
-    gboolean selected = gtk_list_item_get_selected (list_item);
-    gboolean hide = app != NULL && otpclient_application_get_hide_otps (app);
-    gboolean revealed = entry != NULL && otp_entry_get_revealed (entry);
-    gboolean show_bar = selected && entry != NULL && (!hide || revealed);
+    gboolean show_bar = validity_should_show (list_item);
 
     if (widgets->timeout_id != 0)
     {
@@ -231,19 +255,9 @@ validity_apply_visibility (GtkListItem *list_item)
 }
 
 static void
-validity_selected_changed (GtkListItem *list_item,
-                           GParamSpec  *pspec,
-                           gpointer     user_data)
-{
-    (void) pspec;
-    (void) user_data;
-    validity_apply_visibility (list_item);
-}
-
-static void
-on_validity_entry_revealed (OTPEntry   *entry,
-                            GParamSpec *pspec,
-                            gpointer    user_data)
+on_validity_entry_changed (OTPEntry   *entry,
+                           GParamSpec *pspec,
+                           gpointer    user_data)
 {
     (void) entry;
     (void) pspec;
@@ -274,7 +288,9 @@ validity_list_item_unbind (GtkSignalListItemFactory *factory,
         widgets->timeout_id = 0;
     }
 
-    gtk_widget_set_visible (widgets->label, FALSE);
+    /* Hide the whole cell, not just the label: a recycled row would otherwise
+     * carry the previous entry's level bar until bind runs again. */
+    gtk_widget_set_visible (widgets->box, FALSE);
 }
 
 /* Render the value-column label for a single entry, honoring both the
@@ -488,8 +504,6 @@ otp_validity_column_setup (GtkSignalListItemFactory *factory,
     widgets->remaining = 30;
     widgets->period = 30;
     g_object_set_data_full (G_OBJECT (list_item), "validity-widgets", widgets, (GDestroyNotify) validity_widgets_free);
-
-    g_signal_connect (list_item, "notify::selected", G_CALLBACK (validity_selected_changed), NULL);
 }
 
 static void
@@ -501,8 +515,11 @@ otp_validity_column_bind (GtkSignalListItemFactory *factory,
     (void) user_data;
 
     /* Track the entry's reveal state so the bar can hide along with the
-     * OTP when the auto-hide timer fires. List items are recycled across
-     * scrolling, so disconnect from any prior entry first. */
+     * OTP when the auto-hide timer fires, and notify::otp-value so it can
+     * appear or disappear the moment "Hide OTPs by default" is toggled -
+     * refresh_otp_value_cells re-emits that property for every entry, and
+     * the value cell already rides on it for the same reason. List items are
+     * recycled across scrolling, so disconnect from any prior entry first. */
     OTPEntry *entry = OTP_ENTRY (gtk_list_item_get_item (list_item));
     OTPEntry *prev = g_object_get_data (G_OBJECT (list_item), "validity-bound-entry");
     if (prev != NULL && prev != entry)
@@ -510,7 +527,9 @@ otp_validity_column_bind (GtkSignalListItemFactory *factory,
     if (entry != NULL && prev != entry)
     {
         g_signal_connect (entry, "notify::revealed",
-                          G_CALLBACK (on_validity_entry_revealed), list_item);
+                          G_CALLBACK (on_validity_entry_changed), list_item);
+        g_signal_connect (entry, "notify::otp-value",
+                          G_CALLBACK (on_validity_entry_changed), list_item);
         g_object_set_data (G_OBJECT (list_item), "validity-bound-entry", entry);
     }
 
@@ -4796,22 +4815,21 @@ on_hide_otps_changed (GObject    *gobject,
     refresh_otp_value_cells (OTPCLIENT_WINDOW (user_data));
 }
 
+/* GtkWindow's "application" is a plain property, not a construct one, so
+ * g_object_new applies it after constructed() has already returned: reading it
+ * from there hands back NULL and the hook below was never connected at all.
+ * Hook it from the constructor, where the application is in hand either way.
+ * g_signal_connect_object auto-disconnects when the window is finalized. */
 static void
-otpclient_window_constructed (GObject *object)
+watch_hide_otps_setting (OTPClientWindow      *self,
+                         OTPClientApplication *app)
 {
-    G_OBJECT_CLASS (otpclient_window_parent_class)->constructed (object);
+    if (app == NULL)
+        return;
 
-    /* The "application" construct property is set before constructed() runs,
-     * so the app is reachable here (unlike in _init). g_signal_connect_object
-     * auto-disconnects when the window is finalized. */
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (object)));
-    if (app != NULL)
-    {
-        g_signal_connect_object (app, "notify::hide-otps",
-                                 G_CALLBACK (on_hide_otps_changed), object,
-                                 G_CONNECT_DEFAULT);
-    }
+    g_signal_connect_object (app, "notify::hide-otps",
+                             G_CALLBACK (on_hide_otps_changed), self,
+                             G_CONNECT_DEFAULT);
 }
 
 static void
@@ -4941,7 +4959,6 @@ otpclient_window_class_init (OTPClientWindowClass *klass)
 {
     G_OBJECT_CLASS(klass)->dispose = otpclient_window_dispose;
     G_OBJECT_CLASS(klass)->finalize = otpclient_window_finalize;
-    G_OBJECT_CLASS(klass)->constructed = otpclient_window_constructed;
 
     GtkWidgetClass *widget_class = GTK_WIDGET_CLASS(klass);
     gtk_widget_class_set_template_from_resource (widget_class, "/com/github/paolostivanin/OTPClient/ui/window.ui");
@@ -5009,5 +5026,8 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
 GtkWidget *
 otpclient_window_new (OTPClientApplication *application)
 {
-    return g_object_new (OTPCLIENT_TYPE_WINDOW, "application", application, NULL);
+    OTPClientWindow *self = g_object_new (OTPCLIENT_TYPE_WINDOW,
+                                          "application", application, NULL);
+    watch_hide_otps_setting (self, application);
+    return GTK_WIDGET (self);
 }
