@@ -236,6 +236,92 @@ test_roundtrip_hotp_parse_emit_parse (void)
     json_decref (obj);
 }
 
+static void
+test_roundtrip_percent_in_account (void)
+{
+    /* A literal '%' in the account name is escaped once on the way out and has
+     * to be unescaped exactly once on the way back in. Decoding it twice makes
+     * "100%" a truncated escape sequence and the token is refused outright, so
+     * our own export stops re-importing. */
+    json_t *obj = build_json_obj ("TOTP", "alice 100%", "Example",
+                                  "JBSWY3DPEHPK3PXP", 6, "SHA1", 30, 0, NULL);
+    g_autofree gchar *uri = get_otpauth_uri (obj);
+    g_assert_nonnull (strstr (uri, "100%25"));
+
+    otp_t *otp = parse_single (uri);
+    g_assert_nonnull (otp);
+    g_assert_cmpstr (otp->account_name, ==, "alice 100%");
+    g_assert_cmpstr (otp->issuer, ==, "Example");
+    free_otp (otp);
+
+    json_decref (obj);
+}
+
+static void
+test_roundtrip_colon_in_issuer (void)
+{
+    /* The colon between issuer and account is the separator, so a colon that
+     * belongs to either half has to stay encoded. Escaping the joined label
+     * instead makes the separator indistinguishable from the issuer's own colon
+     * and the label comes back split in the wrong place. */
+    json_t *obj = build_json_obj ("TOTP", "alice", "Acme:Corp",
+                                  "JBSWY3DPEHPK3PXP", 6, "SHA1", 30, 0, NULL);
+    g_autofree gchar *uri = get_otpauth_uri (obj);
+
+    otp_t *otp = parse_single (uri);
+    g_assert_nonnull (otp);
+    g_assert_cmpstr (otp->issuer, ==, "Acme:Corp");
+    g_assert_cmpstr (otp->account_name, ==, "alice");
+    free_otp (otp);
+
+    json_decref (obj);
+}
+
+static void
+test_encoded_separator_still_accepted (void)
+{
+    /* Exports that percent-encode the separator too, ours before 5.2.0 among
+     * them, still have to import. */
+    otp_t *otp = parse_single (
+        "otpauth://totp/Example%3Aalice?secret=JBSWY3DPEHPK3PXP&digits=6");
+    g_assert_nonnull (otp);
+    g_assert_cmpstr (otp->issuer, ==, "Example");
+    g_assert_cmpstr (otp->account_name, ==, "alice");
+    free_otp (otp);
+}
+
+static void
+test_percent_in_issuer_param (void)
+{
+    /* The issuer query parameter is decoded by g_uri_parse_params and must not
+     * be decoded again either: a second pass turns "50%25off" into a broken
+     * escape and g_uri_parse_params fails, taking the whole token with it. */
+    otp_t *otp = parse_single (
+        "otpauth://totp/alice?secret=JBSWY3DPEHPK3PXP&issuer=50%25off&digits=6");
+    g_assert_nonnull (otp);
+    g_assert_cmpstr (otp->issuer, ==, "50%off");
+    g_assert_cmpstr (otp->account_name, ==, "alice");
+    free_otp (otp);
+}
+
+static void
+test_steam_uri_has_one_issuer (void)
+{
+    /* Steam tokens used to get the issuer parameter twice, once from the Steam
+     * special case and once from the generic branch. Lossless for us, since the
+     * two agree bar the capitalisation, but a strict parser is entitled to
+     * reject the duplicate. */
+    json_t *obj = build_json_obj ("TOTP", "alice", "steam",
+                                  "JBSWY3DPEHPK3PXP", 5, "SHA1", 30, 0, NULL);
+    g_autofree gchar *uri = get_otpauth_uri (obj);
+    const gchar *first = strstr (uri, "issuer=");
+    g_assert_nonnull (first);
+    g_assert_null (strstr (first + 1, "issuer="));
+    g_assert_true (g_str_has_prefix (uri, "otpauth://totp/Steam:alice?"));
+
+    json_decref (obj);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -256,6 +342,11 @@ main (int argc, char **argv)
     g_test_add_func ("/parse-uri-extra/invalid-secret",        test_invalid_secret_rejected);
     g_test_add_func ("/parse-uri-extra/roundtrip-totp",        test_roundtrip_parse_emit_parse);
     g_test_add_func ("/parse-uri-extra/roundtrip-hotp",        test_roundtrip_hotp_parse_emit_parse);
+    g_test_add_func ("/parse-uri-extra/roundtrip-percent",     test_roundtrip_percent_in_account);
+    g_test_add_func ("/parse-uri-extra/roundtrip-colon",       test_roundtrip_colon_in_issuer);
+    g_test_add_func ("/parse-uri-extra/encoded-separator",     test_encoded_separator_still_accepted);
+    g_test_add_func ("/parse-uri-extra/percent-issuer-param",  test_percent_in_issuer_param);
+    g_test_add_func ("/parse-uri-extra/steam-single-issuer",   test_steam_uri_has_one_issuer);
 
     return g_test_run ();
 }

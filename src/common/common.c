@@ -33,12 +33,18 @@ otp_import_diagnostics_free (OtpImportDiagnostics *diagnostics)
     g_free (diagnostics);
 }
 
+/* A 50 MB file of junk lines is millions of skipped entries, one diagnostic
+ * string each, all concatenated into a single label nobody can read. Keep the
+ * first few, which is as much as anyone looks at, and count the rest. */
+#define MAX_REPORTED_ISSUES 50
+
 void
 otp_import_diagnostics_add (OtpImportDiagnostics *diagnostics, guint source_index,
                             const gchar *reason)
 {
     if (diagnostics == NULL) return;
     diagnostics->skipped_invalid++;
+    if (diagnostics->issues->len >= MAX_REPORTED_ISSUES) return;
     g_ptr_array_add (diagnostics->issues,
                      g_strdup_printf (_("Entry %u: %s"), source_index + 1, reason));
 }
@@ -51,6 +57,11 @@ otp_import_diagnostics_format (const OtpImportDiagnostics *diagnostics)
         for (guint i = 0; i < diagnostics->issues->len; i++) {
             if (i > 0) g_string_append_c (text, '\n');
             g_string_append (text, g_ptr_array_index (diagnostics->issues, i));
+        }
+        guint not_listed = diagnostics->skipped_invalid - diagnostics->issues->len;
+        if (not_listed > 0) {
+            if (text->len > 0) g_string_append_c (text, '\n');
+            g_string_append_printf (text, _("... and %u more."), not_listed);
         }
     }
     return g_string_free (text, FALSE);
@@ -715,6 +726,25 @@ output_stream_write_all_exact (GOutputStream  *stream,
         return FALSE;
     }
     return TRUE;
+}
+
+
+void
+output_stream_close_checked (GOutputStream  *stream,
+                             GError        **err)
+{
+    if (stream == NULL) return;
+
+    GError *close_err = NULL;
+    if (!g_output_stream_close (stream, NULL, &close_err)) {
+        // Keep whatever failed first: a write error explains a close error, not
+        // the other way round.
+        if (err != NULL && *err == NULL) {
+            *err = close_err;
+            return;
+        }
+        g_error_free (close_err);
+    }
 }
 
 

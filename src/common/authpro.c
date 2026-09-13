@@ -104,8 +104,7 @@ export_authpro (const gchar *export_path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_clear_error (&err);
-        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
-        return g_strdup (err->message);
+        return g_strdup (msg);
     }
 
     // set_new for fresh literals throughout: ownership flows up to root, so
@@ -274,10 +273,13 @@ end:
     g_free (salt);
     if (json_data != NULL) gcry_free (json_data);
     if (root != NULL) json_decref (root);
+    output_stream_close_checked (G_OUTPUT_STREAM (out_stream), &err);
     if (out_stream != NULL) g_object_unref (out_stream);
     if (out_gfile != NULL) g_object_unref (out_gfile);
 
-    return (err != NULL ? g_strdup (err->message) : NULL);
+    gchar *ret = (err != NULL ? g_strdup (err->message) : NULL);
+    g_clear_error (&err);
+    return ret;
 }
 
 

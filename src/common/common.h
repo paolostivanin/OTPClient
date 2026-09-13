@@ -109,6 +109,17 @@ gboolean          output_stream_write_all_exact   (GOutputStream      *stream,
                                                    gsize               count,
                                                    GError            **err);
 
+/* Close an export stream and fold the outcome into *err.
+ *
+ * Exports are written with G_FILE_CREATE_REPLACE_DESTINATION, which writes a
+ * temporary file and renames it onto the destination inside close(). So close()
+ * is where a full, read-only or over-quota filesystem finally reports itself.
+ * Leaving the close to the unref means dispose does it and throws the answer
+ * away, and the caller tells the user the backup succeeded over a file that was
+ * never written. A NULL stream is a no-op, so this can sit in a cleanup block. */
+void              output_stream_close_checked    (GOutputStream      *stream,
+                                                  GError            **err);
+
 /* Open a path with O_NOFOLLOW, fstat to confirm it's a regular file (not a
  * symlink, directory, or special file), and return the open fd. Caller is
  * responsible for closing it. To eliminate the close-then-reopen TOCTOU,

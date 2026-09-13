@@ -66,14 +66,18 @@ export_freeotpplus (const gchar *export_path,
     GFileOutputStream *out_stream = g_file_replace (out_gfile, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION | G_FILE_CREATE_PRIVATE, NULL, &err);
     if (out_stream != NULL) {
         json_array_foreach (json_db_data, index, db_obj) {
+            // The URI carries the seed, so wipe it rather than handing the
+            // plaintext back to the allocator. The file itself is cleartext by
+            // definition, but that is no reason to leave a copy in the heap.
             gchar *uri = get_otpauth_uri (db_obj);
             // g_output_stream_write expects a byte count, not Unicode characters.
             if (!output_stream_write_all_exact (G_OUTPUT_STREAM(out_stream), uri, strlen (uri), &err)) {
-                g_free (uri);
+                sensitive_g_free (uri);
                 break;
             }
-            g_free (uri);
+            sensitive_g_free (uri);
         }
+        output_stream_close_checked (G_OUTPUT_STREAM (out_stream), &err);
         g_object_unref (out_stream);
     }
 

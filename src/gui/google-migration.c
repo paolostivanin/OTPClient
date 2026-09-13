@@ -27,6 +27,20 @@ free_otp (otp_t *otp)
     g_free (otp);
 }
 
+/* protobuf-c hands each seed back in a plain heap buffer and frees it unwiped,
+ * so the raw secrets would stay legible in freed memory long after the import.
+ * Zero them while they are still ours to zero. */
+static void
+free_payload_wiped (MigrationPayload *payload)
+{
+    for (gsize i = 0; i < payload->n_otp_parameters; i++) {
+        MigrationPayload__OtpParameters *param = payload->otp_parameters[i];
+        if (param != NULL && param->secret.data != NULL && param->secret.len > 0)
+            explicit_bzero (param->secret.data, param->secret.len);
+    }
+    migration_payload__free_unpacked (payload, NULL);
+}
+
 GSList *
 google_migration_decode_full (const gchar  *uri,
                          guint        *invalid_count,
@@ -80,7 +94,7 @@ google_migration_decode_full (const gchar  *uri,
     g_free (raw);
     if (payload == NULL || payload->n_otp_parameters > MAX_MIGRATION_TOKENS) {
         if (payload != NULL)
-            migration_payload__free_unpacked (payload, NULL);
+            free_payload_wiped (payload);
         g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
                      "Google migration payload is malformed or contains too many tokens.");
         return NULL;
@@ -89,7 +103,7 @@ google_migration_decode_full (const gchar  *uri,
         payload->batch_size > (gint32) MAX_MIGRATION_BATCHES ||
         payload->batch_index < 0 ||
         payload->batch_index >= payload->batch_size) {
-        migration_payload__free_unpacked (payload, NULL);
+        free_payload_wiped (payload);
         g_set_error (error, generic_error_gquark (), GENERIC_ERRCODE,
                      "Google migration batch metadata is invalid.");
         return NULL;
@@ -183,7 +197,7 @@ google_migration_decode_full (const gchar  *uri,
         result = g_slist_append (result, otp);
     }
 
-    migration_payload__free_unpacked (payload, NULL);
+    free_payload_wiped (payload);
     if (invalid_count != NULL)
         *invalid_count = invalid;
     if (result == NULL) {

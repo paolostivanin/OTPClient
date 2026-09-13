@@ -208,7 +208,9 @@ get_otps_from_encrypted_backup (const gchar          *path,
         goto cleanup;
     }
 
-    keybuf = gcry_malloc (AEGIS_KEY_SIZE);
+    // The scrypt output unwraps the master key, so it is as sensitive as the
+    // master key itself: secure memory keeps it off disk and wipes it on free.
+    keybuf = gcry_calloc_secure (AEGIS_KEY_SIZE, 1);
     if (keybuf == NULL) {
         g_set_error (err, secmem_alloc_error_gquark (), SECMEM_ALLOC_ERRCODE,
                      "Couldn't allocate secure memory for the Aegis KDF output.");
@@ -348,8 +350,7 @@ export_aegis (const gchar   *export_path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_clear_error (&err);
-        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
-        return g_strdup (err->message);
+        return g_strdup (msg);
     }
 
     // set_new for fresh literals throughout: it transfers ownership to the
@@ -609,10 +610,13 @@ cleanup_and_exit:
     if (aegis_db_obj != NULL) json_decref (aegis_db_obj);  // only when not transferred
     if (aegis_header_obj != NULL) json_decref (aegis_header_obj);
     if (root != NULL) json_decref (root);
+    output_stream_close_checked (G_OUTPUT_STREAM (out_stream), &err);
     if (out_stream != NULL) g_object_unref (out_stream);
     if (out_gfile != NULL) g_object_unref (out_gfile);
 
-    return (err != NULL ? g_strdup (err->message) : NULL);
+    gchar *ret = (err != NULL ? g_strdup (err->message) : NULL);
+    g_clear_error (&err);
+    return ret;
 }
 
 

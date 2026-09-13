@@ -122,8 +122,7 @@ export_twofas (const gchar *export_path,
             "This requires administrator privileges and is a system-wide setting that OTPClient cannot change automatically."
         ));
         g_clear_error (&err);
-        g_set_error (&err, secmem_alloc_error_gquark (), NO_SECMEM_AVAIL_ERRCODE, "%s", msg);
-        return g_strdup (err->message);
+        return g_strdup (msg);
     }
 
     gint64 epoch_time = g_get_real_time();
@@ -276,7 +275,7 @@ export_twofas (const gchar *export_path,
         memcpy (enc_data_with_tag, enc_buf, json_data_size);
         memcpy (enc_data_with_tag + json_data_size, tag, TWOFAS_TAG);
         explicit_bzero (tag, TWOFAS_TAG);
-        gcry_free (enc_buf);
+        g_free (enc_buf);
         enc_buf = NULL;
 
         enc_root = json_object ();
@@ -320,7 +319,10 @@ end:
         explicit_bzero (derived_key, 32);
         gcry_free (derived_key);
     }
-    if (enc_buf != NULL) gcry_free (enc_buf);
+    // enc_buf holds ciphertext and comes from g_malloc0, so it is not secure
+    // memory: freeing it with gcry_free is heap corruption under a libgcrypt
+    // built with --enable-m-guard.
+    g_free (enc_buf);
     g_free (enc_data_with_tag);
     g_free (encoded_data);
     g_free (encoded_ref_data);
@@ -332,10 +334,13 @@ end:
     if (services_array != NULL) json_decref (services_array);
     if (groups_array != NULL) json_decref (groups_array);
     if (root != NULL) json_decref (root);
+    output_stream_close_checked (G_OUTPUT_STREAM (out_stream), &err);
     if (out_stream != NULL) g_object_unref (out_stream);
     if (out_gfile != NULL) g_object_unref (out_gfile);
 
-    return (err != NULL ? g_strdup (err->message) : NULL);
+    gchar *ret = (err != NULL ? g_strdup (err->message) : NULL);
+    g_clear_error (&err);
+    return ret;
 }
 
 
