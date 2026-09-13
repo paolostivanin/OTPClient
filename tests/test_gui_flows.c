@@ -11,6 +11,8 @@
 #include "dialogs/import-dialog.h"
 #include "dialogs/export-dialog.h"
 #include "dialogs/sensitive-dialog.h"
+#include "autostart.h"
+#include "version.h"
 
 static OTPClientApplication *app;
 static OTPClientWindow *win;
@@ -414,6 +416,52 @@ test_failed_reorder_restores_row_order (void)
     review_fixture_clear (&fixture);
 }
 
+/* B8: the autostart key is new in 5.2.0 and defaults to off, so an entry that
+ * is already there when a launch finds the key untouched cannot be ours. The
+ * startup reassert used to read the default and delete the user's file. */
+static void
+test_autostart_adoption (void)
+{
+    g_autofree gchar *dir = g_build_filename (g_get_user_config_dir (), "autostart", NULL);
+    g_autofree gchar *path = g_build_filename (dir, APPLICATION_ID ".desktop", NULL);
+    g_assert_cmpint (g_mkdir_with_parents (dir, 0700), ==, 0);
+
+    g_autoptr (GSettings) settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+    g_settings_reset (settings, "autostart");
+    otpclient_application_reload_settings (app);
+    g_assert_true (otpclient_application_autostart_key_is_default (app));
+
+    g_assert_true (g_file_set_contents (path,
+        "[Desktop Entry]\nType=Application\nName=OTPClient\nExec=otpclient\n", -1, NULL));
+
+    g_assert_true (autostart_adopt_existing_entry (app));
+    g_assert_true (otpclient_application_get_autostart (app));
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+
+    /* The key has a user value now, so the entry is this application's from
+     * here on and a later launch must not read it as somebody else's again. */
+    g_assert_false (autostart_adopt_existing_entry (app));
+
+    /* An entry that is switched off is a no, not something to turn on. The key
+     * still stops being a default, so the question is asked only once. */
+    g_settings_reset (settings, "autostart");
+    otpclient_application_reload_settings (app);
+    g_assert_true (g_file_set_contents (path,
+        "[Desktop Entry]\nType=Application\nName=OTPClient\nExec=otpclient\n"
+        "X-GNOME-Autostart-enabled=false\n", -1, NULL));
+    g_assert_false (autostart_adopt_existing_entry (app));
+    g_assert_false (otpclient_application_get_autostart (app));
+    g_assert_false (otpclient_application_autostart_key_is_default (app));
+
+    /* No entry at all is the ordinary first launch: nothing to adopt, and the
+     * key is left alone so a file that appears later is still adoptable. */
+    g_settings_reset (settings, "autostart");
+    otpclient_application_reload_settings (app);
+    g_assert_cmpint (g_unlink (path), ==, 0);
+    g_assert_false (autostart_adopt_existing_entry (app));
+    g_assert_true (otpclient_application_autostart_key_is_default (app));
+}
+
 int
 main (int argc, char **argv)
 {
@@ -439,6 +487,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
     g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
+    g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

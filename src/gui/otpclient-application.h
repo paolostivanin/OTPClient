@@ -116,6 +116,11 @@ gboolean              otpclient_application_get_autostart (OTPClientApplication 
 void                  otpclient_application_set_autostart (OTPClientApplication *self,
                                                            gboolean              autostart);
 
+/* TRUE while nobody has ever set the autostart key, which is how a launch tells
+ * that a login-time entry it can see was not put there by this application: the
+ * key is new in 5.2.0 and 5.1.x had no autostart code to write one with. */
+gboolean              otpclient_application_autostart_key_is_default (OTPClientApplication *self);
+
 /* The durable "the desktop has not been told yet" note. Set by anything that
  * writes the startup keys without being able to act on them, which is what a
  * settings import does, and retired only by a reconciliation that actually got

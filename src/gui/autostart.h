@@ -110,6 +110,17 @@ void     autostart_ensure_background (OTPClientApplication *app,
  * so, instead of the next launch having to guess. */
 gboolean autostart_entry_may_exist (void);
 
+/* Take ownership of a login-time entry this application cannot have written.
+ * The autostart key is new in 5.2.0 and defaults to off, so the first launch
+ * after an upgrade found somebody else's entry, read the default, and deleted
+ * it: the file can only have come from the user, since 5.1.x had no autostart
+ * code at all, and GNOME Tweaks writes exactly that filename.
+ *
+ * Sets the key to true and returns TRUE when it adopted one. Call before
+ * autostart_reassert, which is the deletion. Only meaningful on the host, where
+ * the entry is a file this side can see; returns FALSE under Flatpak. */
+gboolean autostart_adopt_existing_entry (OTPClientApplication *app);
+
 /* State both startup keys at the desktop. There is no read-back API, so the
  * GSettings keys are the only record of the entry and they go stale: revoking
  * "Run in Background" writes no to the permission store without deleting the

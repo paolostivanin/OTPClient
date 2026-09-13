@@ -3,5 +3,9 @@
 #define PROJECT_NAME   "@PROJECT_NAME@"
 #define PROJECT_VER    "@PROJECT_VERSION@"
 #define INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@"
+/* Where this build's binaries land. The autostart entry needs it: a session's
+ * PATH is not the shell's, so a bare Exec name is a login-time launch that may
+ * silently never happen. */
+#define INSTALL_BINDIR "@CMAKE_INSTALL_FULL_BINDIR@"
 #define LOCALE_DIR     "@SHARE_INSTALL_PREFIX@/locale"
 #define APPLICATION_ID "com.github.paolostivanin.OTPClient"

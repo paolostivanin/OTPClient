@@ -1459,6 +1459,9 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
      * the sandbox; the pending key covers what cannot be seen, including the
      * import that turns everything off, which is the one case where every other
      * signal here reads as nothing to do. */
+    /* Before the reassert, which is the thing that would delete it. */
+    autostart_adopt_existing_entry (self);
+
     if (self->autostart || self->minimize_to_tray
         || otpclient_application_get_startup_reconcile_pending (self)
         || autostart_entry_may_exist ())
@@ -2001,6 +2004,25 @@ void otpclient_application_set_autostart (OTPClientApplication *self, gboolean a
     self->autostart = autostart;
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "autostart", autostart);
+}
+
+gboolean
+otpclient_application_autostart_key_is_default (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+
+    /* No schema means no record of anything, which is not the same as a key
+     * nobody has set: there is nowhere to write the adoption to either, so the
+     * honest answer is that this is not a first launch we can act on. */
+    if (self->settings == NULL)
+        return FALSE;
+
+    GVariant *user_value = g_settings_get_user_value (self->settings, "autostart");
+    if (user_value == NULL)
+        return TRUE;
+
+    g_variant_unref (user_value);
+    return FALSE;
 }
 
 gboolean

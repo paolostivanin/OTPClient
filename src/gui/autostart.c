@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <string.h>
 #include <glib/gi18n.h>
 #include <gio/gio.h>
 #include <glib/gstdio.h>
@@ -18,6 +19,13 @@ static guint autostart_generation = 0;
 static void autostart_reconcile (OTPClientApplication  *app,
                                  gboolean               wanted_autostart,
                                  const AutostartResult *result);
+
+/* What to tell the user when the login-time entry did not end up in the state
+ * they asked for. The two builds fail in entirely different ways, so the one
+ * message that used to serve both was wrong on the host half the time: there is
+ * no desktop to refuse anything there, only a file that could not be written.
+ * Defined per build, beside the code that knows what went wrong. */
+static gchar *autostart_refusal_message (gboolean wanted_autostart);
 
 /* The single exit for every answer, however it was arrived at, so that no path
  * can report an outcome without the two keys having been squared with it first.
@@ -48,8 +56,17 @@ autostart_deliver (OTPClientApplication  *app,
 #define PORTAL_BACKGROUND  "org.freedesktop.portal.Background"
 #define PORTAL_REQUEST     "org.freedesktop.portal.Request"
 
-/* A portal that never answers must not strand the switch mid-flight. */
-#define PORTAL_RESPONSE_TIMEOUT_SECONDS 60
+/* A portal that never answers must not strand the switch mid-flight.
+ *
+ * Generous on purpose. Expiring closes the Request, which dismisses the prompt
+ * the portal is showing, so this is not only "stop waiting", it is "take the
+ * question off the user's screen and then tell them the desktop refused". At a
+ * minute that was a real outcome for anyone who read the dialog, walked away
+ * mid-decision or had it appear behind another window: they came back to
+ * Minimize to Tray switched off and an explanation that was not true. Five
+ * minutes is past the point where a human is still deciding, and a portal that
+ * is genuinely wedged is no worse for the wait. */
+#define PORTAL_RESPONSE_TIMEOUT_SECONDS 300
 
 typedef enum {
     BACKEND_UNKNOWN,
@@ -454,6 +471,30 @@ autostart_entry_may_exist (void)
     return FALSE;
 }
 
+gboolean
+autostart_adopt_existing_entry (OTPClientApplication *app)
+{
+    (void) app;
+
+    /* Nothing to adopt and no way to see it. The host-side entry is outside the
+     * sandbox, so a first 5.2.0 launch that asks the portal for background
+     * access does restate autostart=false and the portal does remove a
+     * user-created entry, the same way the host build used to. There is no
+     * signal on this side to tell that case from "no entry at all", and asking
+     * for the background grant is not optional, so the sandbox keeps that
+     * narrower version of the problem. */
+    return FALSE;
+}
+
+/* The response code is the whole of what the portal says, so there is nothing
+ * to add to it. */
+static gchar *
+autostart_refusal_message (gboolean wanted_autostart)
+{
+    (void) wanted_autostart;
+    return g_strdup (_("The desktop refused to change the login-time launch"));
+}
+
 void
 autostart_apply (OTPClientApplication *app,
                  gboolean              enable_autostart,
@@ -606,6 +647,65 @@ autostart_file_path (void)
                              AUTOSTART_DESKTOP_FILE, NULL);
 }
 
+/* Where this build's binary is, rather than whatever the session's PATH
+ * resolves "otpclient" to.
+ *
+ * The session's PATH is not the shell's: it comes from the login environment,
+ * so an install to ~/.local/bin or to an opt prefix is commonly not on it and
+ * the entry would silently never launch. A bare name also means a build-tree or
+ * second-prefix run writes an entry pointing at somebody else's binary, and an
+ * uninstall leaves an entry that fails at every login instead of one the
+ * desktop knows to skip, which is what TryExec is for. */
+static gchar *
+autostart_exec_path (void)
+{
+    return g_build_filename (INSTALL_BINDIR, "otpclient", NULL);
+}
+
+/* Exec is a command line, not a path: a prefix with a space in it has to be
+ * quoted, and the characters the spec reserves have to be escaped inside the
+ * quotes. TryExec takes the bare path, since it is not parsed as a command. */
+static gchar *
+desktop_exec_quote (const gchar *path)
+{
+    if (strpbrk (path, " \t\n\"'\\<>~|&;$*?#()`") == NULL)
+        return g_strdup (path);
+
+    GString *out = g_string_new ("\"");
+    for (const gchar *p = path; *p != '\0'; p++)
+    {
+        if (*p == '"' || *p == '\\' || *p == '$' || *p == '`')
+            g_string_append_c (out, '\\');
+        g_string_append_c (out, *p);
+    }
+    g_string_append_c (out, '"');
+
+    return g_string_free (out, FALSE);
+}
+
+/* Why the last local attempt failed, in the user's language where glib gives us
+ * one. It travels beside the result rather than in it: AutostartResult is
+ * shared with the portal build and with the policy tests, and this is set
+ * immediately before the delivery that reads it, a couple of frames down the
+ * same synchronous call. */
+static gchar *autostart_local_error = NULL;
+
+static gchar *
+autostart_refusal_message (gboolean wanted_autostart)
+{
+    if (autostart_local_error == NULL)
+        return g_strdup (wanted_autostart
+                           ? _("Could not create the login-time entry")
+                           : _("Could not remove the login-time entry"));
+
+    if (wanted_autostart)
+        return g_strdup_printf (_("Could not create the login-time entry: %s"),
+                                autostart_local_error);
+
+    return g_strdup_printf (_("Could not remove the login-time entry: %s"),
+                            autostart_local_error);
+}
+
 void
 autostart_init (void)
 {
@@ -624,6 +724,72 @@ autostart_entry_may_exist (void)
     return g_file_test (path, G_FILE_TEST_EXISTS);
 }
 
+/* An entry can be present and still be switched off. Hidden=true is the
+ * spec's way of recording that the user deleted it, and
+ * X-GNOME-Autostart-enabled=false is what the old gnome-session-properties
+ * wrote for the same thing. Adopting one of those would read a deliberate no as
+ * a yes. A file that will not parse counts as off: it cannot be launching
+ * anything, so there is no working state to preserve. */
+static gboolean
+autostart_entry_is_enabled (const gchar *path)
+{
+    g_autoptr (GKeyFile) kf = g_key_file_new ();
+    if (!g_key_file_load_from_file (kf, path, G_KEY_FILE_NONE, NULL))
+        return FALSE;
+
+    if (g_key_file_get_boolean (kf, G_KEY_FILE_DESKTOP_GROUP,
+                                G_KEY_FILE_DESKTOP_KEY_HIDDEN, NULL))
+        return FALSE;
+
+    g_autoptr (GError) err = NULL;
+    gboolean gnome_enabled = g_key_file_get_boolean (kf, G_KEY_FILE_DESKTOP_GROUP,
+                                                     "X-GNOME-Autostart-enabled", &err);
+    if (err == NULL && !gnome_enabled)
+        return FALSE;
+
+    return TRUE;
+}
+
+gboolean
+autostart_adopt_existing_entry (OTPClientApplication *app)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (app), FALSE);
+
+    /* The key holding its default is what says this is the first launch that
+     * has ever had an opinion. Once it has a user value, the file is this
+     * application's business and the reassert can have it. */
+    if (otpclient_application_get_autostart (app))
+        return FALSE;
+    if (!otpclient_application_autostart_key_is_default (app))
+        return FALSE;
+
+    g_autofree gchar *path = autostart_file_path ();
+    if (!g_file_test (path, G_FILE_TEST_EXISTS))
+        return FALSE;
+
+    /* Nothing in 5.1.x could have written this file: the key and the code
+     * behind it are both new in 5.2.0. So the entry is the user's, most likely
+     * from GNOME Tweaks' Startup Applications, which writes exactly this
+     * filename. The reassert that follows would have read the default of false
+     * and g_unlinked it without a word, on the first launch after an upgrade,
+     * while the Settings switch went on reading Off. */
+    if (!autostart_entry_is_enabled (path))
+    {
+        /* Present but off, which is what the key already says. Give the key a
+         * user value so this does not run again, and let the reassert take the
+         * file: an entry that is switched off and no entry at all mean the same
+         * thing to every desktop, and from here the switch is what says which
+         * it is. */
+        otpclient_application_set_autostart (app, FALSE);
+        return FALSE;
+    }
+
+    g_message ("Adopting an existing autostart entry; the login-time launch stays on");
+    otpclient_application_set_autostart (app, TRUE);
+
+    return TRUE;
+}
+
 void
 autostart_apply (OTPClientApplication *app,
                  gboolean              enable_autostart,
@@ -640,11 +806,15 @@ autostart_apply (OTPClientApplication *app,
     g_autofree gchar *path = autostart_file_path ();
     gboolean ok = TRUE;
 
+    /* Describes this attempt from here on, and only this one. */
+    g_clear_pointer (&autostart_local_error, g_free);
+
     if (!enable_autostart)
     {
         if (g_unlink (path) != 0 && errno != ENOENT)
         {
             g_warning ("Could not remove %s: %s", path, g_strerror (errno));
+            autostart_local_error = g_strdup (g_strerror (errno));
             ok = FALSE;
         }
     }
@@ -654,19 +824,29 @@ autostart_apply (OTPClientApplication *app,
         if (g_mkdir_with_parents (dir, 0700) != 0)
         {
             g_warning ("Could not create %s: %s", dir, g_strerror (errno));
+            autostart_local_error = g_strdup (g_strerror (errno));
             ok = FALSE;
         }
         else
         {
+            g_autofree gchar *bin = autostart_exec_path ();
+            g_autofree gchar *quoted = desktop_exec_quote (bin);
+            g_autofree gchar *exec =
+                otpclient_application_get_start_minimized (app)
+                  ? g_strdup_printf ("%s --start-minimized", quoted)
+                  : g_strdup (quoted);
+
             g_autoptr (GKeyFile) kf = g_key_file_new ();
             g_key_file_set_string (kf, G_KEY_FILE_DESKTOP_GROUP,
                                    G_KEY_FILE_DESKTOP_KEY_TYPE, "Application");
             g_key_file_set_string (kf, G_KEY_FILE_DESKTOP_GROUP,
                                    G_KEY_FILE_DESKTOP_KEY_NAME, "OTPClient");
             g_key_file_set_string (kf, G_KEY_FILE_DESKTOP_GROUP,
-                                   G_KEY_FILE_DESKTOP_KEY_EXEC,
-                                   otpclient_application_get_start_minimized (app)
-                                     ? "otpclient --start-minimized" : "otpclient");
+                                   G_KEY_FILE_DESKTOP_KEY_EXEC, exec);
+            /* An uninstalled binary makes the entry a no-op rather than a
+             * failed launch every login. */
+            g_key_file_set_string (kf, G_KEY_FILE_DESKTOP_GROUP,
+                                   G_KEY_FILE_DESKTOP_KEY_TRY_EXEC, bin);
             g_key_file_set_string (kf, G_KEY_FILE_DESKTOP_GROUP,
                                    G_KEY_FILE_DESKTOP_KEY_ICON, APPLICATION_ID);
             g_key_file_set_boolean (kf, G_KEY_FILE_DESKTOP_GROUP,
@@ -680,6 +860,7 @@ autostart_apply (OTPClientApplication *app,
             if (!g_key_file_save_to_file (kf, path, &err))
             {
                 g_warning ("Could not write %s: %s", path, err->message);
+                autostart_local_error = g_strdup (err->message);
                 ok = FALSE;
             }
         }
@@ -735,11 +916,11 @@ autostart_reconcile (OTPClientApplication  *app,
 
     if (actions.write_autostart)
     {
-        g_message ("The desktop would not %s the login-time entry",
+        g_message ("Could not %s the login-time entry",
                    wanted_autostart ? "create" : "remove");
         otpclient_application_set_autostart (app, actions.autostart_value);
-        otpclient_application_report_startup_change (app,
-            _("The desktop refused to change the login-time launch"));
+        g_autofree gchar *message = autostart_refusal_message (wanted_autostart);
+        otpclient_application_report_startup_change (app, message);
     }
 
     if (actions.disable_tray)
