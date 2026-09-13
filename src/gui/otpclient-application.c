@@ -204,6 +204,8 @@ otpclient_application_show_about (GSimpleAction *simple,
     adw_dialog_present (dialog, GTK_WIDGET (self->window));
 }
 
+static gboolean otpclient_application_signal_quit (gpointer user_data);
+
 static void
 otpclient_application_quit (GSimpleAction *simple,
                             GVariant      *parameter,
@@ -212,12 +214,14 @@ otpclient_application_quit (GSimpleAction *simple,
     (void) simple;
     (void) parameter;
 
-    OTPClientApplication *self = OTPCLIENT_APPLICATION(user_data);
-    if (self->window != NULL)
-    {
-        gtk_window_destroy (GTK_WINDOW(self->window));
-        self->window = NULL;
-    }
+    /* Destroying the window is not quitting. The tray holds the application
+     * alive with no window left to reach it by, and nothing unpublishes the
+     * icon, so clicking it lands in a present_window that early-returns: an
+     * unquittable process with a decrypted database in it. No accelerator and
+     * no menu item point here today, but app actions are exported on D-Bus, so
+     * this is reachable by anyone who asks for it by name. Quit the same way
+     * the tray's own Quit and the signal handlers do. */
+    otpclient_application_signal_quit (user_data);
 }
 
 static void
@@ -1207,6 +1211,15 @@ otpclient_application_present_window (OTPClientApplication *self)
     gtk_widget_set_visible (GTK_WIDGET (self->window), TRUE);
     gtk_window_present (GTK_WINDOW (self->window));
 
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    /* The tray's "we tucked it away" flag is what arms both the stranded-window
+     * deadline and the un-hide on a lost panel, and only the tray's own show
+     * path used to clear it. Everything else that puts the window back on
+     * screen arrives here: a second otpclient invocation, a search-provider
+     * activation, a D-Bus activate. */
+    otpclient_tray_notify_window_shown (self);
+#endif
+
     if (self->pending_db_missing_path != NULL)
     {
         g_autofree gchar *name = g_steal_pointer (&self->pending_db_missing_name);
@@ -1215,14 +1228,28 @@ otpclient_application_present_window (OTPClientApplication *self)
     }
 
     /* Deferred from a hidden start: this is the first moment there is a window
-     * to attach a prompt to. */
+     * to attach a prompt to.
+     *
+     * Through init_database_request_key when the keyring is in play, because
+     * that is the only thing in the codebase that reads use_secret_service and
+     * calls secret_password_lookup. Going straight to the unlock dialog meant
+     * that start-at-login together with "store the password in the keyring",
+     * the one combination start-at-login exists for, asked for the master
+     * password on the first tray click of every session and never once
+     * consulted the keyring it was told to use.
+     *
+     * The locked state is not in the way: it is only how a hidden start parks a
+     * database it has deliberately not asked for a key yet, and on_unlock_done
+     * lifts it as readily for a key that came from the keyring as for one that
+     * came from the dialog. Without the keyring there is nothing to consult, so
+     * the locked-mode unlock dialog it is. */
     if (self->unlock_deferred)
     {
         self->unlock_deferred = FALSE;
-        if (otpclient_application_get_app_locked (self))
-            lock_app_present_unlock_dialog (self);
-        else if (self->db_data != NULL)
+        if (self->db_data != NULL && self->use_secret_service)
             init_database_request_key (self);
+        else
+            lock_app_present_unlock_dialog (self);
     }
 
     /* Was in startup(), where it presented a dialog on a window that had not
@@ -1306,7 +1333,15 @@ resolve_start_hidden (OTPClientApplication *self)
         return FALSE;
     }
 
-    if (!otpclient_tray_is_available ())
+    /* The synchronous probe, not otpclient_tray_is_available(): this runs
+     * inside startup(), a few statements after otpclient_tray_init, and
+     * g_bus_watch_name cannot have answered yet without a main-loop iteration.
+     * The availability accessor therefore still says UNKNOWN, which reads as
+     * "maybe" and passed this check every time, so a session with no watcher at
+     * all showed nothing for the ten seconds the tray's deadline takes to give
+     * up. One round trip to the bus daemon, only on a start-minimized launch,
+     * buys the answer now. */
+    if (!otpclient_tray_watcher_present_sync ())
     {
         g_debug ("Ignoring start-minimized: no system tray on this session");
         return FALSE;
@@ -1478,7 +1513,16 @@ otpclient_application_dispose (GObject *object)
 
     lock_app_cleanup (self);
 
-    self->window = NULL;
+    /* Dropping the pointer is not enough: the weak ref added in startup() still
+     * names this field, and GObject writes NULL through it when the window is
+     * finalized. An application that outlives its window is the ordinary case,
+     * but an application finalized first left GObject holding the address of a
+     * field inside freed memory. Nothing in the tree removed this ref. */
+    if (self->window != NULL)
+    {
+        g_object_remove_weak_pointer (G_OBJECT (self->window), (gpointer *) &self->window);
+        self->window = NULL;
+    }
 
     g_clear_object (&self->settings);
     g_clear_pointer (&self->search_provider_keyword, g_free);

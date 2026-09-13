@@ -61,11 +61,19 @@ static TrayData *tray_data = NULL;
 static void tray_publish   (TrayData *td);
 static void tray_unpublish (TrayData *td);
 
+/* The window is on screen, however it got there, so it is neither tucked away
+ * nor waiting on a timer that would decide it had been stranded. */
 static void
-show_window (TrayData *td)
+tray_mark_window_shown (TrayData *td)
 {
     td->window_hidden = FALSE;
     g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
+}
+
+static void
+show_window (TrayData *td)
+{
+    tray_mark_window_shown (td);
 
     /* The main window specifically, not the active one: while we are tucked
      * away nothing is active, and once something is, it may well be a dialog. */
@@ -86,6 +94,45 @@ show_window (TrayData *td)
          * what's-new or missing-database dialog. */
         otpclient_application_present_window (td->app);
     }
+}
+
+/* How long a tucked-away window waits for a tray icon to come back before it
+ * concludes there is nothing left to come back from.
+ *
+ * Un-hiding the instant the item went away was too eager. Everything that takes
+ * a StatusNotifierWatcher off the bus for a second or two, a GNOME Shell
+ * restart, an extension reload, plasmashell --replace, went through the same
+ * path as a panel that is gone for good, so a blip raised the window unasked
+ * and, on a --start-minimized launch, put an unprompted password dialog on
+ * screen, possibly mid screen-share. A watcher that comes back republishes and
+ * clears this; one that does not still gets the window back. */
+#define TRAY_LOST_GRACE_SECONDS 3
+
+static gboolean
+on_tray_lost_grace (gpointer user_data)
+{
+    TrayData *td = user_data;
+    td->hidden_deadline_id = 0;
+
+    if (td->window_hidden && !td->published)
+    {
+        g_message ("The tray item did not come back within %d seconds; showing the window",
+                   TRAY_LOST_GRACE_SECONDS);
+        show_window (td);
+    }
+
+    return G_SOURCE_REMOVE;
+}
+
+/* Shares the timer with the started-hidden deadline: both ask the one question
+ * of whether a hidden window has been stranded, only ever one of them is
+ * outstanding, and a successful publish clears the field either way. */
+static void
+tray_arm_lost_grace (TrayData *td)
+{
+    g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
+    td->hidden_deadline_id = g_timeout_add_seconds (TRAY_LOST_GRACE_SECONDS,
+                                                    on_tray_lost_grace, td);
 }
 
 /* The hold is what lets the app outlive its only window while it sits in the
@@ -785,9 +832,10 @@ tray_unpublish (TrayData *td)
     tray_sync_hold (td);
 
     /* The panel can go away (extension toggled off, shell restarted) while the
-     * window is tucked into the tray. Bring it back rather than stranding it. */
+     * window is tucked into the tray. Bring it back rather than stranding it,
+     * but give it a moment first: see the grace period below. */
     if (td->window_hidden)
-        show_window (td);
+        tray_arm_lost_grace (td);
 }
 
 /* --- StatusNotifierWatcher detection --- */
@@ -1067,6 +1115,23 @@ otpclient_tray_disable (OTPClientApplication *app)
     }
 
     tray_unpublish (tray_data);
+
+    /* The user turned the feature off, so there is nothing left to wait for and
+     * no reason to make them wait for it. The grace period is for a panel that
+     * might still come back. */
+    if (tray_data->window_hidden)
+        show_window (tray_data);
+}
+
+void
+otpclient_tray_notify_window_shown (OTPClientApplication *app)
+{
+    (void) app;
+
+    if (tray_data == NULL)
+        return;
+
+    tray_mark_window_shown (tray_data);
 }
 
 void
@@ -1093,6 +1158,48 @@ otpclient_tray_is_available (void)
     return tray_data != NULL && tray_data->host != TRAY_HOST_UNAVAILABLE;
 }
 
+gboolean
+otpclient_tray_watcher_present_sync (void)
+{
+    /* Whatever the name watcher has managed to learn already is both cheaper
+     * and stronger than a fresh probe: AVAILABLE means a host confirmed it,
+     * UNAVAILABLE that the name has no owner. Only UNKNOWN is worth a call. */
+    if (tray_data != NULL && tray_data->host != TRAY_HOST_UNKNOWN)
+        return tray_data->host == TRAY_HOST_AVAILABLE;
+
+    g_autoptr (GError) err = NULL;
+    g_autoptr (GDBusConnection) bus = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, &err);
+    if (bus == NULL)
+    {
+        g_debug ("No session bus to look for a tray watcher on: %s", err->message);
+        return FALSE;
+    }
+
+    g_autoptr (GVariant) reply =
+        g_dbus_connection_call_sync (bus,
+                                     "org.freedesktop.DBus",
+                                     "/org/freedesktop/DBus",
+                                     "org.freedesktop.DBus",
+                                     "NameHasOwner",
+                                     g_variant_new ("(s)", WATCHER_BUS_NAME),
+                                     G_VARIANT_TYPE ("(b)"),
+                                     G_DBUS_CALL_FLAGS_NO_AUTO_START,
+                                     /* The bus daemon itself, so a short wait
+                                      * is generous and a launch is never held
+                                      * up by a busy session. */
+                                     2000, NULL, &err);
+    if (reply == NULL)
+    {
+        g_debug ("Could not ask the bus for a tray watcher: %s", err->message);
+        return FALSE;
+    }
+
+    gboolean has_owner = FALSE;
+    g_variant_get (reply, "(b)", &has_owner);
+
+    return has_owner;
+}
+
 void
 otpclient_tray_cleanup (OTPClientApplication *app)
 {
@@ -1103,10 +1210,18 @@ otpclient_tray_cleanup (OTPClientApplication *app)
     {
         /* NULL here means GTK already destroyed the window and took the handler
          * with it. Anything else would be the wrong window: disconnecting a
-         * handler id it never had is a critical. */
+         * handler id it never had is a critical.
+         *
+         * A non-NULL window is not proof on its own, either. The application's
+         * weak pointer nulls in finalize, but g_signal_handlers_destroy runs in
+         * dispose, so between the two the window is still addressable and the
+         * id is already dead. Ask before disconnecting. */
         GtkWindow *window = otpclient_application_get_window (app);
-        if (window != NULL)
-            g_signal_handler_disconnect (window, tray_data->close_handler_id);
+        if (window != NULL
+            && g_signal_handler_is_connected (window, tray_data->close_handler_id))
+            g_clear_signal_handler (&tray_data->close_handler_id, window);
+
+        tray_data->close_handler_id = 0;
     }
 
     if (tray_data->host_signal_id != 0 && tray_data->watch_connection != NULL)
