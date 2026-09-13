@@ -4,6 +4,9 @@
 
 G_BEGIN_DECLS
 
+/* Serialised exportable settings, or NULL with *err set. The buffer is plain
+ * GLib memory, so free it with g_free no matter which allocator jansson is
+ * currently using: the CLI calls this before init_libs installs libgcrypt's. */
 gchar    *export_settings_to_json   (GError **err);
 
 /* Three of the exportable keys only describe an intent: the login-time entry

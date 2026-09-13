@@ -239,7 +239,23 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 g_clear_error (&store_err);
             }
         } else {
-            secret_password_store (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT, "OTPClient database password", db_data->key, NULL, on_password_stored, NULL, "string", db_data->db_path, NULL);
+            /* Sync here for the same reason as the migration branch above, and
+             * it matters just as much: the async store's chain of round-trips
+             * (secret_service_get, then the collection, then CreateItem) needs
+             * main-context iterations that a CLI run never provides, so it
+             * stalled after the first message and the item was never created.
+             * With secret-service on, that asked for the master password on
+             * every single invocation and never said why, because
+             * on_password_stored does not fire either. */
+            GError *store_err = NULL;
+            if (!secret_password_store_sync (OTPCLIENT_SCHEMA, SECRET_COLLECTION_DEFAULT,
+                                             "OTPClient database password",
+                                             db_data->key, NULL, &store_err,
+                                             "string", db_data->db_path, NULL)) {
+                g_printerr (_("Warning: failed to store the password in the secret service: %s\n"),
+                            store_err != NULL ? store_err->message : _("unknown error"));
+                g_clear_error (&store_err);
+            }
         }
     }
 
@@ -309,7 +325,13 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
     if (cmdline_opts->export) {
         gchar *export_directory;
 #ifdef IS_FLATPAK
-        export_directory = g_get_user_data_dir ();
+        /* The sandbox can only write where it has been granted access, and
+         * --output-dir names a host path the app cannot see, so the data dir
+         * is the only destination that reliably works. Say so instead of
+         * writing somewhere the user did not ask for without a word. */
+        if (cmdline_opts->export_dir != NULL)
+            g_printerr (_("Note: --output-dir is ignored in the Flatpak build; the export is saved into the app's data directory.\n"));
+        export_directory = (gchar *)g_get_user_data_dir ();
 #else
         export_directory = (cmdline_opts->export_dir != NULL) ? cmdline_opts->export_dir : (gchar *)g_get_home_dir ();
         if (!g_file_test (export_directory, G_FILE_TEST_IS_DIR)) {
@@ -367,7 +389,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 g_print (_("Data successfully exported to: %s\n"), exported_file_path);
             } else {
                 gchar *msg = g_strconcat (_("Option not recognized: "), cmdline_opts->export_type, NULL);
-                g_print ("%s\n", msg);
+                g_printerr ("%s\n", msg);
                 g_free (msg);
                 return FALSE;
             }

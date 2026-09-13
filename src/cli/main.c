@@ -182,7 +182,7 @@ command_line (GApplication                *application __attribute__((unused)),
             if (!g_file_set_contents (cmdline_opts->import_file, json, -1, &err)) {
                 g_application_command_line_printerr (cmdline, _("Error writing file: %s\n"), err->message);
                 g_clear_error (&err);
-                gcry_free (json);
+                g_free (json);
                 g_free_cmdline_opts (cmdline_opts);
                 return -1;
             }
@@ -190,7 +190,7 @@ command_line (GApplication                *application __attribute__((unused)),
         } else {
             g_application_command_line_print (cmdline, "%s\n", json);
         }
-        gcry_free (json);
+        g_free (json);
         g_free_cmdline_opts (cmdline_opts);
         return 0;
     }
@@ -277,6 +277,12 @@ parse_options (GApplicationCommandLine *cmdline,
     g_variant_dict_lookup (options, "export-settings", "b", &cmdline_opts->export_settings);
     g_variant_dict_lookup (options, "import-settings", "b", &cmdline_opts->import_settings);
 
+    /* Everything below reports a bad invocation, so it all goes to stderr. It
+     * used to go to stdout, which meant `--output=json 2>/dev/null | jq .` fed
+     * jq an English sentence on any mistyped invocation, and
+     * `otpclient-cli --list 1>/dev/null` threw away the only diagnostic. The
+     * runtime errors were already on stderr; it was exclusively this layer that
+     * had it backwards, against what the man page promises. */
     if (g_variant_dict_lookup (options, "output", "s", &cmdline_opts->output)) {
         if (g_ascii_strcasecmp (cmdline_opts->output, "table") == 0) {
             cmdline_opts->output_format = OUTPUT_FORMAT_TABLE;
@@ -285,23 +291,23 @@ parse_options (GApplicationCommandLine *cmdline,
         } else if (g_ascii_strcasecmp (cmdline_opts->output, "csv") == 0) {
             cmdline_opts->output_format = OUTPUT_FORMAT_CSV;
         } else {
-            g_application_command_line_print (cmdline, _("Unknown --output value '%s'. Expected: table, json, csv.\n"), cmdline_opts->output);
+            g_application_command_line_printerr (cmdline, _("Unknown --output value '%s'. Expected: table, json, csv.\n"), cmdline_opts->output);
             return FALSE;
         }
         if (!cmdline_opts->show && !cmdline_opts->list && !cmdline_opts->list_databases) {
-            g_application_command_line_print (cmdline, "%s", _("The --output option only applies to --show, --list, or --list-databases.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("The --output option only applies to --show, --list, or --list-databases.\n"));
             return FALSE;
         }
     }
 
     guint action_count = cmdline_opts->list_types + cmdline_opts->show + cmdline_opts->list + cmdline_opts->list_databases + cmdline_opts->import + cmdline_opts->export + cmdline_opts->export_settings + cmdline_opts->import_settings;
     if (action_count == 0) {
-        g_application_command_line_print (cmdline, "%s", _("Please provide one action (--show, --list, --list-databases, --import, --export, --export-settings, --import-settings, or --list-types).\n"));
+        g_application_command_line_printerr (cmdline, "%s", _("Please provide one action (--show, --list, --list-databases, --import, --export, --export-settings, --import-settings, or --list-types).\n"));
         return FALSE;
     }
 
     if (action_count > 1) {
-        g_application_command_line_print (cmdline, "%s", _("Please provide only one action at a time.\n"));
+        g_application_command_line_printerr (cmdline, "%s", _("Please provide only one action at a time.\n"));
         return FALSE;
     }
 
@@ -309,7 +315,7 @@ parse_options (GApplicationCommandLine *cmdline,
         g_variant_dict_lookup (options, "account", "s", &cmdline_opts->account);
         g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer);
         if (cmdline_opts->account == NULL && cmdline_opts->issuer == NULL) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide at least the account or issuer option.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide at least the account or issuer option.\n"));
             return FALSE;
         }
         g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact);
@@ -319,14 +325,14 @@ parse_options (GApplicationCommandLine *cmdline,
             g_variant_dict_lookup (options, "issuer", "s", &cmdline_opts->issuer) ||
             g_variant_dict_lookup (options, "match-exact", "b", &cmdline_opts->match_exact) ||
             g_variant_dict_lookup (options, "show-next", "b", &cmdline_opts->show_next)) {
-            g_application_command_line_print (cmdline, "%s", _("The account/issuer filters and matching options can only be used with --show.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("The account/issuer filters and matching options can only be used with --show.\n"));
             return FALSE;
         }
     }
 
     if (cmdline_opts->import_settings) {
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide a file to import settings from (--file).\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide a file to import settings from (--file).\n"));
             return FALSE;
         }
     }
@@ -338,26 +344,26 @@ parse_options (GApplicationCommandLine *cmdline,
 
     if (cmdline_opts->import) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->import_type)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide an import type.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide an import type.\n"));
             return FALSE;
         }
         if (!is_valid_type (cmdline_opts->import_type)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide a valid import type (see --help).\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide a valid import type (see --help).\n"));
             return FALSE;
         }
         if (!g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide a file to import.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide a file to import.\n"));
             return FALSE;
         }
     }
 
     if (cmdline_opts->export) {
         if (!g_variant_dict_lookup (options, "type", "s", &cmdline_opts->export_type)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide an export type (see --help).\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide an export type (see --help).\n"));
             return FALSE;
         }
         if (!is_valid_type (cmdline_opts->export_type)) {
-            g_application_command_line_print (cmdline, "%s", _("Please provide a valid export type.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("Please provide a valid export type.\n"));
             return FALSE;
         }
 #ifndef IS_FLATPAK
@@ -368,18 +374,18 @@ parse_options (GApplicationCommandLine *cmdline,
     if (!cmdline_opts->import && !cmdline_opts->export) {
         gchar *unused_type = NULL;
         if (g_variant_dict_lookup (options, "type", "s", &unused_type)) {
-            g_application_command_line_print (cmdline, "%s", _("The --type option can only be used with --import or --export.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("The --type option can only be used with --import or --export.\n"));
             g_free (unused_type);
             return FALSE;
         }
         if (!cmdline_opts->import_settings && !cmdline_opts->export_settings &&
             g_variant_dict_lookup (options, "file", "s", &cmdline_opts->import_file)) {
-            g_application_command_line_print (cmdline, "%s", _("The --file option can only be used with --import, --import-settings, or --export-settings.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("The --file option can only be used with --import, --import-settings, or --export-settings.\n"));
             return FALSE;
         }
 #ifndef IS_FLATPAK
         if (g_variant_dict_lookup (options, "output-dir", "s", &cmdline_opts->export_dir)) {
-            g_application_command_line_print (cmdline, "%s", _("The --output-dir option can only be used with --export.\n"));
+            g_application_command_line_printerr (cmdline, "%s", _("The --output-dir option can only be used with --export.\n"));
             return FALSE;
         }
 #endif

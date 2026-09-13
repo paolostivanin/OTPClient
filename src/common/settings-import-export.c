@@ -81,7 +81,21 @@ export_settings_to_json (GError **err)
         }
     }
 
-    gchar *result = json_dumps (root, JSON_INDENT (2) | JSON_SORT_KEYS);
+    /* Serialise into a buffer we own rather than taking json_dumps' allocation.
+     * jansson's allocator is global and init_libs swaps it for libgcrypt's
+     * secure one, so a json_dumps result has to be freed with gcry_free in the
+     * GUI and with free in the CLI, which calls this before init_libs runs.
+     * Callers cannot tell the two apart, and one of them was already getting it
+     * wrong. A plain GLib buffer is the same answer under either allocator. */
+    const size_t flags = JSON_INDENT (2) | JSON_SORT_KEYS;
+    size_t needed = json_dumpb (root, NULL, 0, flags);
+    gchar *result = NULL;
+    if (needed > 0) {
+        result = g_malloc (needed + 1);
+        /* json_dumpb does not terminate the buffer, and we want a C string. */
+        needed = json_dumpb (root, result, needed, flags);
+        result[needed] = '\0';
+    }
     json_decref (root);
 
     if (result == NULL) {
