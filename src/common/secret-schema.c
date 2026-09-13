@@ -182,6 +182,84 @@ otpclient_secret_lookup_with_legacy_fallback (const gchar  *db_path,
 }
 
 
+/* Async twin of the above. Two chained secret_password_lookup calls: the
+ * db_path-keyed entry first, then the v4 "main_pwd" one. Whether the answer came
+ * from the fallback rides along as task data so _finish can report it. */
+static void
+on_legacy_lookup_done (GObject      *source G_GNUC_UNUSED,
+                       GAsyncResult *result,
+                       gpointer      user_data)
+{
+    g_autoptr (GTask) task = user_data;
+    GError *err = NULL;
+    gchar *pwd = secret_password_lookup_finish (result, &err);
+
+    if (err != NULL) {
+        g_task_return_error (task, err);
+        return;
+    }
+    if (pwd != NULL)
+        g_task_set_task_data (task, GINT_TO_POINTER (TRUE), NULL);
+    g_task_return_pointer (task, pwd, (GDestroyNotify) secret_password_free);
+}
+
+
+static void
+on_primary_lookup_done (GObject      *source G_GNUC_UNUSED,
+                        GAsyncResult *result,
+                        gpointer      user_data)
+{
+    GTask *task = user_data;
+    GError *err = NULL;
+    gchar *pwd = secret_password_lookup_finish (result, &err);
+
+    if (err != NULL) {
+        g_task_return_error (task, err);
+        g_object_unref (task);
+        return;
+    }
+    if (pwd != NULL) {
+        g_task_return_pointer (task, pwd, (GDestroyNotify) secret_password_free);
+        g_object_unref (task);
+        return;
+    }
+
+    secret_password_lookup (OTPCLIENT_SCHEMA, g_task_get_cancellable (task),
+                            on_legacy_lookup_done, task,
+                            "string", OTPCLIENT_SECRET_LEGACY_ATTR, NULL);
+}
+
+
+void
+otpclient_secret_lookup_with_legacy_fallback_async (const gchar         *db_path,
+                                                    GCancellable        *cancellable,
+                                                    GAsyncReadyCallback  callback,
+                                                    gpointer             user_data)
+{
+    g_return_if_fail (db_path != NULL);
+
+    GTask *task = g_task_new (NULL, cancellable, callback, user_data);
+    g_task_set_source_tag (task, otpclient_secret_lookup_with_legacy_fallback_async);
+    secret_password_lookup (OTPCLIENT_SCHEMA, cancellable,
+                            on_primary_lookup_done, task,
+                            "string", db_path, NULL);
+}
+
+
+gchar *
+otpclient_secret_lookup_with_legacy_fallback_finish (GAsyncResult  *result,
+                                                     gboolean      *out_is_legacy,
+                                                     GError       **err)
+{
+    g_return_val_if_fail (g_task_is_valid (result, NULL), NULL);
+    g_return_val_if_fail (err == NULL || *err == NULL, NULL);
+
+    if (out_is_legacy != NULL)
+        *out_is_legacy = GPOINTER_TO_INT (g_task_get_task_data (G_TASK (result))) != 0;
+    return g_task_propagate_pointer (G_TASK (result), err);
+}
+
+
 gchar *
 otpclient_secret_lookup_legacy_only (GError **err)
 {

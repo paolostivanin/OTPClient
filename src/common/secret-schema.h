@@ -34,6 +34,26 @@ gchar *otpclient_secret_lookup_with_legacy_fallback (const gchar  *db_path,
                                                      gboolean     *out_is_legacy,
                                                      GError      **err);
 
+/* Same lookup, without blocking the caller's main loop.
+ *
+ * The sync version is fine in the GUI (it runs before a window exists) and in
+ * the CLI (which has no main loop to block), but a single-threaded D-Bus
+ * service must not use it: looking a password up asks the Secret Service to
+ * unlock the collection, and a locked login keyring turns that into a prompt
+ * the user may sit on for a minute. Every other method on the service, the
+ * settings-changed handler included, is frozen for the duration.
+ *
+ * Finish with otpclient_secret_lookup_with_legacy_fallback_finish; the returned
+ * password is freed with secret_password_free, same as the sync version. */
+void   otpclient_secret_lookup_with_legacy_fallback_async  (const gchar         *db_path,
+                                                            GCancellable        *cancellable,
+                                                            GAsyncReadyCallback  callback,
+                                                            gpointer             user_data);
+
+gchar *otpclient_secret_lookup_with_legacy_fallback_finish (GAsyncResult  *result,
+                                                            gboolean      *out_is_legacy,
+                                                            GError       **err);
+
 /* Sync lookup of the v4 legacy keyring entry only. Used by the GUI when
  * the async db_path-keyed lookup has already returned NULL and we only
  * need to check the fallback. Returns NULL if not found. */
