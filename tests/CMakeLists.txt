@@ -78,6 +78,14 @@ if(ISOLATED_SESSION_READY)
 endif()
 
 if(BUILD_SEARCH_PROVIDER)
+    # Header-only: no provider sources, no bus, no schema. The point is to scan
+    # the format strings, which needs nothing but GLib.
+    add_executable(test_dbus_signatures test_dbus_signatures.c)
+    otpclient_apply_target_settings(test_dbus_signatures)
+    target_include_directories(test_dbus_signatures PRIVATE ${PROJECT_SOURCE_DIR}/src/search-provider)
+    target_link_libraries(test_dbus_signatures ${COMMON_LIBS})
+    add_test(NAME dbus_signatures COMMAND test_dbus_signatures)
+
     add_executable(test_search_provider_settings test_search_provider_settings.c
             ${REVIEW_COMMON_SOURCES})
     otpclient_apply_target_settings(test_search_provider_settings)

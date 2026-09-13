@@ -15,6 +15,7 @@
 #include "../common/otp-validation.h"
 #include "../common/secret-schema.h"
 #include "../common/gsettings-common.h"
+#include "dbus-signatures.h"
 
 #define KRUNNER_BUS "com.github.paolostivanin.OTPClient.KRunner"
 #define KRUNNER_PATH "/com/github/paolostivanin/OTPClient/KRunner"
@@ -948,7 +949,7 @@ copy_via_klipper (GDBusConnection *conn,
     delivery->generation = delivery_generation;
     g_dbus_connection_call (conn,
             "org.kde.klipper", "/klipper", "org.kde.klipper.klipper",
-            "setClipboardContents", g_variant_new ("(s)", text),
+            "setClipboardContents", g_variant_new (SP_SIG_KLIPPER_SET_CLIPBOARD, text),
             NULL, G_DBUS_CALL_FLAGS_NONE, 1000, NULL,
             klipper_copy_done, delivery);
 }
@@ -1069,7 +1070,7 @@ send_notification (const gchar *label,
                                                     "/org/freedesktop/Notifications",
                                                     "org.freedesktop.Notifications",
                                                     "Notify",
-                                                    g_variant_new ("(susssasa{sv}i)",
+                                                    g_variant_new (SP_SIG_NOTIFY,
                                                                    "OTPClient", (guint32)0,
                                                                    "com.github.paolostivanin.OTPClient",
                                                                    "OTP Token", body,
@@ -1102,10 +1103,10 @@ handle_gnome_call (GDBusConnection       *conn,
     if (g_strcmp0 (method, "GetInitialResultSet") == 0 || g_strcmp0 (method, "GetSubsearchResultSet") == 0) {
         gchar **terms;
         if (g_strcmp0 (method, "GetInitialResultSet") == 0) {
-            g_variant_get (params, "(^as)", &terms);
+            g_variant_get (params, SP_SIG_GET_INITIAL_RESULT_SET, &terms);
         } else {
             gchar **prev_results = NULL;
-            g_variant_get (params, "(^as^as)", &prev_results, &terms);
+            g_variant_get (params, SP_SIG_GET_SUBSEARCH_RESULT_SET, &prev_results, &terms);
             g_strfreev (prev_results);
         }
         GVariantBuilder builder;
@@ -1126,11 +1127,11 @@ handle_gnome_call (GDBusConnection       *conn,
                 }
             }
         }
-        g_dbus_method_invocation_return_value (inv, g_variant_new ("(as)", &builder));
+        g_dbus_method_invocation_return_value (inv, g_variant_new (SP_SIG_REPLY_RESULT_IDS, &builder));
         g_strfreev (terms);
     } else if (g_strcmp0 (method, "GetResultMetas") == 0) {
         gchar **ids;
-        g_variant_get (params, "(^as)", &ids);
+        g_variant_get (params, SP_SIG_GET_RESULT_METAS, &ids);
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("aa{sv}"));
         for (gsize j = 0; ids[j]; j++) {
@@ -1146,7 +1147,7 @@ handle_gnome_call (GDBusConnection       *conn,
                 g_variant_builder_add_value (&builder, g_variant_builder_end (&meta));
             }
         }
-        g_dbus_method_invocation_return_value (inv, g_variant_new ("(aa{sv})", &builder));
+        g_dbus_method_invocation_return_value (inv, g_variant_new (SP_SIG_REPLY_RESULT_METAS, &builder));
         g_strfreev (ids);
     } else if (g_strcmp0 (method, "ActivateResult") == 0) {
         // Refuse activation entirely when the keyword gate is disabled, so a
@@ -1165,9 +1166,13 @@ handle_gnome_call (GDBusConnection       *conn,
             g_dbus_method_invocation_return_value (inv, NULL);
             return;
         }
-        const gchar *id;
+        /* Initialised because the format string below used to be invalid:
+         * g_variant_get validates first and, on failure, returns without
+         * writing a single out-parameter, so a corrected format string on an
+         * uninitialised id would be an indeterminate-pointer read. */
+        const gchar *id = NULL;
         gchar **terms = NULL;
-        g_variant_get (params, "(&s^as u)", &id, &terms, NULL);
+        g_variant_get (params, SP_SIG_ACTIVATE_RESULT, &id, &terms, NULL);
         g_auto(GStrv) stripped = NULL;
         g_autofree gchar *normalized_query = NULL;
         if (strip_keyword_or_skip (terms, &stripped))
@@ -1215,7 +1220,7 @@ handle_krunner_call (GDBusConnection       *conn,
 
     if (g_strcmp0 (method, "Match") == 0) {
         const gchar *query;
-        g_variant_get (params, "(&s)", &query);
+        g_variant_get (params, SP_SIG_KRUNNER_MATCH, &query);
         GVariantBuilder builder;
         g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(sssida{sv})"));
         if (query && *query) {
@@ -1269,7 +1274,7 @@ handle_krunner_call (GDBusConnection       *conn,
             return;
         }
         const gchar *id;
-        g_variant_get (params, "(&s&s)", &id, NULL);
+        g_variant_get (params, SP_SIG_KRUNNER_RUN, &id, NULL);
         gchar *otp = NULL;
         g_autofree gchar *label = NULL;
         ActivationCapability *cap = consume_activation_capability (
