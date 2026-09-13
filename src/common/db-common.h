@@ -198,19 +198,36 @@ gchar  *db_copy_to              (const gchar  *src_path,
                                  const gchar  *dst_path);
 
 #ifdef OTPCLIENT_TESTING
-/* Which lock attempts should report ENOSYS. BESIDE_DB models the case that
- * actually happens, a database reached through the Flatpak document portal:
- * the lock file next to it cannot be locked, while the fallback in the user
- * data dir can. EVERYWHERE models an NFS home with no lock support at all. */
+/* Which lock attempts should fail, and how. The UNSUPPORTED_* modes report
+ * ENOSYS from flock: BESIDE_DB models the case that actually happens, a
+ * database reached through the Flatpak document portal, where the lock file
+ * next to it cannot be locked while the fallback in the user data dir can;
+ * EVERYWHERE models an NFS home with no lock support at all.
+ *
+ * The OPEN_FAILS_* modes fail earlier, at creating the lock file: a read-only
+ * mount, a full or over-quota filesystem, a directory we may not write. That
+ * is a different code path from ENOSYS and it used to abort the save outright,
+ * so both locations need their own coverage. */
 typedef enum {
     DB_TEST_LOCK_SUPPORTED = 0,
     DB_TEST_LOCK_UNSUPPORTED_BESIDE_DB,
-    DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE
+    DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE,
+    DB_TEST_LOCK_OPEN_FAILS_BESIDE_DB,
+    DB_TEST_LOCK_OPEN_FAILS_EVERYWHERE
 } DbTestLockMode;
 
 void    db_test_set_fail_encrypt      (gboolean fail);
 void    db_test_set_fail_atomic_write (gboolean fail);
 void    db_test_set_lock_mode         (DbTestLockMode mode);
+
+/* Let `n_successes` decrypts through and fail every one after that, or -1 to
+ * stop injecting. Counted rather than a flag because load_db decrypts twice on
+ * the migration path and only the second failure is interesting. Combined with
+ * db_test_set_force_migration these reach the one path where a failed decrypt
+ * used to leave in_memory_json_data pointing at freed memory for
+ * database_data_purge_secrets to decref a second time. */
+void    db_test_fail_decrypt_after    (gint n_successes);
+void    db_test_set_force_migration   (gboolean force);
 #endif
 
 G_END_DECLS

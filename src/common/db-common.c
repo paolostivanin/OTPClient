@@ -24,9 +24,15 @@ typedef struct {
     gchar *path;
 } DbLock;
 
+/* Set the first time we give up on locking, so the warning does not repeat on
+ * every single write. */
+static gboolean warned_no_lock = FALSE;
+
 #ifdef OTPCLIENT_TESTING
 static gboolean test_fail_encrypt = FALSE;
 static gboolean test_fail_atomic_write = FALSE;
+static gint     test_decrypts_before_failure = -1;
+static gboolean test_force_migration = FALSE;
 static DbTestLockMode test_lock_mode = DB_TEST_LOCK_SUPPORTED;
 
 void
@@ -42,9 +48,25 @@ db_test_set_fail_atomic_write (gboolean fail)
 }
 
 void
+db_test_fail_decrypt_after (gint n_successes)
+{
+    test_decrypts_before_failure = n_successes;
+}
+
+void
+db_test_set_force_migration (gboolean force)
+{
+    test_force_migration = force;
+}
+
+void
 db_test_set_lock_mode (DbTestLockMode mode)
 {
     test_lock_mode = mode;
+    /* The warn-once flag is process-global, so without this the second test to
+     * exercise an unlockable database would see no warning and could not assert
+     * on it. Resetting here keeps each test independent. */
+    warned_no_lock = FALSE;
 }
 #endif
 
@@ -95,6 +117,8 @@ static void      add_to_json        (gpointer          list_elem,
 
 static gboolean  backup_db          (const gchar      *path,
                                      GError          **err);
+
+static void      backup_previous_generation (const gchar *path);
 
 static void      cleanup_db_gfile   (GFile            *file,
                                      gpointer          stream,
@@ -334,6 +358,25 @@ db_try_flock (int      fd,
 }
 
 
+/* Wrapper around opening the lock file, so tests can force the case where the
+ * file cannot be created at all (see db_test_set_lock_mode). */
+static int
+db_open_lock_file (const gchar *path,
+                   gboolean     is_fallback)
+{
+#ifdef OTPCLIENT_TESTING
+    if (test_lock_mode == DB_TEST_LOCK_OPEN_FAILS_EVERYWHERE ||
+        (test_lock_mode == DB_TEST_LOCK_OPEN_FAILS_BESIDE_DB && !is_fallback)) {
+        errno = EROFS;
+        return -1;
+    }
+#else
+    (void) is_fallback;
+#endif
+    return g_open (path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+}
+
+
 /* A lock file for `db_path` that does not live next to the database, for use
  * when the filesystem the database is on cannot lock. Keyed on the database
  * path so two processes opening the same database agree on it, canonicalised
@@ -357,31 +400,38 @@ db_fallback_lock_path (const gchar *db_path)
 
 
 /* Open `path` and take the write lock, waiting out a competing writer for up to
- * two seconds. Takes ownership of `path` either way. `unsupported` is set when
- * the filesystem has no lock implementation at all, which is not an error here:
- * the caller decides whether to go looking elsewhere. The descriptor is left
- * open in that case, so the caller must unlock_db before reusing `lock`. */
+ * two seconds. Takes ownership of `path` either way. `try_elsewhere` is set when
+ * this location cannot hold a lock at all, which is not an error here: the
+ * caller decides whether to go looking somewhere else. That covers both a
+ * filesystem with no lock implementation and one that will not let us create
+ * the lock file in the first place, because the outcome is the same either way.
+ * The descriptor may be left open in that case, so the caller must unlock_db
+ * before reusing `lock`. */
 static gboolean
 db_lock_take (DbLock    *lock,
               gchar     *path,
               gboolean   is_fallback,
-              gboolean  *unsupported,
+              gboolean  *try_elsewhere,
               GError   **err)
 {
-    *unsupported = FALSE;
+    *try_elsewhere = FALSE;
     lock->path = path;
-    lock->fd = g_open (lock->path, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    lock->fd = db_open_lock_file (lock->path, is_fallback);
     if (lock->fd < 0) {
-        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                     "Failed to open database lock '%s': %s", lock->path, g_strerror (errno));
+        /* Read-only mount, no space, over quota, or a directory we may not
+         * write. None of that is a reason to refuse the save: the lock is a
+         * best-effort guard, and 5.1.x wrote the database happily without one.
+         * Let the caller try the fallback location, then carry on unlocked. */
+        g_debug ("Failed to open database lock '%s': %s", lock->path, g_strerror (errno));
         g_clear_pointer (&lock->path, g_free);
+        *try_elsewhere = TRUE;
         return FALSE;
     }
 
     gint64 deadline = g_get_monotonic_time () + (2 * G_USEC_PER_SEC);
     while (db_try_flock (lock->fd, is_fallback) != 0) {
         if (errno == ENOSYS || errno == EOPNOTSUPP) {
-            *unsupported = TRUE;
+            *try_elsewhere = TRUE;
             return FALSE;
         }
         if (errno != EWOULDBLOCK && errno != EAGAIN && errno != EINTR) {
@@ -412,10 +462,10 @@ lock_db (const gchar *db_path,
     lock->fd = -1;
     lock->path = NULL;
 
-    gboolean unsupported = FALSE;
-    if (db_lock_take (lock, g_strconcat (db_path, ".lock", NULL), FALSE, &unsupported, err))
+    gboolean try_elsewhere = FALSE;
+    if (db_lock_take (lock, g_strconcat (db_path, ".lock", NULL), FALSE, &try_elsewhere, err))
         return TRUE;
-    if (!unsupported)
+    if (!try_elsewhere)
         return FALSE;
 
     /* The database is somewhere that cannot lock: the Flatpak document portal,
@@ -443,22 +493,24 @@ lock_db (const gchar *db_path,
 
     g_autofree gchar *fallback = db_fallback_lock_path (db_path);
     if (fallback != NULL) {
-        if (db_lock_take (lock, g_steal_pointer (&fallback), TRUE, &unsupported, err))
+        if (db_lock_take (lock, g_steal_pointer (&fallback), TRUE, &try_elsewhere, err))
             return TRUE;
-        if (!unsupported)
+        if (!try_elsewhere)
             return FALSE;
     }
 
     /* Nowhere left to take it. The lock is a best-effort guard against a second
      * OTPClient writing concurrently, not a correctness requirement, so carry
-     * on rather than make the database impossible to open. Any descriptor
-     * db_lock_take left open is cleaned up by the caller's unlock_db. Warn once
-     * so we do not spam on every write. */
-    static gboolean warned = FALSE;
-    if (!warned) {
-        g_warning ("Database lock not supported for '%s', and no fallback lock could be "
+     * on rather than make the database impossible to open. Drop whatever
+     * descriptor db_lock_take left open so the DbLock we hand back honestly
+     * says "no lock held"; the caller's unlock_db then has nothing to do. Warn
+     * once so we do not spam on every write. */
+    unlock_db (lock);
+
+    if (!warned_no_lock) {
+        g_warning ("Could not lock '%s' where it lives, and no fallback lock could be "
                    "taken either; continuing without a lock", db_path);
-        warned = TRUE;
+        warned_no_lock = TRUE;
     }
     return TRUE;
 }
@@ -613,13 +665,24 @@ load_db (DatabaseData    *db_data,
     if (!partition_valid_tokens (db_data, err))
         return;
 
-    if (db_data->current_db_version < DB_VERSION || db_data->needs_legacy_kdf_migration) {
+    gboolean needs_migration = (db_data->current_db_version < DB_VERSION ||
+                                db_data->needs_legacy_kdf_migration);
+#ifdef OTPCLIENT_TESTING
+    /* Reaching this branch for real needs a v2 database on disk, and there is
+     * no v2 writer left to make one with. */
+    needs_migration = needs_migration || test_force_migration;
+#endif
+    if (needs_migration) {
         update_db (db_data, err);
         if (err != NULL && *err != NULL)
             return;
 
         if (db_data->in_memory_json_data != NULL) {
             json_decref (db_data->in_memory_json_data);
+            /* Null it before anything below can fail: every early return from
+             * here lands in database_data_purge_secrets, which decrefs it
+             * again. */
+            db_data->in_memory_json_data = NULL;
         }
         g_slist_free_full (db_data->objects_hash, g_free);
         db_data->objects_hash = NULL;
@@ -698,12 +761,12 @@ update_db (DatabaseData  *db_data,
         return;
     }
 
-    if (exists && !backup_db (db_data->db_path, err)) {
-        unlock_db (&lock);
-        json_decref (candidate);
-        restore_live_from_committed (db_data);
-        return;
-    }
+    /* Snapshot the previous generation before overwriting it. Best effort: the
+     * write itself is atomic (temp file plus rename), so the .bak guards
+     * against an unwanted change, not against a torn file, and refusing to
+     * save because the copy failed would be the worse outcome of the two. */
+    if (exists)
+        backup_previous_generation (db_data->db_path);
 
     gboolean committed = encrypt_db (db_data, candidate, err);
     unlock_db (&lock);
@@ -727,8 +790,6 @@ update_db (DatabaseData  *db_data,
 
     compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
     db_data->has_loaded_file_digest = TRUE;
-
-    backup_db (db_data->db_path, NULL);
 }
 
 
@@ -775,11 +836,8 @@ db_transaction (DatabaseData   *db_data,
         json_decref (candidate);
         return TRUE;
     }
-    if (exists && !backup_db (db_data->db_path, err)) {
-        unlock_db (&lock);
-        json_decref (candidate);
-        return FALSE;
-    }
+    if (exists)
+        backup_previous_generation (db_data->db_path);
 
     gboolean committed = encrypt_db (db_data, candidate, err);
     unlock_db (&lock);
@@ -797,7 +855,6 @@ db_transaction (DatabaseData   *db_data,
     refresh_committed_snapshot (db_data);
     compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
     db_data->has_loaded_file_digest = TRUE;
-    backup_db (db_data->db_path, NULL);
     return TRUE;
 }
 
@@ -1231,6 +1288,15 @@ get_db_derived_key (DatabaseData  *db_data,
                     gboolean       use_legacy_length,
                     GError       **err)
 {
+    // Belt and braces: every caller is supposed to have a key by now, but this
+    // is the one place where getting it wrong would mean strlen(NULL) rather
+    // than a clean error.
+    if (db_data->key == NULL) {
+        g_set_error (err, key_deriv_gquark (), KEY_DERIVATION_ERRCODE,
+                     "Error while deriving the key: no password is set.");
+        return NULL;
+    }
+
     // gcry_kdf_* expects the password length in BYTES, but historically this
     // code passed g_utf8_strlen (CHARACTER count), truncating non-ASCII passwords
     // mid-byte and weakening the KDF. strlen is correct; use_legacy_length=TRUE
@@ -1513,6 +1579,17 @@ decrypt_db (DatabaseData *db_data,
             GError      **err)
 {
     g_return_val_if_fail (err == NULL || *err == NULL, NULL);
+
+#ifdef OTPCLIENT_TESTING
+    if (test_decrypts_before_failure >= 0) {
+        if (test_decrypts_before_failure == 0) {
+            g_set_error (err, bad_tag_gquark (), BAD_TAG_ERRCODE,
+                         "Injected decryption failure.");
+            return NULL;
+        }
+        test_decrypts_before_failure--;
+    }
+#endif
 
     int fd = path_open_safe_regular_file (db_data->db_path, err);
     if (fd < 0)
@@ -1929,6 +2006,26 @@ backup_db (const gchar *path,
            GError     **err)
 {
     return perform_backup_restore (path, TRUE, err);
+}
+
+
+/* Copy the database to `<path>.bak` before it is overwritten, so the .bak
+ * always holds the generation before the most recent successful write. It used
+ * to be taken again afterwards, which left the .bak byte-identical to the live
+ * database and therefore useless for recovering an unwanted change.
+ *
+ * Best effort by design: see the call sites for why a failed copy must not
+ * abort the save. */
+static void
+backup_previous_generation (const gchar *path)
+{
+    GError *err = NULL;
+    if (!backup_db (path, &err)) {
+        g_warning ("Could not refresh the backup of '%s': %s. The database was still saved, "
+                   "but '%s.bak' now holds an older copy.",
+                   path, err != NULL ? err->message : "unknown error", path);
+        g_clear_error (&err);
+    }
 }
 
 

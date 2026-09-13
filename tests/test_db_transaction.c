@@ -268,7 +268,7 @@ test_lock_unsupported_everywhere_warns_once (void)
     DatabaseData *db_data = make_db_data (&dir, &path);
 
     db_test_set_lock_mode (DB_TEST_LOCK_UNSUPPORTED_EVERYWHERE);
-    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*lock not supported*");
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*no fallback lock could be taken*");
 
     GError *err = NULL;
     g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
@@ -278,6 +278,106 @@ test_lock_unsupported_everywhere_warns_once (void)
     g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
 
     /* Warn-once: a second warning here would be an unexpected message and fatal. */
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 3);
+
+    db_test_set_lock_mode (DB_TEST_LOCK_SUPPORTED);
+    cleanup_db_data (db_data, dir, path);
+}
+
+/* The v1/v2 -> v3 migration decrefs in_memory_json_data before re-reading the
+ * file it just rewrote. If that re-read fails, load_db used to return with the
+ * pointer still set, and database_data_purge_secrets decrefed the same object a
+ * second time. Under ASan this aborts; without it, it silently corrupts the
+ * jansson allocator, which here is libgcrypt secure memory. */
+static void
+test_migration_decrypt_failure_no_double_free (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    /* Write a real database first, so load_db has something to read. */
+    GError *err = NULL;
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    database_data_free (db_data);
+
+    db_data = database_data_new (path, DEFAULT_MEMLOCK_VALUE);
+    db_data->key = secure_strdup ("old-password");
+    db_data->argon2id_iter = ARGON2ID_MIN_ITER;
+    db_data->argon2id_memcost = ARGON2ID_MIN_MC;
+    db_data->argon2id_parallelism = ARGON2ID_MIN_PARAL;
+
+    /* load_db decrypts once to read the file, then again after the migration
+     * rewrite. Let the first through and fail the second, which is the one that
+     * runs with in_memory_json_data already decrefed. */
+    db_test_set_force_migration (TRUE);
+    db_test_fail_decrypt_after (1);
+
+    load_db (db_data, &err);
+    g_assert_nonnull (err);
+    g_clear_error (&err);
+
+    db_test_fail_decrypt_after (-1);
+    db_test_set_force_migration (FALSE);
+
+    /* The contract the fix restores: nothing left pointing at freed memory, so
+     * the free below is a single decref and not a second one. */
+    g_assert_null (db_data->in_memory_json_data);
+
+    cleanup_db_data (db_data, dir, path);
+}
+
+/* The lock file next to the database cannot even be created: a read-only mount,
+ * a full filesystem, an over-quota home. That is a different path from ENOSYS
+ * out of flock, and it used to fail lock_db without ever reaching the fallback,
+ * so the save was refused outright. It must behave like ENOSYS instead: fall
+ * through to the lock in the user data dir and commit. */
+static void
+test_lock_open_failure_uses_fallback (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    guint locks_before = count_fallback_locks ();
+    db_test_set_lock_mode (DB_TEST_LOCK_OPEN_FAILS_BESIDE_DB);
+
+    /* As above, silence is the assertion: any warning here would be fatal. */
+    GError *err = NULL;
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
+    g_assert_cmpuint (count_fallback_locks (), ==, locks_before + 1);
+
+    db_test_set_lock_mode (DB_TEST_LOCK_SUPPORTED);
+    cleanup_db_data (db_data, dir, path);
+}
+
+/* Neither location will take the lock file. Same contract as
+ * test_lock_unsupported_everywhere_warns_once: the write still goes through,
+ * with exactly one warning. 5.1.x saved happily with no lock at all, so
+ * refusing here would lose the user's edit over a best-effort guard. */
+static void
+test_lock_open_failure_everywhere_warns_once (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    db_test_set_lock_mode (DB_TEST_LOCK_OPEN_FAILS_EVERYWHERE);
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, "*no fallback lock could be taken*");
+
+    GError *err = NULL;
+    g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
+    g_assert_no_error (err);
+    g_test_assert_expected_messages ();
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+    g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 2);
+
     g_assert_true (db_transaction (db_data, append_token_mutation, NULL, &err));
     g_assert_no_error (err);
     g_assert_cmpint ((int) json_array_size (db_data->in_memory_json_data), ==, 3);
@@ -328,6 +428,9 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/stale-snapshot", test_stale_snapshot_rejected);
     g_test_add_func ("/db-transaction/lock-unsupported-fallback", test_lock_unsupported_uses_fallback);
     g_test_add_func ("/db-transaction/lock-unsupported-everywhere", test_lock_unsupported_everywhere_warns_once);
+    g_test_add_func ("/db-transaction/migration-decrypt-failure", test_migration_decrypt_failure_no_double_free);
+    g_test_add_func ("/db-transaction/lock-open-failure-fallback", test_lock_open_failure_uses_fallback);
+    g_test_add_func ("/db-transaction/lock-open-failure-everywhere", test_lock_open_failure_everywhere_warns_once);
 
     int ret = g_test_run ();
     cleanup_data_home (data_home);
