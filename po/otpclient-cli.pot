@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-10 09:57+0200\n"
+"POT-Creation-Date: 2026-09-13 11:15+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -150,75 +150,75 @@ msgstr ""
 msgid "Error while initializing GCrypt: %s\n"
 msgstr ""
 
-#: ../src/cli/main.c:288
+#: ../src/cli/main.c:294
 #, c-format
 msgid "Unknown --output value '%s'. Expected: table, json, csv.\n"
 msgstr ""
 
-#: ../src/cli/main.c:292
+#: ../src/cli/main.c:298
 msgid ""
 "The --output option only applies to --show, --list, or --list-databases.\n"
 msgstr ""
 
-#: ../src/cli/main.c:299
+#: ../src/cli/main.c:305
 msgid ""
 "Please provide one action (--show, --list, --list-databases, --import, --"
 "export, --export-settings, --import-settings, or --list-types).\n"
 msgstr ""
 
-#: ../src/cli/main.c:304
+#: ../src/cli/main.c:310
 msgid "Please provide only one action at a time.\n"
 msgstr ""
 
-#: ../src/cli/main.c:312
+#: ../src/cli/main.c:318
 msgid "Please provide at least the account or issuer option.\n"
 msgstr ""
 
-#: ../src/cli/main.c:322
+#: ../src/cli/main.c:328
 msgid ""
 "The account/issuer filters and matching options can only be used with --"
 "show.\n"
 msgstr ""
 
-#: ../src/cli/main.c:329
+#: ../src/cli/main.c:335
 msgid "Please provide a file to import settings from (--file).\n"
 msgstr ""
 
-#: ../src/cli/main.c:341
+#: ../src/cli/main.c:347
 msgid "Please provide an import type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:345
+#: ../src/cli/main.c:351
 msgid "Please provide a valid import type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:349
+#: ../src/cli/main.c:355
 msgid "Please provide a file to import.\n"
 msgstr ""
 
-#: ../src/cli/main.c:356
+#: ../src/cli/main.c:362
 msgid "Please provide an export type (see --help).\n"
 msgstr ""
 
-#: ../src/cli/main.c:360
+#: ../src/cli/main.c:366
 msgid "Please provide a valid export type.\n"
 msgstr ""
 
-#: ../src/cli/main.c:371
+#: ../src/cli/main.c:377
 msgid "The --type option can only be used with --import or --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:377
+#: ../src/cli/main.c:383
 msgid ""
 "The --file option can only be used with --import, --import-settings, or --"
 "export-settings.\n"
 msgstr ""
 
-#: ../src/cli/main.c:382
+#: ../src/cli/main.c:388
 msgid "The --output-dir option can only be used with --export.\n"
 msgstr ""
 
-#: ../src/cli/main.c:414
+#: ../src/cli/main.c:420
 #, c-format
 msgid "Supported types: %s\n"
 msgstr ""
@@ -327,103 +327,114 @@ msgstr[1] ""
 msgid "Warning: failed to store password under db_path: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:238
+#: ../src/cli/exec-action.c:238 ../src/cli/exec-action.c:256
 msgid "unknown error"
 msgstr ""
 
-#: ../src/cli/exec-action.c:258
+#: ../src/cli/exec-action.c:255
+#, c-format
+msgid "Warning: failed to store the password in the secret service: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:274
 #, c-format
 msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:264
+#: ../src/cli/exec-action.c:280
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:276
+#: ../src/cli/exec-action.c:292
 msgid ""
 "An error occurred while importing, so nothing has been added to the database."
 msgstr ""
 
-#: ../src/cli/exec-action.c:279
+#: ../src/cli/exec-action.c:295
 msgid " The error is: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:298
+#: ../src/cli/exec-action.c:314
 #, c-format
 msgid "Error while updating the database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:304
+#: ../src/cli/exec-action.c:320
 msgid ""
 "Import completed with skipped invalid entries. Review the warnings before "
 "removing your original tokens."
 msgstr ""
 
-#: ../src/cli/exec-action.c:305
+#: ../src/cli/exec-action.c:321
 #, c-format
 msgid "Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:316
+#: ../src/cli/exec-action.c:333
+msgid ""
+"Note: --output-dir is ignored in the Flatpak build; the export is saved into "
+"the app's data directory.\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:338
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:328 ../src/cli/exec-action.c:339
-#: ../src/cli/exec-action.c:350
+#: ../src/cli/exec-action.c:350 ../src/cli/exec-action.c:361
+#: ../src/cli/exec-action.c:372
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:361
+#: ../src/cli/exec-action.c:383
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:367
+#: ../src/cli/exec-action.c:389
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:369
+#: ../src/cli/exec-action.c:391
 msgid "Option not recognized: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:408
+#: ../src/cli/exec-action.c:430
 #, c-format
 msgid "Database '%s' not found in the known database list.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:416
+#: ../src/cli/exec-action.c:438
 #, c-format
 msgid "Database file/location (%s) does not exist.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:425
+#: ../src/cli/exec-action.c:447
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:430
+#: ../src/cli/exec-action.c:452
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: ../src/cli/exec-action.c:438
+#: ../src/cli/exec-action.c:460
 msgid "The database path must be a non-empty absolute path."
 msgstr ""
 
-#: ../src/cli/exec-action.c:443
+#: ../src/cli/exec-action.c:465
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:515
+#: ../src/cli/exec-action.c:537
 #, c-format
 msgid "Warning: password was truncated at %zu bytes.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:519
+#: ../src/cli/exec-action.c:541
 msgid "Empty password not allowed"
 msgstr ""
 
