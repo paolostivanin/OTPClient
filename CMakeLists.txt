@@ -216,12 +216,27 @@ if(BUILD_SEARCH_PROVIDER)
 
     install(TARGETS ${PROJECT_NAME}-search-provider DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-    # GNOME Search Provider metadata
-    install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION ${CMAKE_INSTALL_DATADIR}/gnome-shell/search-providers)
+    # GNOME Search Provider metadata. Its DesktopId names the GUI's desktop
+    # file, which only a BUILD_GUI build installs; without it GNOME Shell's
+    # Gio.DesktopAppInfo.new returns null and drops the provider anyway, so a
+    # GUI-less build is better off not advertising it at all.
+    if(BUILD_GUI)
+        install(FILES data/gnome-shell/search-providers/com.github.paolostivanin.OTPClient.SearchProvider.ini DESTINATION ${CMAKE_INSTALL_DATADIR}/gnome-shell/search-providers)
+    endif()
 
-    # D-Bus Service activation files
-    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.SearchProvider.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
-    install(FILES data/dbus-1/services/com.github.paolostivanin.OTPClient.KRunner.service DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
+    # D-Bus Service activation files. These have to carry an absolute Exec:
+    # dbus-daemon activates with execv and does no PATH search, so a bare
+    # binary name fails with Spawn.ExecFailed on every session that is not
+    # running dbus-broker with systemd to resolve it. Flatpak is unaffected
+    # either way, build-export rewrites the Exec of exported service files.
+    foreach(_dbus_service SearchProvider KRunner)
+        configure_file(
+                "data/dbus-1/services/com.github.paolostivanin.OTPClient.${_dbus_service}.service.in"
+                "${CMAKE_CURRENT_BINARY_DIR}/data/dbus-1/services/com.github.paolostivanin.OTPClient.${_dbus_service}.service"
+                @ONLY)
+        install(FILES "${CMAKE_CURRENT_BINARY_DIR}/data/dbus-1/services/com.github.paolostivanin.OTPClient.${_dbus_service}.service"
+                DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
+    endforeach()
 
     # KDE Plasma 6 KRunner Metadata
     install(FILES data/krunner/com.github.paolostivanin.OTPClient.KRunner.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/krunner/dbusplugins)

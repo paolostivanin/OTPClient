@@ -1,3 +1,0 @@
-[D-BUS Service]
-Name=com.github.paolostivanin.OTPClient.KRunner
-Exec=otpclient-search-provider --kde
