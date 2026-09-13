@@ -498,6 +498,28 @@ on_validity_warning_color_changed (GtkColorDialogButton *button,
 }
 
 static void
+show_settings_error (SettingsDialog *self,
+                     const gchar    *heading,
+                     const gchar    *message)
+{
+    AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (heading, message));
+    adw_alert_dialog_add_response (alert, "ok", _("OK"));
+    adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+}
+
+/* g_file_get_path answers NULL for anything that is not a native file: an sftp,
+ * smb, MTP or Google Drive mount, all of which the file chooser is happy to
+ * offer. g_file_get_contents and g_file_set_contents then fail their own
+ * g_return_val_if_fail on the NULL path and return FALSE *without* setting the
+ * error, so reading err->message dereferenced NULL and took the app down.
+ * Refuse the location by name instead. */
+static const gchar *
+non_native_location_message (void)
+{
+    return _("That location is not a file on this computer. Pick a local folder instead.");
+}
+
+static void
 on_export_file_save_complete (GObject      *source,
                               GAsyncResult *result,
                               gpointer      user_data)
@@ -516,24 +538,24 @@ on_export_file_save_complete (GObject      *source,
 
     g_autofree gchar *path = g_file_get_path (file);
     g_object_unref (file);
+    if (path == NULL) {
+        show_settings_error (self, _("Export Failed"), non_native_location_message ());
+        return;
+    }
 
     gchar *json = export_settings_to_json (&err);
     if (json == NULL) {
-        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Export Failed"), err->message));
-        adw_alert_dialog_add_response (alert, "ok", _("OK"));
-        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        show_settings_error (self, _("Export Failed"), err->message);
         g_clear_error (&err);
         return;
     }
 
     if (!g_file_set_contents (path, json, -1, &err)) {
-        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Export Failed"), err->message));
-        adw_alert_dialog_add_response (alert, "ok", _("OK"));
-        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        show_settings_error (self, _("Export Failed"), err->message);
         g_clear_error (&err);
     }
 
-    gcry_free (json);
+    g_free (json);
 }
 
 static void
@@ -570,21 +592,21 @@ on_import_file_open_complete (GObject      *source,
 
     g_autofree gchar *path = g_file_get_path (file);
     g_object_unref (file);
+    if (path == NULL) {
+        show_settings_error (self, _("Import Failed"), non_native_location_message ());
+        return;
+    }
 
     gchar *contents = NULL;
     if (!g_file_get_contents (path, &contents, NULL, &err)) {
-        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Import Failed"), err->message));
-        adw_alert_dialog_add_response (alert, "ok", _("OK"));
-        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        show_settings_error (self, _("Import Failed"), err->message);
         g_clear_error (&err);
         return;
     }
 
     gboolean touched_startup = FALSE;
     if (!import_settings_from_json (contents, &touched_startup, &err)) {
-        AdwAlertDialog *alert = ADW_ALERT_DIALOG (adw_alert_dialog_new (_("Import Failed"), err->message));
-        adw_alert_dialog_add_response (alert, "ok", _("OK"));
-        adw_dialog_present (ADW_DIALOG (alert), GTK_WIDGET (self));
+        show_settings_error (self, _("Import Failed"), err->message);
         g_clear_error (&err);
         g_free (contents);
         return;

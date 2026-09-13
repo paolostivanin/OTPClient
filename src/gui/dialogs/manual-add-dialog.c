@@ -1,6 +1,8 @@
+#define _DEFAULT_SOURCE
 #include "sensitive-dialog.h"
 #include <glib/gi18n.h>
 #include <gcrypt.h>
+#include <string.h>
 #include "manual-add-dialog.h"
 #include "common.h"
 #include "db-common.h"
@@ -32,6 +34,7 @@ struct _ManualAddDialog
     GtkWidget *sha1_banner;
 
     gboolean applying_uri;  /* re-entrancy guard while populating fields */
+    gboolean disposed;
 };
 
 G_DEFINE_FINAL_TYPE (ManualAddDialog, manual_add_dialog, ADW_TYPE_DIALOG)
@@ -86,12 +89,15 @@ try_apply_otpauth_uri (ManualAddDialog *self,
         adw_combo_row_set_selected (ADW_COMBO_ROW (self->algo_combo), algo_idx);
     }
 
-    if (otp->digits >= 4 && otp->digits <= 10)
+    /* Track the macros rather than repeating the numbers: the period ceiling
+     * follows libcotp and has moved before, and a prefill that disagrees with
+     * the validator is how the #458/#462/#464 lockouts started. */
+    if (otp->digits >= OTP_DIGITS_MIN && otp->digits <= OTP_DIGITS_MAX)
         adw_spin_row_set_value (ADW_SPIN_ROW (self->digits_spin), (double) otp->digits);
 
     if (is_hotp) {
         adw_spin_row_set_value (ADW_SPIN_ROW (self->counter_spin), (double) otp->counter);
-    } else if (otp->period > 0 && otp->period <= 300) {
+    } else if (otp->period >= OTP_PERIOD_MIN && otp->period <= OTP_PERIOD_MAX) {
         adw_spin_row_set_value (ADW_SPIN_ROW (self->period_spin), (double) otp->period);
     }
 
@@ -254,7 +260,22 @@ static void
 manual_add_dialog_dispose (GObject *object)
 {
     ManualAddDialog *self = MANUAL_ADD_DIALOG (object);
-    g_clear_pointer (&self->db_data, database_data_free);
+    if (!self->disposed) {
+        self->disposed = TRUE;
+        /* The Base32 seed the user typed, or the one an otpauth:// URI put
+         * there, is still sitting in the entry. GTK keeps it in a GtkText
+         * buffer that set_text("") does not zero before reallocating, so wipe
+         * the bytes in place first. Same treatment the password entries get,
+         * and it has to happen whatever closed the dialog: Cancel and Escape
+         * never reach the add handler at all. */
+        if (self->secret_row != NULL) {
+            const gchar *secret = gtk_editable_get_text (GTK_EDITABLE (self->secret_row));
+            if (secret != NULL && secret[0] != '\0')
+                explicit_bzero ((gchar *) secret, strlen (secret));
+            gtk_editable_set_text (GTK_EDITABLE (self->secret_row), "");
+        }
+        g_clear_pointer (&self->db_data, database_data_free);
+    }
 
     G_OBJECT_CLASS (manual_add_dialog_parent_class)->dispose (object);
 }

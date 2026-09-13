@@ -47,6 +47,18 @@ wipe_password_row (GtkWidget *row)
     gtk_editable_set_text (GTK_EDITABLE (row), "");
 }
 
+/* Both rows at once, for the paths that end the export for good. Skipped once
+ * dispose has run, since the template children are gone by then and dispose
+ * has already wiped them. */
+static void
+wipe_password_rows (ExportDialog *self)
+{
+    if (self->disposed)
+        return;
+    wipe_password_row (self->password_row);
+    wipe_password_row (self->password_confirm_row);
+}
+
 static gboolean
 export_password_valid (ExportDialog *self)
 {
@@ -97,8 +109,11 @@ on_file_dialog_save_complete (GObject      *source,
     if (sensitive_dialog_is_closed (ADW_DIALOG (self))) {
         g_clear_object (&file);
         g_clear_error (&err);
+        wipe_password_rows (self);
         return;
     }
+    /* Cancelled the file chooser: the dialog is still up and the user may well
+     * pick another destination, so the typed password stays where it is. */
     if (file == NULL)
     {
         g_clear_error (&err);
@@ -112,10 +127,22 @@ on_file_dialog_save_complete (GObject      *source,
         otpclient_application_get_db_data (app) != self->db_data)
     {
         g_object_unref (file);
+        wipe_password_rows (self);
         return;
     }
     g_autofree gchar *path = g_file_get_path (file);
     g_object_unref (file);
+    /* g_file_get_path answers NULL for a non-native location (sftp, smb, MTP,
+     * Drive), which the chooser offers freely. Every exporter below would hand
+     * that NULL to g_file_new_for_path and report success over a file nobody
+     * wrote, so the user would be told their backup exists when it does not. */
+    if (path == NULL)
+    {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("That location is not a file on this computer. Pick a local folder instead."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
 
     guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
     const gchar *password = NULL;
@@ -160,11 +187,7 @@ on_file_dialog_save_complete (GObject      *source,
     }
 
     /* Clear password entry widgets after use */
-    if (gtk_widget_get_visible (self->password_row))
-    {
-        wipe_password_row (self->password_row);
-        wipe_password_row (self->password_confirm_row);
-    }
+    wipe_password_rows (self);
 
     if (error_msg != NULL)
     {

@@ -109,6 +109,10 @@ webcam_scan_qrcode_cancellable (GCancellable *cancellable,
         symbol = zbar_symbol_next (symbol);
     }
 
+    /* zbar_processor_get_results hands back a counted reference, unlike
+     * zbar_image_get_symbols, which only borrows one. Without this the symbol
+     * set outlives the processor and leaks on every successful scan. */
+    zbar_symbol_set_ref (symbols, -1);
     zbar_processor_destroy (proc);
 
     if (result == NULL) {

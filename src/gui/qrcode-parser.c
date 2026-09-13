@@ -22,6 +22,33 @@ checked_mul_size (gsize   a,
     return TRUE;
 }
 
+/* Transparency has to be resolved against something before the image is
+ * flattened to luminance, and white is the only sane choice for a QR code: a
+ * code exported with an alpha background is a common export, and taking the
+ * colour channels on their own turns it into a solid block that never scans.
+ * Premultiplied transparent pixels are plain zeroes, which read as black;
+ * straight-alpha ones hold whatever the encoder happened to leave behind. */
+static inline guint
+over_white_straight (guint c, guint a)
+{
+    /* GdkPixbuf stores straight RGBA, so the colour has to be scaled first. */
+    return (c * a + 255u * (255u - a) + 127u) / 255u;
+}
+
+static inline guint
+over_white_premul (guint c, guint a)
+{
+    /* gdk_texture_download emits premultiplied colour, already scaled by
+     * alpha, so compositing is one addition and needs no divide. */
+    return MIN (255u, c + (255u - a));
+}
+
+static inline guchar
+luminance (guint r, guint g, guint b)
+{
+    return (guchar) (0.299 * r + 0.587 * g + 0.114 * b);
+}
+
 static gchar *
 scan_grayscale_buffer (const guchar  *gray,
                        guint          width,
@@ -121,8 +148,14 @@ load_pixbuf_image (const gchar  *filepath,
         const guchar *row = pixels + ((gsize) y * (gsize) rowstride);
         for (int x = 0; x < w; x++) {
             const guchar *px = row + ((gsize) x * (gsize) channels);
-            gray[(gsize) y * (gsize) w + (gsize) x] =
-                (guchar)(0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]);
+            guint r = px[0], g = px[1], b = px[2];
+            if (channels >= 4) {
+                const guint a = px[3];
+                r = over_white_straight (r, a);
+                g = over_white_straight (g, a);
+                b = over_white_straight (b, a);
+            }
+            gray[(gsize) y * (gsize) w + (gsize) x] = luminance (r, g, b);
         }
     }
 
@@ -177,7 +210,8 @@ qrcode_parse_texture (GdkTexture  *texture,
         return NULL;
     }
     guchar *rgba = g_malloc (rgba_size);
-    /* gdk_texture_download() always emits BGRA in the host byte order. */
+    /* gdk_texture_download() always emits premultiplied BGRA in the host byte
+     * order (GDK_MEMORY_DEFAULT). */
     gdk_texture_download (texture, rgba, stride);
 
     guchar *gray = g_malloc (gray_size);
@@ -187,7 +221,10 @@ qrcode_parse_texture (GdkTexture  *texture,
         {
             const guchar *px = &rgba[y * stride + x * 4];
             /* Channel order is B,G,R,A (cairo / GdkMemoryFormat default). */
-            gray[y * w + x] = (guchar)(0.299 * px[2] + 0.587 * px[1] + 0.114 * px[0]);
+            const guint a = px[3];
+            gray[y * w + x] = luminance (over_white_premul (px[2], a),
+                                         over_white_premul (px[1], a),
+                                         over_white_premul (px[0], a));
         }
     }
     g_free (rgba);

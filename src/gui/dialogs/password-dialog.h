@@ -24,6 +24,17 @@ PasswordDialog *password_dialog_new           (PasswordDialogMode    mode,
                                                PasswordDialogCallback callback,
                                                gpointer              user_data);
 
+/* As above, but the dialog takes ownership of user_data and releases it with
+ * user_data_destroy when it is disposed, whatever the callback returns and
+ * whether or not the callback ever runs. Use this for a heap context: a
+ * dismissed dialog never calls back, so freeing from the callback alone leaks
+ * the context every time the user presses Escape. The callback must not free
+ * it, and must not assume it outlives the dialog. */
+PasswordDialog *password_dialog_new_full      (PasswordDialogMode    mode,
+                                               PasswordDialogCallback callback,
+                                               gpointer              user_data,
+                                               GDestroyNotify        user_data_destroy);
+
 /* Configure this dialog for "locked database" presentation: adds a Quit
  * button at the start of the header bar that emits "quit-requested" when
  * clicked. The dialog stays dismissable, so Escape/X/click-outside fire the

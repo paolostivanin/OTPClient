@@ -175,19 +175,25 @@ static gboolean
 validity_tick (gpointer data)
 {
     GtkListItem *list_item = GTK_LIST_ITEM (data);
-    ValidityWidgets *widgets;
 
     if (!GTK_IS_LIST_ITEM (list_item))
         return G_SOURCE_REMOVE;
 
-    GtkWidget *child = gtk_list_item_get_child (list_item);
-    if (child == NULL || !GTK_IS_WIDGET (child))
-        return G_SOURCE_REMOVE;
-
-    widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
-
+    /* Looked up before the bail-outs below, because every return that removes
+     * the source has to clear the id it is stored under first. A stale
+     * timeout_id is a live g_source_remove aimed at whichever source GLib has
+     * since handed that number to, clipboard_clear_timer_id being the nearest
+     * candidate. */
+    ValidityWidgets *widgets = g_object_get_data (G_OBJECT (list_item), "validity-widgets");
     if (widgets == NULL)
         return G_SOURCE_REMOVE;
+
+    GtkWidget *child = gtk_list_item_get_child (list_item);
+    if (child == NULL || !GTK_IS_WIDGET (child))
+    {
+        widgets->timeout_id = 0;
+        return G_SOURCE_REMOVE;
+    }
 
     if (!validity_should_show (list_item))
     {
@@ -337,12 +343,19 @@ render_otp_value_label (GtkWidget *label,
 
     if (app != NULL && otpclient_application_get_show_next_otp (app))
     {
-        g_autofree gchar *next = otp_entry_get_next_otp (entry);
+        /* cotp hands back a plain malloc'd code and every other consumer
+         * releases it through sensitive_free so it leaves no cleartext behind
+         * (otp-entry.c:487, :492, :527). The combined string holds both the
+         * current and the next code, so it gets the same treatment on the
+         * GLib side. gtk_label_set_text has copied what it needs by then. */
+        gchar *next = otp_entry_get_next_otp (entry);
         if (next != NULL)
         {
-            g_autofree gchar *combined = g_strdup_printf ("%s  [%s]", current, next);
+            gchar *combined = g_strdup_printf ("%s  [%s]", current, next);
+            sensitive_free (next);
             gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
             gtk_label_set_text (GTK_LABEL (label), combined);
+            sensitive_g_free (combined);
             return;
         }
     }
@@ -458,11 +471,18 @@ otp_text_column_unbind (GtkSignalListItemFactory *factory,
 {
     (void) factory;
     OTPColumn column = GPOINTER_TO_INT (user_data);
-    if (column != OTP_COLUMN_VALUE)
-        return;
 
     GtkWidget *label = gtk_list_item_get_child (list_item);
     if (label == NULL)
+        return;
+
+    /* Every column sets this on bind, so every column drops it on unbind. The
+     * widget is recycled and outlives the binding, and the pointer it holds is
+     * raw and unreffed, so a cell left carrying it names an entry that may be
+     * gone by the time pick_entry_at walks up to read it. */
+    g_object_set_data (G_OBJECT (label), "otp-entry", NULL);
+
+    if (column != OTP_COLUMN_VALUE)
         return;
 
     OTPEntry *entry = g_object_get_data (G_OBJECT (label), "value-bound-entry");
@@ -1338,12 +1358,23 @@ search_text_changed (GtkEntry        *entry,
 
         if (search_group != NULL)
         {
-            /* Find matching group in dropdown and select it */
+            /* Find matching group in dropdown and select it. The model reads
+             * ["All", <groups...>, "Ungrouped"], so both ends are sentinels and
+             * only what lies between them is a real group name.
+             *
+             * i + 1 < n_items rather than i < n_items - 1 because the model is
+             * empty, not just sentinel-only, while the database is locked:
+             * secure_lock_cleanup splices it to zero and rebuild_group_list
+             * refuses to refill it without a database. n_items - 1 then
+             * underflowed to 4294967295 and the loop read past the end of the
+             * model for as long as the user was willing to wait, two criticals
+             * an iteration. Ctrl+F and a bare "group:" on the locked page was
+             * the whole recipe. */
             guint n_items = g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model));
             g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
             win->syncing_group_filter = TRUE;
             gboolean found = FALSE;
-            for (guint i = 1; i < n_items - 1; i++)
+            for (guint i = 1; i + 1 < n_items; i++)
             {
                 const gchar *item = gtk_string_list_get_string (win->group_list_model, i);
                 g_autofree gchar *item_lower = g_utf8_strdown (item, -1);
@@ -1440,13 +1471,22 @@ database_row_selected (GtkListBox      *box,
 
     /* Refuse the switch while an unlock worker is still reading db_data;
      * otherwise otpclient_application_switch_to_db -> set_db_data(NULL)
-     * would free db_data under the worker's feet. Revert the visual row
-     * selection back to the currently loaded DB so the sidebar does not
-     * mislead the user about which DB is active. */
-    if (otpclient_application_is_unlocking (app))
+     * would free db_data under the worker's feet.
+     *
+     * Refuse it while the window is locked too. The sidebar stays reachable on
+     * the locked page (#467 leaves the toolbar live after Escape), and a switch
+     * from there swaps the active database behind the lock screen: the user
+     * comes back, unlocks what they think is the database they left, and gets a
+     * different one. Locking is about the database that was open.
+     *
+     * Either way, revert the visual row selection to the loaded database so the
+     * sidebar does not mislead the user about which one is active. */
+    if (otpclient_application_is_unlocking (app) || window_is_locked (self))
     {
         otpclient_window_show_error_toast (self,
-            _("Please wait, the database is still being unlocked."));
+            otpclient_application_is_unlocking (app)
+                ? _("Please wait, the database is still being unlocked.")
+                : _("Unlock the current database before switching to another one."));
         if (current != NULL && current->db_path != NULL)
         {
             guint n = g_list_model_get_n_items (G_LIST_MODEL (self->db_store));
@@ -1949,12 +1989,25 @@ action_column_bind (GtkSignalListItemFactory *factory, GtkListItem *item, gpoint
     }
 }
 
+/* Same reasoning as otp_text_column_unbind: the button is recycled across rows
+ * and holds a raw pointer to the entry it was last bound to. */
+static void
+action_column_unbind (GtkSignalListItemFactory *factory, GtkListItem *item, gpointer data)
+{
+    (void) factory;
+    (void) data;
+    GtkWidget *button = gtk_list_item_get_child (item);
+    if (button != NULL)
+        g_object_set_data (G_OBJECT (button), "otp-entry", NULL);
+}
+
 static void
 add_action_column (GtkColumnView *view)
 {
     GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
     g_signal_connect (factory, "setup", G_CALLBACK (action_column_setup), NULL);
     g_signal_connect (factory, "bind", G_CALLBACK (action_column_bind), NULL);
+    g_signal_connect (factory, "unbind", G_CALLBACK (action_column_unbind), NULL);
     GtkColumnViewColumn *column = gtk_column_view_column_new (_("Action"), factory);
     /* Icon buttons are all one size, so pin the width instead of letting the
      * column stretch to whatever the widest row needs. */
@@ -2012,6 +2065,8 @@ find_store_pos_for_entry (OTPClientWindow *self, OTPEntry *entry)
     }
     return GTK_INVALID_LIST_POSITION;
 }
+
+static void on_db_modified (gpointer user_data);
 
 /* Resolve the current selection to a JSON-array index.
  *
@@ -2260,6 +2315,15 @@ on_drop (GtkDropTarget *target,
             {
                 show_error_toast (self, _("Failed to save reordered tokens: %s"), err->message);
                 g_clear_error (&err);
+                /* update_db's failure path has already put the JSON back the
+                 * way it was, so the store is now the only thing holding the
+                 * new order and "store index == JSON index" no longer holds.
+                 * Everything that addresses a token by position reads the wrong
+                 * one after that: Generate advances and persists a different
+                 * account's HOTP counter and shows that account's code, and
+                 * Edit and Delete land on the wrong row too. Rebuild from the
+                 * JSON so the visible order is the saved one. */
+                on_db_modified (self);
             }
         }
     }
@@ -3452,6 +3516,8 @@ typedef struct {
 static void
 move_token_context_free (MoveTokenContext *ctx)
 {
+    if (ctx == NULL)
+        return;
     g_weak_ref_clear (&ctx->window_ref);
     if (ctx->token_json != NULL)
         json_decref (ctx->token_json);
@@ -3466,27 +3532,22 @@ on_move_target_password (const gchar  *current_password,
                          gpointer      user_data)
 {
     (void) current_password;
-    (void) error_message;
+    /* ctx belongs to the dialog, which frees it through move_token_context_free
+     * on dispose. Nothing here may free it: this callback does not run at all
+     * when the user dismisses the dialog, which is exactly the case that used
+     * to leak. */
     MoveTokenContext *ctx = (MoveTokenContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
-    if (self == NULL || self->disposing || window_is_locked (self)) {
-        move_token_context_free (ctx);
+    if (self == NULL || self->disposing || window_is_locked (self))
         return TRUE;
-    }
 
     if (password == NULL)
-    {
-        move_token_context_free (ctx);
         return TRUE;
-    }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
-    {
-        move_token_context_free (ctx);
         return TRUE;
-    }
 
     gint32 memlock = 0;
     set_memlock_value (&memlock);
@@ -3496,7 +3557,11 @@ on_move_target_password (const gchar  *current_password,
     target->key = gcry_calloc_secure (strlen (password) + 1, 1);
     if (target->key == NULL) {
         database_data_free (target);
-        show_error_toast (self, "%s", _("Secure memory is exhausted"));
+        /* FALSE keeps the dialog up for a retry, so the reason has to travel
+         * with it: left NULL, the dialog's own label reads "Password was
+         * rejected", which is not what happened. */
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Secure memory is exhausted"));
         return FALSE;
     }
     memcpy (target->key, password, strlen (password) + 1);
@@ -3508,7 +3573,6 @@ on_move_target_password (const gchar  *current_password,
         show_error_toast (self, _("Could not open target database: %s"), err->message);
         g_clear_error (&err);
         database_data_free (target);
-        move_token_context_free (ctx);
         return TRUE;
     }
 
@@ -3551,7 +3615,6 @@ on_move_target_password (const gchar  *current_password,
 
     database_data_free (target);
 
-    move_token_context_free (ctx);
     return TRUE;
 }
 
@@ -3574,9 +3637,10 @@ on_move_db_selected (AdwAlertDialog *dialog,
     /* The response ID is the db_path */
     ctx->target_db_path = g_strdup (response);
 
-    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                    on_move_target_password,
-                                                    ctx);
+    PasswordDialog *pwd_dlg = password_dialog_new_full (PASSWORD_MODE_DECRYPT,
+                                                        on_move_target_password,
+                                                        ctx,
+                                                        (GDestroyNotify) move_token_context_free);
     adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
 }
 
@@ -4088,9 +4152,10 @@ on_new_db_file_selected (GObject      *source,
     g_weak_ref_init (&ctx->window_ref, self);
     ctx->db_path = db_path;
 
-    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_NEW,
-                                                    on_new_db_password_received,
-                                                    ctx);
+    PasswordDialog *pwd_dlg = password_dialog_new_full (PASSWORD_MODE_NEW,
+                                                        on_new_db_password_received,
+                                                        ctx,
+                                                        (GDestroyNotify) new_db_context_free);
     adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
     window_async_context_free (async_ctx);
 }
@@ -4103,10 +4168,11 @@ on_new_db_password_received (const gchar  *current_password,
 {
     (void) current_password;
     (void) error_message;
+    /* Owned by the dialog, freed on its dispose. The path is stolen because the
+     * work below outlives neither the dialog nor its context. */
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
     gchar *db_path = g_steal_pointer (&ctx->db_path);
-    new_db_context_free (ctx);
 
     if (self == NULL || self->disposing || window_is_locked (self) ||
         password == NULL)
@@ -4270,9 +4336,10 @@ on_open_db_file_selected (GObject      *source,
     ctx->db_path = g_strdup (path);
     ctx->replace_path = g_steal_pointer (&async_ctx->replace_path);
 
-    PasswordDialog *pwd_dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
-                                                    on_open_db_password_received,
-                                                    ctx);
+    PasswordDialog *pwd_dlg = password_dialog_new_full (PASSWORD_MODE_DECRYPT,
+                                                        on_open_db_password_received,
+                                                        ctx,
+                                                        (GDestroyNotify) new_db_context_free);
     adw_dialog_present (ADW_DIALOG (pwd_dlg), GTK_WIDGET (self));
     window_async_context_free (async_ctx);
 }
@@ -4285,11 +4352,11 @@ on_open_db_password_received (const gchar  *current_password,
 {
     (void) current_password;
     (void) error_message;
+    /* Owned by the dialog, freed on its dispose. */
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
     gchar *db_path = g_steal_pointer (&ctx->db_path);
     g_autofree gchar *replace_path = g_steal_pointer (&ctx->replace_path);
-    new_db_context_free (ctx);
 
     if (self == NULL || self->disposing || window_is_locked (self) ||
         password == NULL)

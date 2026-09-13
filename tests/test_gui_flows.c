@@ -277,6 +277,143 @@ test_validity_follows_the_code (void)
     review_fixture_clear (&fixture);
 }
 
+/* Both ends of the "group:" prefix sync, which walks the dropdown's model
+ * looking for the group the user is typing. The model reads
+ * ["All", <groups...>, "Ungrouped"], so the walk has to skip a sentinel at each
+ * end without ever assuming there are two of them: while the database is locked
+ * the model is empty, not sentinel-only, and the old `i < n_items - 1` bound
+ * underflowed to 4294967295 there and read past the end for as long as the user
+ * was willing to wait, two criticals an iteration. The search box is reachable
+ * on the locked page: it sits outside content_stack, and #467 deliberately
+ * leaves the toolbar live after Escape. Criticals are fatal in this binary, so
+ * reaching the end of this function is half the assertion. */
+static void
+test_group_search_bounds (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET, 6, "SHA1", 30, 0, "Work"));
+    otpclient_window_rebuild_groups (win);
+    settle ();
+    /* All, Work, Ungrouped: the only real group is the one between them. */
+    g_assert_cmpuint (g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model)), ==, 3);
+
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), TRUE);
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "group:work");
+    /* GtkSearchEntry delays "search-changed"; emit what it would emit. */
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+    g_assert_cmpuint (gtk_drop_down_get_selected (GTK_DROP_DOWN (win->group_dropdown)), ==, 1);
+
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+
+    lock_app_lock (app);
+    settle ();
+    AdwDialog *unlock = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    if (unlock != NULL) adw_dialog_force_close (unlock);
+    settle ();
+    g_assert_true (otpclient_application_get_app_locked (app));
+    g_assert_cmpuint (g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model)), ==, 0);
+
+    /* A bare "group:" is enough: search_group becomes a non-NULL "". */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "group:");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), FALSE);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
+static GtkDropTarget *
+find_drop_target (GtkWidget *widget)
+{
+    g_autoptr (GListModel) controllers = gtk_widget_observe_controllers (widget);
+    guint n = g_list_model_get_n_items (controllers);
+    for (guint i = 0; i < n; i++) {
+        g_autoptr (GObject) c = g_list_model_get_item (controllers, i);
+        if (GTK_IS_DROP_TARGET (c))
+            return GTK_DROP_TARGET (c);
+    }
+    return NULL;
+}
+
+/* Row order in the store has to keep matching index order in the JSON, because
+ * that is how every position-addressed action resolves its token. A failed save
+ * after a drag-reorder used to break exactly that: update_db's failure path
+ * restores the JSON to the pre-reorder snapshot while the store keeps the new
+ * order, and the next Generate on an HOTP row then advances and persists a
+ * different account's counter. */
+static void
+test_failed_reorder_restores_row_order (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    GError *err = NULL;
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET, 6, "SHA1", 30, 0, NULL));
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+
+    /* Rebuild the rows from the JSON so the two start out in step. */
+    g_autoptr (OTPEntry) bob = otp_entry_new ("bob", "Example", NULL, "TOTP", 30, 0,
+                                              "SHA1", 6, REVIEW_SECRET);
+    otp_entry_update_otp (bob);
+    g_list_store_append (win->otp_store, bob);
+    settle ();
+    g_assert_cmpuint (g_list_model_get_n_items (G_LIST_MODEL (win->otp_store)), ==, 2);
+
+    GtkDropTarget *drop = find_drop_target (win->otp_list);
+    g_assert_nonnull (drop);
+
+    /* Drop row 0 onto the lower half of row 1, which is the one arrangement
+     * that asks for a real move rather than a no-op. */
+    GtkWidget *button = find_widget (GTK_WIDGET (win), GTK_TYPE_BUTTON, "edit-copy-symbolic");
+    g_assert_nonnull (button);
+    GtkWidget *row = button;
+    while (row != NULL && gtk_widget_get_parent (gtk_widget_get_parent (row)) != win->otp_list)
+        row = gtk_widget_get_parent (row);
+    g_assert_nonnull (row);
+    graphene_point_t pt, btn;
+    g_assert_true (gtk_widget_compute_point (row, win->otp_list, &GRAPHENE_POINT_INIT (0, 0), &pt));
+    g_assert_true (gtk_widget_compute_point (button, win->otp_list, &GRAPHENE_POINT_INIT (0, 0), &btn));
+    /* The button is where the row's "otp-entry" data is reachable by a pick, and
+     * the exact vertical midpoint counts as the lower half (y >= midpoint), so
+     * one point serves for both halves of what on_drop needs. */
+    double drop_x = btn.x + gtk_widget_get_width (button) / 2.0;
+    double drop_y = pt.y + gtk_widget_get_height (row) / 2.0;
+
+    db_test_set_fail_atomic_write (TRUE);
+    GValue value = G_VALUE_INIT;
+    g_value_init (&value, G_TYPE_UINT);
+    g_value_set_uint (&value, 0);
+    gboolean handled = FALSE;
+    g_signal_emit_by_name (drop, "drop", &value, drop_x, drop_y, &handled);
+    g_value_unset (&value);
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_true (handled);
+    settle ();
+
+    /* The write failed, so the JSON is back in its original order and the rows
+     * have to say the same thing. */
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (win->otp_store));
+    g_assert_cmpuint (n, ==, json_array_size (fixture.db->in_memory_json_data));
+    for (guint i = 0; i < n; i++) {
+        g_autoptr (OTPEntry) row_entry = g_list_model_get_item (G_LIST_MODEL (win->otp_store), i);
+        const gchar *label = json_string_value (
+            json_object_get (json_array_get (fixture.db->in_memory_json_data, i), "label"));
+        g_assert_cmpstr (otp_entry_get_account (row_entry), ==, label);
+    }
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -300,6 +437,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
+    g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
+    g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

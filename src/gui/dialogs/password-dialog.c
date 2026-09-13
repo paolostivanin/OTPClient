@@ -12,6 +12,7 @@ struct _PasswordDialog
     PasswordDialogMode mode;
     PasswordDialogCallback callback;
     gpointer callback_data;
+    GDestroyNotify callback_data_destroy;
 
     GtkWidget *header;
     GtkWidget *status_page;
@@ -213,6 +214,14 @@ password_dialog_dispose (GObject *object)
         wipe_editable (self->current_password_row);
         wipe_editable (self->password_row);
         wipe_editable (self->confirm_row);
+        /* The one place an owned callback_data is guaranteed to be released.
+         * Dismissing the dialog never reaches the callback, so a caller that
+         * heap-allocates its context has no other hook to free it on. */
+        if (self->callback_data_destroy != NULL) {
+            self->callback_data_destroy (self->callback_data);
+            self->callback_data_destroy = NULL;
+            self->callback_data = NULL;
+        }
     }
     G_OBJECT_CLASS (password_dialog_parent_class)->dispose (object);
 }
@@ -269,6 +278,15 @@ password_dialog_new (PasswordDialogMode     mode,
                      PasswordDialogCallback callback,
                      gpointer               user_data)
 {
+    return password_dialog_new_full (mode, callback, user_data, NULL);
+}
+
+PasswordDialog *
+password_dialog_new_full (PasswordDialogMode     mode,
+                          PasswordDialogCallback callback,
+                          gpointer               user_data,
+                          GDestroyNotify         user_data_destroy)
+{
     PasswordDialog *self = g_object_new (PASSWORD_TYPE_DIALOG,
                                          "title", "",
                                          "content-width", 440,
@@ -278,6 +296,7 @@ password_dialog_new (PasswordDialogMode     mode,
     self->mode = mode;
     self->callback = callback;
     self->callback_data = user_data;
+    self->callback_data_destroy = user_data_destroy;
 
     /* Build UI programmatically */
     GtkWidget *toolbar_view = adw_toolbar_view_new ();
