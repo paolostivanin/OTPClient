@@ -6,8 +6,9 @@ Only the versions listed below receive security updates.
 
 | Version | Status      |
 |---------|-------------|
-| 5.1.x   | Active      |
-| 5.0.x   | Maintenance |
+| 5.2.x   | Active      |
+| 5.1.x   | Maintenance |
+| 5.0.x   | End of life |
 | < 5.0   | End of life |
 
 - **Active** - current release line. Receives new features, bug fixes, and security patches.
