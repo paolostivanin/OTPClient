@@ -94,7 +94,7 @@
   </content_rating>
 
   <releases>
-    <release version="5.2.0" date="2026-09-13">
+    <release version="5.2.0" date="2026-09-16">
       <description>
         <p>Selecting a token no longer copies it. Clicking a row, or just arrowing past one, used to copy the code and, for HOTP, burn a counter, so scrolling through the list could silently desynchronise an account from its provider. Selection is now inert and each row carries an explicit Copy or Generate button, with Enter and Ctrl+C as the keyboard equivalent. Underneath that, HOTP counters are written to the encrypted database before a code is ever shown, in a single transaction, which also means the GUI and the command line finally agree on what the stored counter means. The tray menu was separately empty on every desktop except KDE Plasma, and had been since the tray was rewritten: right-clicking the icon opened a blank rectangle on GNOME, Cinnamon, MATE, Xfce and Waybar alike. That is fixed too, and OTPClient can now start minimized to the tray and start at login. Alongside all of those: the clipboard is no longer wiped out from under another application, locking clears the dialogs it used to leave open, imports say which entries they skipped and why, backup reminders are tracked per database instead of globally, and a round of fixes lands for things that never worked inside the Flatpak sandbox. A pre-release audit of the whole release then turned up a handful more that had never worked anywhere: GNOME Shell search results that did nothing when activated, desktop integration that could not be started at all on sessions using dbus-daemon, and exports that reported success after writing nothing.</p>
         <ul>
