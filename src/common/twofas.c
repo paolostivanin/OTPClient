@@ -67,6 +67,12 @@ get_twofas_data_full (const gchar  *path,
     }
 
     goffset input_size = get_file_size (path);
+    if (input_size < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Could not determine the size of the imported file.");
+        close (safe_fd);
+        return NULL;
+    }
     if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -166,8 +172,9 @@ export_twofas (const gchar *export_path,
         json_t *otp_obj = json_object ();
         json_t *order_obj = json_object ();
         const gchar *issuer = json_string_value (json_object_get (db_obj, "issuer"));
+        gboolean is_steam = (issuer != NULL && g_ascii_strcasecmp (issuer, "steam") == 0);
         if (issuer != NULL) {
-            if (g_ascii_strcasecmp (issuer, "steam") == 0) {
+            if (is_steam) {
                 json_object_set_new (export_obj, "name", json_string ("Steam"));
                 json_object_set_new (otp_obj, "issuer", json_string ("Steam"));
                 json_object_set_new (otp_obj, "tokenType", json_string ("STEAM"));
@@ -197,7 +204,10 @@ export_twofas (const gchar *export_path,
         if (type_raw == NULL) type_raw = "TOTP";
         if (g_ascii_strcasecmp (type_raw, "TOTP") == 0) {
             json_object_set (otp_obj, "period", json_object_get (db_obj, "period"));
-            json_object_set_new (otp_obj, "tokenType", json_string ("TOTP"));
+            /* Steam is a TOTP token underneath, but 2FAS keys its algorithm
+             * off tokenType. Do not overwrite the explicit STEAM set above. */
+            if (!is_steam)
+                json_object_set_new (otp_obj, "tokenType", json_string ("TOTP"));
         } else {
             json_object_set (otp_obj, "counter", json_object_get (db_obj, "counter"));
             json_object_set_new (otp_obj, "tokenType", json_string ("HOTP"));
@@ -703,12 +713,18 @@ parse_twofas_json_data (const gchar *data,
         } else if (g_ascii_strcasecmp (type, "TOTP") == 0) {
             otp->type = g_strdup ("TOTP");
             otp->period = (guint32)json_integer_value (json_object_get (otp_obj, "period"));
+            /* 2FAS leaves period nullable; default to the standard 30s rather
+             * than letting a valid token fail validation and be dropped. */
+            if (otp->period == 0)
+                otp->period = 30;
         } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
             otp->type = g_strdup ("HOTP");
             otp->counter = json_integer_value (json_object_get (otp_obj, "counter"));
         } else if (g_ascii_strcasecmp (type, "Steam") == 0) {
             otp->type = g_strdup ("TOTP");
             otp->period = (guint32)json_integer_value (json_object_get (otp_obj, "period"));
+            if (otp->period == 0)
+                otp->period = 30;
             g_free (otp->issuer);
             otp->issuer = g_strdup ("Steam");
         } else {

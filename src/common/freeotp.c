@@ -25,6 +25,12 @@ get_freeotpplus_data_full (const gchar  *path,
         return NULL;
     }
     goffset input_size = get_file_size (path);
+    if (input_size < 0) {
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Could not determine the size of the imported file.");
+        close (safe_fd);
+        return NULL;
+    }
     if (!is_secmem_available ((db_size + input_size) * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"

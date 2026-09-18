@@ -85,6 +85,11 @@ typedef struct {
     gchar *query;
     gchar *db_path;
     gchar *label;
+    /* Stable token identity (issuer + label + content hash), not the
+     * positional index: a DB write between query and activation can
+     * reorder/remove entries, and an index would then resolve to a different
+     * token. */
+    gchar *token_identity;
     gsize  json_index;
     gint64 expires_at_us;
 } ActivationCapability;
@@ -104,6 +109,7 @@ typedef struct otp_search_entry_t {
     gchar *issuer;
     gchar *db_name;
     gchar *db_path;        /* needed to recompute OTP on Run/Activate */
+    gchar *token_identity; /* issuer + label + content hash, used to re-find the token */
     gsize  json_index;     /* position of the token within the DB's JSON array */
     /* Pre-folded copies for entry_matches_terms - avoid casefolding per query. */
     gchar *label_fold;
@@ -116,9 +122,11 @@ static GPtrArray *get_entries_finish (GAsyncResult *result);
 static gboolean entry_matches_terms (const OtpSearchEntry *entry, gchar **terms, gsize terms_len);
 static gchar *get_entry_otp_value (json_t *obj);
 static gchar *compute_otp_with_password (const gchar  *db_path,
+                                         const gchar  *token_identity,
                                          gsize         json_index,
                                          const gchar  *password,
                                          gchar       **out_failure);
+static gchar *token_identity_from_obj (json_t *obj);
 static void send_notification (const gchar *label, const gchar *otp_value);
 static void send_failure_notification (const gchar *label, const gchar *reason);
 static void copy_to_clipboard (GDBusConnection *conn, const gchar *text, gboolean is_kde);
@@ -179,6 +187,7 @@ otp_search_entry_free (OtpSearchEntry *entry)
     g_free (entry->issuer);
     g_free (entry->db_name);
     g_free (entry->db_path);
+    g_free (entry->token_identity);
     g_free (entry->label_fold);
     g_free (entry->issuer_fold);
     g_free (entry);
@@ -335,6 +344,7 @@ activation_capability_free (ActivationCapability *cap)
     g_free (cap->query);
     g_free (cap->db_path);
     g_free (cap->label);
+    g_free (cap->token_identity);
     g_free (cap);
 }
 
@@ -410,6 +420,7 @@ issue_activation_capability (const gchar          *sender,
     cap->query = g_strdup (query != NULL ? query : "");
     cap->db_path = g_strdup (entry->db_path);
     cap->label = g_strdup (entry->label);
+    cap->token_identity = g_strdup (entry->token_identity);
     cap->json_index = entry->json_index;
     cap->expires_at_us = g_get_monotonic_time () + ACTIVATION_CAP_TTL_US;
     g_hash_table_insert (g_activation_caps, g_strdup (id), cap);
@@ -493,6 +504,79 @@ get_entry_otp_value (json_t *obj)
 }
 
 
+/* A stable identity for a token: issuer, label and the 32-bit content hash of
+ * the whole token (which includes the secret). issuer+label alone is not
+ * unique - a database can hold two different tokens with the same name - and
+ * matching on it alone would resolve a result to the wrong secret. The hash
+ * is not reversible and is never persisted; it only lives in the capability
+ * and activation job for the 30 s TTL. Ambiguous matches are rejected by the
+ * caller rather than guessed. */
+static gchar *
+token_identity_from_obj (json_t *obj)
+{
+    const gchar *label = json_string_value (json_object_get (obj, "label"));
+    if (label == NULL)
+        return NULL;
+    const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+    guint32 hash = json_object_get_hash (obj);
+    return g_strdup_printf ("%s\x1f%s\x1f%08x",
+                            issuer != NULL ? issuer : "", label, hash);
+}
+
+
+/* TRUE when @obj is the token named by @identity. */
+static gboolean
+token_obj_matches_identity (json_t     *obj,
+                            const gchar *identity)
+{
+    if (identity == NULL)
+        return FALSE;
+    g_autofree gchar *cand = token_identity_from_obj (obj);
+    return cand != NULL && g_strcmp0 (cand, identity) == 0;
+}
+
+
+/* Finds the token named by @identity in @root. @preferred_index (the array
+ * position captured at query time) wins when it still names that token, so two
+ * distinct tokens sharing a name resolve to the one actually selected. Only
+ * when the index no longer matches do we scan; an ambiguous scan (more than one
+ * match, e.g. a 32-bit hash collision) is rejected rather than guessed.
+ * Returns NULL and sets *out_failure when missing or ambiguous. */
+static json_t *
+find_token_by_identity (json_t      *root,
+                        const gchar *identity,
+                        gsize        preferred_index,
+                        gchar      **out_failure)
+{
+    json_t *obj = NULL;
+    if (identity != NULL && preferred_index < json_array_size (root)) {
+        json_t *at_index = json_array_get (root, preferred_index);
+        if (token_obj_matches_identity (at_index, identity))
+            obj = at_index;
+    }
+
+    if (obj == NULL) {
+        guint matches = 0;
+        gsize idx;
+        json_t *candidate;
+        json_array_foreach (root, idx, candidate) {
+            if (token_obj_matches_identity (candidate, identity)) {
+                obj = candidate;
+                matches++;
+            }
+        }
+        if (matches > 1) {
+            *out_failure = g_strdup ("More than one account matches that result. Open OTPClient and try again.");
+            return NULL;
+        }
+    }
+
+    if (obj == NULL)
+        *out_failure = g_strdup ("That account is no longer in the database.");
+    return obj;
+}
+
+
 /* The keyring lookup happens in entries_reload_step, asynchronously; by the time
  * we get here the password is in hand and everything left is local work. */
 static void
@@ -543,6 +627,7 @@ load_entries_from_db (GPtrArray   *entries,
         entry->issuer = g_strdup (issuer ? issuer : "");
         entry->db_name = g_strdup (db_name);
         entry->db_path = g_strdup (db_path);
+        entry->token_identity = token_identity_from_obj (obj);
         entry->json_index = index;
         /* Pre-casefold for entry_matches_terms - done once at load instead of
          * once per term per query. Live OTP codes are no longer cached: they're
@@ -584,6 +669,11 @@ on_db_file_changed (GFileMonitor      *monitor G_GNUC_UNUSED,
             if (path != NULL)
                 kdf_cache_invalidate_path (path);
         }
+        /* Pending activation capabilities name tokens resolved against the
+         * previous contents. Drop them; an already-started activation job
+         * re-resolves its token by identity against the fresh database, so it
+         * cannot deliver another token's OTP. */
+        activation_capabilities_clear();
     }
 }
 
@@ -1004,6 +1094,7 @@ entry_matches_terms (const OtpSearchEntry *entry,
  * into a code looked exactly like a result that had been ignored. */
 static gchar *
 compute_otp_with_password (const gchar  *db_path,
+                           const gchar  *token_identity,
                            gsize         json_index,
                            const gchar  *password,
                            gchar       **out_failure)
@@ -1028,10 +1119,13 @@ compute_otp_with_password (const gchar  *db_path,
     load_db (db_data, &err);
     gchar *otp = NULL;
     if (err == NULL && db_data->in_memory_json_data != NULL) {
-        json_t *obj = json_array_get (db_data->in_memory_json_data, json_index);
-        if (obj == NULL)
-            *out_failure = g_strdup ("That account is no longer in the database.");
-        else if ((otp = get_entry_otp_value (obj)) == NULL)
+        /* Re-find the token by its stable identity instead of blindly trusting
+         * the index captured at query time: the array may have been reordered
+         * or had entries inserted/removed by a write in the meantime. */
+        json_t *obj = find_token_by_identity (db_data->in_memory_json_data,
+                                              token_identity, json_index,
+                                              out_failure);
+        if (obj != NULL && (otp = get_entry_otp_value (obj)) == NULL)
             *out_failure = g_strdup ("The code for that account could not be generated.");
         /* try_decrypt_v2 populates db_data->cached_* on success; persist
          * those into g_kdf_cache so the next call hits. Capturing only on
@@ -1386,6 +1480,7 @@ typedef struct {
     GDBusConnection       *conn;
     gchar                 *db_path;
     gchar                 *label;
+    gchar                 *token_identity;
     gsize                  json_index;
     gboolean               is_kde;
     guint64                generation;
@@ -1419,6 +1514,7 @@ activation_job_free (ActivationJob *job)
     g_clear_object (&job->conn);
     g_free (job->db_path);
     g_free (job->label);
+    g_free (job->token_identity);
     g_free (job);
 }
 
@@ -1446,7 +1542,8 @@ on_activation_password (GObject      *source G_GNUC_UNUSED,
         failure = g_strdup ("No password for this database is stored in the keyring. "
                             "Unlock it once in OTPClient.");
     } else {
-        otp = compute_otp_with_password (job->db_path, job->json_index, pwd, &failure);
+        otp = compute_otp_with_password (job->db_path, job->token_identity,
+                                         job->json_index, pwd, &failure);
     }
     if (pwd != NULL)
         secret_password_free (pwd);
@@ -1475,6 +1572,7 @@ activation_job_start (GDBusMethodInvocation      *inv,
     job->conn = conn != NULL ? g_object_ref (conn) : NULL;
     job->db_path = g_strdup (cap->db_path);
     job->label = g_strdup (cap->label);
+    job->token_identity = g_strdup (cap->token_identity);
     job->json_index = cap->json_index;
     job->is_kde = is_kde;
     job->generation = delivery_generation;

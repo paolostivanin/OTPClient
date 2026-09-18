@@ -24,9 +24,15 @@
 #define AEGIS_SALT_SIZE   32
 #define AEGIS_KEY_SIZE    32
 #define AEGIS_SCRYPT_MIN_N 1024
-#define AEGIS_SCRYPT_MAX_N 1048576
+/* Keep a crafted backup from forcing a huge scrypt allocation/CPU burn before
+ * authentication. Aegis itself uses n=32768, p=1; these bounds leave ample
+ * headroom for legitimate vaults while capping n*128*8 at 128 MiB. */
+#define AEGIS_SCRYPT_MAX_N 131072
 #define AEGIS_SCRYPT_MIN_P 1
 #define AEGIS_SCRYPT_MAX_P 16
+/* n*p upper bound; prevents trading a small n for a large p to regain the
+ * work the n cap removed. */
+#define AEGIS_SCRYPT_MAX_WORK 1048576ULL
 
 
 static GSList   *get_otps_from_plain_backup     (const gchar  *path,
@@ -184,7 +190,8 @@ get_otps_from_encrypted_backup (const gchar          *path,
     if (!json_is_integer (n_obj) || !json_is_integer (p_obj) ||
         !valid_scrypt_n (json_integer_value (n_obj)) ||
         json_integer_value (p_obj) < AEGIS_SCRYPT_MIN_P ||
-        json_integer_value (p_obj) > AEGIS_SCRYPT_MAX_P) {
+        json_integer_value (p_obj) > AEGIS_SCRYPT_MAX_P ||
+        (guint64)json_integer_value (n_obj) * (guint64)json_integer_value (p_obj) > AEGIS_SCRYPT_MAX_WORK) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
                      "Malformed Aegis backup: unsupported scrypt parameters.");
         goto cleanup;
@@ -732,7 +739,10 @@ is_file_otpauth_txt (const gchar  *file_path,
 
     GFile *file = g_file_new_for_path (file_path);
     GFileInputStream *input_stream = g_file_read (file, NULL, err);
-    if (err != NULL && *err != NULL) {
+    if (input_stream == NULL) {
+        if (err != NULL && *err == NULL)
+            g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Could not open the file to inspect its format.");
         g_object_unref (file);
         return result;
     }

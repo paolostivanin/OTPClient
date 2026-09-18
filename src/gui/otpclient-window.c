@@ -47,6 +47,18 @@ validity_widgets_free (ValidityWidgets *widgets)
     if (widgets->timeout_id != 0)
         g_source_remove (widgets->timeout_id);
 
+    if (widgets->css_provider != NULL)
+    {
+        /* gtk_style_context_add_provider_for_display keeps its own reference
+         * and the registration outlives the widget, so it must be removed
+         * explicitly before dropping ours. */
+        GdkDisplay *display = gdk_display_get_default ();
+        if (display != NULL)
+            gtk_style_context_remove_provider_for_display (
+                display, GTK_STYLE_PROVIDER (widgets->css_provider));
+        g_object_unref (widgets->css_provider);
+    }
+
     g_free (widgets);
 }
 
@@ -111,12 +123,11 @@ validity_update_display (ValidityWidgets *widgets)
             else
                 color = otpclient_application_get_validity_color (app);
 
-            GtkCssProvider *provider = g_object_get_data (G_OBJECT (widgets->level_bar), "css-provider");
+            GtkCssProvider *provider = widgets->css_provider;
             if (provider == NULL)
             {
                 provider = gtk_css_provider_new ();
-                g_object_set_data_full (G_OBJECT (widgets->level_bar), "css-provider",
-                                        provider, g_object_unref);
+                widgets->css_provider = provider;
                 gtk_widget_add_css_class (widgets->level_bar, "otp-validity");
                 gtk_style_context_add_provider_for_display (
                     gtk_widget_get_display (widgets->level_bar),
@@ -610,6 +621,64 @@ add_validity_column (GtkColumnView *view)
     g_object_unref (view_column);
 }
 
+/* Refreshes one TOTP entry when its step has changed since we last rendered
+ * it. Tracking the last rendered step (rather than requiring an exact
+ * `now % period == 0` tick) means a delayed timer, a missed tick across
+ * suspend/resume, or a system clock jump still lands on a refresh instead of
+ * showing a stale code for up to a full period. */
+static void
+refresh_totp_entry (OTPClientWindow *self,
+                    OTPEntry        *entry,
+                    gboolean         show_next,
+                    gint64           now)
+{
+    const gchar *type = otp_entry_get_otp_type (entry);
+    if (type == NULL || g_ascii_strcasecmp (type, "TOTP") != 0)
+        return;
+
+    guint32 period = otp_entry_get_period (entry);
+    if (period == 0)
+        return;
+
+    gint64 step = now / (gint64) period;
+    /* The generation step is recorded by otp_entry_update_otp(), including on
+     * explicit activation. Comparing against it (instead of against a value we
+     * only update during ticks) stops a delayed tick from hiding a code that
+     * was just generated, and stops a code from surviving its first boundary
+     * because the tick that should have recorded it never ran. */
+    gint64 last_step = otp_entry_get_last_rendered_step (entry);
+    gboolean rotated = (last_step != 0 && last_step != step);
+
+    if (last_step == step)
+        return;
+
+    otp_entry_update_otp (entry);
+
+    /* Reveal lifetime is tied to the validity window: if this entry was
+     * revealed when the period rolled over, either auto-roll (re-copy +
+     * re-notify the new value if this entry still owns the clipboard and the
+     * user opted into "show next OTP", and only once per reveal session) or
+     * hide it. Only a genuine rotation (not the first time we see the entry)
+     * triggers this. */
+    if (!rotated || !otp_entry_get_revealed (entry))
+        return;
+
+    g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
+    gboolean owns_clipboard = (clip_owner == entry);
+
+    if (show_next && owns_clipboard && !otp_entry_get_roll_consumed (entry))
+    {
+        copy_otp_to_clipboard_and_notify (self, entry);
+        otp_entry_mark_roll_consumed (entry);
+    }
+    else
+    {
+        if (owns_clipboard)
+            g_weak_ref_set (&self->clipboard_owner_entry, NULL);
+        otp_entry_set_revealed (entry, FALSE);
+    }
+}
+
 static gboolean
 otp_refresh_tick (gpointer user_data)
 {
@@ -621,51 +690,27 @@ otp_refresh_tick (gpointer user_data)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     gboolean show_next = (app != NULL && otpclient_application_get_show_next_otp (app));
+    gint64 now = g_get_real_time () / G_USEC_PER_SEC;
 
     guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
     for (guint i = 0; i < n; i++)
     {
         g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
-        if (entry == NULL)
-            continue;
+        if (entry != NULL)
+            refresh_totp_entry (self, entry, show_next, now);
+    }
 
-        const gchar *type = otp_entry_get_otp_type (entry);
-        if (type == NULL || g_ascii_strcasecmp (type, "TOTP") != 0)
-            continue;
-
-        guint32 period = otp_entry_get_period (entry);
-        if (period == 0)
-            continue;
-
-        gint64 now = g_get_real_time () / G_USEC_PER_SEC;
-        guint32 remaining = period - (guint32)(now % period);
-        /* Not on a rotation boundary: nothing to do. */
-        if (remaining != period)
-            continue;
-
-        otp_entry_update_otp (entry);
-
-        /* Reveal lifetime is tied to the validity window: if this entry was
-         * revealed when the period rolled over, either auto-roll (re-copy +
-         * re-notify the new value if this entry still owns the clipboard
-         * and the user opted into "show next OTP", and only once per reveal
-         * session) or hide it. */
-        if (!otp_entry_get_revealed (entry))
-            continue;
-
-        g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
-        gboolean owns_clipboard = (clip_owner == entry);
-
-        if (show_next && owns_clipboard && !otp_entry_get_roll_consumed (entry))
+    /* Cross-database search results are computed lazily when bound, so they
+     * need the same rotation/reveal pass or they keep showing an expired (or
+     * revealed) code forever. */
+    if (self->cross_db_store != NULL)
+    {
+        n = g_list_model_get_n_items (G_LIST_MODEL (self->cross_db_store));
+        for (guint i = 0; i < n; i++)
         {
-            copy_otp_to_clipboard_and_notify (self, entry);
-            otp_entry_mark_roll_consumed (entry);
-        }
-        else
-        {
-            if (owns_clipboard)
-                g_weak_ref_set (&self->clipboard_owner_entry, NULL);
-            otp_entry_set_revealed (entry, FALSE);
+            g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->cross_db_store), i);
+            if (entry != NULL)
+                refresh_totp_entry (self, entry, show_next, now);
         }
     }
 
@@ -1232,17 +1277,21 @@ void
 otpclient_window_clear_displayed_otps (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-    if (self->otp_store == NULL)
-        return;
 
-    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
-    for (guint i = 0; i < n; i++)
+    GListStore *stores[2] = { self->otp_store, self->cross_db_store };
+    for (guint s = 0; s < G_N_ELEMENTS (stores); s++)
     {
-        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
-        if (entry != NULL)
+        if (stores[s] == NULL)
+            continue;
+        guint n = g_list_model_get_n_items (G_LIST_MODEL (stores[s]));
+        for (guint i = 0; i < n; i++)
         {
-            otp_entry_set_revealed (entry, FALSE);
-            otp_entry_set_otp_value (entry, "");
+            g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (stores[s]), i);
+            if (entry != NULL)
+            {
+                otp_entry_set_revealed (entry, FALSE);
+                otp_entry_set_otp_value (entry, "");
+            }
         }
     }
 
@@ -1804,7 +1853,10 @@ copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
     g_weak_ref_set (&self->clipboard_owner_entry, entry);
 
     if (self->clipboard_clear_timer_id != 0)
+    {
         g_source_remove (self->clipboard_clear_timer_id);
+        self->clipboard_clear_timer_id = 0;
+    }
     guint clear_timeout = 30;
     if (app != NULL)
         clear_timeout = otpclient_application_get_clipboard_clear_timeout (app);
@@ -2171,13 +2223,21 @@ on_drag_prepare (GtkDragSource *source,
     if (search_text != NULL && search_text[0] != '\0')
         return NULL;
 
-    guint pos = gtk_single_selection_get_selected (self->otp_selection);
-    if (pos == GTK_INVALID_LIST_POSITION)
+    /* The selection model sits on top of the sort model, so the selected
+     * index is a sorted-view position. Resolve the entry and carry its
+     * position in the underlying (unsorted) store, which is what on_drop
+     * needs regardless of the active sort or group filter. */
+    GObject *item = gtk_single_selection_get_selected_item (self->otp_selection);
+    if (item == NULL)
+        return NULL;
+
+    guint store_pos = find_store_pos_for_entry (self, OTP_ENTRY (item));
+    if (store_pos == GTK_INVALID_LIST_POSITION)
         return NULL;
 
     GValue value = G_VALUE_INIT;
     g_value_init (&value, G_TYPE_UINT);
-    g_value_set_uint (&value, pos);
+    g_value_set_uint (&value, store_pos);
 
     return gdk_content_provider_new_for_value (&value);
 }
@@ -2241,16 +2301,12 @@ on_drop (GtkDropTarget *target,
     if (!G_VALUE_HOLDS_UINT (value))
         return FALSE;
 
-    guint source_filter_pos = g_value_get_uint (value);
+    /* on_drag_prepare stored the source's position in the unsorted store. */
+    guint source_pos = g_value_get_uint (value);
 
-    /* Resolve source entry from the filter model */
     g_autoptr (OTPEntry) source_entry = g_list_model_get_item (
-        G_LIST_MODEL (self->filter_model), source_filter_pos);
+        G_LIST_MODEL (self->otp_store), source_pos);
     if (source_entry == NULL)
-        return FALSE;
-
-    guint source_pos = find_store_pos_for_entry (self, source_entry);
-    if (source_pos == GTK_INVALID_LIST_POSITION)
         return FALSE;
 
     /* Find target entry under the cursor */
@@ -2625,11 +2681,11 @@ rebuild_group_list (OTPClientWindow *self)
                              G_LIST_MODEL (self->group_list_model));
 
     /* Restore previous selection if still present */
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model));
     guint restore_pos = 0; /* default to "All" */
     if (prev_filter != NULL)
     {
-        guint n = g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model));
-        for (guint i = 0; i < n; i++)
+        for (guint i = 0; i < n_items; i++)
         {
             const gchar *item = gtk_string_list_get_string (self->group_list_model, i);
             if (prev_filter[0] == '\0' && g_strcmp0 (item, _("Ungrouped")) == 0)
@@ -2645,7 +2701,24 @@ rebuild_group_list (OTPClientWindow *self)
         }
     }
     gtk_drop_down_set_selected (GTK_DROP_DOWN (self->group_dropdown), restore_pos);
+
+    /* syncing_group_filter suppresses on_group_dropdown_changed, so the
+     * effective filter must be updated here. If the previously selected group
+     * disappeared (last token removed/moved), restore_pos falls back to "All"
+     * or "Ungrouped"; leaving active_group_filter pointing at the dead group
+     * would keep filtering it out and show an empty list labelled "All". */
+    g_clear_pointer (&self->active_group_filter, g_free);
+    if (restore_pos == 0)
+        self->active_group_filter = NULL;
+    else if (restore_pos == n_items - 1)
+        self->active_group_filter = g_strdup ("");
+    else
+        self->active_group_filter = g_strdup (
+            gtk_string_list_get_string (self->group_list_model, restore_pos));
     self->syncing_group_filter = FALSE;
+
+    if (g_strcmp0 (prev_filter, self->active_group_filter) != 0)
+        gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
 
     g_list_free (group_names);
     g_hash_table_destroy (groups);
@@ -2849,7 +2922,7 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
 {
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL) {
+    if (app == NULL || window_is_locked (self)) {
         sensitive_g_free (otpauth_uri);
         return;
     }
@@ -2909,6 +2982,11 @@ typedef struct {
      * cannot leak the relocation intent into the next open. */
     gchar *replace_path;
     gchar *backup_source;
+    /* The database and lock generation that were active when the async work
+     * started. A result delivered after the user switched/locked (or switched
+     * away and back) must not be applied to whatever database is open now. */
+    gchar *origin_db_path;
+    guint  origin_generation;
 } WindowAsyncContext;
 
 static WindowAsyncContext *
@@ -2916,6 +2994,15 @@ window_async_context_new (OTPClientWindow *self)
 {
     WindowAsyncContext *ctx = g_new0 (WindowAsyncContext, 1);
     g_weak_ref_init (&ctx->window_ref, self);
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL)
+    {
+        DatabaseData *db_data = otpclient_application_get_db_data (app);
+        ctx->origin_db_path = g_strdup (db_data != NULL ? db_data->db_path : NULL);
+        ctx->origin_generation = otpclient_application_get_lock_generation (app);
+    }
     return ctx;
 }
 
@@ -2927,7 +3014,55 @@ window_async_context_free (WindowAsyncContext *ctx)
     g_weak_ref_clear (&ctx->window_ref);
     g_free (ctx->replace_path);
     g_free (ctx->backup_source);
+    g_free (ctx->origin_db_path);
     g_free (ctx);
+}
+
+/* TRUE when the database this async work started for is no longer the active,
+ * unlocked one: the app locked, the database was replaced (even by the same
+ * path), or a different database is open. Callers use this to discard a result
+ * instead of importing it into the wrong database. */
+static gboolean
+window_async_origin_changed (OTPClientWindow      *self,
+                             WindowAsyncContext   *ctx)
+{
+    if (window_is_locked (self))
+        return TRUE;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL)
+        return TRUE;
+
+    DatabaseData *db_data = otpclient_application_get_db_data (app);
+    if (db_data == NULL || db_data->db_path == NULL)
+        return TRUE;
+
+    if (g_strcmp0 (db_data->db_path, ctx->origin_db_path) != 0)
+        return TRUE;
+
+    if (otpclient_application_get_lock_generation (app) != ctx->origin_generation)
+        return TRUE;
+
+    return FALSE;
+}
+
+/* Like window_async_origin_changed(), but for work (creating or opening a
+ * database) that legitimately runs with no database currently open. Only the
+ * lock state and the session generation matter; a missing db_data is fine. */
+static gboolean
+window_async_session_changed (OTPClientWindow    *self,
+                              WindowAsyncContext *ctx)
+{
+    if (window_is_locked (self))
+        return TRUE;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    if (app == NULL || otpclient_application_is_unlocking (app))
+        return TRUE;
+
+    return otpclient_application_get_lock_generation (app) != ctx->origin_generation;
 }
 
 static void
@@ -2953,6 +3088,13 @@ on_qr_file_selected (GObject      *source,
     g_clear_error (&err);
     if (file == NULL)
     {
+        window_async_context_free (ctx);
+        return;
+    }
+
+    /* The user may have locked or switched database while the chooser was
+     * open. Do not decode (and therefore do not import) into the wrong one. */
+    if (window_async_origin_changed (self, ctx)) {
         window_async_context_free (ctx);
         return;
     }
@@ -3031,6 +3173,15 @@ on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
         return;
     }
 
+    /* The scan produced a secret; if the database changed while the webcam
+     * was running, wipe it instead of importing it elsewhere. */
+    if (window_async_origin_changed (self, ctx)) {
+        sensitive_g_free (otpauth_uri);
+        otpauth_uri = NULL;
+        window_async_context_free (ctx);
+        return;
+    }
+
     add_token_from_otpauth_uri (self, g_steal_pointer (&otpauth_uri));
     window_async_context_free (ctx);
 }
@@ -3075,6 +3226,13 @@ on_clipboard_texture_received (GObject      *source,
         show_error_toast (self, _("No image on clipboard: %s"),
                           err ? err->message : _("unknown error"));
         g_clear_error (&err);
+        window_async_context_free (ctx);
+        return;
+    }
+
+    /* Do not decode the image (and thus not import its secret) if the
+     * database was locked or switched while the clipboard read was pending. */
+    if (window_async_origin_changed (self, ctx)) {
         window_async_context_free (ctx);
         return;
     }
@@ -3194,6 +3352,15 @@ on_backup_tokens_save_complete (GObject      *source,
 
     g_autofree gchar *path = g_file_get_path (file);
     g_object_unref (file);
+
+    /* g_file_get_path answers NULL for a non-native location (sftp, smb, MTP,
+     * Drive); db_copy_to requires a real local path. */
+    if (path == NULL) {
+        show_error_toast (self, "%s",
+                          _("That location is not a file on this computer. Pick a local folder instead."));
+        window_async_context_free (ctx);
+        return;
+    }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
@@ -4141,6 +4308,12 @@ on_new_db_file_selected (GObject      *source,
         return;
     }
 
+    /* The session may have locked or switched while the chooser was open. */
+    if (window_async_session_changed (self, async_ctx)) {
+        window_async_context_free (async_ctx);
+        return;
+    }
+
     /* Ensure .enc extension */
     gchar *db_path;
     if (!g_str_has_suffix (path, ".enc"))
@@ -4327,6 +4500,12 @@ on_open_db_file_selected (GObject      *source,
 
     g_autofree gchar *path = g_file_get_path (file);
     if (path == NULL) {
+        window_async_context_free (async_ctx);
+        return;
+    }
+
+    /* The session may have locked or switched while the chooser was open. */
+    if (window_async_session_changed (self, async_ctx)) {
         window_async_context_free (async_ctx);
         return;
     }

@@ -359,6 +359,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     self->type_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->type_combo), _("Type"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->type_combo), G_LIST_MODEL (type_model));
+    g_object_unref (type_model);
     g_signal_connect (self->type_combo, "notify::selected", G_CALLBACK (on_type_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (settings_group), self->type_combo);
 
@@ -368,6 +369,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     self->algo_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->algo_combo), _("Algorithm"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->algo_combo), G_LIST_MODEL (algo_model));
+    g_object_unref (algo_model);
     gtk_widget_set_tooltip_text (self->algo_combo,
         _("HMAC hash function. Must match what the provider expects - most use SHA1."));
     g_signal_connect (self->algo_combo, "notify::selected", G_CALLBACK (on_algo_changed), self);

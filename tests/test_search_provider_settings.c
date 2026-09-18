@@ -96,6 +96,68 @@ test_live_settings (void)
     g_assert_null (cached_entries);
 }
 
+static json_t *
+make_token (const gchar *label,
+            const gchar *issuer,
+            const gchar *secret)
+{
+    return build_json_obj ("TOTP", label, issuer, secret, 6, "SHA1", 30, 0, NULL);
+}
+
+/* issuer+label alone is not unique: two different secrets may share a name.
+ * The identity must distinguish them so selecting the second cannot return the
+ * first token's OTP. */
+static void
+test_token_identity_unambiguous (void)
+{
+    json_t *root = json_array ();
+    json_array_append_new (root, make_token ("alice", "Example", "JBSWY3DPEHPK3PXP"));
+    json_array_append_new (root, make_token ("alice", "Example", "KRSXG5CTMVRXEZLU"));
+
+    json_t *a = json_array_get (root, 0);
+    json_t *b = json_array_get (root, 1);
+    g_autofree gchar *ida = token_identity_from_obj (a);
+    g_autofree gchar *idb = token_identity_from_obj (b);
+    g_assert_nonnull (ida);
+    g_assert_nonnull (idb);
+    g_assert_cmpstr (ida, !=, idb);
+    g_assert_true (token_obj_matches_identity (a, ida));
+    g_assert_true (token_obj_matches_identity (b, idb));
+    g_assert_false (token_obj_matches_identity (a, idb));
+    g_assert_false (token_obj_matches_identity (b, ida));
+
+    g_autofree gchar *failure = NULL;
+    /* Selecting the second token (index 1) resolves to the second, not the
+     * first, even though both share issuer+label. */
+    g_assert_true (find_token_by_identity (root, idb, 1, &failure) == b);
+    g_assert_null (failure);
+    /* A stale index that now points at the first token must not win: the scan
+     * still finds the second by its unambiguous identity. */
+    g_assert_true (find_token_by_identity (root, idb, 0, &failure) == b);
+    g_assert_null (failure);
+
+    json_decref (root);
+}
+
+/* Two tokens with the same identity (a hash collision, or literally identical
+ * entries) must be rejected when the preferred index no longer disambiguates
+ * them - returning an arbitrary one could deliver the wrong OTP. */
+static void
+test_token_identity_ambiguous_rejected (void)
+{
+    json_t *root = json_array ();
+    json_array_append_new (root, make_token ("alice", "Example", "JBSWY3DPEHPK3PXP"));
+    json_array_append_new (root, make_token ("alice", "Example", "JBSWY3DPEHPK3PXP"));
+
+    g_autofree gchar *id = token_identity_from_obj (json_array_get (root, 0));
+    g_autofree gchar *failure = NULL;
+    /* Index out of range forces the scan, which matches both entries. */
+    g_assert_null (find_token_by_identity (root, id, 99, &failure));
+    g_assert_nonnull (failure);
+
+    json_decref (root);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -116,6 +178,8 @@ main (int argc, char **argv)
     guint kn = g_dbus_connection_register_object (test_bus, KRUNNER_PATH, kde->interfaces[0], &k_vtable, NULL, NULL, &err);
     g_assert_no_error (err);
     g_test_add_func ("/search-provider/live-settings", test_live_settings);
+    g_test_add_func ("/search-provider/token-identity", test_token_identity_unambiguous);
+    g_test_add_func ("/search-provider/token-identity-ambiguous", test_token_identity_ambiguous_rejected);
     int result = g_test_run ();
     g_dbus_connection_unregister_object (test_bus, gn);
     g_dbus_connection_unregister_object (test_bus, kn);

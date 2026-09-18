@@ -232,6 +232,7 @@ kdf_dialog_new (DatabaseData *db_data)
     self->preset_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->preset_combo), _("Preset"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->preset_combo), G_LIST_MODEL (preset_model));
+    g_object_unref (preset_model);
     gtk_widget_set_tooltip_text (self->preset_combo,
         _("Pick a preset unless you have a reason to tune Argon2id by hand."));
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (new_group), self->preset_combo);

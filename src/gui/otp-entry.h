@@ -51,6 +51,13 @@ const gchar *otp_entry_get_group_lower   (OTPEntry *self);
 
 void         otp_entry_update_otp   (OTPEntry *self);
 
+/* The TOTP step (now / period) the current otp_value was generated for; 0 if
+ * not generated yet. Set on every generation, so callers do not have to infer
+ * rotation boundaries from timer ticks. */
+gint64       otp_entry_get_last_rendered_step (OTPEntry *self);
+void         otp_entry_set_last_rendered_step (OTPEntry    *self,
+                                               gint64       step);
+
 gchar       *otp_entry_get_next_otp (OTPEntry *self);
 
 /* Reveal/hide state controls whether the OTP value column shows the live

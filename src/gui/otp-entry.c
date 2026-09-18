@@ -41,6 +41,13 @@ struct _OTPEntry
      * session, then the next rotation hides. Reset on the FALSE->TRUE
      * transition of `revealed` and on explicit re-click. */
     gboolean roll_consumed;
+
+    /* The TOTP step (now / period) for which otp_value was last generated.
+     * Recorded whenever a code is generated - including explicit activation -
+     * so the window's refresh tick can detect a real rotation instead of
+     * inferring it from timer ticks, which can be delayed or missed. 0 means
+     * "not generated yet". */
+    gint64 last_rendered_step;
 };
 
 static gchar *
@@ -491,6 +498,28 @@ otp_entry_update_otp (OTPEntry *self)
         otp_entry_set_otp_value (self, _("Error"));
         sensitive_free (otp);
     }
+
+    /* Record the step the freshly generated code belongs to. The refresh tick
+     * compares against this to distinguish a real rotation from a delayed or
+     * missed timer tick. */
+    if (self->period > 0)
+        self->last_rendered_step =
+            (g_get_real_time () / G_USEC_PER_SEC) / (gint64) self->period;
+}
+
+gint64
+otp_entry_get_last_rendered_step (OTPEntry *self)
+{
+    g_return_val_if_fail (OTP_IS_ENTRY (self), 0);
+    return self->last_rendered_step;
+}
+
+void
+otp_entry_set_last_rendered_step (OTPEntry *self,
+                                  gint64    step)
+{
+    g_return_if_fail (OTP_IS_ENTRY (self));
+    self->last_rendered_step = step;
 }
 
 gchar *

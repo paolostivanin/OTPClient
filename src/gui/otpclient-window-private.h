@@ -26,6 +26,9 @@ typedef struct
     GtkWidget *label;
     GtkWidget *level_bar;
     GtkWidget *box;
+    /* Registered for the display; must be removed and unreffed when the row
+     * dies or every level bar ever rendered leaks a provider. */
+    GtkCssProvider *css_provider;
     guint timeout_id;
     guint remaining;
     guint period;

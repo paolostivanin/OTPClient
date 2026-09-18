@@ -44,6 +44,12 @@ void                  otpclient_application_relocate_stored_password (OTPClientA
  * pointer to it and freeing under its feet is a use-after-free. */
 gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
 
+/* Monotonic counter bumped whenever the active database is replaced or its
+ * secrets are purged (lock/switch). Async work captures it at start and
+ * discards its result if it changed: this catches switching away and back to
+ * the same path, and lock/unlock cycles, which a path comparison alone misses. */
+guint                 otpclient_application_get_lock_generation (OTPClientApplication *self);
+
 /* TRUE when a database is loaded and the app is not locked, i.e. OTP data is
  * currently accessible. Used to tell a "successful unlock" dialog close apart
  * from a user dismissal. */

@@ -789,6 +789,7 @@ settings_dialog_new (OTPClientApplication *app)
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->inactivity_combo),
                                     _("Inactivity Timeout"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->inactivity_combo), G_LIST_MODEL (timeout_model));
+    g_object_unref (timeout_model);
     /* Sync the selection to the current stored value so reopening the dialog
      * shows what's actually configured rather than always defaulting to row 0. */
     guint current_inactivity = (guint) otpclient_application_get_inactivity_timeout (app);
@@ -818,6 +819,7 @@ settings_dialog_new (OTPClientApplication *app)
     adw_action_row_set_subtitle (ADW_ACTION_ROW (self->clipboard_clear_combo),
                                   _("Automatically clear the clipboard after copying an OTP code from this window"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->clipboard_clear_combo), G_LIST_MODEL (clip_timeout_model));
+    g_object_unref (clip_timeout_model);
     /* Select current value */
     guint current_clip_timeout = otpclient_application_get_clipboard_clear_timeout (app);
     for (guint i = 0; i < G_N_ELEMENTS (clip_timeout_values); i++) {

@@ -32,6 +32,10 @@ struct _OTPClientApplication
     DatabaseData *db_data;
 
     GCancellable *cancellable;
+    /* Dedicated to secret-service lookups so a database switch can cancel a
+     * pending keyring query without also cancelling an in-flight unlock task
+     * (which shares self->cancellable). */
+    GCancellable *keyring_cancellable;
     GSettings *settings;
 
     /* config stuff */
@@ -281,6 +285,10 @@ application_disable_secret_service_runtime (OTPClientApplication *self,
 typedef struct {
     GWeakRef app_ref;
     guint lock_generation;
+    /* The database this async work was started for. A reply whose path no
+     * longer matches the active db_data is stale (the user switched database
+     * or the target was replaced) and must be discarded. */
+    gchar *db_path;
 } ApplicationAsyncContext;
 
 static ApplicationAsyncContext *
@@ -289,6 +297,7 @@ application_async_context_new (OTPClientApplication *self)
     ApplicationAsyncContext *ctx = g_new0 (ApplicationAsyncContext, 1);
     g_weak_ref_init (&ctx->app_ref, self);
     ctx->lock_generation = self->lock_generation;
+    ctx->db_path = g_strdup (self->db_data != NULL ? self->db_data->db_path : NULL);
     return ctx;
 }
 
@@ -298,7 +307,21 @@ application_async_context_free (ApplicationAsyncContext *ctx)
     if (ctx == NULL)
         return;
     g_weak_ref_clear (&ctx->app_ref);
+    g_free (ctx->db_path);
     g_free (ctx);
+}
+
+/* Cancels and replaces the keyring-lookup cancellable, returning the live
+ * one. Called before every secret_password_lookup so that at most one lookup
+ * is pending and a database switch can invalidate the previous one. */
+static GCancellable *
+begin_keyring_lookup (OTPClientApplication *self)
+{
+    if (self->keyring_cancellable != NULL)
+        g_cancellable_cancel (self->keyring_cancellable);
+    g_clear_object (&self->keyring_cancellable);
+    self->keyring_cancellable = g_cancellable_new ();
+    return self->keyring_cancellable;
 }
 
 typedef struct {
@@ -816,6 +839,8 @@ on_unlock_done (GObject      *source_object,
         }
         otpclient_application_set_db_data (self, NULL);
         self->migrating_legacy_keyring = FALSE;
+        if (self->window != NULL)
+            otpclient_window_refresh_content_page (self->window);
         g_clear_error (&err);
         return;
     }
@@ -883,6 +908,15 @@ on_password_received (const gchar  *current_password,
 
     if (password == NULL || self->db_data == NULL)
         return FALSE;
+
+    /* A worker already owns a raw pointer to the current db_data and is
+     * reading/writing it. Starting a second one (e.g. a keyring reply that
+     * raced a database switch or a manual submit) would corrupt that state. */
+    if (self->unlock_in_progress) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("The database is already being unlocked"));
+        return FALSE;
+    }
 
     gsize pwd_len = strlen (password);
     if (self->db_data->key != NULL) {
@@ -958,6 +992,7 @@ on_secret_lookup_done (GObject      *source,
     (void) source;
     ApplicationAsyncContext *ctx = user_data;
     guint lookup_generation = ctx->lock_generation;
+    g_autofree gchar *lookup_path = g_strdup (ctx->db_path);
     g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
     application_async_context_free (ctx);
 
@@ -972,6 +1007,15 @@ on_secret_lookup_done (GObject      *source,
         return;
     }
     if (lookup_generation != self->lock_generation) {
+        if (password != NULL)
+            secret_password_free (password);
+        g_clear_error (&err);
+        return;
+    }
+    /* The reply is for a database that is no longer the active one. It must
+     * not be fed to on_password_received: that would replace the active
+     * database's key and start a worker against the wrong db_data. */
+    if (g_strcmp0 (lookup_path, self->db_data != NULL ? self->db_data->db_path : NULL) != 0) {
         if (password != NULL)
             secret_password_free (password);
         g_clear_error (&err);
@@ -1081,7 +1125,7 @@ init_database_request_key (OTPClientApplication *self)
 
     if (self->use_secret_service)
     {
-        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
+        secret_password_lookup (OTPCLIENT_SCHEMA, begin_keyring_lookup (self),
                                 on_secret_lookup_done,
                                 application_async_context_new (self),
                                 "string", self->db_data->db_path,
@@ -1509,6 +1553,9 @@ otpclient_application_dispose (GObject *object)
 
     g_cancellable_cancel (self->cancellable);
     g_clear_object (&self->cancellable);
+    if (self->keyring_cancellable != NULL)
+        g_cancellable_cancel (self->keyring_cancellable);
+    g_clear_object (&self->keyring_cancellable);
 
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     otpclient_tray_cleanup (self);
@@ -1603,6 +1650,7 @@ otpclient_application_init (OTPClientApplication *self)
 {
     self->db_data = NULL;
     self->cancellable = g_cancellable_new ();
+    self->keyring_cancellable = NULL;
     self->settings = NULL;
     self->search_provider_keyword = NULL;
     self->validity_color = NULL;
@@ -1643,6 +1691,13 @@ otpclient_application_is_unlocking (OTPClientApplication *self)
     return self->unlock_in_progress;
 }
 
+guint
+otpclient_application_get_lock_generation (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), 0);
+    return self->lock_generation;
+}
+
 gboolean
 otpclient_application_is_db_unlocked (OTPClientApplication *self)
 {
@@ -1657,6 +1712,14 @@ otpclient_application_set_db_data (OTPClientApplication *self,
                                     DatabaseData         *db_data)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+
+    /* Installing or clearing the active database invalidates every async
+     * attempt that captured the previous generation. Doing it here, at the
+     * common replacement boundary, covers the open/new-database flows that
+     * call this directly and bypass otpclient_application_switch_to_db: a
+     * stale chooser or import context must not be applied to the new database
+     * (even when it has the same path, e.g. the file was replaced). */
+    self->lock_generation++;
 
     database_data_free (self->db_data);
 
@@ -1707,7 +1770,18 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
     if (self->db_data != NULL && g_strcmp0 (self->db_data->db_path, db_path) == 0)
         return;
 
-    /* Clear the outgoing database state before opening the new database. */
+    /* The unlock worker holds a raw pointer to the current db_data. Replacing
+     * it here would free memory the worker is still using. The window refuses
+     * this while unlocking; enforce it at the API boundary too. */
+    if (self->unlock_in_progress) {
+        g_warning ("Ignoring database switch while an unlock is in progress");
+        return;
+    }
+
+    /* Clear the outgoing database state before opening the new database.
+     * set_db_data() below bumps the lock generation, invalidating any pending
+     * attempt bound to the outgoing database (its reply then fails the guard
+     * in on_secret_lookup_done even if cancellation is not observed). */
     if (self->window != NULL)
     {
         otpclient_window_stop_otp_timer (self->window);
@@ -1730,7 +1804,7 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
 
     if (self->use_secret_service)
     {
-        secret_password_lookup (OTPCLIENT_SCHEMA, self->cancellable,
+        secret_password_lookup (OTPCLIENT_SCHEMA, begin_keyring_lookup (self),
                                 on_secret_lookup_done,
                                 application_async_context_new (self),
                                 "string", db_path,

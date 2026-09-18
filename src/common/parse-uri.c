@@ -30,6 +30,11 @@ set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiag
             }
         }
     }
+    /* g_strsplit copied every line (secrets included) into ordinary heap.
+     * Wipe those copies before releasing them, matching the project's wipe
+     * discipline for secret material. */
+    for (guint k = 0; k < uris_len; k++)
+        explicit_bzero (uris[k], strlen (uris[k]));
     g_strfreev (uris);
 }
 

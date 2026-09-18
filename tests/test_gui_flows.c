@@ -462,6 +462,28 @@ test_autostart_adoption (void)
     g_assert_true (otpclient_application_autostart_key_is_default (app));
 }
 
+/* set_db_data() is the common replacement boundary used by the open/new-DB
+ * flows that bypass switch_to_db(). It must invalidate pending async work
+ * (chooser/import contexts) even when the path is unchanged, so a stale
+ * context cannot be applied to the replacement database. */
+static void
+test_db_replacement_bumps_generation (void)
+{
+    guint before = otpclient_application_get_lock_generation (app);
+    otpclient_application_set_db_data (app, NULL);
+    g_assert_cmpuint (otpclient_application_get_lock_generation (app), >, before);
+
+    /* Same-path replacement must also bump: a stale context keyed only to the
+     * path would otherwise survive. */
+    before = otpclient_application_get_lock_generation (app);
+    DatabaseData *replacement = database_data_new ("/tmp/otpclient-generation.enc",
+                                                   DEFAULT_MEMLOCK_VALUE);
+    otpclient_application_set_db_data (app, replacement);
+    g_assert_cmpuint (otpclient_application_get_lock_generation (app), >, before);
+
+    otpclient_application_set_db_data (app, NULL);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -488,6 +510,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
+    g_test_add_func ("/gui-flows/db-replacement-generation", test_db_replacement_bumps_generation);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

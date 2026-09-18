@@ -145,6 +145,23 @@ test_repair_indexes_by_position (void)
 }
 
 static void
+test_base32_rejects_padding_only (void)
+{
+    /* A secret made only of padding/whitespace decodes to nothing and libcotp
+     * rejects it; accepting it here would let a malformed import create a
+     * token that can never generate a code. */
+    g_assert_false (otp_secret_is_valid_base32 ("="));
+    g_assert_false (otp_secret_is_valid_base32 ("===="));
+    g_assert_false (otp_secret_is_valid_base32 ("= ="));
+    g_assert_false (otp_secret_is_valid_base32 ("   "));
+
+    /* Real base32, with and without trailing padding, stays valid. */
+    g_assert_true (otp_secret_is_valid_base32 ("JBSWY3DPEHPK3PXP"));
+    g_assert_true (otp_secret_is_valid_base32 ("JBSWY3DP===="));
+    g_assert_true (otp_secret_is_valid_base32 ("jbswy3dpehpk3pxp"));
+}
+
+static void
 test_repair_import_token (void)
 {
     otp_t otp = {0};
@@ -187,6 +204,7 @@ main (int argc, char **argv)
     g_test_add_func ("/validation/repair-leaves-named", test_repair_leaves_named_tokens);
     g_test_add_func ("/validation/repair-index", test_repair_indexes_by_position);
     g_test_add_func ("/validation/repair-import-token", test_repair_import_token);
+    g_test_add_func ("/validation/base32-padding-only", test_base32_rejects_padding_only);
 
     return g_test_run ();
 }

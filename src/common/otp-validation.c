@@ -20,6 +20,7 @@ otp_secret_is_valid_base32 (const gchar *secret)
         return FALSE;
 
     gboolean seen_padding = FALSE;
+    gboolean seen_data = FALSE;
     for (const gchar *p = secret; *p != '\0'; p++) {
         if (g_ascii_isspace (*p))
             continue;
@@ -32,8 +33,12 @@ otp_secret_is_valid_base32 (const gchar *secret)
         gchar c = g_ascii_toupper (*p);
         if (!((c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7')))
             return FALSE;
+        seen_data = TRUE;
     }
-    return TRUE;
+    /* Reject a string that is only whitespace and/or padding: it decodes to
+     * nothing and libcotp would reject it, so accepting it here would let a
+     * malformed import create a token that can never generate a code. */
+    return seen_data;
 }
 
 /* Placeholder name for a token that arrives with neither a label nor an issuer.

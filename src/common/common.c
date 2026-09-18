@@ -614,24 +614,42 @@ build_json_obj (const gchar *type,
 {
     // set_new (not set) for fresh literals: set increments the refcount, but
     // these literals have no local handle to decref afterwards, so the extra
-    // reference would leak when the parent object is eventually freed.
+    // reference would leak when the parent object is eventually freed. Jansson
+    // consumes the value even when it fails, so on failure we only decref the
+    // parent (never the value) and report the allocation failure to the caller.
     json_t *obj = json_object ();
-    json_object_set_new (obj, "type", json_string (type != NULL ? type : ""));
-    json_object_set_new (obj, "label", json_string (acc_label != NULL ? acc_label : ""));
-    json_object_set_new (obj, "issuer", json_string (acc_iss != NULL ? acc_iss : ""));
-    json_object_set_new (obj, "digits", json_integer (digits));
-    json_object_set_new (obj, "algo", json_string (algo));
+    if (obj == NULL)
+        return NULL;
 
-    json_object_set_new (obj, "secret", json_string (acc_key != NULL ? acc_key : ""));
-
-    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
-        json_object_set_new (obj, "period", json_integer (period));
-    } else {
-        json_object_set_new (obj, "counter", json_integer ((json_int_t)ctr));
+    if (json_object_set_new (obj, "type", json_string (type != NULL ? type : "")) != 0 ||
+        json_object_set_new (obj, "label", json_string (acc_label != NULL ? acc_label : "")) != 0 ||
+        json_object_set_new (obj, "issuer", json_string (acc_iss != NULL ? acc_iss : "")) != 0 ||
+        json_object_set_new (obj, "digits", json_integer (digits)) != 0 ||
+        json_object_set_new (obj, "algo", json_string (algo != NULL ? algo : "")) != 0 ||
+        json_object_set_new (obj, "secret", json_string (acc_key != NULL ? acc_key : "")) != 0)
+    {
+        json_decref (obj);
+        return NULL;
     }
 
-    if (group != NULL && group[0] != '\0')
-        json_object_set_new (obj, "group", json_string (group));
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        if (json_object_set_new (obj, "period", json_integer (period)) != 0) {
+            json_decref (obj);
+            return NULL;
+        }
+    } else {
+        if (json_object_set_new (obj, "counter", json_integer ((json_int_t)ctr)) != 0) {
+            json_decref (obj);
+            return NULL;
+        }
+    }
+
+    if (group != NULL && group[0] != '\0') {
+        if (json_object_set_new (obj, "group", json_string (group)) != 0) {
+            json_decref (obj);
+            return NULL;
+        }
+    }
 
     return obj;
 }

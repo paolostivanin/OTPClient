@@ -293,6 +293,7 @@ export_dialog_new (DatabaseData *db_data,
     self->format_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->format_combo), _("Format"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->format_combo), G_LIST_MODEL (format_model));
+    g_object_unref (format_model);
     g_signal_connect (self->format_combo, "notify::selected", G_CALLBACK (on_format_changed), self);
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (group), self->format_combo);
 

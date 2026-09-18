@@ -112,7 +112,7 @@ static gboolean  encrypt_db         (DatabaseData     *db_data,
                                      json_t           *json_data,
                                      GError          **err);
 
-static void      add_to_json        (gpointer          list_elem,
+static gboolean  add_to_json        (gpointer          list_elem,
                                      gpointer          json_array);
 
 static gboolean  backup_db          (const gchar      *path,
@@ -736,7 +736,15 @@ update_db (DatabaseData  *db_data,
     }
 
     if (db_data->data_to_add != NULL) {
-        g_slist_foreach (db_data->data_to_add, add_to_json, candidate);
+        for (GSList *l = db_data->data_to_add; l != NULL; l = l->next) {
+            if (!add_to_json (l->data, candidate)) {
+                g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "Failed to stage a pending token for saving.");
+                json_decref (candidate);
+                restore_live_from_committed (db_data);
+                return;
+            }
+        }
     }
 
     if (!otp_validate_database_root (candidate, err)) {
@@ -1062,7 +1070,15 @@ import_otps_mutation (json_t   *candidate,
             continue;
         }
 
-        json_array_append_new (candidate, obj);
+        /* json_array_append_new consumes obj even on failure, so do not
+         * decref it here. Aborting the transaction (rather than counting the
+         * token as added) prevents a false "imported" report over a database
+         * that does not actually contain it. */
+        if (json_array_append_new (candidate, obj) != 0) {
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                 "Failed to store imported token.");
+            return FALSE;
+        }
         report->added++;
     }
 
@@ -1177,6 +1193,12 @@ add_otps_to_db_ex (GSList       *otps,
             continue;
         }
         json_t *obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
+        if (obj == NULL) {
+            /* Secure-memory exhaustion while staging: skip rather than crash,
+             * and do not count it as added. */
+            skipped++;
+            continue;
+        }
         guint32 hash = json_object_get_hash (obj);
         gboolean is_duplicate = FALSE;
         if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
@@ -1872,7 +1894,7 @@ encrypt_db (DatabaseData *db_data,
         gcry_free (derived_key);
         return FALSE;
     }
-    if (json_dumpb (to_dump, in_memory_dumped_data, input_data_len, JSON_COMPACT) == (size_t) -1) {
+    if (json_dumpb (to_dump, in_memory_dumped_data, input_data_len, JSON_COMPACT) != input_data_len) {
         g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE, "Failed to serialize the in-memory database.");
         if (merged != NULL) json_decref (merged);
         gcry_free (in_memory_dumped_data);
@@ -1946,14 +1968,15 @@ encrypt_db (DatabaseData *db_data,
 }
 
 
-static void
+static gboolean
 add_to_json (gpointer list_elem,
              gpointer json_array)
 {
     // append_new (not append) for the freshly-created deep copy: append would
     // bump the deep-copy's refcount to 2 with no local handle to decref, so
     // the copy would persist indefinitely after the parent array is freed.
-    json_array_append_new (json_array, json_deep_copy (list_elem));
+    // Jansson consumes the deep copy even on failure, so no decref on error.
+    return json_array_append_new (json_array, json_deep_copy (list_elem)) == 0;
 }
 
 
