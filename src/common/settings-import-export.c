@@ -92,9 +92,16 @@ export_settings_to_json (GError **err)
     gchar *result = NULL;
     if (needed > 0) {
         result = g_malloc (needed + 1);
-        /* json_dumpb does not terminate the buffer, and we want a C string. */
-        needed = json_dumpb (root, result, needed, flags);
-        result[needed] = '\0';
+        /* json_dumpb does not terminate the buffer, and we want a C string.
+         * The second dump can fail like the first (returning 0); accepting it
+         * used to hand back "" as a successful export. */
+        size_t written = json_dumpb (root, result, needed, flags);
+        if (written != needed) {
+            g_free (result);
+            result = NULL;
+        } else {
+            result[written] = '\0';
+        }
     }
     json_decref (root);
 

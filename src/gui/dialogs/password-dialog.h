@@ -35,6 +35,15 @@ PasswordDialog *password_dialog_new_full      (PasswordDialogMode    mode,
                                                gpointer              user_data,
                                                GDestroyNotify        user_data_destroy);
 
+/* Attach an error message that is visible as soon as the dialog is presented,
+ * before the user types anything. The async unlock path closes the dialog
+ * while the worker runs and reopens it on a wrong-password retry, so there is
+ * no synchronous callback return to carry the reason. Editing any field hides
+ * the label again, same as for synchronous rejections. NULL or empty is a
+ * no-op. */
+void            password_dialog_set_initial_error (PasswordDialog *self,
+                                                   const gchar    *message);
+
 /* Configure this dialog for "locked database" presentation: adds a Quit
  * button at the start of the header bar that emits "quit-requested" when
  * clicked. The dialog stays dismissable, so Escape/X/click-outside fire the

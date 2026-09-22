@@ -188,6 +188,35 @@ test_repair_import_token (void)
     g_free (otp.secret);
 }
 
+/* L7a: if the append into the quarantine array fails (OOM), the token must
+ * stay in root and must not be counted as moved. The old code removed it from
+ * root first, which dropped the only reference and destroyed the token. */
+static void
+test_quarantine_append_failure_keeps_token (void)
+{
+    json_t *root = json_array ();
+    json_array_append_new (root, valid_totp ());
+    json_array_append_new (root, json_object ());
+
+    json_t *invalid_out = json_array ();
+
+    otp_test_set_fail_invalid_append (TRUE);
+    guint moved = otp_extract_invalid_tokens (root, invalid_out);
+    otp_test_set_fail_invalid_append (FALSE);
+    g_assert_cmpuint (moved, ==, 0);
+    g_assert_cmpuint (json_array_size (root), ==, 2);
+    g_assert_cmpuint (json_array_size (invalid_out), ==, 0);
+
+    /* Without the injected failure the move goes through exactly once. */
+    moved = otp_extract_invalid_tokens (root, invalid_out);
+    g_assert_cmpuint (moved, ==, 1);
+    g_assert_cmpuint (json_array_size (root), ==, 1);
+    g_assert_cmpuint (json_array_size (invalid_out), ==, 1);
+
+    json_decref (root);
+    json_decref (invalid_out);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -205,6 +234,7 @@ main (int argc, char **argv)
     g_test_add_func ("/validation/repair-index", test_repair_indexes_by_position);
     g_test_add_func ("/validation/repair-import-token", test_repair_import_token);
     g_test_add_func ("/validation/base32-padding-only", test_base32_rejects_padding_only);
+    g_test_add_func ("/validation/quarantine-append-failure", test_quarantine_append_failure_keeps_token);
 
     return g_test_run ();
 }

@@ -462,8 +462,9 @@ otp_entry_set_counter (OTPEntry *self,
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_COUNTER]);
 }
 
-void
-otp_entry_update_otp (OTPEntry *self)
+static void
+otp_entry_update_otp_at (OTPEntry *self,
+                         gint64    now)
 {
     g_return_if_fail (OTP_IS_ENTRY (self));
 
@@ -473,14 +474,23 @@ otp_entry_update_otp (OTPEntry *self)
     cotp_error_t err;
     gint algo = get_algo_int (self->algorithm);
     gchar *otp = NULL;
-
     if (g_ascii_strcasecmp (self->otp_type, "TOTP") == 0)
     {
+        /* Sample the clock once and generate from this exact timestamp. cotp
+         * reads the clock again inside the non-_at helpers, so a period
+         * boundary falling between its sample and the step recorded below
+         * made refresh_totp_entry believe the freshly rendered code belonged
+         * to the next step and skip regeneration for the whole period -
+         * leaving an expired code on screen. get_totp_at/get_steam_totp_at
+         * take the timestamp we sampled, so the code and the recorded step
+         * describe the same instant. */
         if (self->issuer != NULL &&
             g_ascii_strcasecmp (self->issuer, "steam") == 0)
-            otp = get_steam_totp (self->secret, self->period, &err);
+            otp = get_steam_totp_at (self->secret, (long) now,
+                                     self->period, &err);
         else
-            otp = get_totp (self->secret, self->digits, self->period, algo, &err);
+            otp = get_totp_at (self->secret, (long) now,
+                               self->digits, self->period, algo, &err);
     }
     else
     {
@@ -499,13 +509,28 @@ otp_entry_update_otp (OTPEntry *self)
         sensitive_free (otp);
     }
 
-    /* Record the step the freshly generated code belongs to. The refresh tick
-     * compares against this to distinguish a real rotation from a delayed or
-     * missed timer tick. */
+    /* Record the step the freshly generated code belongs to, derived from the
+     * same timestamp the code was generated from. The refresh tick compares
+     * against this to distinguish a real rotation from a delayed or missed
+     * timer tick. */
     if (self->period > 0)
-        self->last_rendered_step =
-            (g_get_real_time () / G_USEC_PER_SEC) / (gint64) self->period;
+        self->last_rendered_step = now / (gint64) self->period;
 }
+
+void
+otp_entry_update_otp (OTPEntry *self)
+{
+    otp_entry_update_otp_at (self, g_get_real_time () / G_USEC_PER_SEC);
+}
+
+#ifdef OTPCLIENT_TESTING
+void
+otp_entry_test_update_otp_at (OTPEntry *self,
+                              gint64    now)
+{
+    otp_entry_update_otp_at (self, now);
+}
+#endif
 
 gint64
 otp_entry_get_last_rendered_step (OTPEntry *self)

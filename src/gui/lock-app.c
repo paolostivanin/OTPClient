@@ -72,7 +72,8 @@ lock_app_install_unlock_dialog_quit (PasswordDialog       *dlg,
 }
 
 static void
-present_unlock_dialog (OTPClientApplication *app)
+present_unlock_dialog_with_error (OTPClientApplication *app,
+                                  const gchar          *error_message)
 {
     GtkWindow *win = otpclient_application_get_window (app);
     if (win == NULL)
@@ -81,6 +82,10 @@ present_unlock_dialog (OTPClientApplication *app)
     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                on_unlock_password,
                                                app);
+    /* A retry after a failed unlock arrives here with the reason the last
+     * attempt failed; without it the prompt would simply reappear with no
+     * indication that the password was wrong. */
+    password_dialog_set_initial_error (dlg, error_message);
     lock_app_install_unlock_dialog_quit (dlg, app);
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (win));
 }
@@ -91,7 +96,17 @@ lock_app_present_unlock_dialog (OTPClientApplication *app)
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (app));
     if (otpclient_application_is_unlocking (app))
         return;
-    present_unlock_dialog (app);
+    present_unlock_dialog_with_error (app, NULL);
+}
+
+void
+lock_app_present_unlock_dialog_with_error (OTPClientApplication *app,
+                                           const gchar          *error_message)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (app));
+    if (otpclient_application_is_unlocking (app))
+        return;
+    present_unlock_dialog_with_error (app, error_message);
 }
 
 static gboolean
@@ -142,7 +157,7 @@ lock_app_lock (OTPClientApplication *app)
      * unlock dialog when this call actually transitioned into the locked
      * state. */
     if (!was_locked)
-        present_unlock_dialog (app);
+        present_unlock_dialog_with_error (app, NULL);
 }
 
 void

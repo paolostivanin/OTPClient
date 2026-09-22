@@ -218,6 +218,14 @@ typedef enum {
 
 void    db_test_set_fail_encrypt      (gboolean fail);
 void    db_test_set_fail_atomic_write (gboolean fail);
+/* Force the quarantined-token merge in encrypt_db to fail as if the append
+ * hit OOM: the save must abort with an error instead of silently dropping the
+ * token from the serialized database. */
+void    db_test_set_fail_quarantine_append (gboolean fail);
+/* Force the post-commit digest baseline installation to fail, exercising the
+ * explicit no-baseline fallback: the save must still succeed and the next one
+ * must not be blocked by a stale "Database changed on disk" guard. */
+void    db_test_set_fail_committed_digest  (gboolean fail);
 void    db_test_set_lock_mode         (DbTestLockMode mode);
 
 /* Let `n_successes` decrypts through and fail every one after that, or -1 to

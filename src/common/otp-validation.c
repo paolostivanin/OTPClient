@@ -4,6 +4,19 @@
 #include "gquarks.h"
 #include "otp-validation.h"
 
+#ifdef OTPCLIENT_TESTING
+/* Force json_array_append in otp_extract_invalid_tokens to fail as if OOM,
+ * so a test can assert the token is neither dropped from root nor counted as
+ * moved. */
+static gboolean test_fail_invalid_append = FALSE;
+
+void
+otp_test_set_fail_invalid_append (gboolean fail)
+{
+    test_fail_invalid_append = fail;
+}
+#endif
+
 static gboolean
 is_supported_algo (const gchar *algo)
 {
@@ -292,7 +305,17 @@ otp_extract_invalid_tokens (json_t *root,
         if (otp_validate_token_object (obj, idx, &verr))
             continue;
         g_clear_error (&verr);
-        json_array_append (invalid_out, obj);
+        /* obj is a borrowed reference: append first, and only remove once the
+         * append holds its own reference in invalid_out. Appending can fail
+         * (OOM); removing first used to drop root's reference and destroy the
+         * token permanently while still counting it as moved. */
+#ifdef OTPCLIENT_TESTING
+        if (test_fail_invalid_append ||
+            json_array_append (invalid_out, obj) != 0)
+#else
+        if (json_array_append (invalid_out, obj) != 0)
+#endif
+            continue;
         json_array_remove (root, idx);
         moved++;
     }

@@ -20,7 +20,13 @@ OTPClientApplication *otpclient_application_new      (void);
 GtkWindow            *otpclient_application_get_window  (OTPClientApplication *self);
 
 DatabaseData         *otpclient_application_get_db_data (OTPClientApplication *self);
-void                  otpclient_application_set_db_data (OTPClientApplication *self,
+/* Install or clear the active database, freeing whatever was there before.
+ * Returns FALSE without touching anything when the boundary guard refuses the
+ * replacement because an unlock worker still owns the current db_data; the
+ * caller keeps ownership of db_data in that case and must free it itself.
+ * Callers that can, check otpclient_application_is_unlocking() first so the
+ * user is told before doing the work, not after. */
+gboolean              otpclient_application_set_db_data (OTPClientApplication *self,
                                                          DatabaseData         *db_data);
 
 void                  otpclient_application_switch_to_db (OTPClientApplication *self,
@@ -43,6 +49,12 @@ void                  otpclient_application_relocate_stored_password (OTPClientA
  * action that would free or replace db_data: the worker holds a raw
  * pointer to it and freeing under its feet is a use-after-free. */
 gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
+
+#ifdef OTPCLIENT_TESTING
+/* Exercise replacement-boundary behavior without launching an Argon2 worker. */
+void                  otpclient_application_test_set_unlocking (OTPClientApplication *self,
+                                                                gboolean              unlocking);
+#endif
 
 /* Monotonic counter bumped whenever the active database is replaced or its
  * secrets are purged (lock/switch). Async work captures it at start and

@@ -77,6 +77,15 @@ get_aegis_data_full (const gchar     *path,
     }
 
     goffset input_size = get_file_size (path);
+    if (input_size < 0) {
+        /* get_file_size signals failure with -1; added to the unsigned db_size
+         * it used to wrap and arm the secmem-budget check with garbage. Same
+         * guard as the sibling importers (authpro, twofas, freeotp). */
+        g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                     "Could not determine the size of the imported file.");
+        close (safe_fd);
+        return NULL;
+    }
     if (!is_secmem_available ((db_size + input_size)  * SECMEM_REQUIRED_MULTIPLIER, err)) {
         g_autofree gchar *msg = g_strdup_printf (_(
             "Your system's secure memory limit is not enough to securely import the data.\n"
@@ -551,7 +560,14 @@ export_aegis (const gchar   *export_path,
                          "Couldn't allocate secure memory for the serialized database.");
             goto cleanup_and_exit;
         }
-        json_dumpb (aegis_db_obj, dumped_db, db_size, 0);
+        if (json_dumpb (aegis_db_obj, dumped_db, db_size, 0) != db_size) {
+            /* The allocation above trusted the first dump's size; a failed
+             * second dump returns 0 and the zeroed buffer would be encrypted
+             * and exported as a "successful" corrupt payload. */
+            g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
+                         "Couldn't serialize the database into a buffer.");
+            goto cleanup_and_exit;
+        }
         if (gcry_cipher_encrypt (hd, enc_db, db_size, dumped_db, db_size)) {
             g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE, "Error while encrypting the database.");
             goto cleanup_and_exit;

@@ -51,6 +51,13 @@ const gchar *otp_entry_get_group_lower   (OTPEntry *self);
 
 void         otp_entry_update_otp   (OTPEntry *self);
 
+#ifdef OTPCLIENT_TESTING
+/* Generate at a caller-supplied timestamp so boundary behavior is testable
+ * without racing the wall clock. */
+void         otp_entry_test_update_otp_at (OTPEntry *self,
+                                           gint64    now);
+#endif
+
 /* The TOTP step (now / period) the current otp_value was generated for; 0 if
  * not generated yet. Set on every generation, so callers do not have to infer
  * rotation boundaries from timer ticks. */

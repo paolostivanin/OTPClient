@@ -809,16 +809,22 @@ on_unlock_done (GObject      *source_object,
                 /* While locked, keep the locked-mode chrome: re-present the
                  * unlock dialog rather than the generic decrypt dialog. Safe
                  * here because unlock_in_progress is already FALSE and the key
-                 * was just cleared, so the dialog re-enters the unlock path. */
+                 * was just cleared, so the dialog re-enters the unlock path.
+                 * The dialog closed before authentication finished, so this
+                 * initial error is the only feedback the retry gets: attach
+                 * the reason instead of silently reopening a blank prompt. */
                 if (self->app_locked)
                 {
-                    lock_app_present_unlock_dialog (self);
+                    lock_app_present_unlock_dialog_with_error (
+                        self, _("The database password was incorrect. Please try again."));
                 }
                 else
                 {
                     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_DECRYPT,
                                                                on_password_received,
                                                                self);
+                    password_dialog_set_initial_error (
+                        dlg, _("The database password was incorrect. Please try again."));
                     lock_app_install_unlock_dialog_quit (dlg, self);
                     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self->window));
                 }
@@ -1691,6 +1697,16 @@ otpclient_application_is_unlocking (OTPClientApplication *self)
     return self->unlock_in_progress;
 }
 
+#ifdef OTPCLIENT_TESTING
+void
+otpclient_application_test_set_unlocking (OTPClientApplication *self,
+                                           gboolean              unlocking)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    self->unlock_in_progress = unlocking;
+}
+#endif
+
 guint
 otpclient_application_get_lock_generation (OTPClientApplication *self)
 {
@@ -1707,11 +1723,24 @@ otpclient_application_is_db_unlocked (OTPClientApplication *self)
            && self->db_data->in_memory_json_data != NULL;
 }
 
-void
+gboolean
 otpclient_application_set_db_data (OTPClientApplication *self,
                                     DatabaseData         *db_data)
 {
-    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+
+    /* Defense in depth at the replacement boundary: the unlock worker holds a
+     * raw pointer to the current db_data, and freeing it here is a
+     * use-after-free mid-Argon2id. Every caller checks
+     * otpclient_application_is_unlocking() before doing the work, so this is
+     * not expected to fire; it must not be a bare assertion whose callers
+     * would mistake the rejected replacement for success, so it reports and
+     * leaves both databases untouched. */
+    if (self->unlock_in_progress)
+    {
+        g_warning ("Refusing to replace the active database while an unlock is in progress");
+        return FALSE;
+    }
 
     /* Installing or clearing the active database invalidates every async
      * attempt that captured the previous generation. Doing it here, at the
@@ -1724,6 +1753,7 @@ otpclient_application_set_db_data (OTPClientApplication *self,
     database_data_free (self->db_data);
 
     self->db_data = db_data;
+    return TRUE;
 }
 
 void

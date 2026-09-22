@@ -20,6 +20,11 @@ void lock_app_enter_locked_state   (OTPClientApplication *app);
 
 void lock_app_present_unlock_dialog (OTPClientApplication *app);
 
+/* Same, but seeds the prompt with an error message (e.g. a wrong-password
+ * retry from the async unlock worker). NULL shows a clean dialog. */
+void lock_app_present_unlock_dialog_with_error (OTPClientApplication *app,
+                                                const gchar          *error_message);
+
 /* Wire dlg up as the unlock dialog for a locked database: adds the Quit
  * button (routes to g_application_quit) and a "closed" handler that drops the
  * app to the locked page when the user dismisses the prompt without unlocking

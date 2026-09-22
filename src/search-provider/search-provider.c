@@ -66,15 +66,24 @@ static GHashTable *g_kdf_cache = NULL;
 /* Per-sender token bucket for Activate/Run. Without it, any session-bus peer
  * can spam OTP delivery (which sends a notification carrying the live code)
  * at unlimited rate. Match queries are not rate-limited here because the
- * entries cache already absorbs them; only the OTP-yielding paths are. */
+ * entries cache already absorbs them; only the OTP-yielding paths are.
+ *
+ * The buckets are keyed on the D-Bus sender so a local peer that knows the
+ * keyword cannot drain a shared bucket and starve the real user. */
 #define RATE_BUCKET_MAX     10.0
 #define RATE_REFILL_PER_SEC  5.0
+/* Cap on distinct senders tracked at once, so a peer that fabricates unique
+ * sender names cannot grow the map without bound; entries idle longer than
+ * RATE_BUCKET_TTL_US are evicted to make room. */
+#define RATE_BUCKETS_MAX_SENDERS 32
+#define RATE_BUCKET_TTL_US (60 * G_USEC_PER_SEC)
 typedef struct {
     gdouble tokens;
     gint64 last_refill_us;
+    gint64 last_seen_us;
 } RateBucket;
 
-static RateBucket g_global_rate_bucket = { RATE_BUCKET_MAX, 0 };
+static GHashTable *g_rate_buckets = NULL;  /* sender (owned) -> RateBucket* */
 static gint64 g_last_activity_us = 0;
 #define IDLE_WIPE_SECONDS 300
 
@@ -280,15 +289,13 @@ kdf_cache_capture_from_db_data (const DatabaseData *db_data,
 
 /* Returns TRUE if the call should proceed (a token was available), FALSE if
  * the sender's bucket is empty. Tokens refill at RATE_REFILL_PER_SEC up to
- * RATE_BUCKET_MAX. A NULL sender (peer-to-peer connection without a name)
- * is bucketed under a fixed key so it can't bypass the limiter by being
- * unidentifiable. */
-static gboolean
-rate_bucket_consume (const gchar *sender)
+ * RATE_BUCKET_MAX, per sender. A NULL sender (peer-to-peer connection without
+ * a name) is bucketed under a fixed key so it can't bypass the limiter by
+ * being unidentifiable. */
+static void
+rate_bucket_refill (RateBucket *bucket,
+                    gint64      now)
 {
-    (void) sender;
-    gint64 now = g_get_monotonic_time ();
-    RateBucket *bucket = &g_global_rate_bucket;
     if (bucket->last_refill_us == 0) {
         bucket->tokens = RATE_BUCKET_MAX;
         bucket->last_refill_us = now;
@@ -301,6 +308,65 @@ rate_bucket_consume (const gchar *sender)
             bucket->last_refill_us = now;
         }
     }
+}
+
+/* Drop senders idle beyond the TTL. Only called when the map is at its cap,
+ * so the common case never walks the table. */
+static void
+rate_buckets_evict_stale (gint64 now)
+{
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init (&iter, g_rate_buckets);
+    while (g_hash_table_iter_next (&iter, &key, &value)) {
+        RateBucket *bucket = value;
+        if (bucket->last_seen_us != 0 &&
+            now - bucket->last_seen_us >= RATE_BUCKET_TTL_US)
+            g_hash_table_iter_remove (&iter);
+    }
+}
+
+static gboolean
+rate_bucket_consume (const gchar *sender)
+{
+    gint64 now = g_get_monotonic_time ();
+
+    if (g_rate_buckets == NULL)
+        g_rate_buckets = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                g_free, g_free);
+
+    const gchar *key = (sender != NULL && sender[0] != '\0') ? sender : ":anon";
+
+    if (g_hash_table_size (g_rate_buckets) >= RATE_BUCKETS_MAX_SENDERS) {
+        rate_buckets_evict_stale (now);
+        if (g_hash_table_size (g_rate_buckets) >= RATE_BUCKETS_MAX_SENDERS) {
+            /* Every slot is held by a recently active sender. Drop the
+             * least-recently-seen one: a hostile peer still cannot exceed
+             * RATE_BUCKET_MAX per sender, and the real user keeps a slot. */
+            GHashTableIter iter;
+            gpointer key_iter, value_iter;
+            const gchar *lru_key = NULL;
+            gint64 lru_seen = G_MAXINT64;
+            g_hash_table_iter_init (&iter, g_rate_buckets);
+            while (g_hash_table_iter_next (&iter, &key_iter, &value_iter)) {
+                RateBucket *bucket = value_iter;
+                if (bucket->last_seen_us < lru_seen) {
+                    lru_seen = bucket->last_seen_us;
+                    lru_key = key_iter;
+                }
+            }
+            if (lru_key != NULL)
+                g_hash_table_remove (g_rate_buckets, lru_key);
+        }
+    }
+
+    RateBucket *bucket = g_hash_table_lookup (g_rate_buckets, key);
+    if (bucket == NULL) {
+        bucket = g_new0 (RateBucket, 1);
+        g_hash_table_insert (g_rate_buckets, g_strdup (key), bucket);
+    }
+    rate_bucket_refill (bucket, now);
+    bucket->last_seen_us = now;
 
     if (bucket->tokens < 1.0)
         return FALSE;
@@ -312,8 +378,7 @@ rate_bucket_consume (const gchar *sender)
 static void
 rate_buckets_clear (void)
 {
-    g_global_rate_bucket.tokens = RATE_BUCKET_MAX;
-    g_global_rate_bucket.last_refill_us = 0;
+    g_clear_pointer (&g_rate_buckets, g_hash_table_destroy);
 }
 
 static gboolean
@@ -749,12 +814,23 @@ typedef struct {
     const gchar *cur_name;
     /* Settings generation the reload started under. See entries_reload_complete. */
     guint64    generation;
+    /* Bounds the in-flight keyring lookup: if the Secret Service wedges, the
+     * lookup never completes and this reload (plus every queued query) stalls
+     * forever. The deadline cancels the lookup; the completion callback then
+     * observes the timeout and moves on to the next database. */
+    GCancellable *keyring_cancellable;
+    guint         keyring_deadline_id;
+    gboolean      keyring_timed_out;
 } EntriesReload;
 
 static EntriesReload *entries_reload = NULL;
 static GSList        *entries_waiters = NULL;   /* GTask *, owned */
 
 static void entries_reload_step (EntriesReload *reload);
+
+/* A wedged Secret Service must not leave an ActivationJob or a reload parked
+ * forever: bound every keyring lookup with a cancellable deadline. */
+#define KEYRING_LOOKUP_DEADLINE_SECONDS 30
 
 
 static gboolean
@@ -783,10 +859,44 @@ entries_reload_free (EntriesReload *reload)
 {
     if (reload == NULL)
         return;
+    if (reload->keyring_deadline_id != 0) {
+        g_source_remove (reload->keyring_deadline_id);
+        reload->keyring_deadline_id = 0;
+    }
+    g_clear_object (&reload->keyring_cancellable);
     g_clear_pointer (&reload->entries, g_ptr_array_unref);
     g_clear_pointer (&reload->db_list, g_ptr_array_unref);
     g_clear_pointer (&reload->fallback_path, g_free);
     g_free (reload);
+}
+
+static gboolean on_reload_keyring_deadline (gpointer user_data);
+
+static void
+entries_reload_arm_keyring_guard (EntriesReload *reload)
+{
+    if (reload->keyring_deadline_id != 0) {
+        g_source_remove (reload->keyring_deadline_id);
+        reload->keyring_deadline_id = 0;
+    }
+    g_clear_object (&reload->keyring_cancellable);
+    reload->keyring_timed_out = FALSE;
+    reload->keyring_cancellable = g_cancellable_new ();
+    reload->keyring_deadline_id = g_timeout_add_seconds (
+        KEYRING_LOOKUP_DEADLINE_SECONDS, on_reload_keyring_deadline, reload);
+}
+
+static gboolean
+on_reload_keyring_deadline (gpointer user_data)
+{
+    EntriesReload *reload = user_data;
+    reload->keyring_deadline_id = 0;
+    reload->keyring_timed_out = TRUE;
+    g_warning ("Search provider: keyring lookup for %s did not answer within %d s; skipping it.",
+               reload->cur_path != NULL ? reload->cur_path : "(unknown)",
+               KEYRING_LOOKUP_DEADLINE_SECONDS);
+    g_cancellable_cancel (reload->keyring_cancellable);
+    return G_SOURCE_REMOVE;
 }
 
 
@@ -828,20 +938,35 @@ on_reload_password (GObject      *source G_GNUC_UNUSED,
                     gpointer      user_data)
 {
     EntriesReload *reload = user_data;
+    if (reload->keyring_deadline_id != 0) {
+        g_source_remove (reload->keyring_deadline_id);
+        reload->keyring_deadline_id = 0;
+    }
+    g_clear_object (&reload->keyring_cancellable);
     g_autoptr (GError) err = NULL;
     gchar *pwd = otpclient_secret_lookup_with_legacy_fallback_finish (res, NULL, &err);
 
-    /* Issue #446: surface broken-keyring errors via a warning instead of
-     * silently returning. Don't mutate GSettings here, the search provider
-     * is a passive consumer; the GUI app owns the setting. */
-    if (err != NULL) {
+    if (reload->keyring_timed_out) {
+        /* The deadline already fired and cancelled this lookup; the next
+         * database still gets its turn instead of the whole reload (and
+         * every queued query with it) stalling forever. */
+        reload->keyring_timed_out = FALSE;
+    } else if (err != NULL) {
+        /* Issue #446: surface broken-keyring errors via a warning instead of
+         * silently returning. Don't mutate GSettings here, the search provider
+         * is a passive consumer; the GUI app owns the setting. */
         g_warning ("Search provider: secret service lookup failed for %s: %s",
                    reload->cur_path, err->message);
     } else if (pwd != NULL) {
         load_entries_from_db (reload->entries, reload->cur_path, reload->cur_name,
                               reload->next_index, pwd);
-        secret_password_free (pwd);
     }
+    /* Cancellation can race a lookup that has already completed and queued
+     * this callback. In that case keyring_timed_out is TRUE but _finish still
+     * returns the password, so it must be wiped regardless of which branch
+     * above handled the result. */
+    if (pwd != NULL)
+        secret_password_free (pwd);
 
     reload->next_index++;
     entries_reload_step (reload);
@@ -875,7 +1000,9 @@ entries_reload_step (EntriesReload *reload)
      * misses, so users who upgraded but have not opened the GUI yet still get
      * search hits. No cleanup here, the GUI's first launch is what migrates and
      * clears the legacy entry. */
-    otpclient_secret_lookup_with_legacy_fallback_async (reload->cur_path, NULL,
+    entries_reload_arm_keyring_guard (reload);
+    otpclient_secret_lookup_with_legacy_fallback_async (reload->cur_path,
+                                                        reload->keyring_cancellable,
                                                         on_reload_password, reload);
 }
 
@@ -1484,6 +1611,12 @@ typedef struct {
     gsize                  json_index;
     gboolean               is_kde;
     guint64                generation;
+    /* Bounds the keyring lookup: a wedged Secret Service used to leave this
+     * job and its unanswered GDBusMethodInvocation leaked forever. See the
+     * EntriesReload guard for the same pattern. */
+    GCancellable *keyring_cancellable;
+    guint         keyring_deadline_id;
+    gboolean      keyring_timed_out;
 } ActivationJob;
 
 
@@ -1511,11 +1644,30 @@ query_job_free (QueryJob *job)
 static void
 activation_job_free (ActivationJob *job)
 {
+    if (job->keyring_deadline_id != 0) {
+        g_source_remove (job->keyring_deadline_id);
+        job->keyring_deadline_id = 0;
+    }
+    g_clear_object (&job->keyring_cancellable);
     g_clear_object (&job->conn);
     g_free (job->db_path);
     g_free (job->label);
     g_free (job->token_identity);
     g_free (job);
+}
+
+
+static gboolean
+on_activation_keyring_deadline (gpointer user_data)
+{
+    ActivationJob *job = user_data;
+    job->keyring_deadline_id = 0;
+    job->keyring_timed_out = TRUE;
+    g_warning ("Search provider: keyring lookup for %s did not answer within %d s; giving up.",
+               job->db_path != NULL ? job->db_path : "(unknown)",
+               KEYRING_LOOKUP_DEADLINE_SECONDS);
+    g_cancellable_cancel (job->keyring_cancellable);
+    return G_SOURCE_REMOVE;
 }
 
 
@@ -1525,6 +1677,11 @@ on_activation_password (GObject      *source G_GNUC_UNUSED,
                         gpointer      user_data)
 {
     ActivationJob *job = user_data;
+    if (job->keyring_deadline_id != 0) {
+        g_source_remove (job->keyring_deadline_id);
+        job->keyring_deadline_id = 0;
+    }
+    g_clear_object (&job->keyring_cancellable);
     g_autoptr (GError) err = NULL;
     gchar *pwd = otpclient_secret_lookup_with_legacy_fallback_finish (res, NULL, &err);
     g_autofree gchar *failure = NULL;
@@ -1533,6 +1690,11 @@ on_activation_password (GObject      *source G_GNUC_UNUSED,
     if (job->generation != delivery_generation || !provider_access_allowed ()) {
         /* The provider was switched off between the click and the lookup.
          * Deliver nothing, and say nothing either: the user just turned it off. */
+    } else if (job->keyring_timed_out) {
+        /* The deadline fired and cancelled the lookup: fail the delivery
+         * instead of leaving the invocation unanswered forever. */
+        failure = g_strdup ("The keyring did not answer in time. "
+                            "Unlock the database once in OTPClient and try again.");
     } else if (err != NULL) {
         g_warning ("Search provider: secret service lookup failed for %s: %s",
                    job->db_path, err->message);
@@ -1578,8 +1740,14 @@ activation_job_start (GDBusMethodInvocation      *inv,
     job->generation = delivery_generation;
 
     /* Issue #448: v4 fallback so a v4 upgrader who has not opened the GUI yet
-     * still gets OTP values from the search provider. */
-    otpclient_secret_lookup_with_legacy_fallback_async (job->db_path, NULL,
+     * still gets OTP values from the search provider. The lookup is bounded:
+     * a wedged Secret Service must not leave the invocation unanswered. */
+    job->keyring_timed_out = FALSE;
+    job->keyring_cancellable = g_cancellable_new ();
+    job->keyring_deadline_id = g_timeout_add_seconds (
+        KEYRING_LOOKUP_DEADLINE_SECONDS, on_activation_keyring_deadline, job);
+    otpclient_secret_lookup_with_legacy_fallback_async (job->db_path,
+                                                        job->keyring_cancellable,
                                                         on_activation_password, job);
 }
 

@@ -47,18 +47,6 @@ validity_widgets_free (ValidityWidgets *widgets)
     if (widgets->timeout_id != 0)
         g_source_remove (widgets->timeout_id);
 
-    if (widgets->css_provider != NULL)
-    {
-        /* gtk_style_context_add_provider_for_display keeps its own reference
-         * and the registration outlives the widget, so it must be removed
-         * explicitly before dropping ours. */
-        GdkDisplay *display = gdk_display_get_default ();
-        if (display != NULL)
-            gtk_style_context_remove_provider_for_display (
-                display, GTK_STYLE_PROVIDER (widgets->css_provider));
-        g_object_unref (widgets->css_provider);
-    }
-
     g_free (widgets);
 }
 
@@ -80,6 +68,45 @@ show_error_toast (OTPClientWindow *self, const gchar *format, ...)
     AdwToast *toast = adw_toast_new (msg);
     adw_toast_set_timeout (toast, 6);
     adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+}
+
+/* One shared provider for every otp-validity level bar. Per-row state is a
+ * CSS class, not a per-row provider: rows are recycled GtkListItems, and
+ * display-wide providers registered at APPLICATION priority raced each other,
+ * so the winning color was registration (bind/recycle) order rather than each
+ * row's remaining time - warning colors bled onto all rows or were masked on
+ * all rows, flipping as rows recycled. The shared CSS is reloaded only when
+ * the configured colors change. */
+static GtkCssProvider *otp_validity_provider = NULL;
+static gchar *otp_validity_provider_colors = NULL;
+
+static void
+validity_ensure_shared_css (const gchar *normal_color,
+                            const gchar *warning_color)
+{
+    if (otp_validity_provider == NULL)
+    {
+        otp_validity_provider = gtk_css_provider_new ();
+        gtk_style_context_add_provider_for_display (
+            gdk_display_get_default (),
+            GTK_STYLE_PROVIDER (otp_validity_provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    }
+
+    g_autofree gchar *key = g_strdup_printf ("%s|%s",
+                                             normal_color != NULL ? normal_color : "",
+                                             warning_color != NULL ? warning_color : "");
+    if (g_strcmp0 (key, otp_validity_provider_colors) != 0)
+    {
+        g_autofree gchar *css = g_strdup_printf (
+            "levelbar.otp-validity.otp-validity-normal trough block.filled { background-color: %s; }"
+            "levelbar.otp-validity.otp-validity-warning trough block.filled { background-color: %s; }",
+            normal_color != NULL ? normal_color : "green",
+            warning_color != NULL ? warning_color : "red");
+        gtk_css_provider_load_from_string (otp_validity_provider, css);
+        g_free (otp_validity_provider_colors);
+        otp_validity_provider_colors = g_steal_pointer (&key);
+    }
 }
 
 static void
@@ -116,33 +143,22 @@ validity_update_display (ValidityWidgets *widgets)
                 : 0.0;
             gtk_level_bar_set_value (GTK_LEVEL_BAR (widgets->level_bar), fraction);
 
-            /* Apply color based on remaining time */
-            const gchar *color;
-            if (widgets->remaining <= widgets->period / 4)
-                color = otpclient_application_get_validity_warning_color (app);
-            else
-                color = otpclient_application_get_validity_color (app);
+            /* Apply color based on remaining time by toggling a class; the
+             * colors themselves live in the shared provider above. add/remove
+             * are no-ops when the class is already (un)set. */
+            const gchar *normal_color = otpclient_application_get_validity_color (app);
+            const gchar *warning_color = otpclient_application_get_validity_warning_color (app);
+            validity_ensure_shared_css (normal_color, warning_color);
 
-            GtkCssProvider *provider = widgets->css_provider;
-            if (provider == NULL)
+            if (widgets->remaining <= widgets->period / 4)
             {
-                provider = gtk_css_provider_new ();
-                widgets->css_provider = provider;
-                gtk_widget_add_css_class (widgets->level_bar, "otp-validity");
-                gtk_style_context_add_provider_for_display (
-                    gtk_widget_get_display (widgets->level_bar),
-                    GTK_STYLE_PROVIDER (provider),
-                    GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-                g_object_set_data (G_OBJECT (widgets->level_bar), "last-color", NULL);
+                gtk_widget_add_css_class (widgets->level_bar, "otp-validity-warning");
+                gtk_widget_remove_css_class (widgets->level_bar, "otp-validity-normal");
             }
-            const gchar *last_color = g_object_get_data (G_OBJECT (widgets->level_bar), "last-color");
-            if (last_color == NULL || g_strcmp0 (last_color, color) != 0)
+            else
             {
-                g_autofree gchar *css = g_strdup_printf (
-                    "levelbar.otp-validity trough block.filled { background-color: %s; }", color);
-                gtk_css_provider_load_from_string (provider, css);
-                g_object_set_data_full (G_OBJECT (widgets->level_bar), "last-color",
-                                        g_strdup (color), g_free);
+                gtk_widget_add_css_class (widgets->level_bar, "otp-validity-normal");
+                gtk_widget_remove_css_class (widgets->level_bar, "otp-validity-warning");
             }
 
             gtk_widget_set_visible (widgets->level_bar, TRUE);
@@ -525,6 +541,9 @@ otp_validity_column_setup (GtkSignalListItemFactory *factory,
     gtk_level_bar_set_mode (GTK_LEVEL_BAR (level_bar), GTK_LEVEL_BAR_MODE_CONTINUOUS);
     gtk_widget_set_visible (level_bar, FALSE);
     gtk_widget_set_size_request (level_bar, 60, 8);
+    /* Selector hook for the shared validity CSS (see validity_update_display);
+     * the per-row normal/warning class is toggled on top of this. */
+    gtk_widget_add_css_class (level_bar, "otp-validity");
     gtk_box_append (GTK_BOX (box), level_bar);
 
     gtk_list_item_set_child (list_item, box);
@@ -2616,7 +2635,13 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
     if (self->group_list_model != NULL) {
         guint groups = g_list_model_get_n_items (
             G_LIST_MODEL (self->group_list_model));
+        /* Splicing to zero makes GtkDropDown emit notify::selected with
+         * GTK_INVALID_LIST_POSITION. The flag suppresses the handler for the
+         * synchronous emission; the handler itself also treats an invalid
+         * position as "no selection", covering a deferred one. */
+        self->syncing_group_filter = TRUE;
         gtk_string_list_splice (self->group_list_model, 0, groups, NULL);
+        self->syncing_group_filter = FALSE;
     }
     if (self->search_entry != NULL)
         gtk_editable_set_text (GTK_EDITABLE (self->search_entry), "");
@@ -2742,11 +2767,24 @@ on_group_dropdown_changed (GtkDropDown     *dropdown,
         return;
 
     guint selected = gtk_drop_down_get_selected (dropdown);
-    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model));
+    guint n = (self->group_list_model != NULL)
+        ? g_list_model_get_n_items (G_LIST_MODEL (self->group_list_model)) : 0;
 
     g_clear_pointer (&self->active_group_filter, g_free);
 
-    if (selected == 0)
+    if (selected == GTK_INVALID_LIST_POSITION || selected >= n)
+    {
+        /* No real selection. secure_lock_cleanup splices the group model to
+         * zero while the app is locked, and GtkDropDown answers with
+         * GTK_INVALID_LIST_POSITION (0xFFFFFFFF): on guint, the old
+         * `selected == n - 1` comparison underflowed to TRUE and recorded the
+         * empty-string "Ungrouped" sentinel as the user's choice, which
+         * rebuild_group_list then faithfully restored - filtering every
+         * grouped token out after each lock/unlock cycle. Treat "no
+         * selection" as "All"; never as a filter the user chose. */
+        self->active_group_filter = NULL;
+    }
+    else if (selected == 0)
     {
         /* "All" - no group filter */
         self->active_group_filter = NULL;
@@ -3678,6 +3716,12 @@ typedef struct {
     guint            token_pos;
     json_t          *token_json;   /* deep copy, owned */
     gchar           *target_db_path;
+    /* Where the move started. The success branch removes the source entry by
+     * position; verifying the database (path + lock generation) and the token
+     * itself (full JSON equality) first keeps a stale submission from deleting
+     * whatever now sits at that position. */
+    gchar           *source_db_path;
+    guint            source_generation;
 } MoveTokenContext;
 
 static void
@@ -3689,6 +3733,7 @@ move_token_context_free (MoveTokenContext *ctx)
     if (ctx->token_json != NULL)
         json_decref (ctx->token_json);
     g_free (ctx->target_db_path);
+    g_free (ctx->source_db_path);
     g_free (ctx);
 }
 
@@ -3743,11 +3788,30 @@ on_move_target_password (const gchar  *current_password,
         return TRUE;
     }
 
-    /* Append the token to the target database */
+    /* Append the token to the target database. Every staging step can fail
+     * under memory pressure; if any of them does, stop here. The success
+     * branch below removes the source token and persists the source
+     * database, so entering it with a target save that never contained the
+     * token used to delete the only copy the user had. */
     if (target->in_memory_json_data == NULL)
+    {
         target->in_memory_json_data = json_array ();
+        if (target->in_memory_json_data == NULL)
+        {
+            show_error_toast (self, "%s",
+                _("Could not allocate memory to stage the token in the target database. The token was not moved."));
+            database_data_free (target);
+            return TRUE;
+        }
+    }
 
-    json_array_append (target->in_memory_json_data, ctx->token_json);
+    if (json_array_append (target->in_memory_json_data, ctx->token_json) != 0)
+    {
+        show_error_toast (self, "%s",
+            _("Could not stage the token in the target database. The token was not moved."));
+        database_data_free (target);
+        return TRUE;
+    }
 
     update_db (target, &err);
     if (err != NULL)
@@ -3757,19 +3821,39 @@ on_move_target_password (const gchar  *current_password,
     }
     else
     {
-        /* Remove the token from the current (source) database. If writing
-         * the source back fails, restore the in-memory copy so the UI stays
-         * consistent with the on-disk state - otherwise a later reload would
-         * resurrect the token and the user would have a silent duplicate. */
+        /* Remove the token from the current (source) database - but only if
+         * it is still the database this move started from and the entry at
+         * the recorded position is still the very token that was copied.
+         * A dialog left open across a database switch or an edit would
+         * otherwise delete a positional neighbour. If writing the source
+         * back fails, restore the in-memory copy so the UI stays
+         * consistent with the on-disk state - otherwise a later reload
+         * would resurrect the token and the user would have a silent
+         * duplicate. */
         DatabaseData *src = otpclient_application_get_db_data (app);
-        if (src != NULL && src->in_memory_json_data != NULL)
+        json_t *current = (src != NULL && src->in_memory_json_data != NULL)
+            ? json_array_get (src->in_memory_json_data, ctx->token_pos) : NULL;
+        gboolean source_matches =
+            src != NULL && current != NULL &&
+            g_strcmp0 (src->db_path, ctx->source_db_path) == 0 &&
+            otpclient_application_get_lock_generation (app) == ctx->source_generation &&
+            json_equal (current, ctx->token_json);
+        if (!source_matches)
         {
-            json_t *removed = json_incref (json_array_get (src->in_memory_json_data, ctx->token_pos));
+            show_error_toast (self, "%s",
+                _("The token was copied to the target database, but the source database changed meanwhile. The token now exists in both databases; please remove the outdated copy manually."));
+        }
+        else
+        {
+            json_t *removed = json_incref (current);
             json_array_remove (src->in_memory_json_data, ctx->token_pos);
             update_db (src, &err);
             if (err != NULL)
             {
-                json_array_insert (src->in_memory_json_data, ctx->token_pos, removed);
+                /* update_db() restores in_memory_json_data from its committed
+                 * snapshot on every failure. Do not insert removed again here:
+                 * doing so added a second copy of the source token after an
+                 * I/O or external-modification failure. */
                 show_error_toast (self,
                     _("Could not remove the token from the source database: %s. The token now exists in both databases; please remove the duplicate manually."),
                     err->message);
@@ -3853,6 +3937,18 @@ action_move_token (GtkWidget  *widget,
     g_weak_ref_init (&ctx->window_ref, self);
     ctx->token_pos = pos;
     ctx->token_json = json_deep_copy (token_obj);
+    /* The deep copy is the token's ticket through the dialog round-trip; if
+     * staging it failed there is nothing to move and the success path would
+     * go on to delete the source token for nothing. */
+    if (ctx->token_json == NULL)
+    {
+        g_clear_pointer (&ctx, move_token_context_free);
+        show_error_toast (self, "%s",
+            _("Could not allocate memory to stage the token. The token was not moved."));
+        return;
+    }
+    ctx->source_db_path = g_strdup (db_data->db_path);
+    ctx->source_generation = otpclient_application_get_lock_generation (app);
 
     const gchar *account = json_string_value (json_object_get (token_obj, "label"));
     g_autofree gchar *body = g_strdup_printf (_("Select the database to move \"%s\" to:"),
@@ -4263,6 +4359,11 @@ typedef struct {
     GWeakRef window_ref;
     gchar *db_path;
     gchar *replace_path;
+    /* Lock generation captured when the dialog was created. A submission that
+     * lands after the session locked/switched/replaced its database is
+     * permanently stale and must not reach set_db_data; see
+     * on_open_db_password_received. */
+    guint origin_generation;
 } NewDbContext;
 
 static void
@@ -4321,9 +4422,14 @@ on_new_db_file_selected (GObject      *source,
     else
         db_path = g_strdup (path);
 
+    OTPClientApplication *ctx_app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+
     NewDbContext *ctx = g_new0 (NewDbContext, 1);
     g_weak_ref_init (&ctx->window_ref, self);
     ctx->db_path = db_path;
+    ctx->origin_generation = (ctx_app != NULL)
+        ? otpclient_application_get_lock_generation (ctx_app) : 0;
 
     PasswordDialog *pwd_dlg = password_dialog_new_full (PASSWORD_MODE_NEW,
                                                         on_new_db_password_received,
@@ -4340,27 +4446,45 @@ on_new_db_password_received (const gchar  *current_password,
                               gpointer      user_data)
 {
     (void) current_password;
-    (void) error_message;
-    /* Owned by the dialog, freed on its dispose. The path is stolen because the
-     * work below outlives neither the dialog nor its context. */
+    /* Owned by the dialog, freed on its dispose. The path is stolen only once
+     * every pre-flight check has passed, so a rejected submission leaves the
+     * context intact and the dialog retryable. */
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
-    gchar *db_path = g_steal_pointer (&ctx->db_path);
 
     if (self == NULL || self->disposing || window_is_locked (self) ||
         password == NULL)
-    {
-        g_free (db_path);
         return TRUE;
-    }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
+        return TRUE;
+
+    /* A keyring-triggered unlock can still be in flight while this dialog is
+     * up (a slow secret portal at startup, say). Its worker holds a raw
+     * pointer to the active db_data; letting set_db_data run now would free
+     * it mid-Argon2id. Return FALSE with a reason so the dialog stays open
+     * and the submission can be retried once the unlock settles. */
+    if (otpclient_application_is_unlocking (app))
     {
-        g_free (db_path);
+        if (error_message != NULL)
+            *error_message = g_strdup (
+                _("The database is still being unlocked. Please wait a moment and try again."));
+        return FALSE;
+    }
+
+    /* The session moved on since the dialog was created (locked, switched, or
+     * replaced its database). This context is permanently stale: reject it and
+     * let the dialog close rather than install anything into the new session. */
+    if (otpclient_application_get_lock_generation (app) != ctx->origin_generation)
+    {
+        show_error_toast (self, "%s",
+                          _("The session changed while this dialog was open. Please try again."));
         return TRUE;
     }
+
+    gchar *db_path = g_steal_pointer (&ctx->db_path);
 
     /* Free old db_data if present */
     DatabaseData *old_db = otpclient_application_get_db_data (app);
@@ -4412,7 +4536,16 @@ on_new_db_password_received (const gchar  *current_password,
         g_clear_error (&err);
     }
 
-    otpclient_application_set_db_data (app, db_data);
+    if (!otpclient_application_set_db_data (app, db_data))
+    {
+        /* set_db_data's boundary guard refused the replacement (a worker is
+         * somehow reading the current database again). db_data ownership
+         * stayed with us; install nothing and say why. */
+        database_data_free (db_data);
+        show_error_toast (self, "%s",
+                          _("The database is still being unlocked. Please wait a moment and try again."));
+        return TRUE;
+    }
 
     /* Add to sidebar. The first DB ever added is auto-set as primary by
      * otpclient_window_add_database; subsequent creations leave the
@@ -4510,10 +4643,15 @@ on_open_db_file_selected (GObject      *source,
         return;
     }
 
+    OTPClientApplication *ctx_app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+
     NewDbContext *ctx = g_new0 (NewDbContext, 1);
     g_weak_ref_init (&ctx->window_ref, self);
     ctx->db_path = g_strdup (path);
     ctx->replace_path = g_steal_pointer (&async_ctx->replace_path);
+    ctx->origin_generation = (ctx_app != NULL)
+        ? otpclient_application_get_lock_generation (ctx_app) : 0;
 
     PasswordDialog *pwd_dlg = password_dialog_new_full (PASSWORD_MODE_DECRYPT,
                                                         on_open_db_password_received,
@@ -4530,27 +4668,44 @@ on_open_db_password_received (const gchar  *current_password,
                                gpointer      user_data)
 {
     (void) current_password;
-    (void) error_message;
-    /* Owned by the dialog, freed on its dispose. */
+    /* Owned by the dialog, freed on its dispose. The path is stolen only once
+     * every pre-flight check has passed, so a rejected submission leaves the
+     * context intact and the dialog retryable. */
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
-    gchar *db_path = g_steal_pointer (&ctx->db_path);
-    g_autofree gchar *replace_path = g_steal_pointer (&ctx->replace_path);
 
     if (self == NULL || self->disposing || window_is_locked (self) ||
         password == NULL)
-    {
-        g_free (db_path);
         return TRUE;
-    }
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
+        return TRUE;
+
+    /* A keyring-triggered unlock can still be in flight while this dialog is
+     * up. Its worker holds a raw pointer to the active db_data; letting
+     * set_db_data run now would free it mid-Argon2id. Return FALSE with a
+     * reason so the dialog stays open and the submission can be retried. */
+    if (otpclient_application_is_unlocking (app))
     {
-        g_free (db_path);
+        if (error_message != NULL)
+            *error_message = g_strdup (
+                _("The database is still being unlocked. Please wait a moment and try again."));
+        return FALSE;
+    }
+
+    /* Permanently stale: the session locked, switched, or replaced its
+     * database since this dialog was created. */
+    if (otpclient_application_get_lock_generation (app) != ctx->origin_generation)
+    {
+        show_error_toast (self, "%s",
+                          _("The session changed while this dialog was open. Please try again."));
         return TRUE;
     }
+
+    gchar *db_path = g_steal_pointer (&ctx->db_path);
+    g_autofree gchar *replace_path = g_steal_pointer (&ctx->replace_path);
 
     /* Stop current DB */
     otpclient_window_stop_otp_timer (self);
@@ -4583,7 +4738,16 @@ on_open_db_password_received (const gchar  *current_password,
         return TRUE;
     }
 
-    otpclient_application_set_db_data (app, db_data);
+    if (!otpclient_application_set_db_data (app, db_data))
+    {
+        /* set_db_data's boundary guard refused the replacement (a worker is
+         * somehow reading the current database again). db_data ownership
+         * stayed with us; install nothing and say why. */
+        database_data_free (db_data);
+        show_error_toast (self, "%s",
+                          _("The database is still being unlocked. Please wait a moment and try again."));
+        return TRUE;
+    }
 
     gboolean replaced = FALSE;
     if (replace_path != NULL) {

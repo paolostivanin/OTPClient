@@ -126,6 +126,39 @@ test_atomic_write_failure_preserves_add (void)
     assert_transaction_failure_preserves_json (append_token_mutation, TRUE);
 }
 
+/* update_db(), not only db_transaction(), owns rollback of direct live-JSON
+ * mutations. GUI callers must therefore not manually reinsert an item after a
+ * failed delete: the committed snapshot already restored it, and reinserting
+ * would create a duplicate. */
+static void
+test_update_failure_restores_direct_delete_once (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+    GError *err = NULL;
+
+    /* Establish both the on-disk database and its committed in-memory
+     * snapshot, then mutate the live array in the same way as move-token. */
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    json_t *before = json_deep_copy (db_data->in_memory_json_data);
+    g_assert_cmpuint (json_array_size (before), ==, 1);
+    json_array_remove (db_data->in_memory_json_data, 0);
+
+    db_test_set_fail_atomic_write (TRUE);
+    update_db (db_data, &err);
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_error (err, generic_error_gquark (), GENERIC_ERRCODE);
+    g_clear_error (&err);
+
+    g_assert_true (json_equal (db_data->in_memory_json_data, before));
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 1);
+
+    json_decref (before);
+    cleanup_db_data (db_data, dir, path);
+}
+
 static void
 test_password_change_failure_restores_key (void)
 {
@@ -386,6 +419,89 @@ test_lock_open_failure_everywhere_warns_once (void)
     cleanup_db_data (db_data, dir, path);
 }
 
+/* L7b: a failed append while merging quarantined tokens for serialization must
+ * abort the save (nothing is on disk yet) instead of silently omitting the
+ * token from the encrypted file, where the next reload would lose it forever. */
+static void
+test_quarantine_append_failure_aborts_save (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    /* A token that failed validation on load and was set aside (issue #464):
+     * encrypt_db merges it back in for serialization only. */
+    db_data->quarantined_tokens = json_array ();
+    json_array_append_new (db_data->quarantined_tokens,
+                           valid_totp ("quarantined"));
+
+    db_test_set_fail_quarantine_append (TRUE);
+    GError *err = NULL;
+    update_db (db_data, &err);
+    db_test_set_fail_quarantine_append (FALSE);
+    g_assert_error (err, generic_error_gquark (), GENERIC_ERRCODE);
+    g_clear_error (&err);
+    g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
+
+    /* Without the injected failure the save goes through. */
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    g_assert_true (g_file_test (path, G_FILE_TEST_EXISTS));
+
+    cleanup_db_data (db_data, dir, path);
+}
+
+/* L8: the post-save digest baseline is taken from the exact bytes the atomic
+ * commit wrote. A normal save must arm the guard so an external modification
+ * is still detected, and a failing baseline installation must leave the guard
+ * explicitly disarmed instead of armed with a stale pre-write hash, which used
+ * to block every later save with "Database changed on disk". */
+static void
+test_committed_digest_baseline (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    g_assert_true (db_data->has_loaded_file_digest);
+
+    /* Tamper with the file behind the handle's back: the baseline must match
+     * what the commit actually wrote, so the next save is refused. */
+    GError *write_err = NULL;
+    g_assert_true (g_file_set_contents (path, "tampered", -1, &write_err));
+    g_assert_no_error (write_err);
+    update_db (db_data, &err);
+    g_assert_nonnull (err);
+    g_assert_error (err, generic_error_gquark (), GENERIC_ERRCODE);
+    g_clear_error (&err);
+    cleanup_db_data (db_data, dir, path);
+
+    /* Injected baseline failure: the save still commits (the write has already
+     * happened at that point and cannot be rolled into a save failure), the
+     * guard is explicitly disarmed, and the next save is not blocked. */
+    db_data = make_db_data (&dir, &path);
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+
+    db_test_set_fail_committed_digest (TRUE);
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Could not baseline the committed database file*");
+    update_db (db_data, &err);
+    db_test_set_fail_committed_digest (FALSE);
+    g_assert_no_error (err);
+    g_test_assert_expected_messages ();
+    g_assert_false (db_data->has_loaded_file_digest);
+
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    g_assert_true (db_data->has_loaded_file_digest);
+
+    cleanup_db_data (db_data, dir, path);
+}
+
 /* Remove the <data home>/otpclient/locks tree, then the data home itself. */
 static void
 cleanup_data_home (const gchar *data_home)
@@ -423,6 +539,7 @@ main (int argc, char **argv)
 
     g_test_add_func ("/db-transaction/encrypt-failure", test_encrypt_failure_preserves_add_edit_delete);
     g_test_add_func ("/db-transaction/atomic-write-failure", test_atomic_write_failure_preserves_add);
+    g_test_add_func ("/db-transaction/direct-delete-rollback", test_update_failure_restores_direct_delete_once);
     g_test_add_func ("/db-transaction/password-change-failure", test_password_change_failure_restores_key);
     g_test_add_func ("/db-transaction/kdf-failure", test_kdf_failure_restores_params);
     g_test_add_func ("/db-transaction/stale-snapshot", test_stale_snapshot_rejected);
@@ -431,6 +548,8 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/migration-decrypt-failure", test_migration_decrypt_failure_no_double_free);
     g_test_add_func ("/db-transaction/lock-open-failure-fallback", test_lock_open_failure_uses_fallback);
     g_test_add_func ("/db-transaction/lock-open-failure-everywhere", test_lock_open_failure_everywhere_warns_once);
+    g_test_add_func ("/db-transaction/quarantine-append-failure", test_quarantine_append_failure_aborts_save);
+    g_test_add_func ("/db-transaction/committed-digest-baseline", test_committed_digest_baseline);
 
     int ret = g_test_run ();
     cleanup_data_home (data_home);

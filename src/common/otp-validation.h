@@ -78,4 +78,10 @@ gboolean otp_repair_anonymous_import_token (otp_t       *otp,
 guint    otp_extract_invalid_tokens        (json_t      *root,
                                             json_t      *invalid_out);
 
+#ifdef OTPCLIENT_TESTING
+/* Force the append into invalid_out to fail (as if OOM) so tests can assert a
+ * failed move leaves the token in root and does not count it as moved. */
+void     otp_test_set_fail_invalid_append  (gboolean fail);
+#endif
+
 G_END_DECLS

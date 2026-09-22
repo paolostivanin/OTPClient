@@ -150,14 +150,19 @@ on_unlock_clicked (GtkButton      *button,
 
     if (!accepted)
     {
-        gtk_label_set_text (GTK_LABEL (self->error_label),
-                            error_message != NULL ? error_message : _("Password was rejected"));
-        gtk_widget_set_visible (self->error_label, TRUE);
+        /* Clear the fields before showing the error: setting an empty text
+         * re-fires on_text_changed, which hides the error label. Showing the
+         * label first used to hide it again one statement later, so a
+         * synchronous rejection (wrong current password, secure-memory
+         * exhaustion, concurrent-unlock refusal) flashed by unseen. */
         gtk_editable_set_text (GTK_EDITABLE (self->password_row), "");
         if (self->confirm_row != NULL)
             gtk_editable_set_text (GTK_EDITABLE (self->confirm_row), "");
         if (self->current_password_row != NULL)
             gtk_editable_set_text (GTK_EDITABLE (self->current_password_row), "");
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            error_message != NULL ? error_message : _("Password was rejected"));
+        gtk_widget_set_visible (self->error_label, TRUE);
         if (secure_current_pwd != NULL)
             gcry_free (secure_current_pwd);
         gcry_free (secure_pwd);
@@ -252,6 +257,17 @@ on_quit_button_clicked (GtkButton      *button,
 {
     (void) button;
     g_signal_emit (self, signals[SIGNAL_QUIT_REQUESTED], 0);
+}
+
+void
+password_dialog_set_initial_error (PasswordDialog *self,
+                                   const gchar    *message)
+{
+    g_return_if_fail (PASSWORD_IS_DIALOG (self));
+    if (message == NULL || message[0] == '\0')
+        return;
+    gtk_label_set_text (GTK_LABEL (self->error_label), message);
+    gtk_widget_set_visible (self->error_label, TRUE);
 }
 
 void

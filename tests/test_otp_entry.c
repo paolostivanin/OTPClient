@@ -44,6 +44,37 @@ test_rendered_step_tracks_generation (void)
     g_object_unref (entry);
 }
 
+/* Generate immediately on either side of a period boundary and assert that
+ * both the code and last_rendered_step come from the exact same timestamp. */
+static void
+test_rendered_step_exact_boundary (void)
+{
+    const gchar *secret = "JBSWY3DPEHPK3PXP";
+    OTPEntry *entry = otp_entry_new ("alice", "Example", NULL, "TOTP", 30, 0,
+                                     "SHA1", 6, secret);
+    cotp_error_t err;
+
+    const gint64 before = 3000 - 1;
+    otp_entry_test_update_otp_at (entry, before);
+    gchar *expected = get_totp_at (secret, (long) before, 6, 30,
+                                   COTP_SHA1, &err);
+    g_assert_nonnull (expected);
+    g_assert_cmpstr (otp_entry_get_otp_value (entry), ==, expected);
+    g_assert_cmpint (otp_entry_get_last_rendered_step (entry), ==, 99);
+    sensitive_free (expected);
+
+    const gint64 after = 3000;
+    otp_entry_test_update_otp_at (entry, after);
+    expected = get_totp_at (secret, (long) after, 6, 30,
+                            COTP_SHA1, &err);
+    g_assert_nonnull (expected);
+    g_assert_cmpstr (otp_entry_get_otp_value (entry), ==, expected);
+    g_assert_cmpint (otp_entry_get_last_rendered_step (entry), ==, 100);
+    sensitive_free (expected);
+
+    g_object_unref (entry);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -52,5 +83,6 @@ main (int argc, char **argv)
     g_assert_null (init_err);
     g_test_add_func ("/otp-entry/steam", test_steam_generation);
     g_test_add_func ("/otp-entry/rendered-step", test_rendered_step_tracks_generation);
+    g_test_add_func ("/otp-entry/rendered-step-boundary", test_rendered_step_exact_boundary);
     return g_test_run ();
 }

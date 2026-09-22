@@ -56,10 +56,23 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                     json_array_append_new (arr, row);
                 }
             }
-            char *dumped = json_dumps (arr, JSON_INDENT (2));
-            g_print ("%s\n", dumped);
-            gcry_free (dumped);
+            char *dumped = NULL;
+            size_t dump_len = json_dumpb (arr, NULL, 0, JSON_INDENT (2));
+            if (dump_len > 0) {
+                dumped = g_malloc (dump_len + 1);
+                if (json_dumpb (arr, dumped, dump_len, JSON_INDENT (2)) != dump_len) {
+                    g_clear_pointer (&dumped, g_free);
+                } else {
+                    dumped[dump_len] = '\0';
+                }
+            }
             json_decref (arr);
+            if (dumped == NULL) {
+                g_printerr ("%s\n", _("Failed to serialize the database list to JSON."));
+                return FALSE;
+            }
+            g_print ("%s\n", dumped);
+            g_free (dumped);
             return TRUE;
         }
         if (cmdline_opts->output_format == OUTPUT_FORMAT_CSV) {
@@ -168,9 +181,21 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
         if (pwd == NULL) {
             goto get_pwd;
         }
-        db_data->key_stored = TRUE;
+        /* secmem can be exhausted even though the keyring had the password:
+         * key == NULL with key_stored == TRUE would later report the
+         * misleading "no password is set" and the password would never be
+         * re-stored. Fail explicitly instead. */
         db_data->key = secure_strdup (pwd);
         secret_password_free (pwd);
+        if (db_data->key == NULL) {
+            g_printerr ("%s\n", _(
+                "Couldn't allocate secure memory for the password. Please increase your memlock limit (see the secure memory wiki page)."));
+            if (password_fd != STDIN_FILENO) {
+                close (password_fd);
+            }
+            return FALSE;
+        }
+        db_data->key_stored = TRUE;
     } else {
         get_pwd:
         db_data->key = get_pwd (_("Type the DB decryption password: "), password_fd);
@@ -502,10 +527,18 @@ get_pwd (const gchar *pwd_msg,
     }
 
     size_t len = 0;
+    gboolean read_failed = FALSE;
+    int read_errno = 0;
     while (len < BUFFER_SIZE - 1) {
         ssize_t n = read (password_fd, &pwd[len], 1);
         if (n < 0) {
             if (errno == EINTR && password_signal == 0) continue;
+            /* Distinguish error from EOF: breaking the loop on a transient
+             * read error used to pass the partial password on as-is, which
+             * surfaced later as a baffling "Incorrect password". Fail the
+             * read explicitly instead. */
+            read_failed = TRUE;
+            read_errno = errno;
             break;
         }
         if (n == 0 || pwd[len] == '\n') break;
@@ -530,6 +563,13 @@ get_pwd (const gchar *pwd_msg,
         password_signal = 0;
         gcry_free (pwd);
         raise (signo);
+        return NULL;
+    }
+
+    if (read_failed) {
+        explicit_bzero (pwd, BUFFER_SIZE);
+        gcry_free (pwd);
+        g_printerr (_("Failed to read the password: %s\n"), g_strerror (read_errno));
         return NULL;
     }
 

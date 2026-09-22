@@ -31,6 +31,8 @@ static gboolean warned_no_lock = FALSE;
 #ifdef OTPCLIENT_TESTING
 static gboolean test_fail_encrypt = FALSE;
 static gboolean test_fail_atomic_write = FALSE;
+static gboolean test_fail_quarantine_append = FALSE;
+static gboolean test_fail_committed_digest = FALSE;
 static gint     test_decrypts_before_failure = -1;
 static gboolean test_force_migration = FALSE;
 static DbTestLockMode test_lock_mode = DB_TEST_LOCK_SUPPORTED;
@@ -45,6 +47,18 @@ void
 db_test_set_fail_atomic_write (gboolean fail)
 {
     test_fail_atomic_write = fail;
+}
+
+void
+db_test_set_fail_quarantine_append (gboolean fail)
+{
+    test_fail_quarantine_append = fail;
+}
+
+void
+db_test_set_fail_committed_digest (gboolean fail)
+{
+    test_fail_committed_digest = fail;
 }
 
 void
@@ -134,6 +148,11 @@ static void      free_db_resources  (gcry_cipher_hd_t  hd,
 static gboolean  compute_file_digest (const gchar      *path,
                                       guint8            digest[32],
                                       GError          **err);
+
+static void      install_committed_file_digest (DatabaseData *db_data,
+                                                const guint8 *header, gsize header_len,
+                                                const guint8 *enc_buf, gsize enc_len,
+                                                const guint8 *tag,    gsize tag_len);
 
 static gboolean  loaded_file_digest_matches (DatabaseData *db_data,
                                              GError      **err);
@@ -796,8 +815,8 @@ update_db (DatabaseData  *db_data,
     db_data->data_to_add = NULL;
     rebuild_objects_hash (db_data);
 
-    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
-    db_data->has_loaded_file_digest = TRUE;
+    /* The baseline was installed by encrypt_db from the exact committed bytes;
+     * nothing to re-read here. */
 }
 
 
@@ -861,8 +880,8 @@ db_transaction (DatabaseData   *db_data,
     db_data->needs_legacy_kdf_migration = FALSE;
     rebuild_objects_hash (db_data);
     refresh_committed_snapshot (db_data);
-    compute_file_digest (db_data->db_path, db_data->loaded_file_digest, NULL);
-    db_data->has_loaded_file_digest = TRUE;
+    /* The baseline was installed by encrypt_db from the exact committed bytes;
+     * nothing to re-read here. */
     return TRUE;
 }
 
@@ -1811,6 +1830,51 @@ decrypt_db (DatabaseData *db_data,
 }
 
 
+/* Install the external-modification baseline from the exact bytes the atomic
+ * commit wrote (header || ciphertext || tag), without reopening the
+ * destination file. On the (practically unreachable) hashing failure the
+ * explicit policy is to run the next save WITHOUT an external-change baseline
+ * and say so in the journal: a save cannot report failure here because the
+ * write has already committed, and silently keeping a stale pre-write hash
+ * would block every future save with "Database changed on disk". */
+static void
+install_committed_file_digest (DatabaseData *db_data,
+                               const guint8 *header, gsize header_len,
+                               const guint8 *enc_buf, gsize enc_len,
+                               const guint8 *tag,    gsize tag_len)
+{
+    gcry_md_hd_t md = NULL;
+#ifdef OTPCLIENT_TESTING
+    gboolean injected_failure = test_fail_committed_digest;
+#else
+    gboolean injected_failure = FALSE;
+#endif
+    if (injected_failure ||
+        gcry_md_open (&md, GCRY_MD_SHA256, 0) != GPG_ERR_NO_ERROR) {
+        db_data->has_loaded_file_digest = FALSE;
+        g_warning ("Could not baseline the committed database file; "
+                   "the external-modification guard is disabled until the next save or reload.");
+        return;
+    }
+
+    /* gcry_md_write cannot fail (void); a NULL from gcry_md_read is the only
+     * observable failure. */
+    gcry_md_write (md, header, header_len);
+    gcry_md_write (md, enc_buf, enc_len);
+    gcry_md_write (md, tag, tag_len);
+    const guint8 *digest = gcry_md_read (md, GCRY_MD_SHA256);
+    if (digest != NULL) {
+        memcpy (db_data->loaded_file_digest, digest, 32);
+        db_data->has_loaded_file_digest = TRUE;
+    } else {
+        db_data->has_loaded_file_digest = FALSE;
+        g_warning ("Could not baseline the committed database file; "
+                   "the external-modification guard is disabled until the next save or reload.");
+    }
+    gcry_md_close (md);
+}
+
+
 static gboolean
 encrypt_db (DatabaseData *db_data,
             json_t       *json_data,
@@ -1872,8 +1936,28 @@ encrypt_db (DatabaseData *db_data,
         }
         gsize q_idx;
         json_t *q_obj;
+        gboolean inject_append_failure = FALSE;
+#ifdef OTPCLIENT_TESTING
+        inject_append_failure = test_fail_quarantine_append;
+#endif
         json_array_foreach (db_data->quarantined_tokens, q_idx, q_obj)
-            json_array_append (merged, q_obj);
+        {
+            /* A failed append would silently omit the token from the serialized
+             * database: after the atomic replace and the next reload it would
+             * be gone for good. Abort the save instead - nothing has hit disk
+             * yet, so failing here is a clean rollback (same class as the
+             * checked appends in the update_db loop and import_otps_mutation). */
+            if (inject_append_failure ||
+                json_array_append (merged, q_obj) != 0) {
+                g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
+                             "Failed to stage a preserved token for serialization; "
+                             "the save was aborted so that no token is lost.");
+                json_decref (merged);
+                explicit_bzero (derived_key, ARGON2ID_KEYLEN);
+                gcry_free (derived_key);
+                return FALSE;
+            }
+        }
         to_dump = merged;
     }
 
@@ -1940,6 +2024,21 @@ encrypt_db (DatabaseData *db_data,
 
     gboolean wrote = atomic_write_database (db_data->db_path, header_data, sizeof (header_data),
                                             enc_buffer, input_data_len, tag, err);
+    if (wrote) {
+        /* Baseline the external-modification guard from the exact bytes the
+         * atomic commit just wrote. Re-reading the destination (the old
+         * compute_file_digest path) could observe a concurrent writer's bytes,
+         * and when the re-read failed the buffer kept the pre-write content
+         * hash while being marked fresh - arming the guard with a stale
+         * baseline and locking the user out of saving until reload, even
+         * though the write itself had already committed and could not be
+         * turned into an ordinary save failure. Hashing the in-memory buffers
+         * cannot fail spuriously; if hashing is somehow unavailable, fall back
+         * to no baseline for this generation (install_ ... explains the
+         * policy). The tag is hashed before its wipe below. */
+        install_committed_file_digest (db_data, header_data, sizeof (header_data),
+                                       enc_buffer, input_data_len, tag, TAG_SIZE);
+    }
     explicit_bzero (tag, TAG_SIZE);
     if (!wrote) {
         free_db_resources (hd, derived_key, enc_buffer, NULL, NULL, NULL);

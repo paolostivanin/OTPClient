@@ -478,10 +478,26 @@ test_db_replacement_bumps_generation (void)
     before = otpclient_application_get_lock_generation (app);
     DatabaseData *replacement = database_data_new ("/tmp/otpclient-generation.enc",
                                                    DEFAULT_MEMLOCK_VALUE);
-    otpclient_application_set_db_data (app, replacement);
+    g_assert_true (otpclient_application_set_db_data (app, replacement));
     g_assert_cmpuint (otpclient_application_get_lock_generation (app), >, before);
 
-    otpclient_application_set_db_data (app, NULL);
+    /* H1 defense in depth: a worker owns replacement while unlocking, so the
+     * boundary must reject another database without changing ownership,
+     * generation, or the active pointer. */
+    DatabaseData *refused = database_data_new ("/tmp/otpclient-refused.enc",
+                                               DEFAULT_MEMLOCK_VALUE);
+    before = otpclient_application_get_lock_generation (app);
+    otpclient_application_test_set_unlocking (app, TRUE);
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Refusing to replace the active database*");
+    g_assert_false (otpclient_application_set_db_data (app, refused));
+    g_test_assert_expected_messages ();
+    g_assert_true (otpclient_application_get_db_data (app) == replacement);
+    g_assert_cmpuint (otpclient_application_get_lock_generation (app), ==, before);
+    otpclient_application_test_set_unlocking (app, FALSE);
+    database_data_free (refused);
+
+    g_assert_true (otpclient_application_set_db_data (app, NULL));
 }
 
 int

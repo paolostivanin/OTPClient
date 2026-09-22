@@ -147,6 +147,9 @@ add_executable(test_otp_validation
 	${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
 )
 otpclient_apply_target_settings(test_otp_validation)
+# Enables the failure-injection hooks (otp_test_set_fail_invalid_append) the
+# quarantine-append regression test uses.
+target_compile_definitions(test_otp_validation PRIVATE OTPCLIENT_TESTING)
 target_include_directories(test_otp_validation PRIVATE
         ${PROJECT_SOURCE_DIR}/src/common
 )
@@ -357,6 +360,7 @@ if(BUILD_GUI)
             ${PROJECT_SOURCE_DIR}/src/common/otp-validation.c
     )
     otpclient_apply_target_settings(test_otp_entry)
+    target_compile_definitions(test_otp_entry PRIVATE OTPCLIENT_TESTING)
     target_include_directories(test_otp_entry PRIVATE
             ${PROJECT_SOURCE_DIR}/src/common
             ${PROJECT_SOURCE_DIR}/src/gui
