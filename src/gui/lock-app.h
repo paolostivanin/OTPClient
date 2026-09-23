@@ -9,6 +9,9 @@ G_BEGIN_DECLS
 void lock_app_init_dbus_watchers   (OTPClientApplication *app);
 void lock_app_cleanup              (OTPClientApplication *app);
 
+/* Desktop screensaver state, independent of the database's Auto-Lock setting. */
+gboolean lock_app_get_session_locked (OTPClientApplication *app);
+
 void lock_app_lock                 (OTPClientApplication *app);
 void lock_app_unlock               (OTPClientApplication *app);
 

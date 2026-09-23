@@ -21,6 +21,9 @@ void otpclient_tray_begin_hidden (OTPClientApplication *app);
  * clicking the icon is about to ask for a password. No-op when not published. */
 void otpclient_tray_notify_locked_changed (OTPClientApplication *app);
 
+/* Pause automatic recovery while the desktop is locked; restart it on unlock. */
+void otpclient_tray_notify_session_locked_changed (OTPClientApplication *app);
+
 /* The window is on screen again by some route other than the tray icon: a
  * second otpclient invocation, a search-provider activation, a D-Bus activate.
  * The tray's record of having tucked it away is what arms both the

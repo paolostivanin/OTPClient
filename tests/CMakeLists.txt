@@ -114,6 +114,32 @@ if(BUILD_GUI)
     target_link_libraries(test_gui_flows PkgConfig::GTK4 PkgConfig::ADWAITA PkgConfig::GDKPIXBUF
             PkgConfig::ZBAR PkgConfig::PROTOC PkgConfig::LIBQRENCODE ${COMMON_LIBS})
     otpclient_depend_on_test_schema(test_gui_flows)
+    if(ENABLE_MINIMIZE_TO_TRAY)
+        add_executable(test_tray_session test_tray_session.c ${REVIEW_GUI_SOURCES})
+        add_dependencies(test_tray_session OTPClient)
+        otpclient_apply_target_settings(test_tray_session)
+        target_compile_definitions(test_tray_session PRIVATE OTPCLIENT_TESTING)
+        target_include_directories(test_tray_session PRIVATE ${PROJECT_SOURCE_DIR}/src/common ${PROJECT_SOURCE_DIR}/src/gui)
+        target_link_libraries(test_tray_session PkgConfig::GTK4 PkgConfig::ADWAITA PkgConfig::GDKPIXBUF
+                PkgConfig::ZBAR PkgConfig::PROTOC PkgConfig::LIBQRENCODE ${COMMON_LIBS})
+        otpclient_depend_on_test_schema(test_tray_session)
+        if(ISOLATED_SESSION_READY AND TEST_XVFB)
+            foreach(scenario locked-auto-lock-off locked-auto-lock-on
+                    tray-loss-before-lock tray-return-before-unlock missing-tray unlocked-tray-loss
+                    startup-deadline initial-and-stale-state multiple-services query-owner-change
+                    explicit-activation cleanup)
+                add_test(NAME tray_session_${scenario} COMMAND ${Python3_EXECUTABLE}
+                        ${PROJECT_SOURCE_DIR}/tests/isolated-session.py --gui $<TARGET_FILE:test_tray_session>
+                        -p /tray-session/${scenario})
+                set_tests_properties(tray_session_${scenario} PROPERTIES TIMEOUT 100)
+                otpclient_use_test_schema(tray_session_${scenario})
+                if(SANITIZE)
+                    set_property(TEST tray_session_${scenario} APPEND PROPERTY ENVIRONMENT
+                            "LSAN_OPTIONS=suppressions=${PROJECT_SOURCE_DIR}/tests/gui-lsan.supp")
+                endif()
+            endforeach()
+        endif()
+    endif()
     if(ISOLATED_SESSION_READY AND TEST_XVFB)
         add_test(NAME gui_flows COMMAND ${Python3_EXECUTABLE}
                 ${PROJECT_SOURCE_DIR}/tests/isolated-session.py --gui $<TARGET_FILE:test_gui_flows>)

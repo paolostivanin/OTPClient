@@ -114,6 +114,13 @@ the next code, external clipboard changes cancel OTPClient's ownership, locking
 clears sensitive dialogs even when references remain, and cross-database HOTP
 activation opens the owning database.
 
+`test_tray_session` covers desktop locking and tray recovery (#473) using fake
+screensaver and StatusNotifierWatcher services. CTest runs each scenario in its
+own isolated session. It checks that locked sessions stay hidden with Auto-Lock
+on and off, recovery restarts after unlock, startup keeps its longer deadline,
+stale state queries cannot override signals, and explicit activation and cleanup
+still work. It runs only when minimize-to-tray support is built.
+
 `test_search_provider_settings` calls both real D-Bus interfaces against synthetic
 cached metadata. Disabling search or Secret Service immediately revokes results
 and cached keys; re-enabling and changing the keyword work without a restart.

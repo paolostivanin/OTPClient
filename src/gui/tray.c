@@ -7,6 +7,7 @@
 #include "tray.h"
 #include "tray-menu-model.h"
 #include "otpclient-application.h"
+#include "lock-app.h"
 
 #define SNI_OBJECT_PATH    "/StatusNotifierItem"
 #define DBUSMENU_OBJECT_PATH "/StatusNotifierMenu"
@@ -28,6 +29,13 @@ typedef enum
     TRAY_HOST_UNAVAILABLE
 } TrayHostState;
 
+typedef enum
+{
+    HIDDEN_DEADLINE_NONE,
+    HIDDEN_DEADLINE_STARTUP,
+    HIDDEN_DEADLINE_TRAY_LOST
+} HiddenDeadline;
+
 typedef struct
 {
     OTPClientApplication *app;
@@ -39,7 +47,8 @@ typedef struct
     guint bus_name_id;
     guint watcher_watch_id;
     guint host_signal_id;
-    guint hidden_deadline_id;  /* fail-safe for a started-hidden window */
+    guint hidden_deadline_id;
+    HiddenDeadline hidden_deadline; /* retained while the desktop is locked */
     gulong close_handler_id;
     gchar *bus_name;
     gchar *activation_token;   /* handed to us by the host, good for one present */
@@ -61,13 +70,20 @@ static TrayData *tray_data = NULL;
 static void tray_publish   (TrayData *td);
 static void tray_unpublish (TrayData *td);
 
+static void
+tray_clear_hidden_deadline (TrayData *td)
+{
+    g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
+    td->hidden_deadline = HIDDEN_DEADLINE_NONE;
+}
+
 /* The window is on screen, however it got there, so it is neither tucked away
  * nor waiting on a timer that would decide it had been stranded. */
 static void
 tray_mark_window_shown (TrayData *td)
 {
     td->window_hidden = FALSE;
-    g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
+    tray_clear_hidden_deadline (td);
 }
 
 static void
@@ -107,32 +123,47 @@ show_window (TrayData *td)
  * screen, possibly mid screen-share. A watcher that comes back republishes and
  * clears this; one that does not still gets the window back. */
 #define TRAY_LOST_GRACE_SECONDS 3
+/* Allow a cold login more time to establish its first tray icon. */
+#define START_HIDDEN_DEADLINE_SECONDS 10
 
 static gboolean
-on_tray_lost_grace (gpointer user_data)
+on_hidden_deadline (gpointer user_data)
 {
     TrayData *td = user_data;
     td->hidden_deadline_id = 0;
 
+    /* Keep the pending purpose so unlock can grant a fresh grace period. */
+    if (lock_app_get_session_locked (td->app))
+        return G_SOURCE_REMOVE;
+
+    HiddenDeadline deadline = td->hidden_deadline;
+    td->hidden_deadline = HIDDEN_DEADLINE_NONE;
     if (td->window_hidden && !td->published)
     {
-        g_message ("The tray item did not come back within %d seconds; showing the window",
-                   TRAY_LOST_GRACE_SECONDS);
+        if (deadline == HIDDEN_DEADLINE_STARTUP)
+            g_message ("No tray icon appeared within %d seconds; showing the window",
+                       START_HIDDEN_DEADLINE_SECONDS);
+        else
+            g_message ("The tray item did not come back within %d seconds; showing the window",
+                       TRAY_LOST_GRACE_SECONDS);
         show_window (td);
     }
 
     return G_SOURCE_REMOVE;
 }
 
-/* Shares the timer with the started-hidden deadline: both ask the one question
- * of whether a hidden window has been stranded, only ever one of them is
- * outstanding, and a successful publish clears the field either way. */
+/* GNOME can remove the tray for the whole lock session (#473). Remember why
+ * recovery is pending, but count only time after the desktop unlocks. */
 static void
-tray_arm_lost_grace (TrayData *td)
+tray_arm_hidden_deadline (TrayData *td, HiddenDeadline deadline)
 {
     g_clear_handle_id (&td->hidden_deadline_id, g_source_remove);
-    td->hidden_deadline_id = g_timeout_add_seconds (TRAY_LOST_GRACE_SECONDS,
-                                                    on_tray_lost_grace, td);
+    td->hidden_deadline = deadline;
+    if (lock_app_get_session_locked (td->app))
+        return;
+    guint seconds = deadline == HIDDEN_DEADLINE_STARTUP
+        ? START_HIDDEN_DEADLINE_SECONDS : TRAY_LOST_GRACE_SECONDS;
+    td->hidden_deadline_id = g_timeout_add_seconds (seconds, on_hidden_deadline, td);
 }
 
 /* The hold is what lets the app outlive its only window while it sits in the
@@ -561,7 +592,7 @@ on_item_registered (GObject      *source,
     tray_sync_hold (tray_data);
 
     /* There is an icon now, so the started-hidden fail-safe has done its job. */
-    g_clear_handle_id (&tray_data->hidden_deadline_id, g_source_remove);
+    tray_clear_hidden_deadline (tray_data);
 }
 
 /* Ask the watcher to adopt the item, and listen to the answer: whether an icon
@@ -835,7 +866,7 @@ tray_unpublish (TrayData *td)
      * window is tucked into the tray. Bring it back rather than stranding it,
      * but give it a moment first: see the grace period below. */
     if (td->window_hidden)
-        tray_arm_lost_grace (td);
+        tray_arm_hidden_deadline (td, HIDDEN_DEADLINE_TRAY_LOST);
 }
 
 /* --- StatusNotifierWatcher detection --- */
@@ -1012,27 +1043,6 @@ otpclient_tray_init (OTPClientApplication *app)
                           NULL);
 }
 
-/* Seconds to wait for an icon before giving up and showing the window. Long
- * enough for a cold Plasma login, short enough that the user does not conclude
- * the app failed to start. */
-#define START_HIDDEN_DEADLINE_SECONDS 10
-
-static gboolean
-on_start_hidden_deadline (gpointer user_data)
-{
-    TrayData *td = user_data;
-    td->hidden_deadline_id = 0;
-
-    if (td->window_hidden)
-    {
-        g_message ("No tray icon appeared within %d seconds; showing the window",
-                   START_HIDDEN_DEADLINE_SECONDS);
-        show_window (td);
-    }
-
-    return G_SOURCE_REMOVE;
-}
-
 void
 otpclient_tray_begin_hidden (OTPClientApplication *app)
 {
@@ -1043,20 +1053,26 @@ otpclient_tray_begin_hidden (OTPClientApplication *app)
 
     tray_data->window_hidden = TRUE;
 
-    /* Nearly every way this can fail already routes through tray_unpublish,
-     * which ends by showing a hidden window: the watcher name having no owner
-     * (g_bus_watch_name fires vanished at watch time in that case),
-     * IsStatusNotifierHostRegistered coming back false, and the watcher
-     * refusing our item. Those need no timer and self-heal immediately.
-     *
-     * What is left is a watcher that owns the name but never answers the
-     * property read and never emits StatusNotifierHostRegistered: host stays
-     * UNKNOWN, so nothing publishes and nothing unpublishes, and the window
-     * would sit hidden forever. This also covers the genuinely undetectable
-     * case where the watcher accepts the item and the panel never draws it. */
-    tray_data->hidden_deadline_id =
-        g_timeout_add_seconds (START_HIDDEN_DEADLINE_SECONDS,
-                               on_start_hidden_deadline, tray_data);
+    /* This also covers a watcher that owns its name but never answers. Known
+     * failures go through tray_unpublish and switch to the shorter lost-tray
+     * deadline. Both deadlines pause while the desktop is locked. */
+    if (!tray_data->published)
+        tray_arm_hidden_deadline (tray_data, HIDDEN_DEADLINE_STARTUP);
+}
+
+void
+otpclient_tray_notify_session_locked_changed (OTPClientApplication *app)
+{
+    if (tray_data == NULL || tray_data->app != app)
+        return;
+
+    if (lock_app_get_session_locked (app)) {
+        g_clear_handle_id (&tray_data->hidden_deadline_id, g_source_remove);
+    } else if (tray_data->window_hidden && !tray_data->published &&
+               tray_data->hidden_deadline != HIDDEN_DEADLINE_NONE &&
+               tray_data->hidden_deadline_id == 0) {
+        tray_arm_hidden_deadline (tray_data, tray_data->hidden_deadline);
+    }
 }
 
 void
@@ -1232,7 +1248,7 @@ otpclient_tray_cleanup (OTPClientApplication *app)
     if (tray_data->watcher_watch_id != 0)
         g_bus_unwatch_name (tray_data->watcher_watch_id);
 
-    g_clear_handle_id (&tray_data->hidden_deadline_id, g_source_remove);
+    tray_clear_hidden_deadline (tray_data);
 
     /* Clears the hold too, so the teardown doesn't leave the app held. */
     tray_data->window_hidden = FALSE;
