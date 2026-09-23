@@ -863,7 +863,7 @@ settings_dialog_new (OTPClientApplication *app)
     AdwPreferencesGroup *integration_group = ADW_PREFERENCES_GROUP (adw_preferences_group_new ());
     adw_preferences_group_set_title (integration_group, _("Integration"));
     adw_preferences_group_set_description (integration_group,
-                                           _("Type the keyword followed by a space and your search to surface OTP results in GNOME Shell or KDE KRunner (e.g. \"otp github\"). Changes to the keyword take effect after logging out and back in."));
+                                           _("Type the keyword followed by a space and your search to surface OTP results in GNOME Shell or KDE KRunner (e.g. \"otp github\"). Changes to the keyword take effect immediately."));
 
     gboolean sp_enabled = otpclient_application_get_search_provider_enabled (app);
 

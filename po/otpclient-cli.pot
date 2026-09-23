@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-13 11:15+0200\n"
+"POT-Creation-Date: 2026-09-22 16:34+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -223,15 +223,19 @@ msgstr ""
 msgid "Supported types: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:81
+#: ../src/cli/exec-action.c:71
+msgid "Failed to serialize the database list to JSON."
+msgstr ""
+
+#: ../src/cli/exec-action.c:94
 msgid "No databases found in the configuration.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:84
+#: ../src/cli/exec-action.c:97
 msgid "Known databases:\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:100
+#: ../src/cli/exec-action.c:113
 #, c-format
 msgid ""
 "Your system's secure memory limit (memlock: %d bytes) is not enough to "
@@ -243,63 +247,69 @@ msgid ""
 "OTPClient cannot change automatically."
 msgstr ""
 
-#: ../src/cli/exec-action.c:117
+#: ../src/cli/exec-action.c:130
 #, c-format
 msgid "Refusing to open password file '%s': it is a symbolic link.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:119
+#: ../src/cli/exec-action.c:132
 #, c-format
 msgid "Failed to open password file '%s': %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:125
+#: ../src/cli/exec-action.c:138
 #, c-format
 msgid "Failed to stat password file '%s': %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:130
+#: ../src/cli/exec-action.c:143
 #, c-format
 msgid "Refusing to open password file '%s': not a regular file.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:135
+#: ../src/cli/exec-action.c:148
 #, c-format
 msgid ""
 "Refusing to open password file '%s': mode %04o is readable or writable by "
 "group/other. Run `chmod 600 %s` and retry.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:161
+#: ../src/cli/exec-action.c:174
 #, c-format
 msgid ""
 "Warning: secret service lookup failed: %s\n"
 "Falling back to interactive password prompt.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:176
+#: ../src/cli/exec-action.c:192
+msgid ""
+"Couldn't allocate secure memory for the password. Please increase your "
+"memlock limit (see the secure memory wiki page)."
+msgstr ""
+
+#: ../src/cli/exec-action.c:201
 msgid "Type the DB decryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:178
+#: ../src/cli/exec-action.c:203
 msgid "No password provided, exiting."
 msgstr ""
 
-#: ../src/cli/exec-action.c:191
+#: ../src/cli/exec-action.c:216
 msgid "Database file does not exist. Creating a new database...\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:194
+#: ../src/cli/exec-action.c:219
 #, c-format
 msgid "Error while creating new database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:199
+#: ../src/cli/exec-action.c:224
 #, c-format
 msgid "Database '%s' created successfully.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:200
+#: ../src/cli/exec-action.c:225
 msgid ""
 "\n"
 "ATTENTION: if you want to use this database by default, you must update the "
@@ -307,134 +317,139 @@ msgid ""
 "\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:205
+#: ../src/cli/exec-action.c:230
 msgid "Incorrect password."
 msgstr ""
 
-#: ../src/cli/exec-action.c:207
+#: ../src/cli/exec-action.c:232
 msgid "Error while loading the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:217
+#: ../src/cli/exec-action.c:242
 #, c-format
 msgid "Warning: %u token could not be loaded and was skipped.\n"
 msgid_plural "Warning: %u tokens could not be loaded and were skipped.\n"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/cli/exec-action.c:237
+#: ../src/cli/exec-action.c:262
 #, c-format
 msgid "Warning: failed to store password under db_path: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:238 ../src/cli/exec-action.c:256
+#: ../src/cli/exec-action.c:263 ../src/cli/exec-action.c:281
 msgid "unknown error"
 msgstr ""
 
-#: ../src/cli/exec-action.c:255
+#: ../src/cli/exec-action.c:280
 #, c-format
 msgid "Warning: failed to store the password in the secret service: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:274
+#: ../src/cli/exec-action.c:299
 #, c-format
 msgid "%s doesn't exist or is not a valid file.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:280
+#: ../src/cli/exec-action.c:305
 msgid "Type the password for the file you want to import: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:292
+#: ../src/cli/exec-action.c:317
 msgid ""
 "An error occurred while importing, so nothing has been added to the database."
 msgstr ""
 
-#: ../src/cli/exec-action.c:295
+#: ../src/cli/exec-action.c:320
 msgid " The error is: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:314
+#: ../src/cli/exec-action.c:339
 #, c-format
 msgid "Error while updating the database: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:320
+#: ../src/cli/exec-action.c:345
 msgid ""
 "Import completed with skipped invalid entries. Review the warnings before "
 "removing your original tokens."
 msgstr ""
 
-#: ../src/cli/exec-action.c:321
+#: ../src/cli/exec-action.c:346
 #, c-format
 msgid "Data successfully imported. Added: %u, duplicates: %u, invalid: %u.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:333
+#: ../src/cli/exec-action.c:358
 msgid ""
 "Note: --output-dir is ignored in the Flatpak build; the export is saved into "
 "the app's data directory.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:338
+#: ../src/cli/exec-action.c:363
 #, c-format
 msgid ""
 "%s is not a directory or the folder doesn't exist. The output will be saved "
 "into the HOME directory.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:350 ../src/cli/exec-action.c:361
-#: ../src/cli/exec-action.c:372
+#: ../src/cli/exec-action.c:375 ../src/cli/exec-action.c:386
+#: ../src/cli/exec-action.c:397
 msgid "Type the export encryption password: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:383
+#: ../src/cli/exec-action.c:408
 #, c-format
 msgid "An error occurred while exporting the data: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:389
+#: ../src/cli/exec-action.c:414
 #, c-format
 msgid "Data successfully exported to: %s\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:391
+#: ../src/cli/exec-action.c:416
 msgid "Option not recognized: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:430
+#: ../src/cli/exec-action.c:455
 #, c-format
 msgid "Database '%s' not found in the known database list.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:438
+#: ../src/cli/exec-action.c:463
 #, c-format
 msgid "Database file/location (%s) does not exist.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:447
+#: ../src/cli/exec-action.c:472
 msgid "Type the absolute path to the database: "
 msgstr ""
 
-#: ../src/cli/exec-action.c:452
+#: ../src/cli/exec-action.c:477
 msgid "Couldn't get db path from stdin"
 msgstr ""
 
-#: ../src/cli/exec-action.c:460
+#: ../src/cli/exec-action.c:485
 msgid "The database path must be a non-empty absolute path."
 msgstr ""
 
-#: ../src/cli/exec-action.c:465
+#: ../src/cli/exec-action.c:490
 #, c-format
 msgid "File '%s' does not exist\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:537
+#: ../src/cli/exec-action.c:572
+#, c-format
+msgid "Failed to read the password: %s\n"
+msgstr ""
+
+#: ../src/cli/exec-action.c:577
 #, c-format
 msgid "Warning: password was truncated at %zu bytes.\n"
 msgstr ""
 
-#: ../src/cli/exec-action.c:541
+#: ../src/cli/exec-action.c:581
 msgid "Empty password not allowed"
 msgstr ""
 

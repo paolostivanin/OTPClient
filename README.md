@@ -41,7 +41,7 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   that database first; unlock it and explicitly generate the code there.
 - Locking closes sensitive dialogs and clears their QR codes, secrets, and
   passwords, including when an outstanding file chooser retains the dialog
-- Optional minimize-to-tray (build-time opt-in)
+- Optional minimize-to-tray (built in by default, off until you enable it)
 - Optional start-minimized, from *Settings -> Integration* or with
   `otpclient --start-minimized`. Requires minimize-to-tray and a system tray;
   the database is left locked, so the first time you show the window it asks
@@ -53,9 +53,16 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
   the row is greyed out. The entry inherits the start-minimized preference
 
 ### Command-line interface (`otpclient-cli`)
-- `--show / --list` for scripting and shell integration
-- `--import / --export` against the same database the GUI uses
-- `--output={table,json,csv}` for machine-readable output
+- `--show / --list` for scripting and shell integration; `--list-databases`
+  prints the configured databases by name
+- `--account` and `--issuer` select the token for `--show`, with `--match-exact`
+  for exact matching and `--show-next` for the next TOTP
+- `--database` picks a database by path or by name from `--list-databases`
+- `--import / --export` against the same database the GUI uses; `--list-types`
+  prints the accepted `--type` identifiers, `--file` and `--output-dir` set the
+  paths (`--output-dir` is ignored in the Flatpak build)
+- `--output={table,json,csv}` for machine-readable output (`--show`, `--list`,
+  and `--list-databases` only)
 - `--password-file` to read the master password from a file
 - `--export-settings / --import-settings` for GSettings backup/restore
 - Bash, zsh, and fish completions installed by default
@@ -187,10 +194,14 @@ All targets are built by default; pass `-D<OPTION>=OFF` to skip one.
 | `BUILD_SEARCH_PROVIDER`    | `ON`    | Build the GNOME Shell / KRunner D-Bus daemon                         |
 | `IS_FLATPAK`               | `OFF`   | Use the flatpak app's config folder for the database                 |
 | `ENABLE_MINIMIZE_TO_TRAY`  | `ON`    | Offer minimize-to-tray in the GUI (needs a StatusNotifierWatcher)    |
+| `SANITIZE`                 | `OFF`   | Build with AddressSanitizer + UndefinedBehaviorSanitizer             |
 
-`Release` builds enable LTO and additional hardening flags
-(`-fcf-protection=full`, `-fzero-call-used-regs`, `-fstrict-flex-arrays=2`,
-`-ftrivial-auto-var-init=zero`) when the toolchain supports them.
+GNU/Clang builds are position-independent (`-fPIE`, linked with `-pie`), and
+Linux links are hardened with `-Wl,-z,relro,-z,now`, `--as-needed`, and
+`--no-undefined`. The flags `-fcf-protection=full`,
+`-fzero-call-used-regs=used-gpr`, `-fstrict-flex-arrays=2`, and
+`-ftrivial-auto-var-init=zero` are added whenever the toolchain supports them,
+and `Release` builds enable LTO.
 
 ## Requirements
 | Name                                                | Min Version |
