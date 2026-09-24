@@ -94,6 +94,14 @@
   </content_rating>
 
   <releases>
+    <release version="5.2.2" date="2026-09-24">
+      <description>
+        <p>Packaging release. The Flatpak's search provider now sends its notifications through the notification portal instead of talking to the desktop's notification service directly, so the sandbox no longer needs that permission. Native installs are unchanged.</p>
+        <ul>
+          <li>FIX: inside the Flatpak, the search provider's "code copied" and failure notifications go through the notification portal. A notification carrying a code is marked transient where the portal supports it (version 2 and later; older portals reject the hint, so it is only sent after the portal has reported its version) and is withdrawn after five seconds everywhere, so it no longer lingers in notification history on portals that drop the hint, such as KDE's</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.2.1" date="2026-09-23">
       <description>
         <p>Bug-fix release. A post-release audit of 5.2.0 turned up a batch of defects across the database lifetime, the GUI, the importers and exporters, the command line and the search provider, and this release closes them. The worst of them could destroy data or block saving altogether: a database replaced while an unlock was still running, a token silently omitted from a save that then committed, and an external-modification baseline armed with a pre-write hash that refused every later save with "Database changed on disk". Alongside those, a failed password prompt gave no reason why, a lock and unlock cycle recorded an empty group filter as the user's choice, a delayed refresh could leave an expired code on screen, and several importer and command-line error paths reported the wrong thing, in the wrong place, or nothing at all. A separate report against 5.2.0 is fixed here too: a window left in the tray raised itself, and took focus, on every desktop unlock (#473). There is no on-disk format or settings change; existing databases and preferences are untouched.</p>

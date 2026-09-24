@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(OTPClient VERSION "5.2.1" LANGUAGES "C")
+project(OTPClient VERSION "5.2.2" LANGUAGES "C")
 include(GNUInstallDirs)
 include(CTest)
 

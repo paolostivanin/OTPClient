@@ -39,6 +39,10 @@ static const Signature signatures[] = {
     /* Outgoing calls */
     { "klipper setClipboard",  SP_SIG_KLIPPER_SET_CLIPBOARD,    "(s)"             },
     { "Notify",                SP_SIG_NOTIFY,                   "(susssasa{sv}i)" },
+    { "AddNotification",       SP_SIG_ADD_NOTIFICATION,         "(sa{sv})"        },
+    { "RemoveNotification",    SP_SIG_REMOVE_NOTIFICATION,      "(s)"             },
+    { "Properties.Get",        SP_SIG_PROPERTIES_GET,           "(ss)"            },
+    { "Properties.Get reply",  SP_SIG_REPLY_PROPERTIES_GET,     "(v)"             },
 };
 
 /* Deserialising an empty buffer gives the default value for any type, which is

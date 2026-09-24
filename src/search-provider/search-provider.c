@@ -1525,26 +1525,125 @@ copy_to_clipboard (GDBusConnection *conn,
 }
 
 
-/* Fire-and-forget: we never look at the notification id, and waiting on the
- * reply would park the provider's only thread on whatever the notification
- * daemon is doing. */
+/* A notification carrying a live OTP must not be kept. Left alone, GNOME files
+ * it in the message tray and shows the body on the lock screen, and KDE keeps it
+ * in notification history: the code outlives its 30 second window in a place the
+ * user never looks. The KRunner subtext deliberately omits the code for the same
+ * reason, so the notification was the one place it escaped. Both paths below
+ * mark a code notification transient and have it gone after this long. */
+#define NOTIFICATION_EXPIRE_MS 5000
+
+
+#ifdef IS_FLATPAK
+/* Inside the sandbox the notification goes through the portal. Flathub will not
+ * grant --talk-name=org.freedesktop.Notifications to an app that could use the
+ * portal instead, and the portal does not need a GApplication: it works out who
+ * is calling from the sandbox itself. Native installs keep the direct call,
+ * because there may be no portal running at all. */
+#define PORTAL_BUS_NAME     "org.freedesktop.portal.Desktop"
+#define PORTAL_OBJECT_PATH  "/org/freedesktop/portal/desktop"
+#define PORTAL_NOTIFICATION "org.freedesktop.portal.Notification"
+
+/* The "transient" display hint arrived in version 2 of the interface, and older
+ * portals (xdg-desktop-portal before 1.19: Ubuntu 24.04, Debian 12) do not skip
+ * a key they do not know, they refuse the whole notification. So the hint only
+ * goes to a portal that has said it is version 2 or later. Zero means it has not
+ * answered yet, which counts as version 1. */
+static guint32 portal_notification_version;
+static guint   portal_notification_serial;
+
 static void
-send_notification_full (const gchar *summary,
-                        const gchar *body,
-                        gboolean     transient)
+on_portal_notification_version (GObject      *source,
+                                GAsyncResult *res,
+                                gpointer      user_data G_GNUC_UNUSED)
+{
+    g_autoptr (GVariant) reply =
+        g_dbus_connection_call_finish (G_DBUS_CONNECTION (source), res, NULL);
+    if (reply == NULL) return;
+
+    g_autoptr (GVariant) value = NULL;
+    g_variant_get (reply, SP_SIG_REPLY_PROPERTIES_GET, &value);
+    if (g_variant_is_of_type (value, G_VARIANT_TYPE_UINT32))
+        portal_notification_version = g_variant_get_uint32 (value);
+}
+
+
+/* Asked once, at startup. The provider is D-Bus activated by the first search,
+ * so the answer is back long before anyone can activate a result; if it is not,
+ * that one notification simply goes out without the hint. */
+static void
+probe_portal_notification_version (void)
 {
     GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
     if (conn == NULL) return;
 
+    g_dbus_connection_call (conn, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH,
+                            "org.freedesktop.DBus.Properties", "Get",
+                            g_variant_new (SP_SIG_PROPERTIES_GET, PORTAL_NOTIFICATION, "version"),
+                            G_VARIANT_TYPE (SP_SIG_REPLY_PROPERTIES_GET),
+                            G_DBUS_CALL_FLAGS_NONE, 5000, NULL,
+                            on_portal_notification_version, NULL);
+    g_object_unref (conn);
+}
+
+
+/* The portal has no expiry, and a version 1 backend drops the transient hint on
+ * the floor (xdg-desktop-portal-kde is one), which would leave the code sitting
+ * in the history. Withdrawing it ourselves covers every portal version. */
+static gboolean
+withdraw_portal_notification (gpointer user_data)
+{
+    const gchar *id = user_data;
+    GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+    if (conn == NULL) return G_SOURCE_REMOVE;
+
+    g_dbus_connection_call (conn, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, PORTAL_NOTIFICATION,
+                            "RemoveNotification", g_variant_new (SP_SIG_REMOVE_NOTIFICATION, id),
+                            NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL);
+    g_object_unref (conn);
+    return G_SOURCE_REMOVE;
+}
+
+
+static void
+notify_via_portal (GDBusConnection *conn,
+                   const gchar     *summary,
+                   const gchar     *body,
+                   gboolean         transient)
+{
+    /* A fresh id every time. Reusing one makes the portal update the earlier
+     * notification in place, and the withdraw still pending for that earlier
+     * code would then take the new one down early. */
+    g_autofree gchar *id = g_strdup_printf ("otpclient-%u", ++portal_notification_serial);
+
+    GVariantBuilder notification;
+    g_variant_builder_init (&notification, G_VARIANT_TYPE ("a{sv}"));
+    g_variant_builder_add (&notification, "{sv}", "title", g_variant_new_string (summary));
+    g_variant_builder_add (&notification, "{sv}", "body", g_variant_new_string (body));
+    if (transient && portal_notification_version >= 2) {
+        const gchar *display_hint[] = { "transient", NULL };
+        g_variant_builder_add (&notification, "{sv}", "display-hint",
+                               g_variant_new_strv (display_hint, -1));
+    }
+
+    g_dbus_connection_call (conn, PORTAL_BUS_NAME, PORTAL_OBJECT_PATH, PORTAL_NOTIFICATION,
+                            "AddNotification",
+                            g_variant_new (SP_SIG_ADD_NOTIFICATION, id, &notification),
+                            NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL);
+    if (transient)
+        g_timeout_add_full (G_PRIORITY_DEFAULT, NOTIFICATION_EXPIRE_MS,
+                            withdraw_portal_notification, g_steal_pointer (&id), g_free);
+}
+#else
+static void
+notify_directly (GDBusConnection *conn,
+                 const gchar     *summary,
+                 const gchar     *body,
+                 gboolean         transient)
+{
     GVariantBuilder actions, hints;
     g_variant_builder_init (&actions, G_VARIANT_TYPE ("as"));
     g_variant_builder_init (&hints, G_VARIANT_TYPE ("a{sv}"));
-    /* A notification carrying a live OTP must not be kept. Without this hint
-     * GNOME files it in the message tray and shows the body on the lock screen,
-     * and KDE keeps it in notification history: the code outlives its 30 second
-     * window in a place the user never looks. The KRunner subtext deliberately
-     * omits the code for the same reason, so the notification was the one place
-     * it escaped. */
     if (transient)
         g_variant_builder_add (&hints, "{sv}", "transient", g_variant_new_boolean (TRUE));
 
@@ -1557,8 +1656,28 @@ send_notification_full (const gchar *summary,
                                            "OTPClient", (guint32)0,
                                            "com.github.paolostivanin.OTPClient",
                                            summary, body,
-                                           &actions, &hints, (gint32)5000),
+                                           &actions, &hints, (gint32)NOTIFICATION_EXPIRE_MS),
                             NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL, NULL);
+}
+#endif
+
+
+/* Fire-and-forget: we never look at the notification id, and waiting on the
+ * reply would park the provider's only thread on whatever the notification
+ * daemon is doing. */
+static void
+send_notification_full (const gchar *summary,
+                        const gchar *body,
+                        gboolean     transient)
+{
+    GDBusConnection *conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, NULL);
+    if (conn == NULL) return;
+
+#ifdef IS_FLATPAK
+    notify_via_portal (conn, summary, body, transient);
+#else
+    notify_directly (conn, summary, body, transient);
+#endif
     g_object_unref (conn);
 }
 
@@ -2096,6 +2215,9 @@ main (int    argc,
     if (force_gnome)
         g_bus_own_name (G_BUS_TYPE_SESSION, GNOME_BUS, G_BUS_NAME_OWNER_FLAGS_NONE,
                         on_gnome_bus_acquired, NULL, on_name_lost, NULL, NULL);
+#ifdef IS_FLATPAK
+    probe_portal_notification_version ();
+#endif
     g_last_activity_us = g_get_monotonic_time ();
     g_timeout_add_seconds (60, idle_wipe_check, NULL);
     g_main_loop_run (main_loop);

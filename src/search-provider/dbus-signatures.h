@@ -35,4 +35,11 @@ G_BEGIN_DECLS
 #define SP_SIG_KLIPPER_SET_CLIPBOARD     "(s)"
 #define SP_SIG_NOTIFY                    "(susssasa{sv}i)"
 
+/* org.freedesktop.portal.Notification, and the property read that tells us
+ * which version of it the host runs */
+#define SP_SIG_ADD_NOTIFICATION          "(sa{sv})"
+#define SP_SIG_REMOVE_NOTIFICATION       "(s)"
+#define SP_SIG_PROPERTIES_GET            "(ss)"
+#define SP_SIG_REPLY_PROPERTIES_GET      "(v)"
+
 G_END_DECLS
