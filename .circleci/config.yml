@@ -1,4 +1,4 @@
-version: 2.0
+version: 2.1
 
 jobs:
   ubuntuLatest:
@@ -42,7 +42,7 @@ jobs:
       - image: archlinux:latest
     steps:
       - checkout
-      - run: pacman -Syu --noconfirm && pacman -S --noconfirm xorg-server-xvfb dbus python pkg-config git gtk4 libgcrypt zbar gcc clang cmake make libzip jansson protobuf-c libsecret util-linux-libs qrencode  	libadwaita
+      - run: pacman -Syu --noconfirm && pacman -S --noconfirm xorg-server-xvfb dbus python pkg-config git gtk4 libgcrypt zbar gcc clang cmake make libzip jansson protobuf-c libsecret util-linux-libs qrencode libadwaita
       - run: chmod +x .ci/install_deps.sh && .ci/install_deps.sh
       - run: chmod +x .ci/install_otpclient.sh && .ci/install_otpclient.sh
 
@@ -70,7 +70,6 @@ jobs:
       - run: cd build-scan && scan-build --status-bugs make -j2
 
 workflows:
-  version: 2
   build:
     jobs:
       - ubuntuLatest
