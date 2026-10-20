@@ -1239,6 +1239,172 @@ db_remove_group (DatabaseData *db_data, const gchar *name, GError **err)
     return change_group (db_data, name, NULL, err);
 }
 
+typedef struct {
+    const GArray *indices;
+    const gchar *group;
+    json_t *snapshot;
+} TokenBatchMutation;
+
+static gint
+uint_compare (gconstpointer a, gconstpointer b)
+{
+    guint left = *(const guint *) a;
+    guint right = *(const guint *) b;
+    return (left > right) - (left < right);
+}
+
+static GArray *
+validated_sorted_indices (const GArray *indices, guint size, GError **err)
+{
+    if (indices == NULL || indices->len == 0) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                             "Select at least one token.");
+        return NULL;
+    }
+    GArray *sorted = g_array_sized_new (FALSE, FALSE, sizeof (guint), indices->len);
+    g_array_append_vals (sorted, indices->data, indices->len);
+    g_array_sort (sorted, uint_compare);
+    for (guint i = 0; i < sorted->len; i++) {
+        guint index = g_array_index (sorted, guint, i);
+        if (index >= size || (i > 0 && index == g_array_index (sorted, guint, i - 1))) {
+            g_array_unref (sorted);
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                 "The selected token list is stale or invalid.");
+            return NULL;
+        }
+    }
+    return sorted;
+}
+
+static gboolean
+set_token_groups_mutation (json_t *candidate, gpointer user_data, GError **err)
+{
+    TokenBatchMutation *ctx = user_data;
+    GArray *indices = validated_sorted_indices (ctx->indices,
+                                                (guint) json_array_size (candidate), err);
+    if (indices == NULL)
+        return FALSE;
+    for (guint i = 0; i < indices->len; i++) {
+        guint index = g_array_index (indices, guint, i);
+        json_t *token = json_array_get (candidate, index);
+        if (ctx->group != NULL) {
+            if (json_object_set_new (token, "group", json_string (ctx->group)) != 0) {
+                g_array_unref (indices);
+                g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                     "Could not stage the selected group changes.");
+                return FALSE;
+            }
+        } else {
+            json_object_del (token, "group");
+        }
+    }
+    g_array_unref (indices);
+    return TRUE;
+}
+
+gboolean
+db_set_tokens_group (DatabaseData *db_data, const GArray *indices,
+                     const gchar *group, GError **err)
+{
+    TokenBatchMutation ctx = { .indices = indices, .group = group };
+    return db_transaction (db_data, set_token_groups_mutation, &ctx, err);
+}
+
+static gboolean
+delete_tokens_mutation (json_t *candidate, gpointer user_data, GError **err)
+{
+    TokenBatchMutation *ctx = user_data;
+    GArray *indices = validated_sorted_indices (ctx->indices,
+                                                (guint) json_array_size (candidate), err);
+    if (indices == NULL)
+        return FALSE;
+    ctx->snapshot = json_array ();
+    if (ctx->snapshot == NULL) {
+        g_array_unref (indices);
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                             "Could not stage the deletion undo data.");
+        return FALSE;
+    }
+    for (guint i = 0; i < indices->len; i++) {
+        guint index = g_array_index (indices, guint, i);
+        json_t *item = json_object ();
+        json_t *token = json_deep_copy (json_array_get (candidate, index));
+        json_t *index_value = json_integer (index);
+        gboolean staged = item != NULL && token != NULL && index_value != NULL &&
+            json_object_set (item, "index", index_value) == 0 &&
+            json_object_set (item, "token", token) == 0 &&
+            json_array_append (ctx->snapshot, item) == 0;
+        json_decref (index_value);
+        json_decref (token);
+        if (!staged) {
+            g_clear_pointer (&item, json_decref);
+            json_decref (ctx->snapshot);
+            ctx->snapshot = NULL;
+            g_array_unref (indices);
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                 "Could not stage the deletion undo data.");
+            return FALSE;
+        }
+        json_decref (item);
+    }
+    for (guint i = indices->len; i > 0; i--)
+        json_array_remove (candidate, g_array_index (indices, guint, i - 1));
+    g_array_unref (indices);
+    return TRUE;
+}
+
+gboolean
+db_delete_tokens (DatabaseData *db_data, const GArray *indices,
+                  json_t **out_snapshot, GError **err)
+{
+    g_return_val_if_fail (out_snapshot != NULL, FALSE);
+    *out_snapshot = NULL;
+    TokenBatchMutation ctx = { .indices = indices };
+    if (!db_transaction (db_data, delete_tokens_mutation, &ctx, err)) {
+        g_clear_pointer (&ctx.snapshot, json_decref);
+        return FALSE;
+    }
+    *out_snapshot = ctx.snapshot;
+    return TRUE;
+}
+
+static gboolean
+restore_tokens_mutation (json_t *candidate, gpointer user_data, GError **err)
+{
+    json_t *snapshot = user_data;
+    if (!json_is_array (snapshot)) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                             "The deletion undo data is invalid.");
+        return FALSE;
+    }
+    size_t i;
+    json_t *item;
+    json_array_foreach (snapshot, i, item) {
+        json_t *index_value = json_object_get (item, "index");
+        json_t *token = json_object_get (item, "token");
+        if (!json_is_integer (index_value) || !json_is_object (token) ||
+            json_integer_value (index_value) < 0) {
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                 "The deletion undo data is invalid.");
+            return FALSE;
+        }
+        guint64 wanted = (guint64) json_integer_value (index_value);
+        size_t position = (size_t) MIN (wanted, json_array_size (candidate));
+        if (json_array_insert (candidate, position, token) != 0) {
+            g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                 "Could not restore the selected tokens.");
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+gboolean
+db_restore_tokens (DatabaseData *db_data, json_t *snapshot, GError **err)
+{
+    return db_transaction (db_data, restore_tokens_mutation, snapshot, err);
+}
+
 
 static void
 refresh_committed_snapshot (DatabaseData *db_data)

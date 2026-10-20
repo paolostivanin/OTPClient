@@ -185,6 +185,45 @@ test_group_rename_and_remove_are_transactional (void)
 }
 
 static void
+test_batch_delete_restore_is_atomic (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+    json_array_append_new (db_data->in_memory_json_data, valid_totp ("bob"));
+    json_array_append_new (db_data->in_memory_json_data, valid_totp ("carol"));
+    GError *err = NULL;
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    GArray *indices = g_array_new (FALSE, FALSE, sizeof (guint));
+    guint one = 1, two = 2;
+    g_array_append_val (indices, one);
+    g_array_append_val (indices, two);
+    json_t *snapshot = NULL;
+    g_assert_true (db_delete_tokens (db_data, indices, &snapshot, &err));
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 1);
+    g_assert_cmpuint (json_array_size (snapshot), ==, 2);
+
+    db_test_set_fail_atomic_write (TRUE);
+    g_assert_false (db_restore_tokens (db_data, snapshot, &err));
+    g_assert_nonnull (err);
+    g_clear_error (&err);
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 1);
+    g_assert_true (db_restore_tokens (db_data, snapshot, &err));
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 3);
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (db_data->in_memory_json_data, 1), "label")), ==, "bob");
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (db_data->in_memory_json_data, 2), "label")), ==, "carol");
+    json_decref (snapshot);
+    g_array_unref (indices);
+    cleanup_db_data (db_data, dir, path);
+}
+
+static void
 test_encrypt_failure_preserves_add_edit_delete (void)
 {
     assert_transaction_failure_preserves_json (append_token_mutation, FALSE);
@@ -623,6 +662,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/quarantine-append-failure", test_quarantine_append_failure_aborts_save);
     g_test_add_func ("/db-transaction/quarantine-updates-are-transactional", test_quarantine_updates_are_transactional);
     g_test_add_func ("/db-transaction/group-rename-remove", test_group_rename_and_remove_are_transactional);
+    g_test_add_func ("/db-transaction/batch-delete-restore", test_batch_delete_restore_is_atomic);
     g_test_add_func ("/db-transaction/committed-digest-baseline", test_committed_digest_baseline);
 
     int ret = g_test_run ();

@@ -11,6 +11,7 @@ struct _ExportDialog
     AdwDialog parent;
 
     DatabaseData *db_data;
+    json_t *tokens_override;
     GtkWidget *parent_widget;
 
     GtkWidget *format_combo;
@@ -57,6 +58,27 @@ wipe_password_rows (ExportDialog *self)
         return;
     wipe_password_row (self->password_row);
     wipe_password_row (self->password_confirm_row);
+}
+
+static void
+clear_selected_tokens (AdwDialog *dialog)
+{
+    ExportDialog *self = EXPORT_DIALOG (dialog);
+    if (self->tokens_override == NULL)
+        return;
+    size_t i;
+    json_t *token;
+    json_array_foreach (self->tokens_override, i, token) {
+        json_t *secret = json_object_get (token, "secret");
+        if (json_is_string (secret)) {
+            const char *value = json_string_value (secret);
+            size_t len = json_string_length (secret);
+            if (value != NULL && len > 0)
+                explicit_bzero ((void *) value, len);
+        }
+    }
+    json_decref (self->tokens_override);
+    self->tokens_override = NULL;
 }
 
 static gboolean
@@ -170,28 +192,30 @@ on_file_dialog_save_complete (GObject      *source,
     }
 
     gchar *error_msg = NULL;
+    json_t *export_tokens = self->tokens_override != NULL
+        ? self->tokens_override : self->db_data->in_memory_json_data;
     switch (fmt)
     {
         case EXPORT_FMT_FREEOTPPLUS:
-            error_msg = export_freeotpplus (path, self->db_data->in_memory_json_data);
+            error_msg = export_freeotpplus (path, export_tokens);
             break;
         case EXPORT_FMT_AEGIS_PLAIN:
-            error_msg = export_aegis (path, NULL, self->db_data->in_memory_json_data);
+            error_msg = export_aegis (path, NULL, export_tokens);
             break;
         case EXPORT_FMT_AEGIS_ENC:
-            error_msg = export_aegis (path, password, self->db_data->in_memory_json_data);
+            error_msg = export_aegis (path, password, export_tokens);
             break;
         case EXPORT_FMT_AUTHPRO_PLAIN:
-            error_msg = export_authpro (path, NULL, self->db_data->in_memory_json_data);
+            error_msg = export_authpro (path, NULL, export_tokens);
             break;
         case EXPORT_FMT_AUTHPRO_ENC:
-            error_msg = export_authpro (path, password, self->db_data->in_memory_json_data);
+            error_msg = export_authpro (path, password, export_tokens);
             break;
         case EXPORT_FMT_TWOFAS_PLAIN:
-            error_msg = export_twofas (path, NULL, self->db_data->in_memory_json_data);
+            error_msg = export_twofas (path, NULL, export_tokens);
             break;
         case EXPORT_FMT_TWOFAS_ENC:
-            error_msg = export_twofas (path, password, self->db_data->in_memory_json_data);
+            error_msg = export_twofas (path, password, export_tokens);
             break;
         default:
             break;
@@ -245,6 +269,7 @@ export_dialog_dispose (GObject *object)
         wipe_password_row (self->password_row);
         wipe_password_row (self->password_confirm_row);
         g_clear_pointer (&self->db_data, database_data_free);
+        clear_selected_tokens (ADW_DIALOG (self));
     }
 
     G_OBJECT_CLASS (export_dialog_parent_class)->dispose (object);
@@ -264,16 +289,19 @@ export_dialog_class_init (ExportDialogClass *klass)
 }
 
 ExportDialog *
-export_dialog_new (DatabaseData *db_data,
-                   GtkWidget    *parent)
+export_dialog_new_selected (DatabaseData *db_data,
+                            GtkWidget    *parent,
+                            json_t       *tokens)
 {
+    g_return_val_if_fail (json_is_array (tokens), NULL);
     ExportDialog *self = g_object_new (EXPORT_TYPE_DIALOG,
-                                       "title", _("Export Tokens"),
+                                       "title", _("Export Selected Tokens"),
                                        "content-width", 440,
                                        "content-height", 440,
                                        NULL);
 
     self->db_data = database_data_ref (db_data);
+    self->tokens_override = json_deep_copy (tokens);
     self->parent_widget = parent;
 
     /* Build UI */
@@ -361,6 +389,20 @@ export_dialog_new (DatabaseData *db_data,
 
     g_signal_connect (self->password_row, "changed", G_CALLBACK (on_password_changed), self);
     g_signal_connect (self->password_confirm_row, "changed", G_CALLBACK (on_password_changed), self);
-    sensitive_dialog_setup (ADW_DIALOG (self), NULL);
+    sensitive_dialog_setup (ADW_DIALOG (self), clear_selected_tokens);
+    return self;
+}
+
+ExportDialog *
+export_dialog_new (DatabaseData *db_data,
+                   GtkWidget    *parent)
+{
+    json_t *empty = json_array ();
+    ExportDialog *self = export_dialog_new_selected (db_data, parent, empty);
+    json_decref (empty);
+    if (self != NULL) {
+        g_clear_pointer (&self->tokens_override, json_decref);
+        g_object_set (self, "title", _("Export Tokens"), NULL);
+    }
     return self;
 }

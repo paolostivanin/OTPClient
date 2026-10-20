@@ -74,6 +74,14 @@ struct _OTPClientWindow
 
     /* Group filter */
     GtkWidget *group_dropdown;
+    GtkWidget *bulk_mode_button;
+    GtkWidget *bulk_toolbar;
+    GtkWidget *bulk_count_label;
+    GtkWidget *bulk_group_dropdown;
+    GtkColumnViewColumn *bulk_selection_column;
+    GHashTable *bulk_selected_entries;
+    GtkStringList *bulk_group_model;
+    gboolean bulk_mode;
     GtkStringList *group_list_model;
     gchar *active_group_filter;  /* NULL = "All", "" = "Ungrouped", non-empty = group name */
     gboolean syncing_group_filter;
@@ -114,5 +122,8 @@ struct _OTPClientWindow
     GList *undo_actions;
 
 };
+
+/* Internal hook used by GUI flow tests to exercise the toast's Undo payload. */
+void otpclient_window_undo_latest_delete (OTPClientWindow *self);
 
 G_END_DECLS

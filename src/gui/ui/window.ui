@@ -35,6 +35,13 @@
                 <property name="tooltip-text" translatable="yes">Filter by group</property>
               </object>
             </child>
+            <child type="start">
+              <object class="GtkToggleButton" id="bulk_mode_button">
+                <property name="label" translatable="yes">Select</property>
+                <property name="icon-name">selection-mode-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Select multiple tokens</property>
+              </object>
+            </child>
             <child type="end">
               <object class="GtkBox" id="titlebar_end_buttons_box">
                 <child>
@@ -147,12 +154,59 @@
                       <object class="GtkStackPage">
                         <property name="name">list</property>
                         <property name="child">
-                          <object class="GtkScrolledWindow">
-                            <property name="vexpand">True</property>
-                            <property name="hscrollbar-policy">automatic</property>
+                          <object class="GtkBox">
+                            <property name="orientation">vertical</property>
+                            <child>
+                              <object class="GtkBox" id="bulk_toolbar">
+                                <property name="orientation">horizontal</property>
+                                <property name="spacing">6</property>
+                                <property name="margin-start">8</property>
+                                <property name="margin-end">8</property>
+                                <property name="margin-top">6</property>
+                                <property name="margin-bottom">6</property>
+                                <property name="visible">False</property>
+                                <child>
+                                  <object class="GtkLabel" id="bulk_count_label">
+                                    <property name="label" translatable="yes">0 selected</property>
+                                    <property name="hexpand">True</property>
+                                    <property name="xalign">0</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkDropDown" id="bulk_group_dropdown">
+                                    <property name="tooltip-text" translatable="yes">Group for selected tokens</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton">
+                                    <property name="label" translatable="yes">Assign Group</property>
+                                    <property name="action-name">win.bulk-set-group</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton">
+                                    <property name="label" translatable="yes">Export Selected</property>
+                                    <property name="action-name">win.bulk-export</property>
+                                  </object>
+                                </child>
+                                <child>
+                                  <object class="GtkButton">
+                                    <property name="label" translatable="yes">Delete Selected</property>
+                                    <property name="action-name">win.bulk-delete</property>
+                                    <style><class name="destructive-action"/></style>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkScrolledWindow">
+                                <property name="vexpand">True</property>
+                                <property name="hscrollbar-policy">automatic</property>
                             <child>
                               <object class="GtkColumnView" id="otp_list">
                                 <property name="vexpand">True</property>
+                              </object>
+                            </child>
                               </object>
                             </child>
                           </object>

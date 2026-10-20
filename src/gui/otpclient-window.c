@@ -41,12 +41,14 @@ static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *e
 static void refresh_search_cache (OTPClientWindow *self);
 static void update_empty_state (OTPClientWindow *self);
 static void update_quarantine_banner (OTPClientWindow *self);
+static void update_bulk_selection_count (OTPClientWindow *self);
 
 typedef struct {
     GWeakRef window_ref;
     DatabaseData *origin_db;
     guint lock_generation;
     json_t *token;
+    json_t *batch_snapshot;
     guint position;
 } UndoDeleteData;
 
@@ -55,17 +57,33 @@ static void on_undo_delete (AdwToast *toast, gpointer user_data);
 static void
 undo_delete_token_clear (UndoDeleteData *data)
 {
-    if (data->token == NULL)
-        return;
-    json_t *secret = json_object_get (data->token, "secret");
-    if (json_is_string (secret)) {
-        const char *value = json_string_value (secret);
-        size_t len = json_string_length (secret);
-        if (value != NULL && len > 0)
-            explicit_bzero ((void *) value, len);
+    if (data->token != NULL) {
+        json_t *secret = json_object_get (data->token, "secret");
+        if (json_is_string (secret)) {
+            const char *value = json_string_value (secret);
+            size_t len = json_string_length (secret);
+            if (value != NULL && len > 0)
+                explicit_bzero ((void *) value, len);
+        }
+        json_decref (data->token);
+        data->token = NULL;
     }
-    json_decref (data->token);
-    data->token = NULL;
+    if (data->batch_snapshot != NULL) {
+        size_t i;
+        json_t *item;
+        json_array_foreach (data->batch_snapshot, i, item) {
+            json_t *token = json_object_get (item, "token");
+            json_t *secret = json_object_get (token, "secret");
+            if (json_is_string (secret)) {
+                const char *value = json_string_value (secret);
+                size_t len = json_string_length (secret);
+                if (value != NULL && len > 0)
+                    explicit_bzero ((void *) value, len);
+            }
+        }
+        json_decref (data->batch_snapshot);
+        data->batch_snapshot = NULL;
+    }
 }
 
 static UndoDeleteData *
@@ -118,6 +136,33 @@ show_undo_toast (OTPClientWindow *self,
     AdwToast *toast = adw_toast_new (_("Token deleted"));
     adw_toast_set_button_label (toast, _("Undo"));
     adw_toast_set_timeout (toast, 5);
+    g_signal_connect_data (toast, "button-clicked", G_CALLBACK (on_undo_delete),
+                           data, undo_delete_data_free, 0);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+}
+
+static void
+show_batch_undo_toast (OTPClientWindow *self,
+                       DatabaseData *origin_db,
+                       json_t *snapshot)
+{
+    UndoDeleteData *data = g_new0 (UndoDeleteData, 1);
+    g_weak_ref_init (&data->window_ref, self);
+    data->origin_db = origin_db;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    data->lock_generation = app != NULL
+        ? otpclient_application_get_lock_generation (app) : 0;
+    data->batch_snapshot = json_deep_copy (snapshot);
+    if (data->batch_snapshot == NULL) {
+        g_weak_ref_clear (&data->window_ref);
+        g_free (data);
+        return;
+    }
+    self->undo_actions = g_list_prepend (self->undo_actions, data);
+    AdwToast *toast = adw_toast_new (_("Tokens deleted"));
+    adw_toast_set_button_label (toast, _("Undo"));
+    adw_toast_set_timeout (toast, 8);
     g_signal_connect_data (toast, "button-clicked", G_CALLBACK (on_undo_delete),
                            data, undo_delete_data_free, 0);
     adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
@@ -725,6 +770,136 @@ add_text_column (GtkColumnView *view,
 }
 
 static void
+bulk_selection_toggled (GtkCheckButton *button, OTPClientWindow *self)
+{
+    OTPEntry *entry = g_object_get_data (G_OBJECT (button), "otp-entry");
+    if (entry == NULL || otp_entry_get_db_name (entry) != NULL)
+        return;
+    if (gtk_check_button_get_active (button))
+        g_hash_table_add (self->bulk_selected_entries, g_object_ref (entry));
+    else
+        g_hash_table_remove (self->bulk_selected_entries, entry);
+    update_bulk_selection_count (self);
+}
+
+static void
+bulk_selection_column_setup (GtkSignalListItemFactory *factory,
+                             GtkListItem              *item,
+                             gpointer                  user_data)
+{
+    (void) factory;
+    GtkWidget *check = gtk_check_button_new ();
+    gtk_widget_set_halign (check, GTK_ALIGN_CENTER);
+    g_signal_connect (check, "toggled", G_CALLBACK (bulk_selection_toggled), user_data);
+    gtk_list_item_set_child (item, check);
+}
+
+static void
+bulk_selection_column_bind (GtkSignalListItemFactory *factory,
+                            GtkListItem              *item,
+                            gpointer                  user_data)
+{
+    (void) factory;
+    OTPClientWindow *self = user_data;
+    OTPEntry *entry = gtk_list_item_get_item (item);
+    GtkWidget *check = gtk_list_item_get_child (item);
+    if (entry == NULL || check == NULL)
+        return;
+    g_object_set_data (G_OBJECT (check), "otp-entry", entry);
+    g_signal_handlers_block_by_func (check, bulk_selection_toggled, self);
+    gtk_check_button_set_active (GTK_CHECK_BUTTON (check),
+        g_hash_table_contains (self->bulk_selected_entries, entry));
+    gtk_widget_set_visible (check, self->bulk_mode);
+    gtk_widget_set_sensitive (check, otp_entry_get_db_name (entry) == NULL);
+    gtk_widget_set_tooltip_text (check, otp_entry_get_db_name (entry) == NULL
+        ? _("Select token") : _("Tokens from other databases are read-only."));
+    g_signal_handlers_unblock_by_func (check, bulk_selection_toggled, self);
+}
+
+static void
+bulk_selection_column_unbind (GtkSignalListItemFactory *factory,
+                              GtkListItem              *item,
+                              gpointer                  user_data)
+{
+    (void) factory;
+    (void) user_data;
+    GtkWidget *check = gtk_list_item_get_child (item);
+    if (check != NULL)
+        g_object_set_data (G_OBJECT (check), "otp-entry", NULL);
+}
+
+static void
+add_bulk_selection_column (OTPClientWindow *self)
+{
+    GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
+    self->bulk_selection_column = gtk_column_view_column_new ("", factory);
+    gtk_column_view_column_set_fixed_width (self->bulk_selection_column, 42);
+    g_signal_connect (factory, "setup", G_CALLBACK (bulk_selection_column_setup), self);
+    g_signal_connect (factory, "bind", G_CALLBACK (bulk_selection_column_bind), self);
+    g_signal_connect (factory, "unbind", G_CALLBACK (bulk_selection_column_unbind), self);
+    gtk_column_view_append_column (GTK_COLUMN_VIEW (self->otp_list),
+                                   self->bulk_selection_column);
+    g_object_unref (self->bulk_selection_column);
+}
+
+static void
+update_bulk_selection_count (OTPClientWindow *self)
+{
+    guint count = self->bulk_selected_entries != NULL
+        ? g_hash_table_size (self->bulk_selected_entries) : 0;
+    if (self->bulk_count_label != NULL) {
+        g_autofree gchar *text = g_strdup_printf (ngettext ("%u selected", "%u selected", count), count);
+        gtk_label_set_text (GTK_LABEL (self->bulk_count_label), text);
+    }
+    const gchar * const actions[] = { "win.bulk-set-group", "win.bulk-export", "win.bulk-delete" };
+    for (guint i = 0; i < G_N_ELEMENTS (actions); i++)
+        gtk_widget_action_set_enabled (GTK_WIDGET (self), actions[i], self->bulk_mode && count > 0);
+}
+
+static void
+bulk_mode_toggled (GtkToggleButton *button, OTPClientWindow *self)
+{
+    self->bulk_mode = gtk_toggle_button_get_active (button);
+    gtk_widget_set_visible (self->bulk_toolbar, self->bulk_mode);
+    if (!self->bulk_mode && self->bulk_selected_entries != NULL)
+        g_hash_table_remove_all (self->bulk_selected_entries);
+    update_bulk_selection_count (self);
+    gtk_button_set_label (GTK_BUTTON (button), self->bulk_mode ? _("Done") : _("Select"));
+    gtk_widget_set_tooltip_text (GTK_WIDGET (button), self->bulk_mode
+        ? _("Finish selecting tokens") : _("Select multiple tokens"));
+}
+
+static GArray *
+bulk_selected_indices (OTPClientWindow *self, json_t **out_tokens)
+{
+    GArray *indices = g_array_new (FALSE, FALSE, sizeof (guint));
+    json_t *tokens = out_tokens != NULL ? json_array () : NULL;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db == NULL || db->in_memory_json_data == NULL) {
+        if (out_tokens != NULL)
+            *out_tokens = tokens;
+        return indices;
+    }
+    guint count = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store));
+    for (guint i = 0; i < count; i++) {
+        g_autoptr (OTPEntry) entry = g_list_model_get_item (G_LIST_MODEL (self->otp_store), i);
+        if (!g_hash_table_contains (self->bulk_selected_entries, entry))
+            continue;
+        g_array_append_val (indices, i);
+        if (tokens != NULL) {
+            json_t *token = json_array_get (db->in_memory_json_data, i);
+            if (token != NULL)
+                json_array_append (tokens, token);
+        }
+    }
+    if (out_tokens != NULL)
+        *out_tokens = tokens;
+    return indices;
+}
+
+static void
 add_validity_column (GtkColumnView *view)
 {
     GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
@@ -1191,6 +1366,10 @@ otpclient_window_clear_undo_actions (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
     clear_undo_snapshots (self);
+    if (self->bulk_mode_button != NULL)
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->bulk_mode_button), FALSE);
+    if (self->bulk_selected_entries != NULL)
+        g_hash_table_remove_all (self->bulk_selected_entries);
 }
 
 /* Split a group-qualified query into its group and remaining text. Quoted names
@@ -1510,6 +1689,9 @@ otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
         "win.set-group",
         "win.new-group",
         "win.remove-from-group",
+        "win.bulk-set-group",
+        "win.bulk-export",
+        "win.bulk-delete",
         "win.rename-db",
         "win.set-primary-db",
         "win.remove-db",
@@ -1567,6 +1749,7 @@ setup_otp_view (OTPClientWindow *self)
     self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),
                                                      GTK_FILTER (self->search_filter));
 
+    add_bulk_selection_column (self);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Account"), OTP_COLUMN_ACCOUNT);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("Issuer"), OTP_COLUMN_ISSUER);
     add_text_column (GTK_COLUMN_VIEW (self->otp_list), _("OTP Value"), OTP_COLUMN_VALUE);
@@ -2139,7 +2322,7 @@ copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry)
 static void
 trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
 {
-    if (entry == NULL)
+    if (entry == NULL || self->bulk_mode)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -2814,6 +2997,8 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->clipboard_cancellable);
     g_clear_object (&win->file_dialog_cancellable);
     g_clear_object (&win->group_list_model);
+    g_clear_object (&win->bulk_group_model);
+    g_clear_pointer (&win->bulk_selected_entries, g_hash_table_unref);
     g_clear_pointer (&win->active_group_filter, g_free);
     g_clear_pointer (&win->search_lower, g_free);
     g_clear_pointer (&win->search_group_lower, g_free);
@@ -2849,6 +3034,10 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
     clear_undo_snapshots (self);
+    if (self->bulk_mode_button != NULL)
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->bulk_mode_button), FALSE);
+    if (self->bulk_selected_entries != NULL)
+        g_hash_table_remove_all (self->bulk_selected_entries);
 
     /* Snapshot the stack: closing dialogs changes the live model. Clear now,
      * even if an asynchronous file chooser still holds a dialog reference. */
@@ -2942,6 +3131,16 @@ rebuild_group_list (OTPClientWindow *self)
     /* Sort group names */
     GList *group_names = g_hash_table_get_keys (groups);
     group_names = g_list_sort (group_names, (GCompareFunc) g_utf8_collate);
+
+    g_clear_object (&self->bulk_group_model);
+    self->bulk_group_model = gtk_string_list_new (NULL);
+    gtk_string_list_append (self->bulk_group_model, _("Ungrouped"));
+    for (GList *l = group_names; l != NULL; l = l->next)
+        gtk_string_list_append (self->bulk_group_model, (const gchar *) l->data);
+    gtk_drop_down_set_model (GTK_DROP_DOWN (self->bulk_group_dropdown),
+                             G_LIST_MODEL (self->bulk_group_model));
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (self->bulk_group_dropdown),
+                               GTK_INVALID_LIST_POSITION);
 
     /* Remember current selection */
     g_autofree gchar *prev_filter = g_strdup (self->active_group_filter);
@@ -3064,6 +3263,9 @@ static void
 on_db_modified (gpointer user_data)
 {
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    if (self->bulk_selected_entries != NULL)
+        g_hash_table_remove_all (self->bulk_selected_entries);
+    update_bulk_selection_count (self);
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     if (app == NULL)
@@ -4294,7 +4496,7 @@ on_undo_delete (AdwToast *toast,
 {
     (void) toast;
     UndoDeleteData *undo = user_data;
-    if (undo->token == NULL)
+    if (undo->token == NULL && undo->batch_snapshot == NULL)
         return;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&undo->window_ref);
     if (self == NULL)
@@ -4310,6 +4512,20 @@ on_undo_delete (AdwToast *toast,
         db_data->in_memory_json_data == NULL ||
         otpclient_application_get_lock_generation (app) != undo->lock_generation)
         return;
+
+    if (undo->batch_snapshot != NULL) {
+        GError *err = NULL;
+        if (!db_restore_tokens (db_data, undo->batch_snapshot, &err)) {
+            show_error_toast (self, _("Failed to restore deleted tokens: %s"),
+                              err != NULL ? err->message : _("database write failed"));
+            g_clear_error (&err);
+            show_batch_undo_toast (self, undo->origin_db, undo->batch_snapshot);
+            return;
+        }
+        undo_delete_token_clear (undo);
+        on_db_modified (self);
+        return;
+    }
 
     gsize arr_len = json_array_size (db_data->in_memory_json_data);
     guint insert_pos = (undo->position <= arr_len) ? undo->position : (guint) arr_len;
@@ -4331,6 +4547,14 @@ on_undo_delete (AdwToast *toast,
     undo->token = NULL;
 
     on_db_modified (self);
+}
+
+void
+otpclient_window_undo_latest_delete (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    if (self->undo_actions != NULL)
+        on_undo_delete (NULL, self->undo_actions->data);
 }
 
 static void
@@ -4409,6 +4633,148 @@ action_delete_token (GtkWidget  *widget,
 
     adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
                              (GAsyncReadyCallback) on_delete_response, self);
+}
+
+typedef struct {
+    GWeakRef window_ref;
+    DatabaseData *db_data;
+    guint lock_generation;
+    GArray *indices;
+} BulkDeleteContext;
+
+static void
+bulk_delete_context_free (BulkDeleteContext *ctx)
+{
+    g_weak_ref_clear (&ctx->window_ref);
+    database_data_unref (ctx->db_data);
+    g_array_unref (ctx->indices);
+    g_free (ctx);
+}
+
+static void
+on_bulk_delete_response (AdwAlertDialog *dialog,
+                         GAsyncResult *result,
+                         BulkDeleteContext *ctx)
+{
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    OTPClientApplication *app = self != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self))) : NULL;
+    if (g_strcmp0 (response, "delete") != 0 || app == NULL ||
+        window_is_locked (self) || otpclient_application_get_db_data (app) != ctx->db_data ||
+        otpclient_application_get_lock_generation (app) != ctx->lock_generation) {
+        bulk_delete_context_free (ctx);
+        return;
+    }
+    json_t *snapshot = NULL;
+    GError *err = NULL;
+    if (!db_delete_tokens (ctx->db_data, ctx->indices, &snapshot, &err)) {
+        show_error_toast (self, _("Could not delete selected tokens: %s"),
+                          err != NULL ? err->message : _("database write failed"));
+        g_clear_error (&err);
+        bulk_delete_context_free (ctx);
+        return;
+    }
+    on_db_modified (self);
+    show_batch_undo_toast (self, ctx->db_data, snapshot);
+    json_decref (snapshot);
+    bulk_delete_context_free (ctx);
+}
+
+static void
+action_bulk_delete (GtkWidget *widget,
+                    const char *action_name G_GNUC_UNUSED,
+                    GVariant *parameter G_GNUC_UNUSED)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL)
+        return;
+    GArray *indices = bulk_selected_indices (self, NULL);
+    if (indices->len == 0) {
+        g_array_unref (indices);
+        return;
+    }
+    BulkDeleteContext *ctx = g_new0 (BulkDeleteContext, 1);
+    g_weak_ref_init (&ctx->window_ref, self);
+    ctx->db_data = database_data_ref (db_data);
+    ctx->lock_generation = otpclient_application_get_lock_generation (app);
+    ctx->indices = indices;
+    g_autofree gchar *message = g_strdup_printf (
+        ngettext ("Delete %u selected token? You can undo this action.",
+                  "Delete %u selected tokens? You can undo this action.", indices->len),
+        indices->len);
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Delete Selected Tokens?"), message));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "delete", _("Delete"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "delete", ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_bulk_delete_response, ctx);
+}
+
+static void
+action_bulk_set_group (GtkWidget *widget,
+                       const char *action_name G_GNUC_UNUSED,
+                       GVariant *parameter G_GNUC_UNUSED)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL)
+        return;
+    guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (self->bulk_group_dropdown));
+    if (selected == GTK_INVALID_LIST_POSITION || self->bulk_group_model == NULL)
+        return;
+    guint n = g_list_model_get_n_items (G_LIST_MODEL (self->bulk_group_model));
+    if (selected >= n)
+        return;
+    GArray *indices = bulk_selected_indices (self, NULL);
+    if (indices->len == 0) {
+        g_array_unref (indices);
+        return;
+    }
+    const gchar *group = selected == 0 ? NULL
+        : gtk_string_list_get_string (self->bulk_group_model, selected);
+    GError *err = NULL;
+    if (!db_set_tokens_group (db_data, indices, group, &err)) {
+        show_error_toast (self, _("Could not assign the selected group: %s"),
+                          err != NULL ? err->message : _("database write failed"));
+        g_clear_error (&err);
+    } else {
+        on_db_modified (self);
+        AdwToast *toast = adw_toast_new (_("Group updated for selected tokens"));
+        adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+    }
+    g_array_unref (indices);
+}
+
+static void
+action_bulk_export (GtkWidget *widget,
+                    const char *action_name G_GNUC_UNUSED,
+                    GVariant *parameter G_GNUC_UNUSED)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL)
+        return;
+    json_t *tokens = NULL;
+    GArray *indices = bulk_selected_indices (self, &tokens);
+    g_array_unref (indices);
+    if (!json_is_array (tokens) || json_array_size (tokens) == 0) {
+        g_clear_pointer (&tokens, json_decref);
+        return;
+    }
+    ExportDialog *dialog = export_dialog_new_selected (db_data, GTK_WIDGET (self), tokens);
+    json_decref (tokens);
+    if (dialog != NULL)
+        adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (self));
 }
 
 static void
@@ -6107,6 +6473,10 @@ otpclient_window_init (OTPClientWindow *self)
     g_weak_ref_init (&self->clipboard_owner_entry, NULL);
     self->cross_db_monitors = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                       g_free, g_object_unref);
+    self->bulk_selected_entries = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                                        g_object_unref, NULL);
+    g_signal_connect (self->bulk_mode_button, "toggled",
+                      G_CALLBACK (bulk_mode_toggled), self);
     GdkDisplay *display = gdk_display_get_default ();
     if (display != NULL)
         g_signal_connect_object (gdk_display_get_clipboard (display), "changed",
@@ -6250,6 +6620,10 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, locked_status_page);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, locked_unlock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, bulk_mode_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, bulk_toolbar);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, bulk_count_label);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, bulk_group_dropdown);
 
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "app.quit", NULL);
 
@@ -6280,6 +6654,9 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.edit-token", NULL, action_edit_token);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_F2, 0, "win.edit-token", NULL);
     gtk_widget_class_install_action (widget_class, "win.delete-token", NULL, action_delete_token);
+    gtk_widget_class_install_action (widget_class, "win.bulk-delete", NULL, action_bulk_delete);
+    gtk_widget_class_install_action (widget_class, "win.bulk-set-group", NULL, action_bulk_set_group);
+    gtk_widget_class_install_action (widget_class, "win.bulk-export", NULL, action_bulk_export);
     gtk_widget_class_install_action (widget_class, "win.show-qr", NULL, action_show_qr);
     gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);
     gtk_widget_class_install_action (widget_class, "win.set-group", "s", action_set_group);

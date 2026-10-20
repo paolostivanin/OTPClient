@@ -153,6 +153,17 @@ gboolean      db_rename_group (DatabaseData *db_data,
 gboolean      db_remove_group (DatabaseData *db_data,
                                 const gchar *name,
                                 GError **err);
+gboolean      db_set_tokens_group (DatabaseData *db_data,
+                                    const GArray *indices,
+                                    const gchar *group,
+                                    GError **err);
+gboolean      db_delete_tokens (DatabaseData *db_data,
+                                 const GArray *indices,
+                                 json_t **out_snapshot,
+                                 GError **err);
+gboolean      db_restore_tokens (DatabaseData *db_data,
+                                  json_t *snapshot,
+                                  GError **err);
 
 void    load_db            (DatabaseData   *db_data,
                             GError        **error);

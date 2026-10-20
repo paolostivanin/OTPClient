@@ -59,6 +59,16 @@ collect_entries (GtkWidget *parent, GPtrArray *entries)
 }
 
 static void
+collect_check_buttons (GtkWidget *parent, GPtrArray *buttons)
+{
+    if (GTK_IS_CHECK_BUTTON (parent))
+        g_ptr_array_add (buttons, parent);
+    for (GtkWidget *child = gtk_widget_get_first_child (parent); child != NULL;
+         child = gtk_widget_get_next_sibling (child))
+        collect_check_buttons (child, buttons);
+}
+
+static void
 assert_cleared (GtkWidget *parent)
 {
     if (GTK_IS_EDITABLE (parent) && !GTK_IS_SPIN_BUTTON (parent))
@@ -236,6 +246,41 @@ test_manage_groups_renames_all_matching_tokens (void)
     settle ();
     g_assert_cmpstr (json_string_value (json_object_get (
         json_array_get (fixture.db->in_memory_json_data, 0), "group")), ==, "Projects");
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_bulk_delete_restores_selected_tokens (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    GtkWidget *mode = win->bulk_mode_button;
+    g_assert_true (GTK_IS_TOGGLE_BUTTON (mode));
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (mode), TRUE);
+    settle ();
+    g_autoptr (GPtrArray) checks = g_ptr_array_new ();
+    collect_check_buttons (GTK_WIDGET (win), checks);
+    g_assert_cmpuint (checks->len, >, 0);
+    gtk_check_button_set_active (g_ptr_array_index (checks, 0), TRUE);
+    g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 1);
+
+    g_assert_true (gtk_widget_activate_action (GTK_WIDGET (win), "win.bulk-delete", NULL));
+    settle ();
+    AdwDialog *confirm = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (confirm);
+    GtkWidget *delete_button = find_widget (GTK_WIDGET (confirm), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (delete_button);
+    g_signal_emit_by_name (delete_button, "clicked");
+    settle ();
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 0);
+
+    g_assert_nonnull (win->undo_actions);
+    otpclient_window_undo_latest_delete (win);
+    settle ();
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
     review_fixture_clear (&fixture);
 }
 
@@ -636,6 +681,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/quarantine-review-delete", test_quarantine_review_can_delete_preserved_token);
     g_test_add_func ("/gui-flows/quarantine-review-repair", test_quarantine_review_repairs_and_validates_token);
     g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
+    g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
