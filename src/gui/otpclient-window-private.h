@@ -133,6 +133,11 @@ void otpclient_window_undo_show_batch (OTPClientWindow *self,
 void otpclient_window_undo_clear (OTPClientWindow *self);
 void otpclient_window_undo_latest (OTPClientWindow *self);
 void otpclient_window_database_modified (OTPClientWindow *self);
+guint otpclient_window_selected_writable_json_index (OTPClientWindow *self);
+GArray *otpclient_window_get_bulk_selected_indices (OTPClientWindow *self,
+                                                    json_t **out_tokens);
+void otpclient_window_actions_delete (OTPClientWindow *self);
+void otpclient_window_actions_bulk_delete (OTPClientWindow *self);
 
 /* Internal hook used by GUI flow tests to exercise the toast's Undo payload. */
 void otpclient_window_undo_latest_delete (OTPClientWindow *self);

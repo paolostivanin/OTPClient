@@ -203,3 +203,143 @@ otpclient_window_undo_latest (OTPClientWindow *self)
     if (self->undo_actions != NULL)
         on_undo_delete (NULL, self->undo_actions->data);
 }
+
+typedef struct {
+    GWeakRef window_ref;
+    DatabaseData *db_data;
+    guint lock_generation;
+    GArray *indices;
+} BulkDeleteContext;
+
+static void
+bulk_delete_context_free (BulkDeleteContext *ctx)
+{
+    g_weak_ref_clear (&ctx->window_ref);
+    database_data_unref (ctx->db_data);
+    g_array_unref (ctx->indices);
+    g_free (ctx);
+}
+
+static void
+on_delete_response (AdwAlertDialog *dialog, GAsyncResult *result,
+                    gpointer user_data)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+    if (g_strcmp0 (response, "delete") != 0)
+        return;
+
+    guint pos = otpclient_window_selected_writable_json_index (self);
+    if (pos == GTK_INVALID_LIST_POSITION)
+        return;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL
+        ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    json_t *deleted_token = json_deep_copy (
+        json_array_get (db_data->in_memory_json_data, pos));
+    if (deleted_token == NULL)
+        return;
+    json_array_remove (db_data->in_memory_json_data, pos);
+    GError *err = NULL;
+    update_db (db_data, &err);
+    if (err != NULL) {
+        g_autofree gchar *message = g_strdup_printf (
+            _("Failed to delete token: %s"), err->message);
+        otpclient_window_show_error_toast (self, message);
+        g_clear_error (&err);
+        json_array_insert (db_data->in_memory_json_data, pos, deleted_token);
+        json_decref (deleted_token);
+        return;
+    }
+    otpclient_window_database_modified (self);
+    otpclient_window_undo_show_single (self, db_data, deleted_token, pos);
+    json_decref (deleted_token);
+}
+
+void
+otpclient_window_actions_delete (OTPClientWindow *self)
+{
+    if (otpclient_window_selected_writable_json_index (self) ==
+        GTK_INVALID_LIST_POSITION)
+        return;
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Delete Token?"),
+                              _("This action cannot be undone.")));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "delete", _("Delete"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "delete",
+                                               ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_delete_response, self);
+}
+
+static void
+on_bulk_delete_response (AdwAlertDialog *dialog, GAsyncResult *result,
+                         BulkDeleteContext *ctx)
+{
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    OTPClientApplication *app = self != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self))) : NULL;
+    if (g_strcmp0 (response, "delete") != 0 || app == NULL || self == NULL ||
+        otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != ctx->db_data ||
+        otpclient_application_get_lock_generation (app) != ctx->lock_generation) {
+        bulk_delete_context_free (ctx);
+        return;
+    }
+    json_t *snapshot = NULL;
+    GError *err = NULL;
+    if (!db_delete_tokens (ctx->db_data, ctx->indices, &snapshot, &err)) {
+        g_autofree gchar *message = g_strdup_printf (
+            _("Could not delete selected tokens: %s"),
+            err != NULL ? err->message : _("database write failed"));
+        otpclient_window_show_error_toast (self, message);
+        g_clear_error (&err);
+        bulk_delete_context_free (ctx);
+        return;
+    }
+    otpclient_window_database_modified (self);
+    otpclient_window_undo_show_batch (self, ctx->db_data, snapshot);
+    json_decref (snapshot);
+    bulk_delete_context_free (ctx);
+}
+
+void
+otpclient_window_actions_bulk_delete (OTPClientWindow *self)
+{
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL
+        ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL)
+        return;
+    GArray *indices = otpclient_window_get_bulk_selected_indices (self, NULL);
+    if (indices->len == 0) {
+        g_array_unref (indices);
+        return;
+    }
+    BulkDeleteContext *ctx = g_new0 (BulkDeleteContext, 1);
+    g_weak_ref_init (&ctx->window_ref, self);
+    ctx->db_data = database_data_ref (db_data);
+    ctx->lock_generation = otpclient_application_get_lock_generation (app);
+    ctx->indices = indices;
+    g_autofree gchar *message = g_strdup_printf (
+        ngettext ("Delete %u selected token? You can undo this action.",
+                  "Delete %u selected tokens? You can undo this action.",
+                  indices->len), indices->len);
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Delete Selected Tokens?"), message));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "delete", _("Delete"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "delete",
+                                               ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+        (GAsyncReadyCallback) on_bulk_delete_response, ctx);
+}
