@@ -939,6 +939,14 @@ refresh_totp_entry (OTPClientWindow *self,
         gtk_window_get_application (GTK_WINDOW (self)));
     g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
     gboolean owns_clipboard = clip_owner == entry;
+    /* Cross-database entries are cached lazily as search results bind. Do not
+     * turn the periodic refresh into an eager generator for cached rows that
+     * were never shown; an explicit reveal/clipboard owner still refreshes. */
+    const gchar *cached_value = otp_entry_get_otp_value (entry);
+    if (otp_entry_get_db_name (entry) != NULL &&
+        (cached_value == NULL || cached_value[0] == '\0') &&
+        !otp_entry_get_revealed (entry) && !owns_clipboard)
+        return;
     if (app != NULL && otpclient_application_get_hide_otps (app) &&
         !otp_entry_get_revealed (entry) && !owns_clipboard)
         return;
