@@ -4,6 +4,7 @@
 #include "otpclient-window-private.h"
 #include "otp-entry.h"
 #include "otp-validation.h"
+#include "parse-uri.h"
 #include "lock-app.h"
 #include "dialogs/qr-display-dialog.h"
 #include "dialogs/password-dialog.h"
@@ -161,8 +162,12 @@ test_quarantine_review_can_delete_preserved_token (void)
     update_db (fixture.db, &err);
     g_assert_no_error (err);
 
-    g_assert_true (gtk_widget_activate_action (GTK_WIDGET (win),
-                                               "win.review-quarantine", NULL));
+    otpclient_window_database_modified (win);
+    g_assert_nonnull (win->quarantine_banner);
+    g_assert_true (adw_banner_get_revealed (ADW_BANNER (win->quarantine_banner)));
+    GtkWidget *review_button = find_widget (win->quarantine_banner, GTK_TYPE_BUTTON, "Review");
+    g_assert_nonnull (review_button);
+    g_signal_emit_by_name (review_button, "clicked");
     settle ();
     AdwDialog *review = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
     g_assert_nonnull (review);
@@ -171,6 +176,7 @@ test_quarantine_review_can_delete_preserved_token (void)
     g_signal_emit_by_name (delete_button, "clicked");
     settle ();
     g_assert_cmpuint (db_get_quarantined_count (fixture.db), ==, 0);
+    g_assert_false (adw_banner_get_revealed (ADW_BANNER (win->quarantine_banner)));
     g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
     g_assert_null (adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win)));
     review_fixture_clear (&fixture);
@@ -191,6 +197,7 @@ test_quarantine_review_repairs_and_validates_token (void)
     update_db (fixture.db, &err);
     g_assert_no_error (err);
 
+    otpclient_window_database_modified (win);
     gtk_widget_activate_action (GTK_WIDGET (win), "win.review-quarantine", NULL);
     settle ();
     AdwDialog *review = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
@@ -344,6 +351,90 @@ test_single_delete_and_undo_write_failures (void)
     g_assert_no_error (err);
     g_assert_true (json_equal (reader->in_memory_json_data, fixture.db->in_memory_json_data));
     database_data_free (reader);
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_bulk_selection_mode_refreshes_rows (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    g_assert_false (gtk_column_view_column_get_visible (win->bulk_selection_column));
+    for (guint cycle = 0; cycle < 2; cycle++) {
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (win->bulk_mode_button), TRUE);
+        settle ();
+        g_assert_true (gtk_column_view_column_get_visible (win->bulk_selection_column));
+        g_autoptr (GPtrArray) checks = g_ptr_array_new ();
+        collect_check_buttons (win->otp_list, checks);
+        g_assert_cmpuint (checks->len, >, 0);
+        for (guint i = 0; i < checks->len; i++) {
+            GtkWidget *check = g_ptr_array_index (checks, i);
+            g_assert_true (gtk_widget_get_visible (check));
+            g_assert_false (gtk_check_button_get_active (GTK_CHECK_BUTTON (check)));
+        }
+        gtk_check_button_set_active (g_ptr_array_index (checks, 0), TRUE);
+        g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 1);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (win->bulk_mode_button), FALSE);
+        settle ();
+        g_assert_false (gtk_column_view_column_get_visible (win->bulk_selection_column));
+        g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 0);
+    }
+    review_fixture_clear (&fixture);
+}
+
+static void
+capture_import_summary (const ImportSummary *summary, gpointer user_data)
+{
+    ImportSummary *captured = user_data;
+    *captured = *summary;
+    captured->details = NULL;
+}
+
+static void
+test_import_preview_duplicates_and_conflicts (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    json_t *existing = json_array_get (fixture.db->in_memory_json_data, 0);
+    json_t *type = json_incref (json_object_get (existing, "type"));
+    json_object_del (existing, "type");
+    json_object_set_new (existing, "type", type);
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+
+    ImportSummary summary = {0};
+    ImportDialog *dialog = import_dialog_new (fixture.db, GTK_WIDGET (win),
+                                               capture_import_summary, &summary);
+    g_object_ref_sink (dialog);
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (win));
+    GSList *otps = NULL;
+    set_otps_from_uris (
+        "otpauth://hotp/Example:alice?secret=" REVIEW_SECRET "&issuer=Example&counter=0\n"
+        "otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&counter=0\n"
+        "otpauth://totp/Example:bob?secret=" REVIEW_SECRET "&issuer=Example\n"
+        "otpauth://totp/Example:bob?secret=" REVIEW_SECRET "&issuer=Example",
+        &otps);
+    g_assert_cmpuint (g_slist_length (otps), ==, 4);
+    import_dialog_test_preview (dialog, otps);
+    g_autoptr (GPtrArray) checks = g_ptr_array_new ();
+    collect_check_buttons (GTK_WIDGET (dialog), checks);
+    g_assert_cmpuint (checks->len, ==, 4);
+    g_assert_false (gtk_check_button_get_active (g_ptr_array_index (checks, 0)));
+    g_assert_true (gtk_check_button_get_active (g_ptr_array_index (checks, 1)));
+    g_assert_true (gtk_check_button_get_active (g_ptr_array_index (checks, 2)));
+    g_assert_false (gtk_check_button_get_active (g_ptr_array_index (checks, 3)));
+    g_assert_nonnull (strstr (gtk_check_button_get_label (g_ptr_array_index (checks, 0)), "exact duplicate"));
+    g_assert_nonnull (strstr (gtk_check_button_get_label (g_ptr_array_index (checks, 1)), "different secret"));
+
+    GtkWidget *commit = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Import Selected");
+    g_assert_nonnull (commit);
+    g_signal_emit_by_name (commit, "clicked");
+    settle ();
+    g_assert_cmpuint (summary.added, ==, 2);
+    g_assert_cmpuint (summary.skipped_duplicates, ==, 2);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 3);
+    g_object_unref (dialog);
     review_fixture_clear (&fixture);
 }
 
@@ -900,6 +991,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
     g_test_add_func ("/gui-flows/single-delete-undo-write-failures", test_single_delete_and_undo_write_failures);
     g_test_add_func ("/gui-flows/bulk-group-assignment", test_bulk_group_assignment);
+    g_test_add_func ("/gui-flows/bulk-selection-mode", test_bulk_selection_mode_refreshes_rows);
+    g_test_add_func ("/gui-flows/import-preview", test_import_preview_duplicates_and_conflicts);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);

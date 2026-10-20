@@ -27,4 +27,10 @@ ImportDialog *import_dialog_new (DatabaseData   *db_data,
                                  ImportCallback  callback,
                                  gpointer        user_data);
 
+#ifdef OTPCLIENT_TESTING
+/* Exercise the preview after parsing without invoking a native file picker.
+ * Takes ownership of the parsed token list, as the normal parse callback does. */
+void import_dialog_test_preview (ImportDialog *self, GSList *otps);
+#endif
+
 G_END_DECLS

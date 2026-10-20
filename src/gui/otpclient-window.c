@@ -643,13 +643,31 @@ static void
 bulk_selection_toggled (GtkCheckButton *button, OTPClientWindow *self)
 {
     OTPEntry *entry = g_object_get_data (G_OBJECT (button), "otp-entry");
-    if (entry == NULL || otp_entry_get_db_name (entry) != NULL)
+    if (!self->bulk_mode || entry == NULL || otp_entry_get_db_name (entry) != NULL)
         return;
     if (gtk_check_button_get_active (button))
         g_hash_table_add (self->bulk_selected_entries, g_object_ref (entry));
     else
         g_hash_table_remove (self->bulk_selected_entries, entry);
     update_bulk_selection_count (self);
+}
+
+static void
+refresh_bulk_selection_checks (GtkWidget *widget, OTPClientWindow *self)
+{
+    if (GTK_IS_CHECK_BUTTON (widget)) {
+        OTPEntry *entry = g_object_get_data (G_OBJECT (widget), "otp-entry");
+        if (entry != NULL) {
+            g_signal_handlers_block_by_func (widget, bulk_selection_toggled, self);
+            gtk_check_button_set_active (GTK_CHECK_BUTTON (widget),
+                g_hash_table_contains (self->bulk_selected_entries, entry));
+            gtk_widget_set_visible (widget, self->bulk_mode);
+            g_signal_handlers_unblock_by_func (widget, bulk_selection_toggled, self);
+        }
+    }
+    for (GtkWidget *child = gtk_widget_get_first_child (widget); child != NULL;
+         child = gtk_widget_get_next_sibling (child))
+        refresh_bulk_selection_checks (child, self);
 }
 
 static void
@@ -703,6 +721,7 @@ add_bulk_selection_column (OTPClientWindow *self)
 {
     GtkListItemFactory *factory = gtk_signal_list_item_factory_new ();
     self->bulk_selection_column = gtk_column_view_column_new ("", factory);
+    gtk_column_view_column_set_visible (self->bulk_selection_column, self->bulk_mode);
     gtk_column_view_column_set_fixed_width (self->bulk_selection_column, 42);
     g_signal_connect (factory, "setup", G_CALLBACK (bulk_selection_column_setup), self);
     g_signal_connect (factory, "bind", G_CALLBACK (bulk_selection_column_bind), self);
@@ -734,6 +753,9 @@ bulk_mode_toggled (GtkToggleButton *button, OTPClientWindow *self)
     gtk_widget_set_visible (self->bulk_toolbar, self->bulk_mode);
     if (!self->bulk_mode && self->bulk_selected_entries != NULL)
         g_hash_table_remove_all (self->bulk_selected_entries);
+    /* Changing the mode does not rebind rows that are already on screen. */
+    refresh_bulk_selection_checks (self->otp_list, self);
+    gtk_column_view_column_set_visible (self->bulk_selection_column, self->bulk_mode);
     update_bulk_selection_count (self);
     gtk_button_set_label (GTK_BUTTON (button), self->bulk_mode ? _("Done") : _("Select"));
     gtk_widget_set_tooltip_text (GTK_WIDGET (button), self->bulk_mode
@@ -6330,6 +6352,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, lock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, settings_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, backup_age_banner);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, quarantine_banner);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, sidebar_toggle_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, split_view);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, database_list);

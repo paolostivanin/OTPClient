@@ -211,8 +211,7 @@ show_import_preview (ImportDialog *self, GSList *otps, const gchar *details,
                                                (GDestroyNotify) g_ptr_array_unref);
     GHashTable *identities = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
                                                    (GDestroyNotify) g_ptr_array_unref);
-    json_t *root = self->db_data->in_memory_json_data;
-    json_t *tokens = root != NULL ? json_object_get (root, "tokens") : NULL;
+    json_t *tokens = self->db_data->in_memory_json_data;
     if (json_is_array (tokens)) {
         size_t i;
         json_t *obj;
@@ -303,6 +302,14 @@ show_import_preview (ImportDialog *self, GSList *otps, const gchar *details,
     gtk_box_insert_child_after (GTK_BOX (box), self->preview_group, self->error_label);
     gtk_button_set_label (GTK_BUTTON (self->import_button), _("Import Selected"));
 }
+
+#ifdef OTPCLIENT_TESTING
+void
+import_dialog_test_preview (ImportDialog *self, GSList *otps)
+{
+    show_import_preview (self, otps, "", 0, 0, 0);
+}
+#endif
 
 static void
 commit_import_preview (ImportDialog *self)

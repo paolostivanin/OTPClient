@@ -549,11 +549,16 @@ json_object_get_hash (json_t *obj)
     // still only used as a fast first-pass filter - db_import_otps breaks ties
     // with json_equal so a colliding-but-distinct entry isn't silently dropped.
     GString *tmp_string = g_string_new (NULL);
-    const gchar *key;
-    json_t *value;
-    json_object_foreach (obj, key, value) {
-        if (g_strcmp0 (key, "group") == 0)
-            continue;
+    /* JSON object equality ignores insertion order. Hash token fields in a
+     * fixed order so equal tokens always reach the same equality bucket.
+     * Group and extension fields may collide; callers resolve those with
+     * json_equal before treating an entry as a duplicate. */
+    static const gchar * const fields[] = {
+        "type", "label", "issuer", "digits", "algo", "secret", "period", "counter"
+    };
+    for (guint i = 0; i < G_N_ELEMENTS (fields); i++) {
+        const gchar *key = fields[i];
+        json_t *value = json_object_get (obj, key);
         if (g_strcmp0 (key, "period") == 0 || g_strcmp0 (key, "counter") == 0 || g_strcmp0 (key, "digits") == 0) {
             json_int_t v = json_integer_value (value);
             g_string_append_printf (tmp_string, "%" G_GINT64_FORMAT, (gint64) v);

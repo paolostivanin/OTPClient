@@ -185,6 +185,52 @@ test_group_rename_and_remove_are_transactional (void)
 }
 
 static void
+test_import_duplicate_ignores_field_order (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+    json_t *existing = json_array_get (db_data->in_memory_json_data, 0);
+    /* Move the first field to the end without changing the object's value. */
+    json_t *type = json_incref (json_object_get (existing, "type"));
+    json_object_del (existing, "type");
+    json_object_set_new (existing, "type", type);
+    GError *err = NULL;
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+
+    otp_t *otp = g_new0 (otp_t, 1);
+    otp->type = g_strdup ("TOTP");
+    otp->account_name = g_strdup ("alice");
+    otp->issuer = g_strdup ("Example");
+    otp->secret = secure_strdup ("JBSWY3DPEHPK3PXP");
+    otp->algo = g_strdup ("SHA1");
+    otp->digits = 6;
+    otp->period = 30;
+    GSList *otps = g_slist_prepend (NULL, otp);
+    OtpImportReport report = {0};
+    g_assert_true (db_import_otps (db_data, otps, &report, &err));
+    g_assert_no_error (err);
+    g_assert_cmpuint (report.added, ==, 0);
+    g_assert_cmpuint (report.skipped_duplicates, ==, 1);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 1);
+
+    /* Sharing a hash does not make a token with different metadata equal. */
+    otp->group = g_strdup ("Work");
+    g_assert_true (db_import_otps (db_data, otps, &report, &err));
+    g_assert_no_error (err);
+    g_assert_cmpuint (report.added, ==, 1);
+    g_assert_cmpuint (report.skipped_duplicates, ==, 0);
+    g_assert_true (db_import_otps (db_data, otps, &report, &err));
+    g_assert_no_error (err);
+    g_assert_cmpuint (report.added, ==, 0);
+    g_assert_cmpuint (report.skipped_duplicates, ==, 1);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 2);
+    free_otps_gslist (otps);
+    cleanup_db_data (db_data, dir, path);
+}
+
+static void
 test_batch_delete_restore_is_atomic (void)
 {
     gchar *dir = NULL;
@@ -663,6 +709,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/quarantine-updates-are-transactional", test_quarantine_updates_are_transactional);
     g_test_add_func ("/db-transaction/group-rename-remove", test_group_rename_and_remove_are_transactional);
     g_test_add_func ("/db-transaction/batch-delete-restore", test_batch_delete_restore_is_atomic);
+    g_test_add_func ("/db-transaction/import-duplicate-field-order", test_import_duplicate_ignores_field_order);
     g_test_add_func ("/db-transaction/committed-digest-baseline", test_committed_digest_baseline);
 
     int ret = g_test_run ();
