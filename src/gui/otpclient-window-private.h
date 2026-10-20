@@ -86,6 +86,7 @@ struct _OTPClientWindow
 
     /* Cross-database search */
     GListStore *cross_db_store;
+    GHashTable *cross_db_monitors; /* path -> GFileMonitor for cached sources */
     GtkFlattenListModel *flatten_model;
     gboolean cross_db_loaded;
     gboolean cross_db_loading;

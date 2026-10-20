@@ -891,11 +891,27 @@ cross_db_deactivate (OTPClientWindow *self)
 
 typedef struct {
     GPtrArray *db_list;    /* array of DbListEntry (owned) */
+    GPtrArray *loaded_db_paths;
     gchar *current_db_path;
     gint32 max_file_size;
     GWeakRef window_ref;
     guint64 generation;
 } CrossDbTaskData;
+
+typedef struct {
+    GWeakRef window_ref;
+} CrossDbMonitorContext;
+
+static void cross_db_trigger_load (OTPClientWindow *self);
+
+static void
+cross_db_monitor_context_free (gpointer data,
+                              GClosure *closure G_GNUC_UNUSED)
+{
+    CrossDbMonitorContext *ctx = data;
+    g_weak_ref_clear (&ctx->window_ref);
+    g_free (ctx);
+}
 
 static void
 cross_db_task_data_free (gpointer data)
@@ -905,6 +921,8 @@ cross_db_task_data_free (gpointer data)
     g_free (td->current_db_path);
     if (td->db_list != NULL)
         g_ptr_array_unref (td->db_list);
+    if (td->loaded_db_paths != NULL)
+        g_ptr_array_unref (td->loaded_db_paths);
     g_free (td);
 }
 
@@ -995,10 +1013,56 @@ cross_db_load_thread (GTask        *task,
             g_object_unref (entry);
         }
 
+        g_ptr_array_add (td->loaded_db_paths, g_strdup (dbe->path));
+
         database_data_free (db_data);
     }
 
     g_task_return_pointer (task, result, g_object_unref);
+}
+
+static void
+cross_db_source_changed (GFileMonitor      *monitor,
+                         GFile             *file,
+                         GFile             *other_file,
+                         GFileMonitorEvent  event,
+                         gpointer           user_data)
+{
+    (void) monitor;
+    (void) file;
+    (void) other_file;
+    (void) event;
+    CrossDbMonitorContext *ctx = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    if (self == NULL || self->disposing)
+        return;
+
+    otpclient_window_invalidate_cross_db (self);
+    const gchar *query = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
+    if (query != NULL && query[0] != '\0')
+        cross_db_trigger_load (self);
+}
+
+static void
+cross_db_watch_source (OTPClientWindow *self,
+                       const gchar     *path)
+{
+    if (self->cross_db_monitors == NULL ||
+        g_hash_table_contains (self->cross_db_monitors, path))
+        return;
+    g_autoptr (GFile) file = g_file_new_for_path (path);
+    g_autoptr (GError) err = NULL;
+    GFileMonitor *monitor = g_file_monitor_file (file, G_FILE_MONITOR_WATCH_MOVES,
+                                                 NULL, &err);
+    if (monitor == NULL) {
+        g_debug ("Could not watch cross-database source %s: %s", path, err->message);
+        return;
+    }
+    CrossDbMonitorContext *ctx = g_new0 (CrossDbMonitorContext, 1);
+    g_weak_ref_init (&ctx->window_ref, self);
+    g_signal_connect_data (monitor, "changed", G_CALLBACK (cross_db_source_changed),
+                           ctx, cross_db_monitor_context_free, 0);
+    g_hash_table_insert (self->cross_db_monitors, g_strdup (path), monitor);
 }
 
 static void
@@ -1041,6 +1105,8 @@ cross_db_load_done (GObject      *source,
     g_clear_object (&self->cross_db_store);
     self->cross_db_store = store;
     self->cross_db_loaded = TRUE;
+    for (guint i = 0; i < td->loaded_db_paths->len; i++)
+        cross_db_watch_source (self, g_ptr_array_index (td->loaded_db_paths, i));
 
     /* Rebuild the flatten model with the new cross-db store */
     g_clear_object (&self->flatten_model);
@@ -1085,6 +1151,7 @@ cross_db_trigger_load (OTPClientWindow *self)
 
     CrossDbTaskData *td = g_new0 (CrossDbTaskData, 1);
     td->db_list = db_list;
+    td->loaded_db_paths = g_ptr_array_new_with_free_func (g_free);
     td->current_db_path = g_strdup (db_data->db_path);
     td->max_file_size = db_data->max_file_size_from_memlock;
     td->generation = self->cross_db_generation;
@@ -1106,6 +1173,8 @@ otpclient_window_invalidate_cross_db (OTPClientWindow *self)
     g_clear_object (&self->cross_db_cancellable);
     self->cross_db_loading = FALSE;
     self->cross_db_loaded = FALSE;
+    if (self->cross_db_monitors != NULL)
+        g_hash_table_remove_all (self->cross_db_monitors);
     cross_db_deactivate (self);
     g_clear_object (&self->flatten_model);
     if (self->cross_db_store != NULL)
@@ -2713,6 +2782,7 @@ otpclient_window_dispose (GObject *object)
     g_clear_object (&win->otp_store);
     g_clear_object (&win->db_store);
     g_clear_object (&win->cross_db_store);
+    g_clear_pointer (&win->cross_db_monitors, g_hash_table_unref);
     g_clear_object (&win->flatten_model);
     g_clear_object (&win->cross_db_cancellable);
     g_clear_object (&win->webcam_cancellable);
@@ -2787,6 +2857,8 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
 
     self->cross_db_loading = FALSE;
     self->cross_db_loaded = FALSE;
+    if (self->cross_db_monitors != NULL)
+        g_hash_table_remove_all (self->cross_db_monitors);
     cross_db_deactivate (self);
     g_clear_object (&self->flatten_model);
     if (self->cross_db_store != NULL)
@@ -5467,6 +5539,8 @@ otpclient_window_init (OTPClientWindow *self)
     gtk_widget_init_template (GTK_WIDGET(self));
 
     g_weak_ref_init (&self->clipboard_owner_entry, NULL);
+    self->cross_db_monitors = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                                      g_free, g_object_unref);
     GdkDisplay *display = gdk_display_get_default ();
     if (display != NULL)
         g_signal_connect_object (gdk_display_get_clipboard (display), "changed",
