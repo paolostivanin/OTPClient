@@ -21,6 +21,7 @@ struct _ExportDialog
     GtkWidget *error_label;
     GtkWidget *plain_warning;
     gboolean disposed;
+    gboolean export_running;
 };
 
 typedef enum
@@ -34,6 +35,57 @@ typedef enum
     EXPORT_FMT_TWOFAS_ENC,
     N_EXPORT_FORMATS
 } ExportFormat;
+
+typedef struct {
+    gchar *path;
+    guint format;
+    json_t *tokens;
+    gchar *password;
+} ExportTaskData;
+
+typedef struct {
+    gchar *error;
+} ExportTaskResult;
+
+static void
+wipe_token_array (json_t *tokens)
+{
+    if (!json_is_array (tokens))
+        return;
+    size_t i;
+    json_t *token;
+    json_array_foreach (tokens, i, token) {
+        json_t *secret = json_object_get (token, "secret");
+        if (json_is_string (secret)) {
+            const char *value = json_string_value (secret);
+            size_t len = json_string_length (secret);
+            if (value != NULL && len > 0)
+                explicit_bzero ((void *) value, len);
+        }
+    }
+}
+
+static void
+export_task_data_free (gpointer data)
+{
+    ExportTaskData *td = data;
+    g_free (td->path);
+    wipe_token_array (td->tokens);
+    g_clear_pointer (&td->tokens, json_decref);
+    if (td->password != NULL) {
+        explicit_bzero (td->password, strlen (td->password));
+        gcry_free (td->password);
+    }
+    g_free (td);
+}
+
+static void
+export_task_result_free (gpointer data)
+{
+    ExportTaskResult *result = data;
+    g_free (result->error);
+    g_free (result);
+}
 
 G_DEFINE_FINAL_TYPE (ExportDialog, export_dialog, ADW_TYPE_DIALOG)
 
@@ -66,17 +118,7 @@ clear_selected_tokens (AdwDialog *dialog)
     ExportDialog *self = EXPORT_DIALOG (dialog);
     if (self->tokens_override == NULL)
         return;
-    size_t i;
-    json_t *token;
-    json_array_foreach (self->tokens_override, i, token) {
-        json_t *secret = json_object_get (token, "secret");
-        if (json_is_string (secret)) {
-            const char *value = json_string_value (secret);
-            size_t len = json_string_length (secret);
-            if (value != NULL && len > 0)
-                explicit_bzero ((void *) value, len);
-        }
-    }
+    wipe_token_array (self->tokens_override);
     json_decref (self->tokens_override);
     self->tokens_override = NULL;
 }
@@ -116,6 +158,95 @@ on_format_changed (AdwComboRow  *combo_row,
     gtk_widget_set_visible (self->password_confirm_row, needs_password);
     adw_banner_set_revealed (ADW_BANNER (self->plain_warning), is_plain);
     on_password_changed (NULL, self);
+}
+
+static void
+export_tokens_thread (GTask *task, gpointer source, gpointer task_data,
+                      GCancellable *cancellable)
+{
+    (void) source;
+    ExportTaskData *td = task_data;
+    if (g_cancellable_is_cancelled (cancellable)) {
+        g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                                 "Export cancelled");
+        return;
+    }
+
+    gchar *error = NULL;
+    switch (td->format) {
+        case EXPORT_FMT_FREEOTPPLUS:
+            error = export_freeotpplus (td->path, td->tokens);
+            break;
+        case EXPORT_FMT_AEGIS_PLAIN:
+            error = export_aegis (td->path, NULL, td->tokens);
+            break;
+        case EXPORT_FMT_AEGIS_ENC:
+            error = export_aegis (td->path, td->password, td->tokens);
+            break;
+        case EXPORT_FMT_AUTHPRO_PLAIN:
+            error = export_authpro (td->path, NULL, td->tokens);
+            break;
+        case EXPORT_FMT_AUTHPRO_ENC:
+            error = export_authpro (td->path, td->password, td->tokens);
+            break;
+        case EXPORT_FMT_TWOFAS_PLAIN:
+            error = export_twofas (td->path, NULL, td->tokens);
+            break;
+        case EXPORT_FMT_TWOFAS_ENC:
+            error = export_twofas (td->path, td->password, td->tokens);
+            break;
+        default:
+            error = g_strdup (_("Unsupported export format."));
+            break;
+    }
+    if (g_cancellable_is_cancelled (cancellable)) {
+        g_free (error);
+        g_task_return_new_error (task, G_IO_ERROR, G_IO_ERROR_CANCELLED,
+                                 "Export cancelled");
+        return;
+    }
+    ExportTaskResult *result = g_new0 (ExportTaskResult, 1);
+    result->error = error;
+    g_task_return_pointer (task, result, export_task_result_free);
+}
+
+static void
+export_tokens_done (GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    (void) user_data;
+    ExportDialog *self = EXPORT_DIALOG (source);
+    self->export_running = FALSE;
+    gtk_widget_set_sensitive (self->format_combo, TRUE);
+    gtk_widget_set_sensitive (self->password_row, TRUE);
+    gtk_widget_set_sensitive (self->password_confirm_row, TRUE);
+    gtk_button_set_label (GTK_BUTTON (self->export_button), _("Export"));
+    gtk_widget_set_sensitive (self->export_button, TRUE);
+    if (sensitive_dialog_is_closed (ADW_DIALOG (self)))
+        return;
+
+    GError *err = NULL;
+    ExportTaskResult *export_result = g_task_propagate_pointer (G_TASK (result), &err);
+    if (err != NULL) {
+        if (!g_error_matches (err, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
+            gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
+            gtk_widget_set_visible (self->error_label, TRUE);
+        }
+        g_clear_error (&err);
+        return;
+    }
+    if (export_result->error != NULL) {
+        gtk_label_set_text (GTK_LABEL (self->error_label), export_result->error);
+        gtk_widget_add_css_class (self->error_label, "error");
+        gtk_widget_remove_css_class (self->error_label, "success");
+    } else {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Export completed successfully."));
+        gtk_widget_remove_css_class (self->error_label, "error");
+        gtk_widget_add_css_class (self->error_label, "success");
+        wipe_password_rows (self);
+    }
+    gtk_widget_set_visible (self->error_label, TRUE);
+    export_task_result_free (export_result);
 }
 
 static void
@@ -167,17 +298,6 @@ on_file_dialog_save_complete (GObject      *source,
     }
 
     guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
-    static const char * const export_names[] = {
-        "otpclient-freeotp.json",
-        "otpclient-aegis.json",
-        "otpclient-aegis.json",
-        "otpclient-authpro.json",
-        "otpclient-authpro.json",
-        "otpclient-2fas.json",
-        "otpclient-2fas.json"
-    };
-    gtk_file_dialog_set_initial_name (dialog,
-                                     export_names[MIN (fmt, N_EXPORT_FORMATS - 1)]);
     const gchar *password = NULL;
     if (gtk_widget_get_visible (self->password_row))
     {
@@ -191,55 +311,40 @@ on_file_dialog_save_complete (GObject      *source,
         }
     }
 
-    gchar *error_msg = NULL;
     json_t *export_tokens = self->tokens_override != NULL
         ? self->tokens_override : self->db_data->in_memory_json_data;
-    switch (fmt)
-    {
-        case EXPORT_FMT_FREEOTPPLUS:
-            error_msg = export_freeotpplus (path, export_tokens);
-            break;
-        case EXPORT_FMT_AEGIS_PLAIN:
-            error_msg = export_aegis (path, NULL, export_tokens);
-            break;
-        case EXPORT_FMT_AEGIS_ENC:
-            error_msg = export_aegis (path, password, export_tokens);
-            break;
-        case EXPORT_FMT_AUTHPRO_PLAIN:
-            error_msg = export_authpro (path, NULL, export_tokens);
-            break;
-        case EXPORT_FMT_AUTHPRO_ENC:
-            error_msg = export_authpro (path, password, export_tokens);
-            break;
-        case EXPORT_FMT_TWOFAS_PLAIN:
-            error_msg = export_twofas (path, NULL, export_tokens);
-            break;
-        case EXPORT_FMT_TWOFAS_ENC:
-            error_msg = export_twofas (path, password, export_tokens);
-            break;
-        default:
-            break;
+    ExportTaskData *td = g_new0 (ExportTaskData, 1);
+    td->path = g_strdup (path);
+    td->format = fmt;
+    td->tokens = json_deep_copy (export_tokens);
+    if (password != NULL) {
+        gsize len = strlen (password);
+        td->password = gcry_calloc_secure (len + 1, 1);
+        if (td->password != NULL)
+            memcpy (td->password, password, len);
     }
-
-    /* Clear password entry widgets after use */
-    wipe_password_rows (self);
-
-    if (error_msg != NULL)
-    {
-        gtk_label_set_text (GTK_LABEL (self->error_label), error_msg);
+    if (td->tokens == NULL || (password != NULL && td->password == NULL)) {
+        export_task_data_free (td);
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Could not prepare the export in secure memory."));
         gtk_widget_set_visible (self->error_label, TRUE);
-        g_free (error_msg);
+        wipe_password_rows (self);
         return;
     }
 
-    /* This dialog now only handles third-party migration formats, so a
-     * successful export does NOT count as a token-database backup - the
-     * reminder is updated by Settings -> Backup -> "Back up tokens". */
-
-    gtk_label_set_text (GTK_LABEL (self->error_label), _("Export completed successfully."));
-    gtk_widget_remove_css_class (self->error_label, "error");
-    gtk_widget_add_css_class (self->error_label, "success");
-    gtk_widget_set_visible (self->error_label, TRUE);
+    self->export_running = TRUE;
+    gtk_widget_set_sensitive (self->format_combo, FALSE);
+    gtk_widget_set_sensitive (self->password_row, FALSE);
+    gtk_widget_set_sensitive (self->password_confirm_row, FALSE);
+    gtk_button_set_label (GTK_BUTTON (self->export_button), _("Exporting…"));
+    gtk_widget_set_sensitive (self->export_button, FALSE);
+    gtk_widget_set_visible (self->error_label, FALSE);
+    wipe_password_rows (self);
+    GTask *task = g_task_new (self, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
+                              export_tokens_done, NULL);
+    g_task_set_task_data (task, td, export_task_data_free);
+    g_task_run_in_thread (task, export_tokens_thread);
+    g_object_unref (task);
 }
 
 static void
@@ -248,11 +353,24 @@ on_export_clicked (GtkButton    *button,
 {
     (void) button;
 
-    if (sensitive_dialog_is_closed (ADW_DIALOG (self)) || !export_password_valid (self))
+    if (sensitive_dialog_is_closed (ADW_DIALOG (self)) || self->export_running ||
+        !export_password_valid (self))
         return;
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Export tokens"));
+    static const char * const export_names[] = {
+        "otpclient-freeotp.json",
+        "otpclient-aegis.json",
+        "otpclient-aegis.json",
+        "otpclient-authpro.json",
+        "otpclient-authpro.json",
+        "otpclient-2fas.json",
+        "otpclient-2fas.json"
+    };
+    guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
+    gtk_file_dialog_set_initial_name (dialog,
+                                     export_names[MIN (fmt, N_EXPORT_FORMATS - 1)]);
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_save (dialog, win, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
