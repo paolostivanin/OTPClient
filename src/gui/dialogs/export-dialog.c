@@ -277,6 +277,7 @@ on_file_dialog_save_complete (GObject      *source,
     OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
         ? OTPCLIENT_APPLICATION (default_app) : NULL;
     if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_database_operation_in_progress (app) ||
         otpclient_application_get_db_data (app) != self->db_data)
     {
         g_object_unref (file);

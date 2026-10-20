@@ -311,6 +311,7 @@ commit_import_preview (ImportDialog *self)
     OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
         ? OTPCLIENT_APPLICATION (default_app) : NULL;
     if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_database_operation_in_progress (app) ||
         otpclient_application_get_db_data (app) != self->db_data) {
         gtk_label_set_text (GTK_LABEL (self->error_label),
                             _("The active database changed. Reopen this dialog before importing."));
@@ -430,6 +431,7 @@ import_parse_done (GObject *source, GAsyncResult *result, gpointer user_data)
         ? OTPCLIENT_APPLICATION (default_app) : NULL;
     ImportParseData *pd = g_task_get_task_data (G_TASK (result));
     if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_database_operation_in_progress (app) ||
         otpclient_application_get_db_data (app) != self->db_data ||
         otpclient_application_get_lock_generation (app) != pd->lock_generation) {
         gtk_label_set_text (GTK_LABEL (self->error_label),

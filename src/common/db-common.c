@@ -1390,7 +1390,10 @@ restore_tokens_mutation (json_t *candidate, gpointer user_data, GError **err)
         }
         guint64 wanted = (guint64) json_integer_value (index_value);
         size_t position = (size_t) MIN (wanted, json_array_size (candidate));
-        if (json_array_insert (candidate, position, token) != 0) {
+        /* The caller may wipe the undo snapshot immediately after success.
+         * Keep the restored database independent of that snapshot. */
+        json_t *restored = json_deep_copy (token);
+        if (restored == NULL || json_array_insert_new (candidate, position, restored) != 0) {
             g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
                                  "Could not restore the selected tokens.");
             return FALSE;

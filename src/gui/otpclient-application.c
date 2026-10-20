@@ -501,6 +501,11 @@ on_change_password_received (const gchar  *current_password,
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
     if (password == NULL || self->db_data == NULL || self->app_locked)
         return FALSE;
+    if (self->unlock_in_progress || self->database_operation_in_progress) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Another database operation is already in progress"));
+        return FALSE;
+    }
     if (!password_bytes_equal (current_password, self->db_data->key)) {
         if (error_message != NULL)
             *error_message = g_strdup (_("Current password is incorrect"));
@@ -541,7 +546,8 @@ otpclient_application_change_pwd (GSimpleAction *simple,
     (void) parameter;
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
-    if (self->db_data == NULL)
+    if (self->db_data == NULL || self->app_locked ||
+        self->unlock_in_progress || self->database_operation_in_progress)
         return;
 
     PasswordDialog *dlg = password_dialog_new (PASSWORD_MODE_CHANGE,
@@ -559,7 +565,8 @@ otpclient_application_db_info (GSimpleAction *simple,
     (void) parameter;
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
-    if (self->db_data == NULL)
+    if (self->db_data == NULL || self->app_locked ||
+        self->unlock_in_progress || self->database_operation_in_progress)
         return;
 
     DbInfoDialog *dlg = db_info_dialog_new (self->db_data);
@@ -575,7 +582,8 @@ otpclient_application_kdf_settings (GSimpleAction *simple,
     (void) parameter;
 
     OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
-    if (self->db_data == NULL)
+    if (self->db_data == NULL || self->app_locked ||
+        self->unlock_in_progress || self->database_operation_in_progress)
         return;
 
     KdfDialog *dlg = kdf_dialog_new (self->db_data);
@@ -1861,6 +1869,8 @@ otpclient_application_is_db_unlocked (OTPClientApplication *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
     return !self->app_locked
+           && !self->unlock_in_progress
+           && !self->database_operation_in_progress
            && self->db_data != NULL
            && self->db_data->in_memory_json_data != NULL;
 }

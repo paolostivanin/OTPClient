@@ -281,6 +281,69 @@ test_bulk_delete_restores_selected_tokens (void)
     g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
     g_assert_cmpstr (json_string_value (json_object_get (
         json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "secret")), ==, REVIEW_SECRET);
+    GError *err = NULL;
+    gsize index = 0;
+    g_autoptr (GPtrArray) codes = db_generate_hotp (fixture.db, &index, 1, &err);
+    g_assert_no_error (err);
+    g_assert_nonnull (codes);
+    g_assert_cmpstr (((DbHotpResult *) g_ptr_array_index (codes, 0))->code, ==, "755224");
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_single_delete_and_undo_write_failures (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET, 6, "SHA1", 30, 0, NULL));
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.delete-token", NULL);
+    settle ();
+    AdwDialog *dialog = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (dialog);
+    GtkWidget *button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (button);
+    db_test_set_fail_atomic_write (TRUE);
+    g_signal_emit_by_name (button, "clicked");
+    settle ();
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_true (json_equal (fixture.db->in_memory_json_data, fixture.db->committed_json_data));
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
+
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.delete-token", NULL);
+    settle ();
+    dialog = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (button);
+    g_signal_emit_by_name (button, "clicked");
+    settle ();
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+
+    db_test_set_fail_atomic_write (TRUE);
+    otpclient_window_undo_latest_delete (win);
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_true (json_equal (fixture.db->in_memory_json_data, fixture.db->committed_json_data));
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "bob");
+
+    otpclient_window_undo_latest_delete (win);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 1), "label")), ==, "bob");
+    DatabaseData *reader = database_data_new (fixture.path, DEFAULT_MEMLOCK_VALUE);
+    reader->key = secure_strdup ("test-password");
+    load_db (reader, &err);
+    g_assert_no_error (err);
+    g_assert_true (json_equal (reader->in_memory_json_data, fixture.db->in_memory_json_data));
+    database_data_free (reader);
     review_fixture_clear (&fixture);
 }
 
@@ -542,6 +605,90 @@ find_drop_target (GtkWidget *widget)
     return NULL;
 }
 
+static void
+test_encryption_operation_blocks_token_actions (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    GtkWidget *generate = find_widget (GTK_WIDGET (win), GTK_TYPE_BUTTON, "view-refresh-symbolic");
+    g_assert_nonnull (generate);
+
+    /* A response that was already pending must obey the guard too. */
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.delete-token", NULL);
+    settle ();
+    AdwDialog *confirm = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (confirm);
+    GtkWidget *remove = find_widget (GTK_WIDGET (confirm), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (remove);
+    g_assert_true (otpclient_application_begin_database_operation (app, fixture.db));
+    g_signal_emit_by_name (remove, "clicked");
+    settle ();
+    g_signal_emit_by_name (generate, "clicked");
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.activate-token", NULL);
+    g_assert_cmpuint (otp_entry_get_counter (entry), ==, 0);
+    g_assert_cmpint (json_integer_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "counter")), ==, 0);
+
+    json_t *deleted = build_json_obj ("TOTP", "deleted", "Example", REVIEW_SECRET, 6, "SHA1", 30, 0, NULL);
+    otpclient_window_undo_show_single (win, fixture.db, deleted, 1);
+    json_decref (deleted);
+    otpclient_window_undo_latest_delete (win);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+
+    GtkDropTarget *drop = find_drop_target (win->otp_list);
+    g_assert_nonnull (drop);
+    GValue value = G_VALUE_INIT;
+    g_value_init (&value, G_TYPE_UINT);
+    g_value_set_uint (&value, 0);
+    gboolean handled = TRUE;
+    g_signal_emit_by_name (drop, "drop", &value, 0.0, 0.0, &handled);
+    g_value_unset (&value);
+    g_assert_false (handled);
+    g_assert_true (json_equal (fixture.db->in_memory_json_data, fixture.db->committed_json_data));
+
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.manage-groups", NULL);
+    g_action_group_activate_action (G_ACTION_GROUP (app), "kdf-settings", NULL);
+    g_action_group_activate_action (G_ACTION_GROUP (app), "change-password", NULL);
+    g_action_group_activate_action (G_ACTION_GROUP (app), "db-info", NULL);
+    g_assert_null (adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win)));
+
+    otpclient_application_end_database_operation (app, fixture.db);
+    g_signal_emit_by_name (generate, "clicked");
+    g_assert_cmpuint (otp_entry_get_counter (entry), ==, 1);
+    otpclient_window_undo_latest_delete (win);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_encryption_operation_blocks_pending_edit (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    EditTokenDialog *edit = edit_token_dialog_new (
+        json_array_get (fixture.db->in_memory_json_data, 0), 0, fixture.db, NULL, NULL);
+    g_object_ref_sink (edit);
+    adw_dialog_present (ADW_DIALOG (edit), GTK_WIDGET (win));
+    GtkWidget *label = find_widget (GTK_WIDGET (edit), ADW_TYPE_ENTRY_ROW, "Label");
+    GtkWidget *save = find_widget (GTK_WIDGET (edit), GTK_TYPE_BUTTON, "Save");
+    g_assert_nonnull (label);
+    g_assert_nonnull (save);
+    gtk_editable_set_text (GTK_EDITABLE (label), "changed");
+
+    g_assert_true (otpclient_application_begin_database_operation (app, fixture.db));
+    g_signal_emit_by_name (save, "clicked");
+    g_assert_true (json_equal (fixture.db->in_memory_json_data, fixture.db->committed_json_data));
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
+    otpclient_application_end_database_operation (app, fixture.db);
+    g_signal_emit_by_name (save, "clicked");
+    settle ();
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "changed");
+    g_object_unref (edit);
+    review_fixture_clear (&fixture);
+}
+
 /* Row order in the store has to keep matching index order in the JSON, because
  * that is how every position-addressed action resolves its token. A failed save
  * after a drag-reorder used to break exactly that: update_db's failure path
@@ -701,7 +848,7 @@ static void
 test_encryption_operation_guards_database_lifetime (void)
 {
     ReviewFixture fixture;
-    attach_fixture (&fixture);
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
     DatabaseData *active = otpclient_application_get_db_data (app);
     g_assert_true (otpclient_application_begin_database_operation (app, active));
     g_assert_true (otpclient_application_is_database_operation_in_progress (app));
@@ -751,6 +898,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/quarantine-review-repair", test_quarantine_review_repairs_and_validates_token);
     g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
     g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
+    g_test_add_func ("/gui-flows/single-delete-undo-write-failures", test_single_delete_and_undo_write_failures);
     g_test_add_func ("/gui-flows/bulk-group-assignment", test_bulk_group_assignment);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
@@ -761,6 +909,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
     g_test_add_func ("/gui-flows/db-replacement-generation", test_db_replacement_bumps_generation);
     g_test_add_func ("/gui-flows/encryption-operation-lifetime", test_encryption_operation_guards_database_lifetime);
+    g_test_add_func ("/gui-flows/encryption-operation-token-actions", test_encryption_operation_blocks_token_actions);
+    g_test_add_func ("/gui-flows/encryption-operation-pending-edit", test_encryption_operation_blocks_pending_edit);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

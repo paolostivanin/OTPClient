@@ -135,6 +135,9 @@ otpclient_window_undo_clear (OTPClientWindow *self)
 {
     for (GList *l = self->undo_actions; l != NULL; l = l->next)
         undo_delete_token_clear (l->data);
+    /* Toast closures own the payloads; the window owns these list nodes.
+     * During finalization their weak references may already be cleared. */
+    g_clear_pointer (&self->undo_actions, g_list_free);
 }
 
 static void
@@ -150,7 +153,9 @@ on_undo_delete (AdwToast *toast, gpointer user_data)
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL)
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_unlocking (app) ||
+        otpclient_application_is_database_operation_in_progress (app))
         return;
     DatabaseData *db_data = otpclient_application_get_db_data (app);
     if (db_data == NULL || db_data != undo->origin_db ||
@@ -182,7 +187,6 @@ on_undo_delete (AdwToast *toast, gpointer user_data)
     GError *err = NULL;
     update_db (db_data, &err);
     if (err != NULL) {
-        json_array_remove (db_data->in_memory_json_data, insert_pos);
         g_autofree gchar *message = g_strdup_printf (
             _("Failed to restore deleted token: %s"), err->message);
         otpclient_window_show_error_toast (self, message);
@@ -251,7 +255,6 @@ on_delete_response (AdwAlertDialog *dialog, GAsyncResult *result,
             _("Failed to delete token: %s"), err->message);
         otpclient_window_show_error_toast (self, message);
         g_clear_error (&err);
-        json_array_insert (db_data->in_memory_json_data, pos, deleted_token);
         json_decref (deleted_token);
         return;
     }
@@ -288,6 +291,8 @@ on_bulk_delete_response (AdwAlertDialog *dialog, GAsyncResult *result,
         gtk_window_get_application (GTK_WINDOW (self))) : NULL;
     if (g_strcmp0 (response, "delete") != 0 || app == NULL || self == NULL ||
         otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_unlocking (app) ||
+        otpclient_application_is_database_operation_in_progress (app) ||
         otpclient_application_get_db_data (app) != ctx->db_data ||
         otpclient_application_get_lock_generation (app) != ctx->lock_generation) {
         bulk_delete_context_free (ctx);

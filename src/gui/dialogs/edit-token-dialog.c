@@ -77,6 +77,7 @@ on_save_clicked (GtkButton       *button,
         ? OTPCLIENT_APPLICATION (default_app)
         : NULL;
     if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_database_operation_in_progress (app) ||
         otpclient_application_get_db_data (app) != self->db_data)
     {
         gtk_label_set_text (GTK_LABEL (self->error_label),

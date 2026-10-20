@@ -44,11 +44,13 @@ static void update_quarantine_banner (OTPClientWindow *self);
 static void update_bulk_selection_count (OTPClientWindow *self);
 
 static inline gboolean
-window_is_locked (OTPClientWindow *self)
+window_database_is_unavailable (OTPClientWindow *self)
 {
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    return app != NULL && otpclient_application_get_app_locked (app);
+    return app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_is_unlocking (app) ||
+        otpclient_application_is_database_operation_in_progress (app);
 }
 
 static void
@@ -719,9 +721,10 @@ update_bulk_selection_count (OTPClientWindow *self)
         g_autofree gchar *text = g_strdup_printf (ngettext ("%u selected", "%u selected", count), count);
         gtk_label_set_text (GTK_LABEL (self->bulk_count_label), text);
     }
+    gboolean enabled = self->bulk_mode && count > 0 && !window_database_is_unavailable (self);
     const gchar * const actions[] = { "win.bulk-set-group", "win.bulk-export", "win.bulk-delete" };
     for (guint i = 0; i < G_N_ELEMENTS (actions); i++)
-        gtk_widget_action_set_enabled (GTK_WIDGET (self), actions[i], self->bulk_mode && count > 0);
+        gtk_widget_action_set_enabled (GTK_WIDGET (self), actions[i], enabled);
 }
 
 static void
@@ -745,7 +748,7 @@ bulk_selected_indices (OTPClientWindow *self, json_t **out_tokens)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
-    if (db == NULL || db->in_memory_json_data == NULL) {
+    if (window_database_is_unavailable (self) || db == NULL || db->in_memory_json_data == NULL) {
         if (out_tokens != NULL)
             *out_tokens = tokens;
         return indices;
@@ -1421,8 +1424,8 @@ update_quarantine_banner (OTPClientWindow *self)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
-    guint count = db_get_quarantined_count (db);
-    gboolean reveal = count > 0 && !otpclient_application_get_app_locked (app);
+    guint count = !window_database_is_unavailable (self) ? db_get_quarantined_count (db) : 0;
+    gboolean reveal = count > 0;
     if (reveal) {
         g_autofree gchar *title = g_strdup_printf (
             ngettext ("%u token needs repair.", "%u tokens need repair.", count), count);
@@ -1446,6 +1449,9 @@ update_empty_state (OTPClientWindow *self)
      * handled below. */
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
+    if (app != NULL && otpclient_application_is_database_operation_in_progress (app) &&
+        !otpclient_application_get_app_locked (app))
+        return;
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
     const gchar *target_page;
     if (app != NULL && otpclient_application_get_app_locked (app))
@@ -1566,6 +1572,9 @@ otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
         "win.import",
         "win.export",
         "win.edit-token",
+        "win.activate-token",
+        "win.review-quarantine",
+        "win.manage-groups",
         "win.delete-token",
         "win.show-qr",
         "win.move-token",
@@ -1584,6 +1593,9 @@ otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
 
     for (gsize i = 0; i < G_N_ELEMENTS (db_actions); i++)
         gtk_widget_action_set_enabled (GTK_WIDGET (self), db_actions[i], enabled);
+    gtk_widget_set_sensitive (self->otp_list, enabled);
+    update_bulk_selection_count (self);
+    update_quarantine_banner (self);
 }
 
 void
@@ -1854,11 +1866,13 @@ database_row_selected (GtkListBox      *box,
      *
      * Either way, revert the visual row selection to the loaded database so the
      * sidebar does not mislead the user about which one is active. */
-    if (otpclient_application_is_unlocking (app) || window_is_locked (self))
+    if (window_database_is_unavailable (self))
     {
         otpclient_window_show_error_toast (self,
             otpclient_application_is_unlocking (app)
                 ? _("Please wait, the database is still being unlocked.")
+                : otpclient_application_is_database_operation_in_progress (app)
+                ? _("Please wait for the current database operation to finish.")
                 : _("Unlock the current database before switching to another one."));
         if (current != NULL && current->db_path != NULL)
         {
@@ -2211,7 +2225,7 @@ trigger_otp_action_for_entry (OTPClientWindow *self, OTPEntry *entry)
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
 
-    if (window_is_locked (self) || app == NULL)
+    if (window_database_is_unavailable (self) || app == NULL)
         return;
     /* g_ascii_strcasecmp() g_return_val_if_fail()s to 0, which reads as "equal",
      * so a missing type would be mistaken for HOTP and would open a database
@@ -2400,7 +2414,7 @@ static void popup_menu_at (GtkWidget *popover, GtkWidget *over, double x, double
 static gboolean
 popup_token_menu_from_keyboard (OTPClientWindow *self)
 {
-    if (window_is_locked (self) ||
+    if (window_database_is_unavailable (self) ||
         gtk_single_selection_get_selected (self->otp_selection) == GTK_INVALID_LIST_POSITION)
         return FALSE;
 
@@ -2486,6 +2500,8 @@ static void on_db_modified (gpointer user_data);
 static guint
 selected_writable_json_index (OTPClientWindow *self)
 {
+    if (window_database_is_unavailable (self))
+        return GTK_INVALID_LIST_POSITION;
     OTPEntry *entry = OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection));
     if (entry == NULL)
         return GTK_INVALID_LIST_POSITION;
@@ -2572,7 +2588,7 @@ on_drag_prepare (GtkDragSource *source,
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
 
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return NULL;
 
     /* Disable DnD while search filter is active */
@@ -2655,7 +2671,7 @@ on_drop (GtkDropTarget *target,
 
     dnd_clear_highlight (self);
 
-    if (!G_VALUE_HOLDS_UINT (value))
+    if (window_database_is_unavailable (self) || !G_VALUE_HOLDS_UINT (value))
         return FALSE;
 
     /* on_drag_prepare stored the source's position in the unsorted store. */
@@ -2999,7 +3015,9 @@ rebuild_group_list (OTPClientWindow *self)
 {
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL)
+    /* Unlock completion rebuilds the groups before clearing the lock screen. */
+    if (app == NULL || otpclient_application_is_unlocking (app) ||
+        otpclient_application_is_database_operation_in_progress (app))
         return;
 
     DatabaseData *db_data = otpclient_application_get_db_data (app);
@@ -3152,6 +3170,8 @@ static void
 on_db_modified (gpointer user_data)
 {
     OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
+    if (window_database_is_unavailable (self))
+        return;
     if (self->bulk_selected_entries != NULL)
         g_hash_table_remove_all (self->bulk_selected_entries);
     update_bulk_selection_count (self);
@@ -3464,6 +3484,9 @@ quarantine_delete_clicked (GtkButton *button,
                            gpointer   user_data)
 {
     QuarantineReview *review = user_data;
+    g_autoptr (OTPClientWindow) owner = g_weak_ref_get (&review->window_ref);
+    if (owner == NULL || window_database_is_unavailable (owner))
+        return;
     guint index = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (button), "quarantine-index")) - 1;
     GError *err = NULL;
     if (!db_delete_quarantined_token (review->db_data, index, &err)) {
@@ -3500,9 +3523,10 @@ quarantine_repair_response (GObject      *source,
         ? g_weak_ref_get (&review->window_ref) : NULL;
     OTPClientApplication *app = window != NULL ? OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (window))) : NULL;
-    json_t *current = repair->index < db_get_quarantined_count (repair->db_data)
+    json_t *current = app != NULL && !window_database_is_unavailable (window) &&
+        repair->index < db_get_quarantined_count (repair->db_data)
         ? json_array_get (repair->db_data->quarantined_tokens, repair->index) : NULL;
-    if (app == NULL || otpclient_application_get_app_locked (app) ||
+    if (app == NULL || window_database_is_unavailable (window) ||
         otpclient_application_get_db_data (app) != repair->db_data ||
         otpclient_application_get_lock_generation (app) != repair->lock_generation ||
         current == NULL || !json_equal (current, repair->original)) {
@@ -3548,6 +3572,9 @@ quarantine_repair_clicked (GtkButton *button,
                            gpointer   user_data)
 {
     QuarantineReview *review = user_data;
+    g_autoptr (OTPClientWindow) owner = g_weak_ref_get (&review->window_ref);
+    if (owner == NULL || window_database_is_unavailable (owner))
+        return;
     guint index = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (button), "quarantine-index")) - 1;
     json_t *original = json_array_get (review->db_data->quarantined_tokens, index);
     if (original == NULL)
@@ -3605,6 +3632,8 @@ action_review_quarantine (GtkWidget  *widget,
                           GVariant   *parameter G_GNUC_UNUSED)
 {
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    if (window_database_is_unavailable (self))
+        return;
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
@@ -3735,7 +3764,7 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
 {
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL || window_is_locked (self)) {
+    if (app == NULL || window_database_is_unavailable (self)) {
         sensitive_g_free (otpauth_uri);
         return;
     }
@@ -3839,7 +3868,7 @@ static gboolean
 window_async_origin_changed (OTPClientWindow      *self,
                              WindowAsyncContext   *ctx)
 {
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return TRUE;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3867,7 +3896,7 @@ static gboolean
 window_async_session_changed (OTPClientWindow    *self,
                               WindowAsyncContext *ctx)
 {
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return TRUE;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -4548,7 +4577,7 @@ on_move_target_password (const gchar  *current_password,
      * to leak. */
     MoveTokenContext *ctx = (MoveTokenContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
-    if (self == NULL || self->disposing || window_is_locked (self))
+    if (self == NULL || self->disposing || window_database_is_unavailable (self))
         return TRUE;
 
     if (password == NULL)
@@ -4676,7 +4705,7 @@ on_move_db_selected (AdwAlertDialog *dialog,
     const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
 
-    if (self == NULL || self->disposing || window_is_locked (self) ||
+    if (self == NULL || self->disposing || window_database_is_unavailable (self) ||
         g_strcmp0 (response, "cancel") == 0 || response == NULL)
     {
         move_token_context_free (ctx);
@@ -4919,7 +4948,7 @@ on_new_group_response (AdwAlertDialog  *dialog,
         g_free (ctx);
         return;
     }
-    if (self == NULL || self->disposing || window_is_locked (self)) {
+    if (self == NULL || self->disposing || window_database_is_unavailable (self)) {
         g_weak_ref_clear (&ctx->window_ref);
         g_free (ctx);
         return;
@@ -5032,7 +5061,7 @@ on_manage_groups_response (AdwAlertDialog *dialog,
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
     OTPClientApplication *app = self != NULL ? OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self))) : NULL;
-    if (self == NULL || app == NULL || window_is_locked (self) ||
+    if (self == NULL || app == NULL || window_database_is_unavailable (self) ||
         otpclient_application_get_db_data (app) != ctx->db_data ||
         otpclient_application_get_lock_generation (app) != ctx->lock_generation ||
         (g_strcmp0 (response, "rename") != 0 && g_strcmp0 (response, "remove") != 0)) {
@@ -5070,6 +5099,8 @@ action_manage_groups (GtkWidget *widget,
                       GVariant *parameter G_GNUC_UNUSED)
 {
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    if (window_database_is_unavailable (self))
+        return;
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
@@ -5138,7 +5169,7 @@ on_token_right_click (GtkGestureClick *gesture,
     gtk_gesture_set_state (GTK_GESTURE (gesture), GTK_EVENT_SEQUENCE_CLAIMED);
     gtk_event_controller_reset (GTK_EVENT_CONTROLLER (gesture));
 
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return;
 
     /* Select the row under the cursor so a right-click alone is enough. */
@@ -5366,7 +5397,7 @@ on_new_db_password_received (const gchar  *current_password,
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
 
-    if (self == NULL || self->disposing || window_is_locked (self) ||
+    if (self == NULL || self->disposing || window_database_is_unavailable (self) ||
         password == NULL)
         return TRUE;
 
@@ -5588,7 +5619,7 @@ on_open_db_password_received (const gchar  *current_password,
     NewDbContext *ctx = (NewDbContext *) user_data;
     g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
 
-    if (self == NULL || self->disposing || window_is_locked (self) ||
+    if (self == NULL || self->disposing || window_database_is_unavailable (self) ||
         password == NULL)
         return TRUE;
 
@@ -5908,7 +5939,7 @@ on_rename_dialog_response (AdwAlertDialog  *dialog,
                            const gchar     *response,
                            OTPClientWindow *self)
 {
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return;
     if (g_strcmp0 (response, "rename") != 0)
         return;
@@ -5990,7 +6021,7 @@ on_remove_dialog_response (AdwAlertDialog  *dialog,
 {
     (void) dialog;
 
-    if (window_is_locked (self))
+    if (window_database_is_unavailable (self))
         return;
     if (g_strcmp0 (response, "remove") != 0)
         return;
