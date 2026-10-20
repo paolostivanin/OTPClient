@@ -285,6 +285,44 @@ test_bulk_delete_restores_selected_tokens (void)
 }
 
 static void
+test_bulk_group_assignment (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    json_object_set_new (json_array_get (fixture.db->in_memory_json_data, 0),
+                         "group", json_string ("Personal"));
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET, 6,
+                        "SHA1", 30, 0, "Work"));
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+    otpclient_window_rebuild_groups (win);
+
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (win->bulk_mode_button), TRUE);
+    settle ();
+    g_autoptr (GPtrArray) checks = g_ptr_array_new ();
+    collect_check_buttons (GTK_WIDGET (win), checks);
+    g_assert_cmpuint (checks->len, >, 0);
+    gtk_check_button_set_active (g_ptr_array_index (checks, 0), TRUE);
+    g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 1);
+
+    guint group_count = g_list_model_get_n_items (G_LIST_MODEL (win->bulk_group_model));
+    guint work_index = GTK_INVALID_LIST_POSITION;
+    for (guint i = 0; i < group_count; i++) {
+        if (g_strcmp0 (gtk_string_list_get_string (win->bulk_group_model, i), "Work") == 0)
+            work_index = i;
+    }
+    g_assert_cmpuint (work_index, !=, GTK_INVALID_LIST_POSITION);
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (win->bulk_group_dropdown), work_index);
+    g_assert_true (gtk_widget_activate_action (GTK_WIDGET (win), "win.bulk-set-group", NULL));
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "group")), ==, "Work");
+    review_fixture_clear (&fixture);
+}
+
+static void
 test_dialog_lock_and_export_validation (void)
 {
     ReviewFixture fixture;
@@ -682,6 +720,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/quarantine-review-repair", test_quarantine_review_repairs_and_validates_token);
     g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
     g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
+    g_test_add_func ("/gui-flows/bulk-group-assignment", test_bulk_group_assignment);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
