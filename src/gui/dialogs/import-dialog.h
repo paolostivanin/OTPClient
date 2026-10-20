@@ -15,6 +15,7 @@ typedef struct {
     guint skipped;     /* duplicates or invalid records ignored */
     guint skipped_duplicates;
     guint skipped_invalid;
+    guint skipped_unselected;
     guint batch_size;  /* Google migration batch count (0/1 = single payload) */
     guint batch_index; /* zero-based index of the imported batch */
 } ImportSummary;

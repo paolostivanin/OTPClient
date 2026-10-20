@@ -70,6 +70,13 @@
               </object>
             </child>
             <child>
+              <object class="AdwBanner" id="quarantine_banner">
+                <property name="revealed">False</property>
+                <property name="button-label" translatable="yes">Review</property>
+                <property name="action-name">win.review-quarantine</property>
+              </object>
+            </child>
+            <child>
               <object class="GtkSearchBar" id="search_bar">
                 <child>
                   <object class="GtkSearchEntry" id="search_entry">

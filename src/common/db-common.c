@@ -589,6 +589,88 @@ db_get_quarantined_count (DatabaseData *db_data)
     return (guint) json_array_size (db_data->quarantined_tokens);
 }
 
+static gboolean
+update_quarantine_entry (DatabaseData *db_data,
+                         guint         index,
+                         json_t       *repaired_token,
+                         GError      **err)
+{
+    g_return_val_if_fail (db_data != NULL, FALSE);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
+    if (!json_is_array (db_data->quarantined_tokens) ||
+        index >= json_array_size (db_data->quarantined_tokens)) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                             "The quarantined token no longer exists.");
+        return FALSE;
+    }
+
+    if (repaired_token != NULL &&
+        !otp_validate_token_object (repaired_token, index, err))
+        return FALSE;
+    if (!json_is_array (db_data->in_memory_json_data)) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_FAILED,
+                             "The active database is not ready for a quarantine update.");
+        return FALSE;
+    }
+
+    json_t *quarantine_backup = json_copy (db_data->quarantined_tokens);
+    if (quarantine_backup == NULL) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                             "Could not stage the quarantine change.");
+        return FALSE;
+    }
+
+    if (repaired_token != NULL &&
+        json_array_append (db_data->in_memory_json_data, repaired_token) != 0) {
+        json_decref (quarantine_backup);
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                             "Could not stage the repaired token.");
+        return FALSE;
+    }
+    if (json_array_remove (db_data->quarantined_tokens, index) != 0) {
+        if (repaired_token != NULL)
+            json_array_remove (db_data->in_memory_json_data,
+                              json_array_size (db_data->in_memory_json_data) - 1);
+        json_decref (quarantine_backup);
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_FAILED,
+                             "Could not update the quarantine list.");
+        return FALSE;
+    }
+
+    GError *save_error = NULL;
+    update_db (db_data, &save_error);
+    if (save_error != NULL) {
+        json_decref (db_data->quarantined_tokens);
+        db_data->quarantined_tokens = quarantine_backup;
+        if (err != NULL)
+            g_propagate_error (err, save_error);
+        else
+            g_clear_error (&save_error);
+        return FALSE;
+    }
+
+    json_decref (quarantine_backup);
+    return TRUE;
+}
+
+gboolean
+db_delete_quarantined_token (DatabaseData *db_data,
+                             guint         index,
+                             GError      **err)
+{
+    return update_quarantine_entry (db_data, index, NULL, err);
+}
+
+gboolean
+db_repair_quarantined_token (DatabaseData *db_data,
+                             guint         index,
+                             json_t       *repaired_token,
+                             GError      **err)
+{
+    g_return_val_if_fail (repaired_token != NULL, FALSE);
+    return update_quarantine_entry (db_data, index, repaired_token, err);
+}
+
 
 /* Load-time policy: never let one bad token brick the whole database. Move every
  * token that fails validation into db_data->quarantined_tokens (preserved and

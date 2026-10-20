@@ -45,6 +45,7 @@ struct _OTPClientWindow
     GtkWidget *lock_button;
     GtkWidget *settings_button;
     GtkWidget *backup_age_banner;
+    GtkWidget *quarantine_banner;
     GtkWidget *database_list;
     GtkWidget *new_db_button;
     GtkWidget *open_db_button;

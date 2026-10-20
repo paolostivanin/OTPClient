@@ -43,6 +43,8 @@ cleanup_db_data (DatabaseData *db_data,
 {
     database_data_free (db_data);
     g_unlink (path);
+    g_autofree gchar *backup_path = g_strconcat (path, ".bak", NULL);
+    g_unlink (backup_path);
     g_autofree gchar *lock_path = g_strconcat (path, ".lock", NULL);
     g_unlink (lock_path);
     g_rmdir (dir);
@@ -109,6 +111,47 @@ assert_transaction_failure_preserves_json (DbMutationFunc mutation,
     g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
 
     json_decref (before);
+    cleanup_db_data (db_data, dir, path);
+}
+
+static void
+test_quarantine_updates_are_transactional (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+    db_data->quarantined_tokens = json_array ();
+    json_t *invalid = valid_totp ("broken");
+    json_object_set_new (invalid, "digits", json_integer (99));
+    json_array_append_new (db_data->quarantined_tokens, invalid);
+
+    GError *err = NULL;
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+    g_assert_cmpuint (db_get_quarantined_count (db_data), ==, 1);
+
+    json_t *still_invalid = valid_totp ("still-broken");
+    json_object_set_new (still_invalid, "digits", json_integer (99));
+    g_assert_false (db_repair_quarantined_token (db_data, 0, still_invalid, &err));
+    g_assert_nonnull (err);
+    g_clear_error (&err);
+    json_decref (still_invalid);
+    g_assert_cmpuint (db_get_quarantined_count (db_data), ==, 1);
+
+    db_test_set_fail_atomic_write (TRUE);
+    g_assert_false (db_delete_quarantined_token (db_data, 0, &err));
+    g_assert_nonnull (err);
+    g_clear_error (&err);
+    db_test_set_fail_atomic_write (FALSE);
+    g_assert_cmpuint (db_get_quarantined_count (db_data), ==, 1);
+
+    json_t *repaired = valid_totp ("fixed");
+    g_assert_true (db_repair_quarantined_token (db_data, 0, repaired, &err));
+    g_assert_no_error (err);
+    json_decref (repaired);
+    g_assert_cmpuint (db_get_quarantined_count (db_data), ==, 0);
+    g_assert_cmpuint (json_array_size (db_data->in_memory_json_data), ==, 2);
+
     cleanup_db_data (db_data, dir, path);
 }
 
@@ -549,6 +592,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/lock-open-failure-fallback", test_lock_open_failure_uses_fallback);
     g_test_add_func ("/db-transaction/lock-open-failure-everywhere", test_lock_open_failure_everywhere_warns_once);
     g_test_add_func ("/db-transaction/quarantine-append-failure", test_quarantine_append_failure_aborts_save);
+    g_test_add_func ("/db-transaction/quarantine-updates-are-transactional", test_quarantine_updates_are_transactional);
     g_test_add_func ("/db-transaction/committed-digest-baseline", test_committed_digest_baseline);
 
     int ret = g_test_run ();

@@ -11,6 +11,7 @@
 #include "../qrcode-parser.h"
 #include "../google-migration.h"
 #include "parse-uri.h"
+#include "otp-validation.h"
 #include "../otpclient-application.h"
 
 struct _ImportDialog
@@ -26,6 +27,14 @@ struct _ImportDialog
     GtkWidget *password_row;
     GtkWidget *import_button;
     GtkWidget *error_label;
+    GtkWidget *preview_group;
+    GtkWidget *preview_summary;
+    GSList *pending_otps;
+    GPtrArray *preview_checks;
+    gchar *pending_details;
+    guint pending_batch_size;
+    guint pending_batch_index;
+    guint pending_parse_skipped_invalid;
 
     gchar *selected_file;
     gchar *import_password;
@@ -77,9 +86,236 @@ on_format_changed (AdwComboRow  *combo_row,
     gtk_widget_set_visible (self->password_row, needs_password);
 }
 
+static GPtrArray *
+import_hash_bucket (GHashTable *index, json_t *obj, gboolean create)
+{
+    gpointer key = GUINT_TO_POINTER (json_object_get_hash (obj));
+    GPtrArray *bucket = g_hash_table_lookup (index, key);
+    if (bucket == NULL && create) {
+        bucket = g_ptr_array_new ();
+        g_hash_table_insert (index, key, bucket);
+    }
+    return bucket;
+}
+
+static gboolean
+import_hash_contains (GHashTable *index, json_t *obj)
+{
+    GPtrArray *bucket = import_hash_bucket (index, obj, FALSE);
+    for (guint i = 0; bucket != NULL && i < bucket->len; i++)
+        if (json_equal (g_ptr_array_index (bucket, i), obj))
+            return TRUE;
+    return FALSE;
+}
+
+static gchar *
+otp_identity_key (const otp_t *otp)
+{
+    g_autofree gchar *account = g_utf8_casefold (otp->account_name != NULL ? otp->account_name : "", -1);
+    g_autofree gchar *issuer = g_utf8_casefold (otp->issuer != NULL ? otp->issuer : "", -1);
+    return g_strdup_printf ("%s\037%s", issuer, account);
+}
+
+static void
+clear_preview (ImportDialog *self)
+{
+    if (self->preview_checks != NULL) {
+        g_ptr_array_unref (self->preview_checks);
+        self->preview_checks = NULL;
+    }
+    if (self->pending_otps != NULL) {
+        free_otps_gslist (self->pending_otps);
+        self->pending_otps = NULL;
+    }
+    g_clear_pointer (&self->pending_details, g_free);
+    self->pending_batch_size = self->pending_batch_index = 0;
+    self->pending_parse_skipped_invalid = 0;
+    if (self->preview_group != NULL) {
+        GtkWidget *parent = gtk_widget_get_parent (self->preview_group);
+        if (GTK_IS_BOX (parent))
+            gtk_box_remove (GTK_BOX (parent), self->preview_group);
+        self->preview_group = NULL;
+        self->preview_summary = NULL;
+    }
+    if (GTK_IS_BUTTON (self->import_button))
+        gtk_button_set_label (GTK_BUTTON (self->import_button), _("Select File & Preview"));
+}
+
+static void
+show_import_preview (ImportDialog *self, GSList *otps, const gchar *details,
+                     guint batch_size, guint batch_index, guint parse_skipped_invalid)
+{
+    clear_preview (self);
+    self->pending_otps = otps;
+    self->pending_details = g_strdup (details);
+    self->pending_batch_size = batch_size;
+    self->pending_batch_index = batch_index;
+    self->pending_parse_skipped_invalid = parse_skipped_invalid;
+    self->preview_checks = g_ptr_array_new ();
+
+    self->preview_group = adw_preferences_group_new ();
+    adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (self->preview_group), _("Review tokens"));
+    self->preview_summary = gtk_label_new (NULL);
+    gtk_label_set_wrap (GTK_LABEL (self->preview_summary), TRUE);
+    gtk_widget_set_halign (self->preview_summary, GTK_ALIGN_START);
+    adw_preferences_group_add (ADW_PREFERENCES_GROUP (self->preview_group), self->preview_summary);
+
+    GHashTable *exact = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL,
+                                               (GDestroyNotify) g_ptr_array_unref);
+    GHashTable *identities = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
+                                                   (GDestroyNotify) g_ptr_array_unref);
+    json_t *root = self->db_data->in_memory_json_data;
+    json_t *tokens = root != NULL ? json_object_get (root, "tokens") : NULL;
+    if (json_is_array (tokens)) {
+        size_t i;
+        json_t *obj;
+        json_array_foreach (tokens, i, obj) {
+            g_ptr_array_add (import_hash_bucket (exact, obj, TRUE), obj);
+            const gchar *account = json_string_value (json_object_get (obj, "label"));
+            const gchar *issuer = json_string_value (json_object_get (obj, "issuer"));
+            g_autofree gchar *folded_account = g_utf8_casefold (account != NULL ? account : "", -1);
+            g_autofree gchar *folded_issuer = g_utf8_casefold (issuer != NULL ? issuer : "", -1);
+            gchar *identity = g_strdup_printf ("%s\037%s", folded_issuer, folded_account);
+            GPtrArray *bucket = g_hash_table_lookup (identities, identity);
+            if (bucket == NULL) {
+                bucket = g_ptr_array_new ();
+                g_hash_table_insert (identities, identity, bucket);
+            } else {
+                g_free (identity);
+            }
+            g_ptr_array_add (bucket, obj);
+        }
+    }
+
+    guint exact_count = 0, conflict_count = 0;
+    guint index = 0;
+    GPtrArray *candidate_objects = g_ptr_array_new_with_free_func ((GDestroyNotify) json_decref);
+    for (GSList *l = otps; l != NULL; l = l->next, index++) {
+        otp_t *otp = l->data;
+        otp_repair_anonymous_import_token (otp, index);
+        json_t *candidate = build_json_obj (otp->type, otp->account_name, otp->issuer,
+                                            otp->secret, otp->digits, otp->algo,
+                                            otp->period, otp->counter, otp->group);
+        gboolean duplicate = candidate != NULL && import_hash_contains (exact, candidate);
+        gboolean conflict = FALSE;
+        if (candidate != NULL && !duplicate) {
+            g_autofree gchar *identity = otp_identity_key (otp);
+            GPtrArray *bucket = g_hash_table_lookup (identities, identity);
+            for (guint n = 0; bucket != NULL && n < bucket->len; n++) {
+                json_t *old = g_ptr_array_index (bucket, n);
+                const gchar *old_secret = json_string_value (json_object_get (old, "secret"));
+                if (g_strcmp0 (old_secret, otp->secret) != 0) {
+                    conflict = TRUE;
+                    break;
+                }
+            }
+        }
+        if (candidate != NULL) {
+            g_ptr_array_add (candidate_objects, candidate);
+            g_ptr_array_add (import_hash_bucket (exact, candidate, TRUE), candidate);
+            if (!duplicate) {
+                g_autofree gchar *identity = otp_identity_key (otp);
+                GPtrArray *bucket = g_hash_table_lookup (identities, identity);
+                if (bucket == NULL) {
+                    bucket = g_ptr_array_new ();
+                    g_hash_table_insert (identities, g_strdup (identity), bucket);
+                }
+                g_ptr_array_add (bucket, candidate);
+            }
+        }
+        const gchar *name = (otp->issuer != NULL && otp->issuer[0] != '\0')
+            ? otp->issuer : (otp->account_name != NULL ? otp->account_name : _("Unnamed token"));
+        g_autofree gchar *label = g_strdup_printf ("%s — %s%s", name,
+            otp->account_name != NULL ? otp->account_name : _("No account"),
+            duplicate ? _(" (exact duplicate)") : conflict ? _(" (same account, different secret)") : "");
+        GtkWidget *check = gtk_check_button_new_with_label (label);
+        g_object_set_data (G_OBJECT (check), "exact-duplicate", GUINT_TO_POINTER (duplicate));
+        gtk_check_button_set_active (GTK_CHECK_BUTTON (check), !duplicate);
+        gtk_widget_set_tooltip_text (check, duplicate
+            ? _("This token already exists and will be skipped by default.")
+            : conflict ? _("An existing token has the same issuer and account but a different secret. Review before importing.")
+                       : _("This token will be added if selected."));
+        adw_preferences_group_add (ADW_PREFERENCES_GROUP (self->preview_group), check);
+        g_ptr_array_add (self->preview_checks, check);
+        exact_count += duplicate;
+        conflict_count += conflict;
+    }
+    g_hash_table_unref (exact);
+    g_hash_table_unref (identities);
+    g_ptr_array_unref (candidate_objects);
+
+    g_autofree gchar *summary = g_strdup_printf (
+        _("%u tokens found. %u exact duplicates are unchecked; %u possible account conflicts need review.%s"),
+        g_slist_length (otps), exact_count, conflict_count,
+        details != NULL && details[0] != '\0' ? _(" Some source entries could not be imported; see the details below.") : "");
+    gtk_label_set_text (GTK_LABEL (self->preview_summary), summary);
+    if (details != NULL && details[0] != '\0')
+        gtk_label_set_text (GTK_LABEL (self->error_label), details);
+    gtk_widget_set_visible (self->error_label, details != NULL && details[0] != '\0');
+    GtkWidget *box = gtk_widget_get_parent (self->import_button);
+    gtk_box_insert_child_after (GTK_BOX (box), self->preview_group, self->error_label);
+    gtk_button_set_label (GTK_BUTTON (self->import_button), _("Import Selected"));
+}
+
+static void
+commit_import_preview (ImportDialog *self)
+{
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app) : NULL;
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("The active database changed. Reopen this dialog before importing."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        return;
+    }
+    GSList *selected = NULL;
+    guint unchecked = 0, unchecked_duplicates = 0;
+    guint i = 0;
+    for (GSList *l = self->pending_otps; l != NULL; l = l->next, i++) {
+        if (gtk_check_button_get_active (g_ptr_array_index (self->preview_checks, i)))
+            selected = g_slist_prepend (selected, l->data);
+        else {
+            unchecked++;
+            if (GPOINTER_TO_UINT (g_object_get_data (
+                    G_OBJECT (g_ptr_array_index (self->preview_checks, i)), "exact-duplicate")))
+                unchecked_duplicates++;
+        }
+    }
+    selected = g_slist_reverse (selected);
+    GError *err = NULL;
+    OtpImportReport report = {0};
+    if (selected != NULL && !db_import_otps (self->db_data, selected, &report, &err)) {
+        gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
+        gtk_widget_set_visible (self->error_label, TRUE);
+        g_clear_error (&err);
+        g_slist_free (selected);
+        return;
+    }
+    ImportSummary summary = {0};
+    summary.added = report.added;
+    summary.skipped_duplicates = report.skipped_duplicates + unchecked_duplicates;
+    summary.skipped_invalid = report.skipped_invalid + self->pending_parse_skipped_invalid;
+    summary.skipped_unselected = unchecked - unchecked_duplicates;
+    summary.skipped = summary.skipped_duplicates + summary.skipped_invalid + summary.skipped_unselected;
+    summary.details = self->pending_details;
+    summary.batch_size = self->pending_batch_size;
+    summary.batch_index = self->pending_batch_index;
+    g_slist_free (selected);
+    if (self->callback != NULL)
+        self->callback (&summary, self->callback_data);
+    adw_dialog_close (ADW_DIALOG (self));
+    clear_preview (self);
+}
+
 static void
 do_import (ImportDialog *self)
 {
+    if (self->pending_otps != NULL) {
+        commit_import_preview (self);
+        return;
+    }
     guint fmt_idx = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
     if (fmt_idx >= N_IMPORT_FORMATS)
         return;
@@ -155,9 +391,6 @@ do_import (ImportDialog *self)
         return;
     }
 
-    ImportSummary summary = {0};
-    summary.batch_size = qr_batch_size;
-    summary.batch_index = qr_batch_index;
     if (otps != NULL)
     {
         GApplication *default_app = g_application_get_default ();
@@ -173,33 +406,9 @@ do_import (ImportDialog *self)
             free_otps_gslist (otps);
             return;
         }
-
-        OtpImportReport report = {0};
-        db_import_otps (self->db_data, otps, &report, &err);
-        if (err != NULL)
-        {
-            gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
-            gtk_widget_set_visible (self->error_label, TRUE);
-            g_clear_error (&err);
-            /* The transaction leaves the live database unchanged on failure;
-             * release the parsed OTP list before returning. */
-            free_otps_gslist (otps);
-            return;
-        }
-
-        summary.added = report.added;
-        summary.skipped_duplicates = report.skipped_duplicates;
-        summary.skipped_invalid = report.skipped_invalid + diagnostics->skipped_invalid;
-        summary.details = details;
-        summary.skipped = summary.skipped_duplicates + summary.skipped_invalid;
-
-        free_otps_gslist (otps);
     }
-
-    adw_dialog_close (ADW_DIALOG (self));
-
-    if (self->callback != NULL)
-        self->callback (&summary, self->callback_data);
+    show_import_preview (self, otps, details, qr_batch_size, qr_batch_index,
+                         diagnostics->skipped_invalid + qr_invalid);
 }
 
 static void
@@ -235,6 +444,11 @@ on_import_clicked (GtkButton    *button,
                    ImportDialog *self)
 {
     (void) button;
+
+    if (self->pending_otps != NULL) {
+        commit_import_preview (self);
+        return;
+    }
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Select file to import"));
@@ -274,12 +488,14 @@ clear_import_password (AdwDialog *dialog)
         explicit_bzero (self->import_password, strlen (self->import_password));
         g_clear_pointer (&self->import_password, gcry_free);
     }
+    clear_preview (self);
 }
 
 static void
 import_dialog_finalize (GObject *object)
 {
     ImportDialog *self = IMPORT_DIALOG (object);
+    clear_preview (self);
     g_free (self->selected_file);
     g_clear_pointer (&self->db_data, database_data_free);
     if (self->import_password != NULL) {
@@ -338,7 +554,7 @@ import_dialog_new (DatabaseData   *db_data,
     /* Format selector */
     const char *format_names[N_IMPORT_FORMATS + 1];
     for (guint i = 0; i < N_IMPORT_FORMATS; i++)
-        format_names[i] = import_formats[i].label;
+        format_names[i] = _(import_formats[i].label);
     format_names[N_IMPORT_FORMATS] = NULL;
 
     GtkStringList *format_model = gtk_string_list_new (format_names);

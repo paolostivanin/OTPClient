@@ -1,6 +1,9 @@
 #define _DEFAULT_SOURCE
+#include <errno.h>
 #include <glib/gi18n.h>
 #include <adwaita.h>
+#include <stdlib.h>
+#include <string.h>
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otpclient-window-private.h"
@@ -26,6 +29,7 @@ static void close_webcam_progress (OTPClientWindow *self);
 #include "secret-schema.h"
 #include "gsettings-common.h"
 #include "common.h"
+#include "otp-validation.h"
 
 G_DEFINE_FINAL_TYPE (OTPClientWindow, otpclient_window, ADW_TYPE_APPLICATION_WINDOW)
 
@@ -36,6 +40,7 @@ static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointe
 static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry);
 static void refresh_search_cache (OTPClientWindow *self);
 static void update_empty_state (OTPClientWindow *self);
+static void update_quarantine_banner (OTPClientWindow *self);
 
 typedef struct {
     GWeakRef window_ref;
@@ -1347,8 +1352,28 @@ apply:
 }
 
 static void
+update_quarantine_banner (OTPClientWindow *self)
+{
+    if (self->quarantine_banner == NULL)
+        return;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    guint count = db_get_quarantined_count (db);
+    gboolean reveal = count > 0 && !otpclient_application_get_app_locked (app);
+    if (reveal) {
+        g_autofree gchar *title = g_strdup_printf (
+            ngettext ("%u token needs repair.", "%u tokens need repair.", count), count);
+        adw_banner_set_title (ADW_BANNER (self->quarantine_banner), title);
+    }
+    adw_banner_set_revealed (ADW_BANNER (self->quarantine_banner), reveal);
+    gtk_widget_action_set_enabled (GTK_WIDGET (self), "win.review-quarantine", reveal);
+}
+
+static void
 update_empty_state (OTPClientWindow *self)
 {
+    update_quarantine_banner (self);
     if (self->content_stack == NULL || self->otp_store == NULL)
         return;
 
@@ -3090,7 +3115,425 @@ on_db_modified (gpointer user_data)
     }
 
     rebuild_group_list (self);
+    update_quarantine_banner (self);
 
+}
+
+typedef struct {
+    GWeakRef window_ref;
+    DatabaseData *db_data;
+    GtkWidget *list_box;
+    AdwAlertDialog *dialog;
+} QuarantineReview;
+
+typedef struct {
+    GWeakRef review_ref;
+    DatabaseData *db_data;
+    guint lock_generation;
+    guint index;
+    json_t *original;
+    GtkWidget *fields[9];
+} QuarantineRepair;
+
+enum {
+    REPAIR_LABEL,
+    REPAIR_ISSUER,
+    REPAIR_GROUP,
+    REPAIR_TYPE,
+    REPAIR_SECRET,
+    REPAIR_ALGORITHM,
+    REPAIR_DIGITS,
+    REPAIR_PERIOD,
+    REPAIR_COUNTER
+};
+
+static void
+quarantine_review_free (gpointer data)
+{
+    QuarantineReview *review = data;
+    g_weak_ref_clear (&review->window_ref);
+    database_data_unref (review->db_data);
+    g_free (review);
+}
+
+static void
+quarantine_repair_free (QuarantineRepair *repair)
+{
+    if (repair == NULL)
+        return;
+    g_weak_ref_clear (&repair->review_ref);
+    database_data_unref (repair->db_data);
+    g_clear_pointer (&repair->original, json_decref);
+    g_free (repair);
+}
+
+static gchar *
+quarantine_field_text (json_t      *token,
+                       const gchar *key,
+                       const gchar *fallback)
+{
+    json_t *value = json_object_get (token, key);
+    if (json_is_string (value))
+        return g_strdup (json_string_value (value));
+    if (json_is_integer (value))
+        return g_strdup_printf ("%" JSON_INTEGER_FORMAT, json_integer_value (value));
+    return g_strdup (fallback ? fallback : "");
+}
+
+static GtkWidget *
+quarantine_repair_add_field (GtkGrid      *grid,
+                             guint         row,
+                             const gchar  *title,
+                             const gchar  *value,
+                             gboolean      password)
+{
+    GtkWidget *label = gtk_label_new (title);
+    gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_label_set_wrap (GTK_LABEL (label), TRUE);
+    gtk_label_set_max_width_chars (GTK_LABEL (label), 24);
+    GtkWidget *entry = password ? gtk_password_entry_new () : gtk_entry_new ();
+    gtk_editable_set_text (GTK_EDITABLE (entry), value);
+    gtk_widget_set_size_request (entry, 150, -1);
+    gtk_widget_set_hexpand (entry, TRUE);
+    gtk_grid_attach (grid, label, 0, row, 1, 1);
+    gtk_grid_attach (grid, entry, 1, row, 1, 1);
+    return entry;
+}
+
+static gboolean
+quarantine_parse_integer (GtkWidget   *entry,
+                          guint64      maximum,
+                          guint64     *out_value)
+{
+    const gchar *text = gtk_editable_get_text (GTK_EDITABLE (entry));
+    if (text[0] == '\0')
+        return FALSE;
+    for (const gchar *p = text; *p != '\0'; p++)
+        if (!g_ascii_isdigit (*p))
+            return FALSE;
+    errno = 0;
+    gchar *end = NULL;
+    guint64 value = g_ascii_strtoull (text, &end, 10);
+    if (errno == ERANGE || end == text || *end != '\0' || value > maximum)
+        return FALSE;
+    *out_value = value;
+    return TRUE;
+}
+
+static gboolean
+quarantine_set_string (json_t      *token,
+                       const gchar *key,
+                       const gchar *value,
+                       gboolean     remove_empty)
+{
+    if (remove_empty && value[0] == '\0') {
+        json_object_del (token, key);
+        return TRUE;
+    }
+    return json_object_set_new (token, key, json_string (value)) == 0;
+}
+
+static json_t *
+quarantine_build_repaired_token (QuarantineRepair *repair,
+                                 GError          **err)
+{
+    json_t *token = json_is_object (repair->original)
+        ? json_deep_copy (repair->original) : json_object ();
+    if (token == NULL) {
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                             "Could not stage the repaired token.");
+        return NULL;
+    }
+    const gchar *label = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_LABEL]));
+    const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_ISSUER]));
+    const gchar *group = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_GROUP]));
+    const gchar *type = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_TYPE]));
+    const gchar *secret = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_SECRET]));
+    const gchar *algo = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_ALGORITHM]));
+    if (!quarantine_set_string (token, "label", label, FALSE) ||
+        !quarantine_set_string (token, "issuer", issuer, TRUE) ||
+        !quarantine_set_string (token, "group", group, TRUE) ||
+        !quarantine_set_string (token, "type", type, FALSE) ||
+        !quarantine_set_string (token, "secret", secret, FALSE) ||
+        !quarantine_set_string (token, "algo", algo, FALSE)) {
+        json_decref (token);
+        g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                             "Could not stage the repaired token fields.");
+        return NULL;
+    }
+
+    guint64 value = 0;
+    if (!quarantine_parse_integer (repair->fields[REPAIR_DIGITS], G_MAXINT64, &value))
+        goto invalid_number;
+    if (json_object_set_new (token, "digits", json_integer ((json_int_t) value)) != 0)
+        goto no_space;
+    if (g_ascii_strcasecmp (type, "TOTP") == 0) {
+        if (!quarantine_parse_integer (repair->fields[REPAIR_PERIOD], G_MAXINT64, &value))
+            goto invalid_number;
+        if (json_object_set_new (token, "period", json_integer ((json_int_t) value)) != 0)
+            goto no_space;
+        json_object_del (token, "counter");
+    } else if (g_ascii_strcasecmp (type, "HOTP") == 0) {
+        if (!quarantine_parse_integer (repair->fields[REPAIR_COUNTER],
+                                       OTP_HOTP_COUNTER_MAX - 1, &value))
+            goto invalid_number;
+        if (json_object_set_new (token, "counter", json_integer ((json_int_t) value)) != 0)
+            goto no_space;
+        json_object_del (token, "period");
+    }
+    return token;
+
+invalid_number:
+    json_decref (token);
+    g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                         "Digits, period, and counter must be whole numbers in range.");
+    return NULL;
+
+no_space:
+    json_decref (token);
+    g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                         "Could not stage the repaired token numbers.");
+    return NULL;
+}
+
+static void quarantine_repair_clicked (GtkButton *button, gpointer user_data);
+static void quarantine_delete_clicked (GtkButton *button, gpointer user_data);
+
+static void
+quarantine_rebuild_list (QuarantineReview *review)
+{
+    while (gtk_widget_get_first_child (review->list_box) != NULL)
+        gtk_box_remove (GTK_BOX (review->list_box), gtk_widget_get_first_child (review->list_box));
+
+    json_t *tokens = review->db_data->quarantined_tokens;
+    gsize count = json_is_array (tokens) ? json_array_size (tokens) : 0;
+    for (guint i = 0; i < count; i++) {
+        json_t *token = json_array_get (tokens, i);
+        const gchar *label = json_string_value (json_object_get (token, "label"));
+        const gchar *issuer = json_string_value (json_object_get (token, "issuer"));
+        g_autofree gchar *title = NULL;
+        if (label != NULL && label[0] != '\0')
+            title = g_strdup (label);
+        else if (issuer != NULL && issuer[0] != '\0')
+            title = g_strdup (issuer);
+        else
+            title = g_strdup_printf (_("Invalid token %u"), i + 1);
+
+        GError *validation_error = NULL;
+        otp_validate_token_object (token, i, &validation_error);
+        GtkWidget *row = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+        gtk_widget_add_css_class (row, "card");
+        gtk_widget_set_margin_top (row, 6);
+        gtk_widget_set_margin_bottom (row, 6);
+        gtk_widget_set_margin_start (row, 8);
+        gtk_widget_set_margin_end (row, 8);
+        GtkWidget *heading = gtk_label_new (title);
+        gtk_label_set_xalign (GTK_LABEL (heading), 0.0f);
+        gtk_widget_add_css_class (heading, "heading");
+        gtk_box_append (GTK_BOX (row), heading);
+        GtkWidget *reason = gtk_label_new (validation_error ? validation_error->message : _("Token needs repair."));
+        gtk_label_set_xalign (GTK_LABEL (reason), 0.0f);
+        gtk_label_set_wrap (GTK_LABEL (reason), TRUE);
+        gtk_box_append (GTK_BOX (row), reason);
+        g_clear_error (&validation_error);
+
+        GtkWidget *buttons = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_widget_set_halign (buttons, GTK_ALIGN_END);
+        GtkWidget *repair = gtk_button_new_with_label (_("Repair…"));
+        GtkWidget *remove = gtk_button_new_with_label (_("Delete"));
+        gtk_widget_add_css_class (remove, "destructive-action");
+        g_object_set_data (G_OBJECT (repair), "quarantine-index", GUINT_TO_POINTER (i + 1));
+        g_object_set_data (G_OBJECT (remove), "quarantine-index", GUINT_TO_POINTER (i + 1));
+        g_signal_connect (repair, "clicked", G_CALLBACK (quarantine_repair_clicked), review);
+        g_signal_connect (remove, "clicked", G_CALLBACK (quarantine_delete_clicked), review);
+        gtk_box_append (GTK_BOX (buttons), repair);
+        gtk_box_append (GTK_BOX (buttons), remove);
+        gtk_box_append (GTK_BOX (row), buttons);
+        gtk_box_append (GTK_BOX (review->list_box), row);
+    }
+}
+
+static void
+quarantine_report_error (QuarantineReview *review,
+                         const gchar      *message)
+{
+    g_autoptr (OTPClientWindow) window = g_weak_ref_get (&review->window_ref);
+    if (window != NULL)
+        show_error_toast (window, "%s", message);
+}
+
+static void
+quarantine_delete_clicked (GtkButton *button,
+                           gpointer   user_data)
+{
+    QuarantineReview *review = user_data;
+    guint index = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (button), "quarantine-index")) - 1;
+    GError *err = NULL;
+    if (!db_delete_quarantined_token (review->db_data, index, &err)) {
+        quarantine_report_error (review, err ? err->message : _("Could not delete the quarantined token."));
+        g_clear_error (&err);
+        quarantine_rebuild_list (review);
+        return;
+    }
+    g_autoptr (OTPClientWindow) window = g_weak_ref_get (&review->window_ref);
+    if (window != NULL)
+        on_db_modified (window);
+    quarantine_rebuild_list (review);
+    if (db_get_quarantined_count (review->db_data) == 0)
+        adw_dialog_close (ADW_DIALOG (review->dialog));
+}
+
+static void
+quarantine_repair_response (GObject      *source,
+                            GAsyncResult *result,
+                            gpointer      user_data)
+{
+    QuarantineRepair *repair = user_data;
+    const gchar *response = adw_alert_dialog_choose_finish (
+        ADW_ALERT_DIALOG (source), result);
+    if (g_strcmp0 (response, "repair") != 0) {
+        quarantine_repair_free (repair);
+        return;
+    }
+
+    g_autoptr (AdwDialog) review_dialog = g_weak_ref_get (&repair->review_ref);
+    QuarantineReview *review = review_dialog != NULL
+        ? g_object_get_data (G_OBJECT (review_dialog), "quarantine-review") : NULL;
+    g_autoptr (OTPClientWindow) window = review != NULL
+        ? g_weak_ref_get (&review->window_ref) : NULL;
+    OTPClientApplication *app = window != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (window))) : NULL;
+    json_t *current = repair->index < db_get_quarantined_count (repair->db_data)
+        ? json_array_get (repair->db_data->quarantined_tokens, repair->index) : NULL;
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != repair->db_data ||
+        otpclient_application_get_lock_generation (app) != repair->lock_generation ||
+        current == NULL || !json_equal (current, repair->original)) {
+        if (window != NULL)
+            show_error_toast (window, "%s", _("The database changed. Reopen the repair form before saving."));
+        quarantine_repair_free (repair);
+        return;
+    }
+
+    GError *err = NULL;
+    json_t *token = quarantine_build_repaired_token (repair, &err);
+    if (token != NULL && !db_repair_quarantined_token (repair->db_data,
+                                                        repair->index, token, &err)) {
+        json_decref (token);
+        token = NULL;
+    }
+    if (token == NULL) {
+        g_autoptr (AdwAlertDialog) error_dialog = ADW_ALERT_DIALOG (
+            adw_alert_dialog_new (_("Repair failed"), err ? err->message : _("Invalid token fields.")));
+        adw_alert_dialog_add_response (error_dialog, "close", _("Close"));
+        if (review_dialog != NULL)
+            adw_dialog_present (ADW_DIALOG (error_dialog), GTK_WIDGET (review_dialog));
+        g_clear_error (&err);
+        quarantine_repair_free (repair);
+        return;
+    }
+    json_decref (token);
+
+    if (review_dialog != NULL) {
+        if (review != NULL) {
+            if (window != NULL)
+                on_db_modified (window);
+            quarantine_rebuild_list (review);
+            if (db_get_quarantined_count (review->db_data) == 0)
+                adw_dialog_close (review_dialog);
+        }
+    }
+    quarantine_repair_free (repair);
+}
+
+static void
+quarantine_repair_clicked (GtkButton *button,
+                           gpointer   user_data)
+{
+    QuarantineReview *review = user_data;
+    guint index = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (button), "quarantine-index")) - 1;
+    json_t *original = json_array_get (review->db_data->quarantined_tokens, index);
+    if (original == NULL)
+        return;
+
+    QuarantineRepair *repair = g_new0 (QuarantineRepair, 1);
+    g_weak_ref_init (&repair->review_ref, review->dialog);
+    repair->db_data = database_data_ref (review->db_data);
+    OTPClientWindow *window = g_weak_ref_get (&review->window_ref);
+    if (window != NULL) {
+        OTPClientApplication *app = OTPCLIENT_APPLICATION (
+            gtk_window_get_application (GTK_WINDOW (window)));
+        repair->lock_generation = app != NULL
+            ? otpclient_application_get_lock_generation (app) : 0;
+        g_object_unref (window);
+    }
+    repair->index = index;
+    repair->original = json_deep_copy (original);
+
+    static const gchar *keys[] = { "label", "issuer", "group", "type", "secret", "algo", "digits", "period", "counter" };
+    static const gchar *titles[] = { N_("Label"), N_("Issuer"), N_("Group"), N_("Type"), N_("Base32 secret"), N_("Algorithm"), N_("Digits"), N_("Period"), N_("Counter") };
+    static const gchar *defaults[] = { "", "", "", "TOTP", "", "SHA1", "6", "30", "0" };
+    GtkWidget *grid = gtk_grid_new ();
+    gtk_grid_set_row_spacing (GTK_GRID (grid), 8);
+    gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
+    for (guint i = 0; i < G_N_ELEMENTS (keys); i++) {
+        g_autofree gchar *text = quarantine_field_text (original, keys[i], defaults[i]);
+        repair->fields[i] = quarantine_repair_add_field (GTK_GRID (grid), i,
+            _(titles[i]), text, i == REPAIR_SECRET);
+    }
+    GtkWidget *scrolled = gtk_scrolled_window_new ();
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_height (GTK_SCROLLED_WINDOW (scrolled), 320);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), grid);
+
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (adw_alert_dialog_new (
+        _("Repair token"), _("Correct the fields below. The repaired token is validated before it replaces the quarantined copy.")));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"), "repair", _("Validate and Save"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "repair", ADW_RESPONSE_SUGGESTED);
+    adw_alert_dialog_set_default_response (dialog, "repair");
+    adw_alert_dialog_set_extra_child (dialog, scrolled);
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (review->dialog), NULL,
+        (GAsyncReadyCallback) quarantine_repair_response, repair);
+}
+
+static void
+quarantine_review_dialog_free (gpointer data)
+{
+    quarantine_review_free (data);
+}
+
+static void
+action_review_quarantine (GtkWidget  *widget,
+                          const char *action_name G_GNUC_UNUSED,
+                          GVariant   *parameter G_GNUC_UNUSED)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL || db_get_quarantined_count (db_data) == 0)
+        return;
+
+    GtkWidget *list = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget *scrolled = gtk_scrolled_window_new ();
+    gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_min_content_height (GTK_SCROLLED_WINDOW (scrolled), 300);
+    gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolled), list);
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Tokens requiring repair"),
+                              _("These entries were preserved because their OTP fields are invalid. Repair and validate an entry, or delete it explicitly.")));
+    adw_alert_dialog_add_response (dialog, "close", _("Close"));
+    adw_alert_dialog_set_extra_child (dialog, scrolled);
+
+    QuarantineReview *review = g_new0 (QuarantineReview, 1);
+    g_weak_ref_init (&review->window_ref, self);
+    review->db_data = database_data_ref (db_data);
+    review->list_box = list;
+    review->dialog = dialog;
+    g_object_set_data_full (G_OBJECT (dialog), "quarantine-review", review,
+                            quarantine_review_dialog_free);
+    quarantine_rebuild_list (review);
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (self));
 }
 
 static void
@@ -3111,6 +3554,10 @@ on_import_done (const ImportSummary *summary,
         msg = g_strdup_printf (ngettext ("Imported %u token.",
                                          "Imported %u tokens.",
                                          summary->added), summary->added);
+    } else if (summary->skipped_unselected > 0) {
+        msg = g_strdup_printf (_("Imported %u; skipped %u duplicates, %u invalid, and %u not selected."),
+                               summary->added, summary->skipped_duplicates,
+                               summary->skipped_invalid, summary->skipped_unselected);
     } else if (summary->skipped_invalid > 0 && summary->skipped_duplicates > 0) {
         msg = g_strdup_printf (_("Imported %u, skipped %u duplicate and %u invalid."),
                                summary->added,
@@ -5707,6 +6154,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.restore-tokens", NULL, action_restore_tokens);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_e, GDK_CONTROL_MASK, "win.export", NULL);
     gtk_widget_class_install_action (widget_class, "win.snooze-backup-banner", NULL, action_snooze_backup_banner);
+    gtk_widget_class_install_action (widget_class, "win.review-quarantine", NULL, action_review_quarantine);
     gtk_widget_class_install_action (widget_class, "win.settings", NULL, action_settings);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_comma, GDK_CONTROL_MASK, "win.settings", NULL);
     gtk_widget_class_install_action (widget_class, "win.activate-token", NULL, action_activate_token);

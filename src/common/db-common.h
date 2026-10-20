@@ -139,6 +139,13 @@ void          database_data_free (DatabaseData *db_data);
 /* Number of tokens set aside on load because they failed validation (preserved
  * in the file and surfaced to the user for repair). 0 in the normal case. */
 guint         db_get_quarantined_count (DatabaseData *db_data);
+gboolean      db_delete_quarantined_token (DatabaseData *db_data,
+                                            guint index,
+                                            GError **err);
+gboolean      db_repair_quarantined_token (DatabaseData *db_data,
+                                            guint index,
+                                            json_t *repaired_token,
+                                            GError **err);
 
 void    load_db            (DatabaseData   *db_data,
                             GError        **error);
