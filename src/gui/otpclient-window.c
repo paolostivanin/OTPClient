@@ -43,138 +43,6 @@ static void update_empty_state (OTPClientWindow *self);
 static void update_quarantine_banner (OTPClientWindow *self);
 static void update_bulk_selection_count (OTPClientWindow *self);
 
-typedef struct {
-    GWeakRef window_ref;
-    DatabaseData *origin_db;
-    guint lock_generation;
-    json_t *token;
-    json_t *batch_snapshot;
-    guint position;
-} UndoDeleteData;
-
-static void on_undo_delete (AdwToast *toast, gpointer user_data);
-
-static void
-undo_delete_token_clear (UndoDeleteData *data)
-{
-    if (data->token != NULL) {
-        json_t *secret = json_object_get (data->token, "secret");
-        if (json_is_string (secret)) {
-            const char *value = json_string_value (secret);
-            size_t len = json_string_length (secret);
-            if (value != NULL && len > 0)
-                explicit_bzero ((void *) value, len);
-        }
-        json_decref (data->token);
-        data->token = NULL;
-    }
-    if (data->batch_snapshot != NULL) {
-        size_t i;
-        json_t *item;
-        json_array_foreach (data->batch_snapshot, i, item) {
-            json_t *token = json_object_get (item, "token");
-            json_t *secret = json_object_get (token, "secret");
-            if (json_is_string (secret)) {
-                const char *value = json_string_value (secret);
-                size_t len = json_string_length (secret);
-                if (value != NULL && len > 0)
-                    explicit_bzero ((void *) value, len);
-            }
-        }
-        json_decref (data->batch_snapshot);
-        data->batch_snapshot = NULL;
-    }
-}
-
-static UndoDeleteData *
-undo_delete_data_new (OTPClientWindow *self,
-                      DatabaseData   *origin_db,
-                      json_t         *token,
-                      guint           position)
-{
-    UndoDeleteData *data = g_new0 (UndoDeleteData, 1);
-    g_weak_ref_init (&data->window_ref, self);
-    data->origin_db = origin_db;
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    data->lock_generation = app != NULL
-        ? otpclient_application_get_lock_generation (app) : 0;
-    data->token = json_deep_copy (token);
-    data->position = position;
-    if (data->token == NULL) {
-        g_weak_ref_clear (&data->window_ref);
-        g_free (data);
-        return NULL;
-    }
-    self->undo_actions = g_list_prepend (self->undo_actions, data);
-    return data;
-}
-
-static void
-undo_delete_data_free (gpointer user_data,
-                       GClosure *closure)
-{
-    (void) closure;
-    UndoDeleteData *data = user_data;
-    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&data->window_ref);
-    if (self != NULL)
-        self->undo_actions = g_list_remove (self->undo_actions, data);
-    g_weak_ref_clear (&data->window_ref);
-    undo_delete_token_clear (data);
-    g_free (data);
-}
-
-static void
-show_undo_toast (OTPClientWindow *self,
-                 DatabaseData   *origin_db,
-                 json_t         *token,
-                 guint           position)
-{
-    UndoDeleteData *data = undo_delete_data_new (self, origin_db, token, position);
-    if (data == NULL)
-        return;
-    AdwToast *toast = adw_toast_new (_("Token deleted"));
-    adw_toast_set_button_label (toast, _("Undo"));
-    adw_toast_set_timeout (toast, 5);
-    g_signal_connect_data (toast, "button-clicked", G_CALLBACK (on_undo_delete),
-                           data, undo_delete_data_free, 0);
-    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
-}
-
-static void
-show_batch_undo_toast (OTPClientWindow *self,
-                       DatabaseData *origin_db,
-                       json_t *snapshot)
-{
-    UndoDeleteData *data = g_new0 (UndoDeleteData, 1);
-    g_weak_ref_init (&data->window_ref, self);
-    data->origin_db = origin_db;
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    data->lock_generation = app != NULL
-        ? otpclient_application_get_lock_generation (app) : 0;
-    data->batch_snapshot = json_deep_copy (snapshot);
-    if (data->batch_snapshot == NULL) {
-        g_weak_ref_clear (&data->window_ref);
-        g_free (data);
-        return;
-    }
-    self->undo_actions = g_list_prepend (self->undo_actions, data);
-    AdwToast *toast = adw_toast_new (_("Tokens deleted"));
-    adw_toast_set_button_label (toast, _("Undo"));
-    adw_toast_set_timeout (toast, 8);
-    g_signal_connect_data (toast, "button-clicked", G_CALLBACK (on_undo_delete),
-                           data, undo_delete_data_free, 0);
-    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
-}
-
-static void
-clear_undo_snapshots (OTPClientWindow *self)
-{
-    for (GList *l = self->undo_actions; l != NULL; l = l->next)
-        undo_delete_token_clear (l->data);
-}
-
 static inline gboolean
 window_is_locked (OTPClientWindow *self)
 {
@@ -1373,7 +1241,7 @@ void
 otpclient_window_clear_undo_actions (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-    clear_undo_snapshots (self);
+    otpclient_window_undo_clear (self);
     if (self->bulk_mode_button != NULL)
         gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->bulk_mode_button), FALSE);
     if (self->bulk_selected_entries != NULL)
@@ -2959,7 +2827,7 @@ otpclient_window_dispose (GObject *object)
         return;
     }
     win->disposing = TRUE;
-    clear_undo_snapshots (win);
+    otpclient_window_undo_clear (win);
 
     if (win->cross_db_cancellable != NULL)
         g_cancellable_cancel (win->cross_db_cancellable);
@@ -3041,7 +2909,7 @@ void
 otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-    clear_undo_snapshots (self);
+    otpclient_window_undo_clear (self);
     if (self->bulk_mode_button != NULL)
         gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (self->bulk_mode_button), FALSE);
     if (self->bulk_selected_entries != NULL)
@@ -3327,6 +3195,12 @@ on_db_modified (gpointer user_data)
     rebuild_group_list (self);
     update_quarantine_banner (self);
 
+}
+
+void
+otpclient_window_database_modified (OTPClientWindow *self)
+{
+    on_db_modified (self);
 }
 
 typedef struct {
@@ -4498,71 +4372,10 @@ action_edit_token (GtkWidget  *widget,
     adw_dialog_present (ADW_DIALOG (dlg), GTK_WIDGET (self));
 }
 
-static void
-on_undo_delete (AdwToast *toast,
-                gpointer  user_data)
-{
-    (void) toast;
-    UndoDeleteData *undo = user_data;
-    if (undo->token == NULL && undo->batch_snapshot == NULL)
-        return;
-    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&undo->window_ref);
-    if (self == NULL)
-        return;
-
-    OTPClientApplication *app = OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL)
-        return;
-
-    DatabaseData *db_data = otpclient_application_get_db_data (app);
-    if (db_data == NULL || db_data != undo->origin_db ||
-        db_data->in_memory_json_data == NULL ||
-        otpclient_application_get_lock_generation (app) != undo->lock_generation)
-        return;
-
-    if (undo->batch_snapshot != NULL) {
-        GError *err = NULL;
-        if (!db_restore_tokens (db_data, undo->batch_snapshot, &err)) {
-            show_error_toast (self, _("Failed to restore deleted tokens: %s"),
-                              err != NULL ? err->message : _("database write failed"));
-            g_clear_error (&err);
-            show_batch_undo_toast (self, undo->origin_db, undo->batch_snapshot);
-            return;
-        }
-        undo_delete_token_clear (undo);
-        on_db_modified (self);
-        return;
-    }
-
-    gsize arr_len = json_array_size (db_data->in_memory_json_data);
-    guint insert_pos = (undo->position <= arr_len) ? undo->position : (guint) arr_len;
-    if (json_array_insert (db_data->in_memory_json_data, insert_pos, undo->token) != 0)
-        return;
-
-    GError *err = NULL;
-    update_db (db_data, &err);
-    if (err != NULL) {
-        show_error_toast (self, _("Failed to restore deleted token: %s"), err->message);
-        g_clear_error (&err);
-        /* The original toast is dismissed after its action fires. Reissue it
-         * with a fresh owned snapshot so a transient write failure is retryable. */
-        show_undo_toast (self, undo->origin_db, undo->token, undo->position);
-        return;
-    }
-
-    json_decref (undo->token);
-    undo->token = NULL;
-
-    on_db_modified (self);
-}
-
 void
 otpclient_window_undo_latest_delete (OTPClientWindow *self)
 {
-    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
-    if (self->undo_actions != NULL)
-        on_undo_delete (NULL, self->undo_actions->data);
+    otpclient_window_undo_latest (self);
 }
 
 static void
@@ -4591,10 +4404,9 @@ on_delete_response (AdwAlertDialog *dialog,
 
     /* Each toast owns an independent snapshot tied to the database it came
      * from. A later deletion or a database switch cannot redirect its Undo. */
-    json_t *deleted_token = json_array_get (db_data->in_memory_json_data, pos);
-    UndoDeleteData *undo = undo_delete_data_new (self, db_data,
-                                                 deleted_token, pos);
-    if (undo == NULL)
+    json_t *deleted_token = json_deep_copy (
+        json_array_get (db_data->in_memory_json_data, pos));
+    if (deleted_token == NULL)
         return;
 
     json_array_remove (db_data->in_memory_json_data, pos);
@@ -4604,16 +4416,15 @@ on_delete_response (AdwAlertDialog *dialog,
     if (err != NULL) {
         show_error_toast (self, _("Failed to delete token: %s"), err->message);
         g_clear_error (&err);
-        undo_delete_data_free (undo, NULL);
+        json_array_insert (db_data->in_memory_json_data, pos, deleted_token);
+        json_decref (deleted_token);
         return;
     }
 
     on_db_modified (self);
 
-    show_undo_toast (self, undo->origin_db, undo->token, undo->position);
-    /* The first snapshot existed to make the delete transactional. The toast
-     * now has its own copy, so release the temporary action record. */
-    undo_delete_data_free (undo, NULL);
+    otpclient_window_undo_show_single (self, db_data, deleted_token, pos);
+    json_decref (deleted_token);
 }
 
 static void
@@ -4684,7 +4495,7 @@ on_bulk_delete_response (AdwAlertDialog *dialog,
         return;
     }
     on_db_modified (self);
-    show_batch_undo_toast (self, ctx->db_data, snapshot);
+    otpclient_window_undo_show_batch (self, ctx->db_data, snapshot);
     json_decref (snapshot);
     bulk_delete_context_free (ctx);
 }

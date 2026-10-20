@@ -123,6 +123,17 @@ struct _OTPClientWindow
 
 };
 
+void otpclient_window_undo_show_single (OTPClientWindow *self,
+                                       DatabaseData *origin_db,
+                                       json_t *token,
+                                       guint position);
+void otpclient_window_undo_show_batch (OTPClientWindow *self,
+                                      DatabaseData *origin_db,
+                                      json_t *snapshot);
+void otpclient_window_undo_clear (OTPClientWindow *self);
+void otpclient_window_undo_latest (OTPClientWindow *self);
+void otpclient_window_database_modified (OTPClientWindow *self);
+
 /* Internal hook used by GUI flow tests to exercise the toast's Undo payload. */
 void otpclient_window_undo_latest_delete (OTPClientWindow *self);
 
