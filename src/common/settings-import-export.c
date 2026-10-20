@@ -123,6 +123,42 @@ export_settings_to_json (GError **err)
 }
 
 
+gchar *
+settings_json_read_file (const gchar *path,
+                         GError     **err)
+{
+    g_autoptr (GFile) file = g_file_new_for_path (path);
+    g_autoptr (GFileInputStream) input = g_file_read (file, NULL, err);
+    if (input == NULL)
+        return NULL;
+
+    GByteArray *bytes = g_byte_array_sized_new (4096);
+    guint8 buffer[4096];
+    while (bytes->len <= SETTINGS_JSON_MAX_BYTES) {
+        gsize capacity = MIN (sizeof buffer, SETTINGS_JSON_MAX_BYTES + 1 - bytes->len);
+        gssize count = g_input_stream_read (G_INPUT_STREAM (input), buffer, capacity,
+                                            NULL, err);
+        if (count < 0) {
+            g_byte_array_unref (bytes);
+            return NULL;
+        }
+        if (count == 0)
+            break;
+        g_byte_array_append (bytes, buffer, (guint) count);
+    }
+
+    if (bytes->len > SETTINGS_JSON_MAX_BYTES) {
+        g_byte_array_unref (bytes);
+        g_set_error (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                     "Settings JSON exceeds %u bytes; refusing to import.",
+                     SETTINGS_JSON_MAX_BYTES);
+        return NULL;
+    }
+
+    g_byte_array_append (bytes, (const guint8 *) "\0", 1);
+    return (gchar *) g_byte_array_free (bytes, FALSE);
+}
+
 gboolean
 import_settings_from_json (const gchar *json_str,
                            gboolean    *out_touched_startup,
@@ -136,16 +172,15 @@ import_settings_from_json (const gchar *json_str,
      * int, string), so a real backup is well under 1 KiB. Cap input at 1 MiB
      * so a malicious or accidental multi-gigabyte file can't drag jansson
      * through unbounded allocations before erroring out. */
-    #define MAX_SETTINGS_JSON_BYTES (1u << 20)
     if (json_str == NULL) {
         g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                              "Settings JSON is NULL.");
         return FALSE;
     }
-    if (strnlen (json_str, MAX_SETTINGS_JSON_BYTES + 1) > MAX_SETTINGS_JSON_BYTES) {
+    if (strnlen (json_str, SETTINGS_JSON_MAX_BYTES + 1) > SETTINGS_JSON_MAX_BYTES) {
         g_set_error (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
                      "Settings JSON exceeds %u bytes; refusing to import.",
-                     MAX_SETTINGS_JSON_BYTES);
+                     SETTINGS_JSON_MAX_BYTES);
         return FALSE;
     }
     json_error_t jerr;

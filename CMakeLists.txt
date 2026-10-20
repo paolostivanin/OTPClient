@@ -18,7 +18,7 @@ option(BUILD_CLI "Build the CLI" ON)
 option(BUILD_SEARCH_PROVIDER "Build the D-Bus search provider" ON)
 
 set(COMMON_C_OPTIONS
-        -Wall -Wextra -O3 -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
+        -Wall -Wextra "$<$<CONFIG:Release>:-O3>" "$<$<CONFIG:Debug>:-Og>" -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
         -Wundef -fdiagnostics-color=always
         -Wstrict-prototypes -Wunreachable-code -Wchar-subscripts
         -Wwrite-strings -Wpointer-arith -Wbad-function-cast -Wcast-align
@@ -87,7 +87,7 @@ option(SANITIZE "Enable AddressSanitizer + UndefinedBehaviorSanitizer (debug bui
 if(SANITIZE)
     # ASan/UBSan want frame pointers, low optimization, and conflict with FORTIFY_SOURCE
     # (the fortified glibc wrappers re-enter the instrumented allocator).
-    list(REMOVE_ITEM COMMON_C_OPTIONS -O3 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3)
+    list(REMOVE_ITEM COMMON_C_OPTIONS "$<$<CONFIG:Release>:-O3>" "$<$<CONFIG:Debug>:-Og>" -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3)
     list(APPEND COMMON_C_OPTIONS
             -O1 -g -fno-omit-frame-pointer
             -fsanitize=address,undefined

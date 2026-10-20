@@ -13,12 +13,6 @@ static void webcam_scan_thread (GTask        *task,
 static gchar *webcam_scan_qrcode_cancellable (GCancellable *cancellable,
                                                GError      **err);
 
-gchar *
-webcam_scan_qrcode (GError **err)
-{
-    return webcam_scan_qrcode_cancellable (NULL, err);
-}
-
 static gchar *
 webcam_scan_qrcode_cancellable (GCancellable *cancellable,
                                 GError      **err)

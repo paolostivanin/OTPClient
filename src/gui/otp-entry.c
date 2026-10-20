@@ -388,52 +388,6 @@ otp_entry_get_counter (OTPEntry *self)
     return self->counter;
 }
 
-const gchar *
-otp_entry_get_algorithm (OTPEntry *self)
-{
-    g_return_val_if_fail (OTP_IS_ENTRY (self), NULL);
-    return self->algorithm;
-}
-
-guint32
-otp_entry_get_digits (OTPEntry *self)
-{
-    g_return_val_if_fail (OTP_IS_ENTRY (self), 6);
-    return self->digits;
-}
-
-void
-otp_entry_set_account (OTPEntry    *self,
-                       const gchar *account)
-{
-    g_return_if_fail (OTP_IS_ENTRY (self));
-
-    if (g_strcmp0 (self->account, account) == 0)
-        return;
-
-    g_free (self->account);
-    self->account = g_strdup (account);
-    g_free (self->account_lower);
-    self->account_lower = strdown_or_empty (self->account);
-    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ACCOUNT]);
-}
-
-void
-otp_entry_set_issuer (OTPEntry    *self,
-                      const gchar *issuer)
-{
-    g_return_if_fail (OTP_IS_ENTRY (self));
-
-    if (g_strcmp0 (self->issuer, issuer) == 0)
-        return;
-
-    g_free (self->issuer);
-    self->issuer = g_strdup (issuer);
-    g_free (self->issuer_lower);
-    self->issuer_lower = strdown_or_empty (self->issuer);
-    g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_ISSUER]);
-}
-
 void
 otp_entry_set_otp_value (OTPEntry    *self,
                          const gchar *otp_value)

@@ -5,8 +5,6 @@
 
 G_BEGIN_DECLS
 
-#define MAX_ABS_PATH_LEN 256
-
 typedef enum {
     OUTPUT_FORMAT_TABLE = 0,
     OUTPUT_FORMAT_JSON,

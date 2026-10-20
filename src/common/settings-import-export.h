@@ -1,8 +1,14 @@
 #pragma once
 
-#include <glib.h>
+#include <gio/gio.h>
 
 G_BEGIN_DECLS
+
+#define SETTINGS_JSON_MAX_BYTES (1u << 20)
+
+/* Read no more than the settings import limit plus one byte from disk. */
+gchar    *settings_json_read_file   (const gchar *path,
+                                     GError     **err);
 
 /* Serialised exportable settings, or NULL with *err set. The buffer is plain
  * GLib memory, so free it with g_free no matter which allocator jansson is

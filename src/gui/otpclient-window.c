@@ -4,6 +4,8 @@
 #include "otpclient-application.h"
 #include "otpclient-window.h"
 #include "otpclient-window-private.h"
+
+static void close_webcam_progress (OTPClientWindow *self);
 #include "otp-entry.h"
 #include "database-sidebar.h"
 #include "db-common.h"
@@ -501,6 +503,8 @@ otp_text_column_setup (GtkSignalListItemFactory *factory,
     GtkWidget *label = gtk_label_new (NULL);
 
     gtk_label_set_xalign (GTK_LABEL (label), 0.0f);
+    gtk_label_set_ellipsize (GTK_LABEL (label), PANGO_ELLIPSIZE_END);
+    gtk_label_set_max_width_chars (GTK_LABEL (label), 28);
     gtk_widget_set_hexpand (label, TRUE);
     gtk_list_item_set_child (list_item, label);
 }
@@ -574,11 +578,13 @@ otp_text_column_bind (GtkSignalListItemFactory *factory,
             "%s  <span size=\"small\" alpha=\"60%%\">[%s]</span>",
             escaped_text, escaped_db);
         gtk_label_set_markup (GTK_LABEL (label), markup);
+        gtk_widget_set_tooltip_text (label, text && text[0] != '\0' ? text : NULL);
         return;
     }
 
     gtk_label_set_use_markup (GTK_LABEL (label), FALSE);
     gtk_label_set_text (GTK_LABEL (label), text ? text : "");
+    gtk_widget_set_tooltip_text (label, text && text[0] != '\0' ? text : NULL);
 }
 
 static void
@@ -2228,19 +2234,45 @@ add_action_column (GtkColumnView *view)
     g_object_unref (column);
 }
 
+static void on_popover_closed (GtkPopover *popover, gpointer user_data);
+static void popup_menu_at (GtkWidget *popover, GtkWidget *over, double x, double y);
+
+static gboolean
+popup_token_menu_from_keyboard (OTPClientWindow *self)
+{
+    if (window_is_locked (self) ||
+        gtk_single_selection_get_selected (self->otp_selection) == GTK_INVALID_LIST_POSITION)
+        return FALSE;
+
+    GtkBuilder *builder = gtk_builder_new_from_resource (
+        "/com/github/paolostivanin/OTPClient/ui/context-menus.ui");
+    GMenuModel *menu = G_MENU_MODEL (gtk_builder_get_object (builder, "token_context_menu"));
+    GtkWidget *popover = gtk_popover_menu_new_from_model (menu);
+    double x = gtk_widget_get_width (self->otp_list) / 2.0;
+    double y = gtk_widget_get_height (self->otp_list) / 2.0;
+    popup_menu_at (popover, self->otp_list, x, y);
+    g_object_unref (builder);
+    return TRUE;
+}
+
 static gboolean
 on_token_key_pressed (GtkEventControllerKey *controller, guint keyval,
                       guint keycode, GdkModifierType state, gpointer data)
 {
     (void) controller;
     (void) keycode;
+    OTPClientWindow *self = data;
+    gboolean context_menu = keyval == GDK_KEY_Menu ||
+        (keyval == GDK_KEY_F10 && (state & GDK_SHIFT_MASK) != 0);
+    if (context_menu)
+        return popup_token_menu_from_keyboard (self);
+
     gboolean activate = ((keyval == GDK_KEY_Return || keyval == GDK_KEY_KP_Enter) &&
                          (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == 0) ||
                         ((keyval == GDK_KEY_c || keyval == GDK_KEY_C) &&
                          (state & (GDK_CONTROL_MASK | GDK_ALT_MASK | GDK_SUPER_MASK)) == GDK_CONTROL_MASK);
     if (!activate)
         return FALSE;
-    OTPClientWindow *self = data;
     trigger_otp_action_for_entry (self, OTP_ENTRY (gtk_single_selection_get_selected_item (self->otp_selection)));
     return TRUE;
 }
@@ -2648,6 +2680,7 @@ otpclient_window_dispose (GObject *object)
         g_cancellable_cancel (win->cross_db_cancellable);
     if (win->webcam_cancellable != NULL)
         g_cancellable_cancel (win->webcam_cancellable);
+    close_webcam_progress (win);
     if (win->clipboard_cancellable != NULL)
         g_cancellable_cancel (win->clipboard_cancellable);
     if (win->file_dialog_cancellable != NULL)
@@ -2742,6 +2775,7 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
         g_cancellable_cancel (self->cross_db_cancellable);
     if (self->webcam_cancellable != NULL)
         g_cancellable_cancel (self->webcam_cancellable);
+    close_webcam_progress (self);
     if (self->clipboard_cancellable != NULL)
         g_cancellable_cancel (self->clipboard_cancellable);
     if (self->file_dialog_cancellable != NULL)
@@ -2783,13 +2817,6 @@ otpclient_window_get_otp_store (OTPClientWindow *self)
 {
     g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
     return self->otp_store;
-}
-
-GtkSingleSelection *
-otpclient_window_get_otp_selection (OTPClientWindow *self)
-{
-    g_return_val_if_fail (OTPCLIENT_IS_WINDOW (self), NULL);
-    return self->otp_selection;
 }
 
 static void
@@ -3317,6 +3344,26 @@ action_add_qr_file (GtkWidget  *widget,
 }
 
 static void
+close_webcam_progress (OTPClientWindow *self)
+{
+    if (self->webcam_dialog == NULL)
+        return;
+    GtkWindow *dialog = self->webcam_dialog;
+    self->webcam_dialog = NULL;
+    gtk_window_destroy (dialog);
+    g_object_unref (dialog);
+}
+
+static void
+on_webcam_cancel_clicked (GtkButton *button G_GNUC_UNUSED,
+                          OTPClientWindow *self)
+{
+    if (self->webcam_cancellable != NULL)
+        g_cancellable_cancel (self->webcam_cancellable);
+    close_webcam_progress (self);
+}
+
+static void
 on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
                      GAsyncResult *result,
                      gpointer      user_data)
@@ -3327,6 +3374,9 @@ on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
         window_async_context_free (ctx);
         return;
     }
+
+    close_webcam_progress (self);
+    g_clear_object (&self->webcam_cancellable);
 
     GError *err = NULL;
     g_autofree gchar *otpauth_uri = webcam_scan_qrcode_finish (result, &err);
@@ -3365,9 +3415,39 @@ action_add_qr_webcam (GtkWidget  *widget,
     (void) parameter;
 
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    if (self->webcam_cancellable != NULL) {
+        show_error_toast (self, "%s", _("A webcam scan is already running."));
+        return;
+    }
 
-    g_clear_object (&self->webcam_cancellable);
     self->webcam_cancellable = g_cancellable_new ();
+
+    GtkWindow *dialog = GTK_WINDOW (gtk_window_new ());
+    g_object_ref_sink (dialog);
+    self->webcam_dialog = dialog;
+    gtk_window_set_title (dialog, _("Scan QR Code"));
+    gtk_window_set_transient_for (dialog, GTK_WINDOW (self));
+    gtk_window_set_modal (dialog, TRUE);
+    gtk_window_set_resizable (dialog, FALSE);
+
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+    gtk_widget_set_margin_top (box, 24);
+    gtk_widget_set_margin_bottom (box, 24);
+    gtk_widget_set_margin_start (box, 24);
+    gtk_widget_set_margin_end (box, 24);
+    GtkWidget *spinner = gtk_spinner_new ();
+    gtk_spinner_start (GTK_SPINNER (spinner));
+    gtk_widget_set_halign (spinner, GTK_ALIGN_CENTER);
+    gtk_box_append (GTK_BOX (box), spinner);
+    GtkWidget *label = gtk_label_new (_("Scanning for a QR code…"));
+    gtk_box_append (GTK_BOX (box), label);
+    GtkWidget *cancel = gtk_button_new_with_label (_("Cancel"));
+    gtk_widget_set_halign (cancel, GTK_ALIGN_CENTER);
+    g_signal_connect (cancel, "clicked", G_CALLBACK (on_webcam_cancel_clicked), self);
+    gtk_box_append (GTK_BOX (box), cancel);
+    gtk_window_set_child (dialog, box);
+    gtk_window_present (dialog);
+
     webcam_scan_qrcode_async (self->webcam_cancellable, on_webcam_scan_done,
                               window_async_context_new (self));
 }
@@ -4345,9 +4425,6 @@ action_new_group (GtkWidget  *widget,
     adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
                              (GAsyncReadyCallback) on_new_group_response, ctx);
 }
-
-static void on_popover_closed (GtkPopover *popover, gpointer user_data);
-static void popup_menu_at (GtkWidget *popover, GtkWidget *over, double x, double y);
 
 static void
 on_token_right_click (GtkGestureClick *gesture,

@@ -13,7 +13,6 @@ GtkWidget          *otpclient_window_new            (OTPClientApplication *appli
 
 GListStore         *otpclient_window_get_otp_store  (OTPClientWindow *self);
 
-GtkSingleSelection *otpclient_window_get_otp_selection (OTPClientWindow *self);
 
 void                otpclient_window_start_otp_timer (OTPClientWindow *self);
 void                otpclient_window_stop_otp_timer  (OTPClientWindow *self);

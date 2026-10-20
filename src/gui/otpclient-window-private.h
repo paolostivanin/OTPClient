@@ -92,6 +92,7 @@ struct _OTPClientWindow
     GCancellable *cross_db_cancellable;
     guint64 cross_db_generation;
     GCancellable *webcam_cancellable;
+    GtkWindow *webcam_dialog;
     GCancellable *clipboard_cancellable;
     GCancellable *file_dialog_cancellable;
     gboolean disposing;

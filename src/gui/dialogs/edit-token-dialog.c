@@ -1,5 +1,7 @@
 #include "sensitive-dialog.h"
 #include <glib/gi18n.h>
+#include <errno.h>
+#include <stdlib.h>
 #include "edit-token-dialog.h"
 #include "common.h"
 #include "db-common.h"
@@ -21,6 +23,7 @@ struct _EditTokenDialog
     GtkWidget *label_row;
     GtkWidget *issuer_row;
     GtkWidget *group_row;
+    GtkWidget *counter_row;
     GtkWidget *save_button;
     GtkWidget *error_label;
 };
@@ -33,6 +36,8 @@ typedef struct {
     gchar *label;
     gchar *issuer;
     gchar *group;
+    guint64 counter;
+    gboolean update_counter;
 } EditTokenMutation;
 
 static gboolean
@@ -55,6 +60,9 @@ edit_token_mutation (json_t   *candidate,
         json_object_set_new (token_obj, "group", json_string (mutation->group));
     else
         json_object_del (token_obj, "group");
+
+    if (mutation->update_counter)
+        json_object_set_new (token_obj, "counter", json_integer ((json_int_t) mutation->counter));
 
     return otp_validate_token_object (token_obj, mutation->token_index, err);
 }
@@ -81,6 +89,27 @@ on_save_clicked (GtkButton       *button,
     const gchar *label_text = gtk_editable_get_text (GTK_EDITABLE (self->label_row));
     const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (self->issuer_row));
     const gchar *group_text = gtk_editable_get_text (GTK_EDITABLE (self->group_row));
+    const gchar *type = json_string_value (json_object_get (self->original_token, "type"));
+    gboolean update_counter = type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0;
+    guint64 counter = 0;
+    if (update_counter) {
+        const gchar *counter_text = gtk_editable_get_text (GTK_EDITABLE (self->counter_row));
+        gchar *end = NULL;
+        gboolean digits_only = counter_text[0] != '\0';
+        for (const gchar *p = counter_text; *p != '\0'; p++)
+            digits_only &= g_ascii_isdigit (*p);
+        errno = 0;
+        counter = g_ascii_strtoull (counter_text, &end, 10);
+        guint64 original_counter = (guint64) json_integer_value (
+            json_object_get (self->original_token, "counter"));
+        if (!digits_only || end == counter_text || *end != '\0' || errno == ERANGE ||
+            counter > OTP_HOTP_COUNTER_MAX || counter < original_counter) {
+            gtk_label_set_text (GTK_LABEL (self->error_label),
+                                _("Enter a counter at or above the current value, within the supported range."));
+            gtk_widget_set_visible (self->error_label, TRUE);
+            return;
+        }
+    }
 
     GError *err = NULL;
     EditTokenMutation mutation = {
@@ -89,6 +118,8 @@ on_save_clicked (GtkButton       *button,
         .label = (gchar *) label_text,
         .issuer = (gchar *) issuer,
         .group = (gchar *) group_text,
+        .counter = counter,
+        .update_counter = update_counter,
     };
     db_transaction (self->db_data, edit_token_mutation, &mutation, &err);
     if (err != NULL)
@@ -222,6 +253,22 @@ edit_token_dialog_new (json_t            *token_obj,
     adw_preferences_group_add (ADW_PREFERENCES_GROUP (info_group), digits_row);
 
     gtk_box_append (GTK_BOX (box), info_group);
+
+    if (type != NULL && g_ascii_strcasecmp (type, "HOTP") == 0) {
+        GtkWidget *counter_group = adw_preferences_group_new ();
+        adw_preferences_group_set_title (ADW_PREFERENCES_GROUP (counter_group), _("Advanced"));
+        self->counter_row = adw_entry_row_new ();
+        adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->counter_row),
+                                       _("Next unused counter"));
+        g_autofree gchar *counter_text = g_strdup_printf (
+            "%" G_GUINT64_FORMAT,
+            (guint64) json_integer_value (json_object_get (token_obj, "counter")));
+        gtk_editable_set_text (GTK_EDITABLE (self->counter_row), counter_text);
+        adw_preferences_group_add (ADW_PREFERENCES_GROUP (counter_group), self->counter_row);
+        adw_preferences_group_set_description (ADW_PREFERENCES_GROUP (counter_group),
+            _("Increase this only to match the counter expected by the provider. It cannot be decreased."));
+        gtk_box_append (GTK_BOX (box), counter_group);
+    }
 
     /* Error label */
     self->error_label = gtk_label_new (NULL);

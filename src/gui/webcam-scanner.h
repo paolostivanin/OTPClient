@@ -5,8 +5,6 @@
 
 G_BEGIN_DECLS
 
-gchar *webcam_scan_qrcode (GError **err);
-
 void   webcam_scan_qrcode_async  (GCancellable        *cancellable,
                                   GAsyncReadyCallback  callback,
                                   gpointer             user_data);

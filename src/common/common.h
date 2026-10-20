@@ -96,7 +96,6 @@ json_t           *build_json_obj                 (const gchar        *type,
 
 json_t           *get_json_root                  (const gchar        *path);
 
-void              json_free                      (gpointer            data);
 
 GKeyFile         *get_kf_ptr                     (void);
 

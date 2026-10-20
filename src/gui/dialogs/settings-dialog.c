@@ -603,8 +603,8 @@ on_import_file_open_complete (GObject      *source,
         return;
     }
 
-    gchar *contents = NULL;
-    if (!g_file_get_contents (path, &contents, NULL, &err)) {
+    gchar *contents = settings_json_read_file (path, &err);
+    if (contents == NULL) {
         show_settings_error (self, _("Import Failed"), err->message);
         g_clear_error (&err);
         return;

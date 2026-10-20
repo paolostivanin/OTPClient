@@ -406,7 +406,7 @@ manual_add_dialog_new (DatabaseData      *db_data,
     gtk_box_append (GTK_BOX (box), settings_group);
 
     /* SHA1 warning banner */
-    self->sha1_banner = adw_banner_new (_("SHA1 is considered weak. Use SHA256 or SHA512 if your provider supports it."));
+    self->sha1_banner = adw_banner_new (_("Use the hash algorithm specified by your provider. Changing it can make generated codes invalid."));
     adw_banner_set_revealed (ADW_BANNER (self->sha1_banner), TRUE);
     gtk_box_append (GTK_BOX (box), self->sha1_banner);
 

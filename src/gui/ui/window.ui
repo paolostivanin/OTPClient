@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <template class="OTPClientWindow" parent="AdwApplicationWindow">
-    <property name="default-width">400</property>
+    <property name="default-width">720</property>
     <property name="default-height">600</property>
     <property name="content">
       <object class="AdwToolbarView">
@@ -142,7 +142,7 @@
                         <property name="child">
                           <object class="GtkScrolledWindow">
                             <property name="vexpand">True</property>
-                            <property name="hscrollbar-policy">never</property>
+                            <property name="hscrollbar-policy">automatic</property>
                             <child>
                               <object class="GtkColumnView" id="otp_list">
                                 <property name="vexpand">True</property>

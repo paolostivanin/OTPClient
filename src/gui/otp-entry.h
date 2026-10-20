@@ -24,13 +24,6 @@ const gchar *otp_entry_get_otp_value(OTPEntry *self);
 const gchar *otp_entry_get_otp_type (OTPEntry *self);
 guint32      otp_entry_get_period   (OTPEntry *self);
 guint64      otp_entry_get_counter  (OTPEntry *self);
-const gchar *otp_entry_get_algorithm(OTPEntry *self);
-guint32      otp_entry_get_digits   (OTPEntry *self);
-
-void         otp_entry_set_account  (OTPEntry    *self,
-                                     const gchar *account);
-void         otp_entry_set_issuer   (OTPEntry    *self,
-                                     const gchar *issuer);
 void         otp_entry_set_otp_value(OTPEntry    *self,
                                      const gchar *otp_value);
 void         otp_entry_set_counter  (OTPEntry    *self,

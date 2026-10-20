@@ -197,8 +197,8 @@ command_line (GApplication                *application __attribute__((unused)),
 
     if (cmdline_opts->import_settings) {
         GError *err = NULL;
-        gchar *contents = NULL;
-        if (!g_file_get_contents (cmdline_opts->import_file, &contents, NULL, &err)) {
+        gchar *contents = settings_json_read_file (cmdline_opts->import_file, &err);
+        if (contents == NULL) {
             g_application_command_line_printerr (cmdline, _("Error reading file: %s\n"), err->message);
             g_clear_error (&err);
             g_free_cmdline_opts (cmdline_opts);

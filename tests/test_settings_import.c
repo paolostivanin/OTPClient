@@ -16,7 +16,9 @@
 
 #include <glib.h>
 #include <gio/gio.h>
+#include <glib/gstdio.h>
 #include <jansson.h>
+#include <string.h>
 #include "settings-import-export.h"
 #include "gsettings-common.h"
 
@@ -59,6 +61,32 @@ import (const gchar *json, gboolean *touched_startup)
 
 /* An import with nothing to say about starting up must not cost a portal round
  * trip, nor leave a note asking for one. */
+static void
+test_settings_reader_is_bounded (void)
+{
+    g_autofree gchar *directory = g_dir_make_tmp ("otpclient-settings-read-XXXXXX", NULL);
+    g_autofree gchar *path = g_build_filename (directory, "settings.json", NULL);
+    g_autoptr (GError) err = NULL;
+
+    g_assert_true (g_file_set_contents (path, "{}", -1, &err));
+    g_assert_no_error (err);
+    g_autofree gchar *contents = settings_json_read_file (path, &err);
+    g_assert_no_error (err);
+    g_assert_cmpstr (contents, ==, "{}");
+
+    g_autofree gchar *large = g_malloc0 (SETTINGS_JSON_MAX_BYTES + 2);
+    memset (large, ' ', SETTINGS_JSON_MAX_BYTES + 1);
+    g_assert_true (g_file_set_contents (path, large, SETTINGS_JSON_MAX_BYTES + 1, &err));
+    g_assert_no_error (err);
+    g_clear_pointer (&contents, g_free);
+    contents = settings_json_read_file (path, &err);
+    g_assert_null (contents);
+    g_assert_error (err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA);
+    g_clear_error (&err);
+    g_unlink (path);
+    g_rmdir (directory);
+}
+
 static void
 test_ordinary_import_is_not_startup (void)
 {
@@ -324,6 +352,8 @@ main (int argc, char *argv[])
 
     g_test_add_func ("/settings-import/ordinary-key-is-not-startup",
                      test_ordinary_import_is_not_startup);
+    g_test_add_func ("/settings-import/bounded-reader",
+                     test_settings_reader_is_bounded);
     g_test_add_func ("/settings-import/startup/everything-off",
                      test_startup_import_turning_everything_off);
     g_test_add_func ("/settings-import/startup/something-on",

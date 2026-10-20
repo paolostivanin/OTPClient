@@ -1923,15 +1923,13 @@ encrypt_db (DatabaseData *db_data,
 
 
 static gboolean
-perform_backup_restore (const gchar *path,
-                        gboolean     is_backup,
-                        GError     **out_err)
+backup_db (const gchar *path,
+           GError     **out_err)
 {
     GError *err = NULL;
-    gchar *src_path = is_backup ? g_strdup (path) : g_strconcat (path, ".bak", NULL);
-    gchar *dst_path = is_backup ? g_strconcat (path, ".bak", NULL) : g_strdup (path);
+    g_autofree gchar *dst_path = g_strconcat (path, ".bak", NULL);
 
-    GFile *src = g_file_new_for_path (src_path);
+    GFile *src = g_file_new_for_path (path);
     GFile *dst = g_file_new_for_path (dst_path);
 
     /* Tighten umask so a freshly-created destination is born 0600 instead of
@@ -1942,8 +1940,7 @@ perform_backup_restore (const gchar *path,
     umask (old_umask);
 
     if (!copied) {
-        g_propagate_prefixed_error (out_err, err, "Couldn't %s: ",
-                                    is_backup ? "create the backup" : "restore the backup");
+        g_propagate_prefixed_error (out_err, err, "Couldn't create the backup: ");
         err = NULL;
     } else {
         /* Belt-and-braces: if the destination already existed with broader
@@ -1957,20 +1954,9 @@ perform_backup_restore (const gchar *path,
         }
     }
 
-    g_free (src_path);
-    g_free (dst_path);
-
     g_object_unref (src);
     g_object_unref (dst);
     return copied;
-}
-
-
-static gboolean
-backup_db (const gchar *path,
-           GError     **err)
-{
-    return perform_backup_restore (path, TRUE, err);
 }
 
 

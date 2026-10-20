@@ -145,6 +145,17 @@ on_file_dialog_save_complete (GObject      *source,
     }
 
     guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
+    static const char * const export_names[] = {
+        "otpclient-freeotp.json",
+        "otpclient-aegis.json",
+        "otpclient-aegis.json",
+        "otpclient-authpro.json",
+        "otpclient-authpro.json",
+        "otpclient-2fas.json",
+        "otpclient-2fas.json"
+    };
+    gtk_file_dialog_set_initial_name (dialog,
+                                     export_names[MIN (fmt, N_EXPORT_FORMATS - 1)]);
     const gchar *password = NULL;
     if (gtk_widget_get_visible (self->password_row))
     {
@@ -201,7 +212,10 @@ on_file_dialog_save_complete (GObject      *source,
      * successful export does NOT count as a token-database backup - the
      * reminder is updated by Settings -> Backup -> "Back up tokens". */
 
-    adw_dialog_close (ADW_DIALOG (self));
+    gtk_label_set_text (GTK_LABEL (self->error_label), _("Export completed successfully."));
+    gtk_widget_remove_css_class (self->error_label, "error");
+    gtk_widget_add_css_class (self->error_label, "success");
+    gtk_widget_set_visible (self->error_label, TRUE);
 }
 
 static void
@@ -279,17 +293,21 @@ export_dialog_new (DatabaseData *db_data,
     GtkWidget *group = adw_preferences_group_new ();
 
     const char * const format_items[] = {
-        "FreeOTP+ (Plain)",
-        "Aegis (Plain JSON)",
-        "Aegis (Encrypted)",
-        "AuthPro (Plain JSON)",
-        "AuthPro (Encrypted)",
-        "2FAS (Plain JSON)",
-        "2FAS (Encrypted)",
+        N_("FreeOTP+ (Plain)"),
+        N_("Aegis (Plain JSON)"),
+        N_("Aegis (Encrypted)"),
+        N_("AuthPro (Plain JSON)"),
+        N_("AuthPro (Encrypted)"),
+        N_("2FAS (Plain JSON)"),
+        N_("2FAS (Encrypted)"),
         NULL
     };
 
-    GtkStringList *format_model = gtk_string_list_new (format_items);
+    const char *translated_items[N_EXPORT_FORMATS + 1];
+    for (guint i = 0; i < N_EXPORT_FORMATS; i++)
+        translated_items[i] = _(format_items[i]);
+    translated_items[N_EXPORT_FORMATS] = NULL;
+    GtkStringList *format_model = gtk_string_list_new (translated_items);
     self->format_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->format_combo), _("Format"));
     adw_combo_row_set_model (ADW_COMBO_ROW (self->format_combo), G_LIST_MODEL (format_model));
@@ -330,6 +348,7 @@ export_dialog_new (DatabaseData *db_data,
     gtk_widget_set_halign (self->export_button, GTK_ALIGN_CENTER);
     g_signal_connect (self->export_button, "clicked", G_CALLBACK (on_export_clicked), self);
     gtk_box_append (GTK_BOX (box), self->export_button);
+    adw_combo_row_set_selected (ADW_COMBO_ROW (self->format_combo), EXPORT_FMT_AEGIS_ENC);
 
     GtkWidget *scrolled = gtk_scrolled_window_new ();
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled),
