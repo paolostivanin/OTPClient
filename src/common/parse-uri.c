@@ -18,6 +18,7 @@ static void   free_parsed_otp      (otp_t         *otp);
 void
 set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiagnostics *diagnostics)
 {
+    GSList *parsed = NULL;
     gchar **uris = g_strsplit (otpauth_uris, "\n", -1);
     guint i = 0, uris_len = g_strv_length (uris);
     guint accepted_count = g_slist_length (*otps);
@@ -26,7 +27,7 @@ set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiag
         for (; i < uris_len; i++) {
             haystack = g_strrstr (uris[i], "otpauth");
             if (haystack != NULL) {
-                parse_uri (haystack, otps, diagnostics, i, &accepted_count);
+                parse_uri (haystack, &parsed, diagnostics, i, &accepted_count);
             } else if (g_strstrip (uris[i])[0] != '\0' && uris[i][0] != '#') {
                 otp_import_diagnostics_add (diagnostics, i, _("Not an OTP URI."));
             }
@@ -38,7 +39,11 @@ set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiag
     for (guint k = 0; k < uris_len; k++)
         explicit_bzero (uris[k], strlen (uris[k]));
     g_strfreev (uris);
-    *otps = g_slist_reverse (*otps);
+    parsed = g_slist_reverse (parsed);
+    if (*otps == NULL)
+        *otps = parsed;
+    else
+        g_slist_last (*otps)->next = parsed;
 }
 
 
