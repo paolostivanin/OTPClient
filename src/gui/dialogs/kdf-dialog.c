@@ -21,6 +21,74 @@ struct _KdfDialog
 
 G_DEFINE_FINAL_TYPE (KdfDialog, kdf_dialog, ADW_TYPE_DIALOG)
 
+typedef struct {
+    GWeakRef dialog_ref;
+    DatabaseData *db_data;
+    guint lock_generation;
+    gint32 iter;
+    gint32 memcost;
+    gint32 parallelism;
+} KdfTaskData;
+
+static void
+kdf_task_data_free (gpointer data)
+{
+    KdfTaskData *td = data;
+    g_weak_ref_clear (&td->dialog_ref);
+    database_data_free (td->db_data);
+    g_free (td);
+}
+
+static void
+kdf_update_thread (GTask *task, gpointer source, gpointer task_data,
+                   GCancellable *cancellable)
+{
+    (void) source;
+    (void) cancellable;
+    KdfTaskData *td = task_data;
+    GError *err = NULL;
+    if (db_update_kdf_params (td->db_data, td->iter, td->memcost,
+                              td->parallelism, &err))
+        g_task_return_boolean (task, TRUE);
+    else
+        g_task_return_error (task, err != NULL ? err :
+            g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED,
+                                 "Could not update KDF parameters."));
+}
+
+static void
+kdf_update_done (GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    (void) user_data;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (source);
+    GTask *task = G_TASK (result);
+    KdfTaskData *td = g_task_get_task_data (task);
+    otpclient_application_end_database_operation (app, td->db_data);
+    g_autoptr (KdfDialog) self = g_weak_ref_get (&td->dialog_ref);
+    GError *err = NULL;
+    gboolean success = g_task_propagate_boolean (task, &err);
+    if (self == NULL) {
+        g_clear_error (&err);
+        return;
+    }
+    if (td->lock_generation != otpclient_application_get_lock_generation (app) ||
+        otpclient_application_get_app_locked (app)) {
+        adw_dialog_close (ADW_DIALOG (self));
+        g_clear_error (&err);
+        return;
+    }
+    if (!success) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            err != NULL ? err->message : _("Could not update KDF parameters."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        gtk_button_set_label (GTK_BUTTON (self->apply_btn), _("Apply"));
+        gtk_widget_set_sensitive (self->apply_btn, TRUE);
+        g_clear_error (&err);
+        return;
+    }
+    adw_dialog_close (ADW_DIALOG (self));
+}
+
 /* Index 3 = Custom; the first three rows are honored presets. */
 static const struct {
     gint32 iter;
@@ -139,22 +207,26 @@ on_apply_clicked (GtkButton *button,
         return;
     }
 
-    /* Argon2id derive runs synchronously on the UI thread; disable the button
-     * to block re-entry from a double-click while the re-encrypt is in flight. */
-    gtk_widget_set_sensitive (self->apply_btn, FALSE);
-
-    GError *err = NULL;
-    db_update_kdf_params (self->db_data, new_iter, new_mc, new_par, &err);
-    if (err != NULL)
-    {
-        gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
+    if (!otpclient_application_begin_database_operation (app, self->db_data)) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("Another database operation is already in progress."));
         gtk_widget_set_visible (self->error_label, TRUE);
-        g_clear_error (&err);
-        gtk_widget_set_sensitive (self->apply_btn, TRUE);
         return;
     }
 
-    adw_dialog_close (ADW_DIALOG (self));
+    KdfTaskData *td = g_new0 (KdfTaskData, 1);
+    g_weak_ref_init (&td->dialog_ref, self);
+    td->db_data = database_data_ref (self->db_data);
+    td->lock_generation = otpclient_application_get_lock_generation (app);
+    td->iter = new_iter;
+    td->memcost = new_mc;
+    td->parallelism = new_par;
+    gtk_widget_set_sensitive (self->apply_btn, FALSE);
+    gtk_button_set_label (GTK_BUTTON (self->apply_btn), _("Applying…"));
+    GTask *task = g_task_new (app, NULL, kdf_update_done, NULL);
+    g_task_set_task_data (task, td, kdf_task_data_free);
+    g_task_run_in_thread (task, kdf_update_thread);
+    g_object_unref (task);
 }
 
 KdfDialog *

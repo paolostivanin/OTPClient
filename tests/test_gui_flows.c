@@ -697,6 +697,37 @@ test_db_replacement_bumps_generation (void)
     g_assert_true (otpclient_application_set_db_data (app, NULL));
 }
 
+static void
+test_encryption_operation_guards_database_lifetime (void)
+{
+    ReviewFixture fixture;
+    attach_fixture (&fixture);
+    DatabaseData *active = otpclient_application_get_db_data (app);
+    g_assert_true (otpclient_application_begin_database_operation (app, active));
+    g_assert_true (otpclient_application_is_database_operation_in_progress (app));
+
+    DatabaseData *replacement = database_data_new ("/tmp/otpclient-operation.enc",
+                                                   DEFAULT_MEMLOCK_VALUE);
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Refusing to replace the active database*");
+    g_assert_false (otpclient_application_set_db_data (app, replacement));
+    g_test_assert_expected_messages ();
+    g_assert_true (otpclient_application_get_db_data (app) == active);
+    database_data_free (replacement);
+
+    /* Auto-Lock can invalidate async UI work immediately, while the worker
+     * still owns the database. Secret clearing waits until the worker exits. */
+    otpclient_application_purge_secrets (app);
+    g_assert_nonnull (active->key);
+    g_assert_nonnull (active->in_memory_json_data);
+    otpclient_application_end_database_operation (app, active);
+    g_assert_false (otpclient_application_is_database_operation_in_progress (app));
+    g_assert_null (active->key);
+    g_assert_null (active->in_memory_json_data);
+    otpclient_application_set_app_locked (app, FALSE);
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -729,6 +760,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
     g_test_add_func ("/gui-flows/db-replacement-generation", test_db_replacement_bumps_generation);
+    g_test_add_func ("/gui-flows/encryption-operation-lifetime", test_encryption_operation_guards_database_lifetime);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

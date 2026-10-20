@@ -50,6 +50,17 @@ void                  otpclient_application_relocate_stored_password (OTPClientA
  * pointer to it and freeing under its feet is a use-after-free. */
 gboolean              otpclient_application_is_unlocking (OTPClientApplication *self);
 
+/* Serialize encryption changes that operate on the live DatabaseData. Locks
+ * may be requested during a job; secret purging is deferred until it ends. */
+gboolean              otpclient_application_begin_database_operation (
+                                                           OTPClientApplication *self,
+                                                           DatabaseData         *db_data);
+void                  otpclient_application_end_database_operation (
+                                                           OTPClientApplication *self,
+                                                           DatabaseData         *db_data);
+gboolean              otpclient_application_is_database_operation_in_progress (
+                                                           OTPClientApplication *self);
+
 #ifdef OTPCLIENT_TESTING
 /* Exercise replacement-boundary behavior without launching an Argon2 worker. */
 void                  otpclient_application_test_set_unlocking (OTPClientApplication *self,

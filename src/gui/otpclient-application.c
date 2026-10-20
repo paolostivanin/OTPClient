@@ -96,6 +96,8 @@ gboolean use_secret_service;
      * window: the worker still holds a raw pointer to db_data and freeing
      * it under the worker's feet is a use-after-free. */
     gboolean unlock_in_progress;
+    gboolean database_operation_in_progress;
+    gboolean purge_after_database_operation;
     guint lock_generation;
 };
 
@@ -146,6 +148,11 @@ static void otpclient_application_change_pwd     (GSimpleAction *simple,
 static void otpclient_application_db_info        (GSimpleAction *simple,
                                                    GVariant      *parameter,
                                                    gpointer       user_data);
+
+static gboolean on_change_password_received (const gchar  *current_password,
+                                              const gchar  *password,
+                                              gchar       **error_message,
+                                              gpointer      user_data);
 
 static void otpclient_application_kdf_settings   (GSimpleAction *simple,
                                                    GVariant      *parameter,
@@ -400,38 +407,77 @@ on_password_stored_gui (GObject      *source         __attribute__((unused)),
                                NULL);
 }
 
-static gboolean
-on_change_password_received (const gchar  *current_password,
-                              const gchar  *password,
-                              gchar       **error_message,
-                              gpointer      user_data)
+typedef struct {
+    DatabaseData *db_data;
+    gchar *password;
+    guint lock_generation;
+} PasswordChangeTaskData;
+
+static void
+password_change_task_data_free (gpointer data)
 {
-    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
-
-    if (password == NULL || self->db_data == NULL || self->app_locked)
-        return FALSE;
-
-    if (!password_bytes_equal (current_password, self->db_data->key))
-    {
-        if (error_message != NULL)
-            *error_message = g_strdup (_("Current password is incorrect"));
-        return FALSE;
+    PasswordChangeTaskData *td = data;
+    database_data_free (td->db_data);
+    if (td->password != NULL) {
+        explicit_bzero (td->password, strlen (td->password));
+        gcry_free (td->password);
     }
+    g_free (td);
+}
 
+static void
+password_change_thread (GTask *task, gpointer source, gpointer task_data,
+                        GCancellable *cancellable)
+{
+    (void) source;
+    (void) cancellable;
+    PasswordChangeTaskData *td = task_data;
     GError *err = NULL;
-    db_change_password (self->db_data, password, &err);
-    if (err != NULL)
-    {
-        g_warning ("Failed to update database with new password: %s", err->message);
-        if (error_message != NULL)
-            *error_message = g_strdup (err->message);
-        g_clear_error (&err);
-        return FALSE;
-    }
+    if (db_change_password (td->db_data, td->password, &err))
+        g_task_return_boolean (task, TRUE);
+    else
+        g_task_return_error (task, err != NULL ? err :
+            g_error_new_literal (G_IO_ERROR, G_IO_ERROR_FAILED,
+                                 "Could not change the database password."));
+}
 
-    /* Update secret service */
-    if (self->use_secret_service)
-    {
+static void
+present_password_change_error (OTPClientApplication *self, const gchar *message)
+{
+    if (self->window == NULL || self->app_locked || self->db_data == NULL)
+        return;
+    PasswordDialog *dialog = password_dialog_new (PASSWORD_MODE_CHANGE,
+                                                   on_change_password_received,
+                                                   self);
+    password_dialog_set_initial_error (dialog, message);
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (self->window));
+}
+
+static void
+on_password_change_done (GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    (void) user_data;
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (source);
+    GTask *task = G_TASK (result);
+    PasswordChangeTaskData *td = g_task_get_task_data (task);
+    otpclient_application_end_database_operation (self, td->db_data);
+    GError *err = NULL;
+    gboolean success = g_task_propagate_boolean (task, &err);
+    gboolean current_session = td->lock_generation == self->lock_generation &&
+        self->db_data == td->db_data && !self->app_locked;
+    if (!current_session) {
+        g_clear_error (&err);
+        return;
+    }
+    if (!success) {
+        g_warning ("Failed to update database with new password: %s",
+                   err != NULL ? err->message : "unknown error");
+        present_password_change_error (self,
+            err != NULL ? err->message : _("Could not change the database password."));
+        g_clear_error (&err);
+        return;
+    }
+    if (self->use_secret_service) {
         StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
         g_weak_ref_init (&ctx->app_ref, self);
         secret_password_store (OTPCLIENT_SCHEMA,
@@ -444,7 +490,45 @@ on_change_password_received (const gchar  *current_password,
                                "string", self->db_data->db_path,
                                NULL);
     }
+}
 
+static gboolean
+on_change_password_received (const gchar  *current_password,
+                             const gchar  *password,
+                             gchar       **error_message,
+                             gpointer      user_data)
+{
+    OTPClientApplication *self = OTPCLIENT_APPLICATION (user_data);
+    if (password == NULL || self->db_data == NULL || self->app_locked)
+        return FALSE;
+    if (!password_bytes_equal (current_password, self->db_data->key)) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Current password is incorrect"));
+        return FALSE;
+    }
+    if (!otpclient_application_begin_database_operation (self, self->db_data)) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Another database operation is already in progress"));
+        return FALSE;
+    }
+
+    gsize len = strlen (password);
+    gchar *secure_password = gcry_calloc_secure (len + 1, 1);
+    if (secure_password == NULL) {
+        otpclient_application_end_database_operation (self, self->db_data);
+        if (error_message != NULL)
+            *error_message = g_strdup (_("Secure memory is exhausted"));
+        return FALSE;
+    }
+    memcpy (secure_password, password, len);
+    PasswordChangeTaskData *td = g_new0 (PasswordChangeTaskData, 1);
+    td->db_data = database_data_ref (self->db_data);
+    td->password = secure_password;
+    td->lock_generation = self->lock_generation;
+    GTask *task = g_task_new (self, NULL, on_password_change_done, NULL);
+    g_task_set_task_data (task, td, password_change_task_data_free);
+    g_task_run_in_thread (task, password_change_thread);
+    g_object_unref (task);
     return TRUE;
 }
 
@@ -931,9 +1015,9 @@ on_password_received (const gchar  *current_password,
     /* A worker already owns a raw pointer to the current db_data and is
      * reading/writing it. Starting a second one (e.g. a keyring reply that
      * raced a database switch or a manual submit) would corrupt that state. */
-    if (self->unlock_in_progress) {
+    if (self->unlock_in_progress || self->database_operation_in_progress) {
         if (error_message != NULL)
-            *error_message = g_strdup (_("The database is already being unlocked"));
+            *error_message = g_strdup (_("Another database operation is already in progress"));
         return FALSE;
     }
 
@@ -988,7 +1072,50 @@ otpclient_application_submit_unlock_password (OTPClientApplication *self,
             *error_message = g_strdup (_("The database is already being unlocked"));
         return FALSE;
     }
+    if (self->database_operation_in_progress) {
+        if (error_message != NULL)
+            *error_message = g_strdup (_("A database encryption change is still in progress"));
+        return FALSE;
+    }
     return on_password_received (NULL, password, error_message, self);
+}
+
+gboolean
+otpclient_application_begin_database_operation (OTPClientApplication *self,
+                                                DatabaseData *db_data)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    if (db_data == NULL || self->db_data != db_data || self->app_locked ||
+        self->unlock_in_progress || self->database_operation_in_progress)
+        return FALSE;
+    self->database_operation_in_progress = TRUE;
+    self->purge_after_database_operation = FALSE;
+    if (self->window != NULL)
+        otpclient_window_set_db_actions_enabled (self->window, FALSE);
+    return TRUE;
+}
+
+void
+otpclient_application_end_database_operation (OTPClientApplication *self,
+                                              DatabaseData *db_data)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (!self->database_operation_in_progress || self->db_data != db_data)
+        return;
+    self->database_operation_in_progress = FALSE;
+    if (self->purge_after_database_operation) {
+        self->purge_after_database_operation = FALSE;
+        database_data_purge_secrets (self->db_data);
+    }
+    if (!self->app_locked && self->window != NULL)
+        otpclient_window_set_db_actions_enabled (self->window, TRUE);
+}
+
+gboolean
+otpclient_application_is_database_operation_in_progress (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
+    return self->database_operation_in_progress;
 }
 
 void
@@ -999,7 +1126,9 @@ otpclient_application_purge_secrets (OTPClientApplication *self)
 
     /* If a worker is active it owns a raw db_data pointer. Its completion
      * observes the generation mismatch and performs the purge safely. */
-    if (!self->unlock_in_progress)
+    if (self->database_operation_in_progress)
+        self->purge_after_database_operation = TRUE;
+    else if (!self->unlock_in_progress)
         database_data_purge_secrets (self->db_data);
 }
 
@@ -1754,6 +1883,10 @@ otpclient_application_set_db_data (OTPClientApplication *self,
         g_warning ("Refusing to replace the active database while an unlock is in progress");
         return FALSE;
     }
+    if (self->database_operation_in_progress) {
+        g_warning ("Refusing to replace the active database while an encryption change is in progress");
+        return FALSE;
+    }
 
     /* Installing or clearing the active database invalidates every async
      * attempt that captured the previous generation. Doing it here, at the
@@ -1823,6 +1956,10 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
      * this while unlocking; enforce it at the API boundary too. */
     if (self->unlock_in_progress) {
         g_warning ("Ignoring database switch while an unlock is in progress");
+        return;
+    }
+    if (self->database_operation_in_progress) {
+        g_warning ("Ignoring database switch while an encryption change is in progress");
         return;
     }
 
