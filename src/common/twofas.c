@@ -761,7 +761,7 @@ parse_twofas_json_data (const gchar *data,
             } else {
                 otp->group = NULL;
             }
-            otps = g_slist_append (otps, otp);
+            otps = g_slist_prepend (otps, otp);
         } else {
             gcry_free (otp->secret);
             g_free (otp->issuer);
@@ -774,7 +774,7 @@ parse_twofas_json_data (const gchar *data,
 
     json_decref (array);
 
-    return otps;
+    return g_slist_reverse (otps);
 }
 
 GSList *

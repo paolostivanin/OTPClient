@@ -13,7 +13,6 @@ G_BEGIN_DECLS
 #define TWOFAS_PLAIN_ACTION_NAME        "twofas_plain"
 #define TWOFAS_ENC_ACTION_NAME          "twofas_encrypted"
 #define GOOGLE_FILE_ACTION_NAME         "import_google_qr_file"
-#define GOOGLE_WEBCAM_ACTION_NAME       "import_google_qr_webcam"
 
 GSList *get_data_from_provider (const gchar  *action_name,
                                 const gchar  *filename,

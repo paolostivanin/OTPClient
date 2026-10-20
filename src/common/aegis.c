@@ -730,7 +730,7 @@ parse_aegis_json_data (const gchar *data,
         if (!skip) {
             const gchar *group_val = json_string_value (json_object_get (obj, "group"));
             otp->group = (group_val != NULL) ? g_strdup (group_val) : NULL;
-            otps = g_slist_append (otps, otp);
+            otps = g_slist_prepend (otps, otp);
         } else {
             gcry_free (otp->secret);
             g_free (otp->issuer);
@@ -743,7 +743,7 @@ parse_aegis_json_data (const gchar *data,
 
     json_decref (root);
 
-    return otps;
+    return g_slist_reverse (otps);
 }
 
 

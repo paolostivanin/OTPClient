@@ -13,7 +13,6 @@ struct _EditTokenDialog
 {
     AdwDialog parent;
 
-    json_t *token_obj;
     json_t *original_token;
     guint token_index;
     DatabaseData *db_data;
@@ -179,7 +178,6 @@ edit_token_dialog_new (json_t            *token_obj,
                                           "content-height", 500,
                                           NULL);
 
-    self->token_obj = token_obj;
     self->original_token = json_deep_copy (token_obj);
     self->token_index = token_index;
     self->db_data = database_data_ref (db_data);

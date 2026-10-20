@@ -9,7 +9,8 @@
 #include "parse-uri.h"
 
 static void   parse_uri            (const gchar   *uri,
-                                    GSList       **otps, OtpImportDiagnostics *diagnostics, guint source_index);
+                                    GSList       **otps, OtpImportDiagnostics *diagnostics,
+                                    guint source_index, guint *accepted_count);
 
 static void   free_parsed_otp      (otp_t         *otp);
 
@@ -19,12 +20,13 @@ set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiag
 {
     gchar **uris = g_strsplit (otpauth_uris, "\n", -1);
     guint i = 0, uris_len = g_strv_length (uris);
+    guint accepted_count = g_slist_length (*otps);
     gchar *haystack = NULL;
     if (uris_len > 0) {
         for (; i < uris_len; i++) {
             haystack = g_strrstr (uris[i], "otpauth");
             if (haystack != NULL) {
-                parse_uri (haystack, otps, diagnostics, i);
+                parse_uri (haystack, otps, diagnostics, i, &accepted_count);
             } else if (g_strstrip (uris[i])[0] != '\0' && uris[i][0] != '#') {
                 otp_import_diagnostics_add (diagnostics, i, _("Not an OTP URI."));
             }
@@ -36,6 +38,7 @@ set_otps_from_uris_full (const gchar *otpauth_uris, GSList **otps, OtpImportDiag
     for (guint k = 0; k < uris_len; k++)
         explicit_bzero (uris[k], strlen (uris[k]));
     g_strfreev (uris);
+    *otps = g_slist_reverse (*otps);
 }
 
 
@@ -225,7 +228,8 @@ split_escaped_label (const gchar  *escaped_label,
 
 static void
 parse_uri (const gchar   *uri,
-           GSList       **otps, OtpImportDiagnostics *diagnostics, guint source_index)
+           GSList       **otps, OtpImportDiagnostics *diagnostics,
+           guint source_index, guint *accepted_count)
 {
     if (uri == NULL || g_ascii_strncasecmp (uri, "otpauth://", 10) != 0) {
         otp_import_diagnostics_add (diagnostics, source_index, _("Malformed or unsupported OTP URI."));
@@ -355,13 +359,14 @@ parse_uri (const gchar   *uri,
     GError *validation_err = NULL;
     /* Name an anonymous token rather than rejecting it (issue #462); the
      * commit path leaves it as-is once it carries a label. */
-    otp_repair_anonymous_import_token (otp, g_slist_length (*otps));
+    otp_repair_anonymous_import_token (otp, *accepted_count);
     if (!otp_validate_import_token (otp, &validation_err)) {
         otp_import_diagnostics_add (diagnostics, source_index, validation_err != NULL ? validation_err->message : _("Invalid token."));
         g_clear_error (&validation_err);
         free_parsed_otp (otp);
     } else {
-        *otps = g_slist_append (*otps, otp);
+        *otps = g_slist_prepend (*otps, otp);
+        (*accepted_count)++;
     }
 
     g_uri_unref (parsed);

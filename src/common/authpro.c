@@ -474,7 +474,7 @@ parse_authpro_json_data (const gchar *data,
         if (!skip) {
             const gchar *cat_name = g_hash_table_lookup (secret_cat_map, secret_str);
             otp->group = (cat_name != NULL) ? g_strdup (cat_name) : NULL;
-            otps = g_slist_append (otps, otp);
+            otps = g_slist_prepend (otps, otp);
         } else {
             gcry_free (otp->secret);
             g_free (otp->issuer);
@@ -490,7 +490,7 @@ parse_authpro_json_data (const gchar *data,
 
     json_decref (root);
 
-    return otps;
+    return g_slist_reverse (otps);
 }
 
 GSList *
