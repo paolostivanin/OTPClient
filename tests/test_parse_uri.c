@@ -19,7 +19,7 @@ test_valid_uri (void)
     g_assert_cmpstr (otp->secret, ==, "JBSWY3DPEHPK3PXP");
     g_assert_cmpuint (otp->period, ==, 30);
 
-    free_otps_gslist (otps, 0);
+    free_otps_gslist (otps);
 }
 
 static void

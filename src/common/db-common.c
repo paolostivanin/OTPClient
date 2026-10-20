@@ -126,9 +126,6 @@ static gboolean  encrypt_db         (DatabaseData     *db_data,
                                      json_t           *json_data,
                                      GError          **err);
 
-static gboolean  add_to_json        (gpointer          list_elem,
-                                     gpointer          json_array);
-
 static gboolean  backup_db          (const gchar      *path,
                                      GError          **err);
 
@@ -156,8 +153,6 @@ static void      install_committed_file_digest (DatabaseData *db_data,
 
 static gboolean  loaded_file_digest_matches (DatabaseData *db_data,
                                              GError      **err);
-
-static void      rebuild_objects_hash (DatabaseData *db_data);
 
 static void      refresh_committed_snapshot (DatabaseData *db_data);
 
@@ -207,18 +202,6 @@ database_data_purge_secrets (DatabaseData *db_data)
         json_decref (db_data->quarantined_tokens);
         db_data->quarantined_tokens = NULL;
     }
-
-    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
-    db_data->data_to_add = NULL;
-    g_slist_free_full (db_data->objects_hash, g_free);
-    db_data->objects_hash = NULL;
-
-    if (db_data->last_hotp != NULL) {
-        explicit_bzero (db_data->last_hotp, strlen (db_data->last_hotp));
-        g_free (db_data->last_hotp);
-        db_data->last_hotp = NULL;
-    }
-    g_clear_pointer (&db_data->last_hotp_update, g_date_time_unref);
 
     explicit_bzero (db_data->loaded_file_digest,
                     sizeof (db_data->loaded_file_digest));
@@ -703,9 +686,6 @@ load_db (DatabaseData    *db_data,
              * again. */
             db_data->in_memory_json_data = NULL;
         }
-        g_slist_free_full (db_data->objects_hash, g_free);
-        db_data->objects_hash = NULL;
-
         in_memory_json = decrypt_db (db_data, &in_memory_json_len, err);
         if (in_memory_json == NULL)
             return;
@@ -724,7 +704,6 @@ load_db (DatabaseData    *db_data,
             return;
     }
 
-    rebuild_objects_hash (db_data);
     refresh_committed_snapshot (db_data);
 
     /* decrypt_db records the digest of the exact authenticated bytes. Do not
@@ -752,18 +731,6 @@ update_db (DatabaseData  *db_data,
         db_data->argon2id_iter = ARGON2ID_DEFAULT_ITER;
         db_data->argon2id_memcost = ARGON2ID_DEFAULT_MC;
         db_data->argon2id_parallelism = ARGON2ID_DEFAULT_PARAL;
-    }
-
-    if (db_data->data_to_add != NULL) {
-        for (GSList *l = db_data->data_to_add; l != NULL; l = l->next) {
-            if (!add_to_json (l->data, candidate)) {
-                g_set_error (err, generic_error_gquark (), GENERIC_ERRCODE,
-                             "Failed to stage a pending token for saving.");
-                json_decref (candidate);
-                restore_live_from_committed (db_data);
-                return;
-            }
-        }
     }
 
     if (!otp_validate_database_root (candidate, err)) {
@@ -811,9 +778,6 @@ update_db (DatabaseData  *db_data,
     db_data->needs_legacy_kdf_migration = FALSE;
     refresh_committed_snapshot (db_data);
 
-    g_slist_free_full (db_data->data_to_add, (GDestroyNotify) json_decref);
-    db_data->data_to_add = NULL;
-    rebuild_objects_hash (db_data);
 
     /* The baseline was installed by encrypt_db from the exact committed bytes;
      * nothing to re-read here. */
@@ -878,7 +842,6 @@ db_transaction (DatabaseData   *db_data,
     db_data->in_memory_json_data = candidate;
     db_data->current_db_version = DB_VERSION;
     db_data->needs_legacy_kdf_migration = FALSE;
-    rebuild_objects_hash (db_data);
     refresh_committed_snapshot (db_data);
     /* The baseline was installed by encrypt_db from the exact committed bytes;
      * nothing to re-read here. */
@@ -1033,17 +996,29 @@ typedef struct {
 } ImportOtpsContext;
 
 
-static gboolean
-candidate_contains_object (json_t *candidate,
-                           json_t *obj)
+static GPtrArray *
+candidate_hash_bucket (GHashTable *index,
+                       json_t     *obj,
+                       gboolean    create)
 {
-    gsize index;
-    json_t *existing;
-
-    json_array_foreach (candidate, index, existing) {
-        if (json_equal (existing, obj))
-            return TRUE;
+    guint32 hash = json_object_get_hash (obj);
+    gpointer key = GUINT_TO_POINTER (hash);
+    GPtrArray *bucket = g_hash_table_lookup (index, key);
+    if (bucket == NULL && create) {
+        bucket = g_ptr_array_new ();
+        g_hash_table_insert (index, key, bucket);
     }
+    return bucket;
+}
+
+static gboolean
+candidate_hash_contains (GHashTable *index,
+                         json_t     *obj)
+{
+    GPtrArray *bucket = candidate_hash_bucket (index, obj, FALSE);
+    for (guint i = 0; bucket != NULL && i < bucket->len; i++)
+        if (json_equal (g_ptr_array_index (bucket, i), obj))
+            return TRUE;
     return FALSE;
 }
 
@@ -1058,6 +1033,15 @@ import_otps_mutation (json_t   *candidate,
     OtpImportReport local = {0, 0, 0};
     OtpImportReport *report = ctx->report != NULL ? ctx->report : &local;
     *report = (OtpImportReport) {0, 0, 0};
+
+    /* Exact equality remains the duplicate rule. The 32-bit content hash only
+     * narrows the candidates, avoiding a full database scan for each import. */
+    g_autoptr (GHashTable) index = g_hash_table_new_full (
+        g_direct_hash, g_direct_equal, NULL, (GDestroyNotify) g_ptr_array_unref);
+    gsize existing_index;
+    json_t *existing;
+    json_array_foreach (candidate, existing_index, existing)
+        g_ptr_array_add (candidate_hash_bucket (index, existing, TRUE), existing);
 
     gsize import_index = 0;
     for (GSList *l = ctx->otps; l != NULL; l = l->next, import_index++) {
@@ -1083,7 +1067,7 @@ import_otps_mutation (json_t   *candidate,
             return FALSE;
         }
 
-        if (candidate_contains_object (candidate, obj)) {
+        if (candidate_hash_contains (index, obj)) {
             json_decref (obj);
             report->skipped_duplicates++;
             continue;
@@ -1098,6 +1082,7 @@ import_otps_mutation (json_t   *candidate,
                                  "Failed to store imported token.");
             return FALSE;
         }
+        g_ptr_array_add (candidate_hash_bucket (index, obj, TRUE), obj);
         report->added++;
     }
 
@@ -1116,50 +1101,6 @@ db_import_otps (DatabaseData     *db_data,
         .report = report,
     };
     return db_transaction (db_data, import_otps_mutation, &ctx, err);
-}
-
-
-/* True when `obj` is byte-equal (per Jansson's json_equal) to any token already
- * present either on disk or staged for the next save. Used to break ties when
- * two distinct OTP tokens share a 32-bit jenkins hash - without this fallback
- * the second token would be silently skipped as a "duplicate". */
-static gboolean
-otp_object_already_present (DatabaseData *db_data,
-                            json_t       *obj)
-{
-    if (db_data->in_memory_json_data != NULL) {
-        gsize idx;
-        json_t *existing;
-        json_array_foreach (db_data->in_memory_json_data, idx, existing) {
-            if (json_equal (existing, obj))
-                return TRUE;
-        }
-    }
-    for (GSList *l = db_data->data_to_add; l != NULL; l = l->next) {
-        if (json_equal ((json_t *) l->data, obj))
-            return TRUE;
-    }
-    return FALSE;
-}
-
-
-static void
-rebuild_objects_hash (DatabaseData *db_data)
-{
-    g_slist_free_full (db_data->objects_hash, g_free);
-    db_data->objects_hash = NULL;
-
-    if (db_data->in_memory_json_data == NULL)
-        return;
-
-    gsize index;
-    json_t *obj;
-    json_array_foreach (db_data->in_memory_json_data, index, obj) {
-        guint32 hash = json_object_get_hash (obj);
-        db_data->objects_hash = g_slist_prepend (db_data->objects_hash,
-                                                 g_memdup2 (&hash, sizeof (guint32)));
-    }
-    db_data->objects_hash = g_slist_reverse (db_data->objects_hash);
 }
 
 
@@ -1183,92 +1124,6 @@ restore_live_from_committed (DatabaseData *db_data)
     if (db_data->in_memory_json_data != NULL)
         json_decref (db_data->in_memory_json_data);
     db_data->in_memory_json_data = json_deep_copy (db_data->committed_json_data);
-    rebuild_objects_hash (db_data);
-}
-
-
-void
-add_otps_to_db_ex (GSList       *otps,
-                   DatabaseData *db_data,
-                   guint        *added_out,
-                   guint        *skipped_out)
-{
-    guint added = 0, skipped = 0;
-    GSList *new_hashes = NULL;
-    GSList *new_data = NULL;
-    gsize import_index = 0;
-    for (GSList *l = otps; l != NULL; l = l->next, import_index++) {
-        otp_t *otp = l->data;
-        GError *validation_err = NULL;
-        /* Keep an anonymous imported token instead of dropping it (issue #462);
-         * a no-op if a parse-time repair already named it. */
-        otp_repair_anonymous_import_token (otp, import_index);
-        if (!otp_validate_import_token (otp, &validation_err)) {
-            if (validation_err != NULL) {
-                g_printerr ("Skipping invalid imported token: %s\n", validation_err->message);
-                g_clear_error (&validation_err);
-            }
-            skipped++;
-            continue;
-        }
-        json_t *obj = build_json_obj (otp->type, otp->account_name, otp->issuer, otp->secret, otp->digits, otp->algo, otp->period, otp->counter, otp->group);
-        if (obj == NULL) {
-            /* Secure-memory exhaustion while staging: skip rather than crash,
-             * and do not count it as added. */
-            skipped++;
-            continue;
-        }
-        guint32 hash = json_object_get_hash (obj);
-        gboolean is_duplicate = FALSE;
-        if (g_slist_find_custom (db_data->objects_hash, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
-            // Hash hit: confirm with a real content comparison before skipping.
-            // jenkins is 32-bit and the hashed string is bounded; collisions
-            // between distinct tokens are realistic and silent skipping causes
-            // user-visible data loss on import.
-            is_duplicate = otp_object_already_present (db_data, obj);
-        }
-        if (!is_duplicate &&
-            g_slist_find_custom (new_hashes, GUINT_TO_POINTER((guint)hash), check_duplicate) != NULL) {
-            for (GSList *staged = new_data; staged != NULL; staged = staged->next) {
-                if (json_equal ((json_t *) staged->data, obj)) {
-                    is_duplicate = TRUE;
-                    break;
-                }
-            }
-        }
-        if (!is_duplicate) {
-            new_hashes = g_slist_prepend (new_hashes, g_memdup2 (&hash, sizeof (guint32)));
-            new_data = g_slist_prepend (new_data, obj);
-            added++;
-        } else {
-            json_decref (obj);
-            skipped++;
-        }
-    }
-    db_data->objects_hash = g_slist_concat (db_data->objects_hash, g_slist_reverse (new_hashes));
-    db_data->data_to_add = g_slist_concat (db_data->data_to_add, g_slist_reverse (new_data));
-    if (added_out != NULL) *added_out = added;
-    if (skipped_out != NULL) *skipped_out = skipped;
-}
-
-
-void
-add_otps_to_db (GSList       *otps,
-                DatabaseData *db_data)
-{
-    add_otps_to_db_ex (otps, db_data, NULL, NULL);
-}
-
-
-gint
-check_duplicate (gconstpointer data,
-                 gconstpointer user_data)
-{
-    guint32 list_elem = *(guint32 *)data;
-    if (list_elem == (guint32)GPOINTER_TO_UINT(user_data)) {
-        return 0;
-    }
-    return -1;
 }
 
 
@@ -2064,18 +1919,6 @@ encrypt_db (DatabaseData *db_data,
     db_data->current_db_version = DB_VERSION;
     db_data->needs_legacy_kdf_migration = FALSE;
     return TRUE;
-}
-
-
-static gboolean
-add_to_json (gpointer list_elem,
-             gpointer json_array)
-{
-    // append_new (not append) for the freshly-created deep copy: append would
-    // bump the deep-copy's refcount to 2 with no local handle to decref, so
-    // the copy would persist indefinitely after the parent array is freed.
-    // Jansson consumes the deep copy even on failure, so no decref on error.
-    return json_array_append_new (json_array, json_deep_copy (list_elem)) == 0;
 }
 
 

@@ -249,13 +249,11 @@ test_import_anonymous_token_roundtrips (void)
     g_assert_no_error (err);
 
     GSList *otps = g_slist_append (NULL, anonymous_totp ());
-    guint added = 0, skipped = 0;
-    add_otps_to_db_ex (otps, writer, &added, &skipped);
-    g_assert_cmpuint (added, ==, 1);
-    g_assert_cmpuint (skipped, ==, 0);
-
-    update_db (writer, &err);           /* persist the staged import */
+    OtpImportReport report = {0};
+    g_assert_true (db_import_otps (writer, otps, &report, &err));
     g_assert_no_error (err);
+    g_assert_cmpuint (report.added, ==, 1);
+    g_assert_cmpuint (report.skipped_duplicates, ==, 0);
 
     DatabaseData *reader = database_data_new (path, DEFAULT_MEMLOCK_VALUE);
     reader->key = secure_strdup ("test-password");

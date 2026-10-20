@@ -99,6 +99,19 @@ gboolean use_secret_service;
     guint lock_generation;
 };
 
+static gint
+read_inactivity_timeout (GSettings *settings)
+{
+    guint timeout = g_settings_get_uint (settings, "auto-lock-timeout");
+    if (timeout == 0 || timeout > G_MAXINT) {
+        /* A corrupted or older imported value must never turn an enabled
+         * Auto-Lock into a negative timeout after the guint-to-gint cast. */
+        timeout = 300;
+        g_settings_set_uint (settings, "auto-lock-timeout", timeout);
+    }
+    return (gint) timeout;
+}
+
 G_DEFINE_TYPE (OTPClientApplication, otpclient_application, ADW_TYPE_APPLICATION)
 
 enum
@@ -1433,7 +1446,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->show_next_otp = g_settings_get_boolean (self->settings, "show-next-otp");
         self->disable_notifications = !g_settings_get_boolean (self->settings, "notification-enabled");
         self->auto_lock = g_settings_get_boolean (self->settings, "auto-lock");
-        self->inactivity_timeout = (gint)g_settings_get_uint (self->settings, "auto-lock-timeout");
+        self->inactivity_timeout = read_inactivity_timeout (self->settings);
         self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
         self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
         self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
@@ -1750,6 +1763,11 @@ otpclient_application_set_db_data (OTPClientApplication *self,
      * (even when it has the same path, e.g. the file was replaced). */
     self->lock_generation++;
 
+    if (self->db_data != db_data && self->window != NULL) {
+        otpclient_window_clear_undo_actions (self->window);
+        otpclient_window_invalidate_cross_db (self->window);
+    }
+
     database_data_free (self->db_data);
 
     self->db_data = db_data;
@@ -1816,6 +1834,7 @@ otpclient_application_switch_to_db (OTPClientApplication *self,
     {
         otpclient_window_stop_otp_timer (self->window);
         otpclient_window_clear_clipboard_now (self->window);
+        otpclient_window_clear_undo_actions (self->window);
         otpclient_window_invalidate_cross_db (self->window);
 
         GListStore *store = otpclient_window_get_otp_store (self->window);
@@ -1901,6 +1920,10 @@ gint otpclient_application_get_inactivity_timeout (OTPClientApplication *self)
 void otpclient_application_set_inactivity_timeout (OTPClientApplication *self, gint timeout)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (timeout <= 0) {
+        g_warning ("Ignoring invalid Auto-Lock timeout %d", timeout);
+        return;
+    }
     self->inactivity_timeout = timeout;
     if (self->settings != NULL)
         g_settings_set_uint (self->settings, "auto-lock-timeout", (guint)timeout);
@@ -1946,6 +1969,8 @@ gboolean otpclient_application_get_use_secret_service (OTPClientApplication *sel
 void otpclient_application_set_use_secret_service (OTPClientApplication *self, gboolean use_ss)
 {
     g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (self->use_secret_service != use_ss && self->window != NULL)
+        otpclient_window_invalidate_cross_db (self->window);
     self->use_secret_service = use_ss;
     if (self->settings != NULL)
         g_settings_set_boolean (self->settings, "secret-service", use_ss);
@@ -2159,9 +2184,12 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     self->show_next_otp = g_settings_get_boolean (self->settings, "show-next-otp");
     self->disable_notifications = !g_settings_get_boolean (self->settings, "notification-enabled");
     self->auto_lock = g_settings_get_boolean (self->settings, "auto-lock");
-    self->inactivity_timeout = (gint) g_settings_get_uint (self->settings, "auto-lock-timeout");
+    self->inactivity_timeout = read_inactivity_timeout (self->settings);
     self->use_dark_theme = g_settings_get_boolean (self->settings, "dark-theme");
+    gboolean old_use_secret_service = self->use_secret_service;
     self->use_secret_service = g_settings_get_boolean (self->settings, "secret-service");
+    if (old_use_secret_service && !self->use_secret_service && self->window != NULL)
+        otpclient_window_invalidate_cross_db (self->window);
     self->search_provider_enabled = g_settings_get_boolean (self->settings, "search-provider-enabled");
     g_free (self->search_provider_keyword);
     self->search_provider_keyword = g_settings_get_string (self->settings, "search-provider-keyword");

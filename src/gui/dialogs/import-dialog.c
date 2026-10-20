@@ -149,7 +149,7 @@ do_import (ImportDialog *self)
     {
         g_autofree gchar *message = g_strconcat (err->message, details[0] != '\0' ? "\n" : "", details, NULL);
         gtk_label_set_text (GTK_LABEL (self->error_label), message);
-        free_otps_gslist (otps, g_slist_length (otps));
+        free_otps_gslist (otps);
         gtk_widget_set_visible (self->error_label, TRUE);
         g_clear_error (&err);
         return;
@@ -170,7 +170,7 @@ do_import (ImportDialog *self)
             gtk_label_set_text (GTK_LABEL (self->error_label),
                                 _("The active database changed. Reopen this dialog before importing."));
             gtk_widget_set_visible (self->error_label, TRUE);
-            free_otps_gslist (otps, g_slist_length (otps));
+            free_otps_gslist (otps);
             return;
         }
 
@@ -181,10 +181,9 @@ do_import (ImportDialog *self)
             gtk_label_set_text (GTK_LABEL (self->error_label), err->message);
             gtk_widget_set_visible (self->error_label, TRUE);
             g_clear_error (&err);
-            /* update_db has already consumed data_to_add AND rolled
-             * in_memory_json_data back to disk state, so no extra cleanup
-             * is needed here beyond the otps list (parsed but not committed). */
-            free_otps_gslist (otps, g_slist_length (otps));
+            /* The transaction leaves the live database unchanged on failure;
+             * release the parsed OTP list before returning. */
+            free_otps_gslist (otps);
             return;
         }
 
@@ -194,8 +193,7 @@ do_import (ImportDialog *self)
         summary.details = details;
         summary.skipped = summary.skipped_duplicates + summary.skipped_invalid;
 
-        guint list_len = g_slist_length (otps);
-        free_otps_gslist (otps, list_len);
+        free_otps_gslist (otps);
     }
 
     adw_dialog_close (ADW_DIALOG (self));

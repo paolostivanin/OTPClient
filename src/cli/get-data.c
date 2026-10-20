@@ -96,9 +96,18 @@ show_token (DatabaseData *db_data, const gchar *account, const gchar *issuer,
                         csv_append_field (output, json_string_value (value));
                 }
                 g_string_append_c (output, '\n');
-            } else if (json_object_get (row, "counter") != NULL) {
-                g_string_append_printf (output, _("Current HOTP: %s\n"), json_string_value (json_object_get (row, "current")));
             } else {
+                const gchar *account_name = json_string_value (
+                    json_object_get (row, "account"));
+                const gchar *issuer_name = json_string_value (
+                    json_object_get (row, "issuer"));
+                g_string_append_printf (output, _("Account: %s | Issuer: %s\n"),
+                                        account_name != NULL ? account_name : "",
+                                        issuer_name != NULL ? issuer_name : "");
+            }
+            if (format != OUTPUT_FORMAT_CSV && json_object_get (row, "counter") != NULL) {
+                g_string_append_printf (output, _("Current HOTP: %s\n"), json_string_value (json_object_get (row, "current")));
+            } else if (format != OUTPUT_FORMAT_CSV) {
                 gint remaining = (gint) json_integer_value (json_object_get (row, "validity_seconds"));
                 g_string_append_printf (output,
                     ngettext ("Current TOTP (valid for %d more second): %s\n", "Current TOTP (valid for %d more seconds): %s\n", remaining),

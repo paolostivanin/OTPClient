@@ -167,6 +167,29 @@
                     </child>
                     <child>
                       <object class="GtkStackPage">
+                        <property name="name">no-search-results</property>
+                        <property name="child">
+                          <object class="AdwStatusPage">
+                            <property name="icon-name">system-search-symbolic</property>
+                            <property name="title" translatable="yes">No matching tokens</property>
+                            <property name="description" translatable="yes">Try another search or clear the current filters.</property>
+                            <property name="vexpand">True</property>
+                            <property name="hexpand">True</property>
+                            <child>
+                              <object class="GtkButton" id="search_empty_clear_button">
+                                <property name="label" translatable="yes">Clear Filters</property>
+                                <property name="action-name">win.clear-search</property>
+                                <style>
+                                  <class name="pill"/>
+                                </style>
+                              </object>
+                            </child>
+                          </object>
+                        </property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkStackPage">
                         <property name="name">empty</property>
                         <property name="child">
                           <object class="AdwStatusPage" id="empty_status_page">

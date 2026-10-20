@@ -51,6 +51,7 @@ struct _OTPClientWindow
     GtkWidget *no_db_create_button;
     GtkWidget *no_db_open_button;
     GtkWidget *empty_state_add_button;
+    GtkWidget *search_empty_clear_button;
     GtkWidget *otp_list;
     GtkWidget *content_stack;
     GtkWidget *loading_status_page;
@@ -89,6 +90,7 @@ struct _OTPClientWindow
     gboolean cross_db_loaded;
     gboolean cross_db_loading;
     GCancellable *cross_db_cancellable;
+    guint64 cross_db_generation;
     GCancellable *webcam_cancellable;
     GCancellable *clipboard_cancellable;
     GCancellable *file_dialog_cancellable;
@@ -104,10 +106,9 @@ struct _OTPClientWindow
      * or just hide. Weak so the entry can still be freed normally. */
     GWeakRef clipboard_owner_entry;
 
-    /* Undo delete */
-    json_t *deleted_token;
-    guint   deleted_token_pos;
-
+    /* Live Undo toast payloads, so lock and database replacement can wipe the
+     * short-lived secret snapshots immediately. */
+    GList *undo_actions;
 
 };
 

@@ -325,7 +325,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
                 g_clear_error (&err);
             }
             gcry_free (pwd);
-            free_otps_gslist (otps, g_slist_length (otps));
+            free_otps_gslist (otps);
 
             return FALSE;
         }
@@ -333,7 +333,7 @@ gboolean exec_action (CmdlineOpts  *cmdline_opts,
 
         OtpImportReport report = {0, 0, 0};
         db_import_otps (db_data, otps, &report, &err);
-        free_otps_gslist (otps, g_slist_length (otps));
+        free_otps_gslist (otps);
         report.skipped_invalid += diagnostics->skipped_invalid;
         if (err != NULL && !g_error_matches (err, missing_file_gquark (), MISSING_FILE_ERRCODE)) {
             g_printerr (_("Error while updating the database: %s\n"), err->message);

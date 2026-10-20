@@ -67,7 +67,7 @@ try_apply_otpauth_uri (ManualAddDialog *self,
 
     otp_t *otp = otps->data;
     if (otp == NULL || otp->secret == NULL || otp->type == NULL) {
-        free_otps_gslist (otps, g_slist_length (otps));
+        free_otps_gslist (otps);
         return FALSE;
     }
 
@@ -101,7 +101,7 @@ try_apply_otpauth_uri (ManualAddDialog *self,
         adw_spin_row_set_value (ADW_SPIN_ROW (self->period_spin), (double) otp->period);
     }
 
-    free_otps_gslist (otps, g_slist_length (otps));
+    free_otps_gslist (otps);
 
     self->applying_uri = FALSE;
     return TRUE;

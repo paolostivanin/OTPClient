@@ -143,6 +143,51 @@ test_malformed_startup_value_is_not_reported (void)
     g_assert_false (g_settings_get_boolean (settings, "autostart"));
 }
 
+static void
+test_invalid_auto_lock_timeout_preserves_existing_value (void)
+{
+    g_autoptr (GSettings) settings = fixture_settings ();
+    if (settings == NULL)
+        return;
+
+    g_settings_set_uint (settings, "auto-lock-timeout", 120);
+    gboolean touched = TRUE;
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Skipping out-of-range unsigned setting 'auto-lock-timeout'.");
+    g_assert_true (import ("{\"auto-lock-timeout\": 4294967295}", &touched));
+    g_test_assert_expected_messages ();
+    g_assert_false (touched);
+    g_assert_cmpuint (g_settings_get_uint (settings, "auto-lock-timeout"), ==, 120);
+
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Skipping out-of-range unsigned setting 'auto-lock-timeout'.");
+    g_assert_true (import ("{\"auto-lock-timeout\": 0}", NULL));
+    g_test_assert_expected_messages ();
+    g_assert_cmpuint (g_settings_get_uint (settings, "auto-lock-timeout"), ==, 120);
+}
+
+static void
+test_invalid_imported_colors_preserve_existing_values (void)
+{
+    g_autoptr (GSettings) settings = fixture_settings ();
+    if (settings == NULL)
+        return;
+
+    g_settings_set_string (settings, "validity-color", "#123456");
+    g_settings_set_string (settings, "validity-warning-color", "#abcdef");
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Skipping invalid color setting 'validity-color'.");
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Skipping invalid color setting 'validity-warning-color'.");
+    g_assert_true (import ("{\"validity-color\": \"red; } * {\", "
+                          "\"validity-warning-color\": \"#00GG00\"}", NULL));
+    g_test_assert_expected_messages ();
+    g_autofree gchar *normal = g_settings_get_string (settings, "validity-color");
+    g_autofree gchar *warning = g_settings_get_string (settings, "validity-warning-color");
+    g_assert_cmpstr (normal, ==, "#123456");
+    g_assert_cmpstr (warning, ==, "#abcdef");
+}
+
 /* One good startup key alongside a malformed one still has to be reported: the
  * good one was written and the desktop has not been told. */
 static void
@@ -191,6 +236,8 @@ test_pending_flag_is_not_exportable (void)
  * hypothetical: search-provider-keyword and clipboard-clear-timeout were both
  * settings the user picks in the dialog and neither survived an export. */
 static const gchar *const not_exportable[] = {
+    /* Retired UI preference. Older backups may contain it; imports ignore it. */
+    "search-column",
     /* Machine-local file locations, not preferences. Restoring these on another
      * machine points the app at databases that are not there. */
     "db-path",
@@ -285,6 +332,10 @@ main (int argc, char *argv[])
                      test_start_minimized_counts_as_startup);
     g_test_add_func ("/settings-import/startup/malformed-is-not-reported",
                      test_malformed_startup_value_is_not_reported);
+    g_test_add_func ("/settings-import/invalid-auto-lock-timeout",
+                     test_invalid_auto_lock_timeout_preserves_existing_value);
+    g_test_add_func ("/settings-import/invalid-colors-preserve-values",
+                     test_invalid_imported_colors_preserve_existing_values);
     g_test_add_func ("/settings-import/startup/one-good-key-is-enough",
                      test_one_good_startup_key_is_enough);
     g_test_add_func ("/settings-import/pending-flag-is-not-exportable",

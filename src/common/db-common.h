@@ -72,14 +72,7 @@ typedef struct db_data_t {
      * for the user to repair or delete. NULL until load runs. */
     json_t *quarantined_tokens;
 
-    GSList *objects_hash;
-
-    GSList *data_to_add;
-
     gint32 max_file_size_from_memlock;
-
-    gchar *last_hotp;
-    GDateTime *last_hotp_update;
 
     gboolean key_stored;
 
@@ -172,19 +165,6 @@ gboolean db_import_otps    (DatabaseData      *db_data,
                             GSList            *otps,
                             OtpImportReport   *report,
                             GError          **err);
-
-void    add_otps_to_db     (GSList       *otps,
-                            DatabaseData *db_data);
-
-/* Same as add_otps_to_db but reports how many entries were appended versus
- * skipped as duplicates. Either out-param may be NULL. */
-void    add_otps_to_db_ex  (GSList       *otps,
-                            DatabaseData *db_data,
-                            guint        *added_out,
-                            guint        *skipped_out);
-
-gint    check_duplicate    (gconstpointer   data,
-                            gconstpointer   user_data);
 
 void    db_invalidate_kdf_cache (DatabaseData *db_data);
 void    database_data_purge_secrets (DatabaseData *db_data);

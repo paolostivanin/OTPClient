@@ -1,5 +1,6 @@
 #include "sensitive-dialog.h"
 #include <glib/gi18n.h>
+#include <string.h>
 #include <qrencode.h>
 #include "qr-display-dialog.h"
 
@@ -19,25 +20,30 @@ create_qr_texture (const gchar *data)
         return NULL;
 
     gint scale = 8;
-    gint size = qrcode->width * scale;
+    const gint quiet_zone_modules = 4;
+    const gint border = quiet_zone_modules * scale;
+    gint size = (qrcode->width + quiet_zone_modules * 2) * scale;
     gint stride = size * 4;  /* RGBA */
-    guchar *pixels = g_malloc0 (stride * size);
+    guchar *pixels = g_malloc (stride * size);
+    memset (pixels, 0xFF, stride * size);
 
     for (gint y = 0; y < qrcode->width; y++)
     {
         for (gint x = 0; x < qrcode->width; x++)
         {
             guchar module = qrcode->data[y * qrcode->width + x] & 1;
-            guchar color = module ? 0x00 : 0xFF;
+            if (!module)
+                continue;
 
             for (gint sy = 0; sy < scale; sy++)
             {
                 for (gint sx = 0; sx < scale; sx++)
                 {
-                    gint px = (y * scale + sy) * stride + (x * scale + sx) * 4;
-                    pixels[px + 0] = color;  /* R */
-                    pixels[px + 1] = color;  /* G */
-                    pixels[px + 2] = color;  /* B */
+                    gint px = (border + y * scale + sy) * stride +
+                              (border + x * scale + sx) * 4;
+                    pixels[px + 0] = 0x00;   /* R */
+                    pixels[px + 1] = 0x00;   /* G */
+                    pixels[px + 2] = 0x00;   /* B */
                     pixels[px + 3] = 0xFF;   /* A */
                 }
             }

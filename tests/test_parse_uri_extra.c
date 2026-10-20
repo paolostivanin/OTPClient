@@ -65,34 +65,24 @@ test_sha512_algorithm (void)
 }
 
 static void
-test_unknown_algorithm_falls_back_to_sha1 (void)
+test_unknown_algorithm_is_rejected (void)
 {
-    /* parse_uri only overrides the default ("SHA1") when the algorithm string
-     * is one of the three supported. Unknown values silently keep SHA1, which
-     * downstream validation accepts. This pins that fallback behaviour. */
     otp_t *otp = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&algorithm=MD5");
-    g_assert_nonnull (otp);
-    g_assert_cmpstr (otp->algo, ==, "SHA1");
-    free_otp (otp);
+    g_assert_null (otp);
 }
 
 static void
 test_period_out_of_bounds (void)
 {
-    /* period=0 and period=999 fall outside [1,120]; parse_uri keeps the
-     * default of 30 in those cases. The resulting otp_t is still valid. */
+    /* Defaults apply only when optional parameters are omitted. */
     otp_t *zero = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=0");
-    g_assert_nonnull (zero);
-    g_assert_cmpuint (zero->period, ==, 30);
-    free_otp (zero);
+    g_assert_null (zero);
 
     otp_t *huge = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=999");
-    g_assert_nonnull (huge);
-    g_assert_cmpuint (huge->period, ==, 30);
-    free_otp (huge);
+    g_assert_null (huge);
 }
 
 static void
@@ -100,15 +90,11 @@ test_digits_out_of_bounds (void)
 {
     otp_t *small = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=3");
-    g_assert_nonnull (small);
-    g_assert_cmpuint (small->digits, ==, 6);
-    free_otp (small);
+    g_assert_null (small);
 
     otp_t *big = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=11");
-    g_assert_nonnull (big);
-    g_assert_cmpuint (big->digits, ==, 6);
-    free_otp (big);
+    g_assert_null (big);
 }
 
 static void
@@ -131,8 +117,8 @@ test_digits_widened_range (void)
 static void
 test_period_upper_bound (void)
 {
-    /* 120 is the top of libcotp's range and must be kept; 150 is above it and
-     * falls back to the default 30 (issue #464). */
+    /* 120 is the top of libcotp's range and must be kept; unsupported explicit
+     * values are rejected. */
     otp_t *at_max = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=120");
     g_assert_nonnull (at_max);
@@ -141,9 +127,7 @@ test_period_upper_bound (void)
 
     otp_t *over = parse_single (
         "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&period=150");
-    g_assert_nonnull (over);
-    g_assert_cmpuint (over->period, ==, 30);
-    free_otp (over);
+    g_assert_null (over);
 }
 
 static void
@@ -157,16 +141,35 @@ test_counter_at_max (void)
     g_assert_cmpuint ((guint64) otp->counter, ==, OTP_HOTP_COUNTER_MAX - 1);
     free_otp (otp);
 
-    /* MAX+1: parse_uri silently keeps counter=0 (the default). The import
-     * token still validates because counter==0 is in range; this asserts
-     * that the out-of-bounds value never lands in the struct. */
+    /* The first unsupported counter must be rejected, not reset to zero. */
     g_autofree gchar *over_max = g_strdup_printf (
         "otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example&counter=%" G_GUINT64_FORMAT,
         OTP_HOTP_COUNTER_MAX);
     otp_t *over = parse_single (over_max);
-    g_assert_nonnull (over);
-    g_assert_cmpuint ((guint64) over->counter, ==, 0);
-    free_otp (over);
+    g_assert_null (over);
+}
+
+static void
+test_hotp_requires_counter (void)
+{
+    otp_t *otp = parse_single (
+        "otpauth://hotp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example");
+    g_assert_null (otp);
+}
+
+static void
+test_partial_uri_import_keeps_valid_entries (void)
+{
+    GSList *otps = NULL;
+    g_autoptr (OtpImportDiagnostics) diagnostics = otp_import_diagnostics_new ();
+    set_otps_from_uris_full (
+        "otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP&issuer=Example\n"
+        "otpauth://totp/Example:bob?secret=JBSWY3DPEHPK3PXP&issuer=Example&digits=99",
+        &otps, diagnostics);
+    g_assert_cmpuint (g_slist_length (otps), ==, 1);
+    g_assert_cmpuint (diagnostics->issues->len, ==, 1);
+    g_assert_nonnull (strstr (g_ptr_array_index (diagnostics->issues, 0), "digits"));
+    g_slist_free_full (otps, (GDestroyNotify) free_otp);
 }
 
 static void
@@ -332,12 +335,14 @@ main (int argc, char **argv)
     g_test_add_func ("/parse-uri-extra/hotp",                  test_hotp_uri_parsed);
     g_test_add_func ("/parse-uri-extra/sha256",                test_sha256_algorithm);
     g_test_add_func ("/parse-uri-extra/sha512",                test_sha512_algorithm);
-    g_test_add_func ("/parse-uri-extra/unknown-algorithm",     test_unknown_algorithm_falls_back_to_sha1);
+    g_test_add_func ("/parse-uri-extra/unknown-algorithm",     test_unknown_algorithm_is_rejected);
     g_test_add_func ("/parse-uri-extra/period-out-of-bounds",  test_period_out_of_bounds);
     g_test_add_func ("/parse-uri-extra/digits-out-of-bounds",  test_digits_out_of_bounds);
     g_test_add_func ("/parse-uri-extra/digits-widened-range",  test_digits_widened_range);
     g_test_add_func ("/parse-uri-extra/period-upper-bound",    test_period_upper_bound);
     g_test_add_func ("/parse-uri-extra/counter-at-max",        test_counter_at_max);
+    g_test_add_func ("/parse-uri-extra/hotp-counter-required", test_hotp_requires_counter);
+    g_test_add_func ("/parse-uri-extra/partial-import",        test_partial_uri_import_keeps_valid_entries);
     g_test_add_func ("/parse-uri-extra/malformed-scheme",      test_malformed_scheme_ignored);
     g_test_add_func ("/parse-uri-extra/invalid-secret",        test_invalid_secret_rejected);
     g_test_add_func ("/parse-uri-extra/roundtrip-totp",        test_roundtrip_parse_emit_parse);

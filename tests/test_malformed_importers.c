@@ -254,7 +254,7 @@ test_freeotp_mixed_valid_invalid (void)
     g_assert_cmpstr (otp->account_name, ==, "alice");
     g_assert_cmpstr (otp->secret, ==, "JBSWY3DPEHPK3PXP");
 
-    free_otps_gslist (otps, 1);
+    free_otps_gslist (otps);
     cleanup_tmp_json (dir, path);
 }
 

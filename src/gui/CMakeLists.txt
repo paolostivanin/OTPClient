@@ -10,6 +10,7 @@ add_custom_command(
         DEPENDS
         ${PROJECT_SOURCE_DIR}/src/gui/gui.gresource.xml
         ${PROJECT_SOURCE_DIR}/src/gui/ui/window.ui
+        ${PROJECT_SOURCE_DIR}/src/gui/ui/context-menus.ui
         ${PROJECT_SOURCE_DIR}/src/gui/ui/shortcuts-window.ui
         ${PROJECT_SOURCE_DIR}/src/gui/ui/otp-button-row.css
 )

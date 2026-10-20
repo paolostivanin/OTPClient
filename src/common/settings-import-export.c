@@ -7,7 +7,6 @@
 
 typedef enum {
     SETTING_BOOL,
-    SETTING_INT,
     SETTING_UINT,
     SETTING_STRING
 } SettingType;
@@ -26,7 +25,6 @@ typedef struct {
 static const SettingDef exportable_settings[] = {
     { "show-next-otp",          SETTING_BOOL,   FALSE },
     { "notification-enabled",   SETTING_BOOL,   FALSE },
-    { "search-column",          SETTING_INT,    FALSE },
     { "dark-theme",             SETTING_BOOL,   FALSE },
     { "auto-lock",              SETTING_BOOL,   FALSE },
     { "auto-lock-timeout",      SETTING_UINT,   FALSE },
@@ -44,6 +42,21 @@ static const SettingDef exportable_settings[] = {
     { "hide-otps",              SETTING_BOOL,   FALSE },
     { NULL, 0, FALSE }
 };
+
+static gboolean
+is_valid_hex_color (const gchar *color)
+{
+    if (color == NULL || color[0] != '#')
+        return FALSE;
+
+    gsize len = strlen (color + 1);
+    if (len != 3 && len != 4 && len != 6 && len != 8)
+        return FALSE;
+    for (const gchar *p = color + 1; *p != '\0'; p++)
+        if (!g_ascii_isxdigit (*p))
+            return FALSE;
+    return TRUE;
+}
 
 
 gchar *
@@ -64,10 +77,6 @@ export_settings_to_json (GError **err)
             case SETTING_BOOL:
                 json_object_set_new (root, def->key,
                     json_boolean (g_settings_get_boolean (settings, def->key)));
-                break;
-            case SETTING_INT:
-                json_object_set_new (root, def->key,
-                    json_integer (g_settings_get_int (settings, def->key)));
                 break;
             case SETTING_UINT:
                 json_object_set_new (root, def->key,
@@ -180,21 +189,13 @@ import_settings_from_json (const gchar *json_str,
                     applied = TRUE;
                 }
                 break;
-            case SETTING_INT:
-                if (json_is_integer (val)) {
-                    json_int_t v = json_integer_value (val);
-                    if (v >= G_MININT && v <= G_MAXINT) {
-                        g_settings_set_int (settings, def->key, (gint) v);
-                        applied = TRUE;
-                    } else {
-                        g_warning ("Skipping out-of-range integer setting '%s'.", def->key);
-                    }
-                }
-                break;
             case SETTING_UINT:
                 if (json_is_integer (val)) {
                     json_int_t v = json_integer_value (val);
-                    if (v >= 0 && (guint64) v <= G_MAXUINT) {
+                    gboolean valid = v >= 0 && (guint64) v <= G_MAXUINT;
+                    if (g_str_equal (def->key, "auto-lock-timeout"))
+                        valid = v >= 1 && v <= G_MAXINT;
+                    if (valid) {
                         g_settings_set_uint (settings, def->key, (guint) v);
                         applied = TRUE;
                     } else {
@@ -204,8 +205,17 @@ import_settings_from_json (const gchar *json_str,
                 break;
             case SETTING_STRING:
                 if (json_is_string (val)) {
-                    g_settings_set_string (settings, def->key, json_string_value (val));
-                    applied = TRUE;
+                    const gchar *value = json_string_value (val);
+                    gboolean valid = TRUE;
+                    if (g_str_equal (def->key, "validity-color") ||
+                        g_str_equal (def->key, "validity-warning-color"))
+                        valid = is_valid_hex_color (value);
+                    if (valid) {
+                        g_settings_set_string (settings, def->key, value);
+                        applied = TRUE;
+                    } else {
+                        g_warning ("Skipping invalid color setting '%s'.", def->key);
+                    }
                 }
                 break;
         }

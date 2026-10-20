@@ -55,7 +55,7 @@ test_valid_payload (void)
     g_assert_cmpstr (otp->account_name, ==, "alice");
     g_assert_cmpstr (otp->issuer, ==, "Example");
     g_assert_cmpstr (otp->secret, ==, "JBSWY3DP");
-    free_otps_gslist (otps, 1);
+    free_otps_gslist (otps);
 }
 
 static void

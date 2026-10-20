@@ -61,14 +61,14 @@ test_exports (void)
         g_assert_no_error (err);
         g_assert_cmpuint (g_slist_length (tokens), ==, 1);
         g_assert_cmpstr (((otp_t *) tokens->data)->secret, ==, REVIEW_SECRET);
-        free_otps_gslist (tokens, g_slist_length (tokens));
+        free_otps_gslist (tokens);
 
         g_autofree gchar *legacy = g_strdup_printf ("%s/fixtures/empty-password-%s", REVIEW_TEST_SOURCE, names[i]);
         tokens = get_data_from_provider (types[i], legacy, "", DEFAULT_MEMLOCK_VALUE, 0, &err);
         g_assert_no_error (err);
         g_assert_cmpuint (g_slist_length (tokens), ==, 1);
         g_assert_cmpstr (((otp_t *) tokens->data)->secret, ==, REVIEW_SECRET);
-        free_otps_gslist (tokens, g_slist_length (tokens));
+        free_otps_gslist (tokens);
     }
     review_fixture_clear (&fixture);
 }
@@ -137,7 +137,7 @@ test_provider_diagnostics (void)
         g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
         g_assert_nonnull (strstr (details, "Entry 2:"));
         g_assert_null (strstr (details, "NOT-BASE32"));
-        free_otps_gslist (tokens, g_slist_length (tokens));
+        free_otps_gslist (tokens);
     }
     review_fixture_clear (&fixture);
 }
@@ -154,7 +154,7 @@ test_import_diagnostics (void)
     g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
     g_assert_nonnull (strstr (details, "Entry 2:"));
     g_assert_null (strstr (details, "NOT-BASE32"));
-    free_otps_gslist (tokens, g_slist_length (tokens));
+    free_otps_gslist (tokens);
 }
 
 static void

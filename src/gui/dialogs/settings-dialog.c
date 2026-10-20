@@ -26,6 +26,8 @@ struct _SettingsDialog
     GtkWidget *disable_notifications_switch;
     GtkWidget *auto_lock_switch;
     GtkWidget *inactivity_combo;
+    guint custom_inactivity_index;
+    gint custom_inactivity_timeout;
     GtkWidget *secret_service_switch;
     GtkWidget *search_provider_switch;
     GtkWidget *search_provider_keyword_entry;
@@ -144,6 +146,10 @@ on_inactivity_changed (AdwComboRow    *combo,
     guint selected = adw_combo_row_get_selected (combo);
     if (selected < G_N_ELEMENTS (timeout_values))
         otpclient_application_set_inactivity_timeout (self->app, timeout_values[selected]);
+    else if (selected == self->custom_inactivity_index &&
+             self->custom_inactivity_timeout > 0)
+        otpclient_application_set_inactivity_timeout (self->app,
+                                                       self->custom_inactivity_timeout);
 }
 
 static void
@@ -780,10 +786,25 @@ settings_dialog_new (OTPClientApplication *app)
         N_("15 minutes"), N_("30 minutes"), N_("1 hour"), NULL
     };
     static const gint inactivity_values[] = { 60, 120, 300, 600, 900, 1800, 3600 };
-    const char *timeout_translated[G_N_ELEMENTS (inactivity_values) + 1];
+    guint current_inactivity = (guint) otpclient_application_get_inactivity_timeout (app);
+    gboolean custom_inactivity = TRUE;
+    for (guint i = 0; i < G_N_ELEMENTS (inactivity_values); i++)
+        if ((guint) inactivity_values[i] == current_inactivity)
+            custom_inactivity = FALSE;
+    const char *timeout_translated[G_N_ELEMENTS (inactivity_values) + 2];
     for (guint i = 0; i < G_N_ELEMENTS (inactivity_values); i++)
         timeout_translated[i] = _(timeout_items[i]);
-    timeout_translated[G_N_ELEMENTS (inactivity_values)] = NULL;
+    self->custom_inactivity_index = G_N_ELEMENTS (inactivity_values);
+    self->custom_inactivity_timeout = custom_inactivity ? (gint) current_inactivity : 0;
+    g_autofree gchar *custom_timeout_label = NULL;
+    if (custom_inactivity) {
+        custom_timeout_label = g_strdup_printf (ngettext ("Custom (%u second)",
+                                                          "Custom (%u seconds)",
+                                                          current_inactivity),
+                                                current_inactivity);
+        timeout_translated[self->custom_inactivity_index] = custom_timeout_label;
+    }
+    timeout_translated[G_N_ELEMENTS (inactivity_values) + (custom_inactivity ? 1 : 0)] = NULL;
     GtkStringList *timeout_model = gtk_string_list_new (timeout_translated);
     self->inactivity_combo = adw_combo_row_new ();
     adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->inactivity_combo),
@@ -792,13 +813,15 @@ settings_dialog_new (OTPClientApplication *app)
     g_object_unref (timeout_model);
     /* Sync the selection to the current stored value so reopening the dialog
      * shows what's actually configured rather than always defaulting to row 0. */
-    guint current_inactivity = (guint) otpclient_application_get_inactivity_timeout (app);
     for (guint i = 0; i < G_N_ELEMENTS (inactivity_values); i++) {
         if ((guint) inactivity_values[i] == current_inactivity) {
             adw_combo_row_set_selected (ADW_COMBO_ROW (self->inactivity_combo), i);
             break;
         }
     }
+    if (custom_inactivity)
+        adw_combo_row_set_selected (ADW_COMBO_ROW (self->inactivity_combo),
+                                    self->custom_inactivity_index);
     g_signal_connect (self->inactivity_combo, "notify::selected",
                       G_CALLBACK (on_inactivity_changed), self);
     adw_preferences_group_add (security_group, self->inactivity_combo);

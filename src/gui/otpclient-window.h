@@ -36,6 +36,7 @@ void                otpclient_window_select_database (OTPClientWindow *self,
                                                       gint             index);
 
 void                otpclient_window_invalidate_cross_db (OTPClientWindow *self);
+void                otpclient_window_clear_undo_actions (OTPClientWindow *self);
 
 void                otpclient_window_rebuild_groups  (OTPClientWindow *self);
 

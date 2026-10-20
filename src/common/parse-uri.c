@@ -301,37 +301,55 @@ parse_uri (const gchar   *uri,
     const gchar *secret = g_hash_table_lookup (params, "secret");
     otp->secret = secure_strdup (secret);
 
+    const gchar *invalid_field = NULL;
     const gchar *algo = g_hash_table_lookup (params, "algorithm");
-    if (algo != NULL &&
-        (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
-         g_ascii_strcasecmp (algo, "SHA256") == 0 ||
-         g_ascii_strcasecmp (algo, "SHA512") == 0)) {
-        g_free (otp->algo);
-        otp->algo = g_ascii_strup (algo, -1);
+    if (algo != NULL) {
+        if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
+            g_ascii_strcasecmp (algo, "SHA256") == 0 ||
+            g_ascii_strcasecmp (algo, "SHA512") == 0) {
+            g_free (otp->algo);
+            otp->algo = g_ascii_strup (algo, -1);
+        } else {
+            invalid_field = _("Unsupported algorithm parameter.");
+        }
     }
 
     const gchar *period = g_hash_table_lookup (params, "period");
-    if (period != NULL) {
+    if (invalid_field == NULL && period != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (period, &endptr, 10);
-        if (endptr != period && *endptr == '\0' && v >= OTP_PERIOD_MIN && v <= OTP_PERIOD_MAX)
+        if (endptr == period || *endptr != '\0' || v < OTP_PERIOD_MIN || v > OTP_PERIOD_MAX)
+            invalid_field = _("Invalid period parameter; expected a value from 1 to 120.");
+        else
             otp->period = (guint32) v;
     }
     const gchar *digits = g_hash_table_lookup (params, "digits");
-    if (digits != NULL) {
+    if (invalid_field == NULL && digits != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (digits, &endptr, 10);
-        if (endptr != digits && *endptr == '\0' && v >= OTP_DIGITS_MIN && v <= OTP_DIGITS_MAX)
+        if (endptr == digits || *endptr != '\0' || v < OTP_DIGITS_MIN || v > OTP_DIGITS_MAX)
+            invalid_field = _("Invalid digits parameter; expected a value from 4 to 10.");
+        else
             otp->digits = (guint32) v;
     }
     const gchar *counter = g_hash_table_lookup (params, "counter");
-    if (counter != NULL) {
+    if (invalid_field == NULL && g_str_equal (otp->type, "HOTP") && counter == NULL)
+        invalid_field = _("HOTP URI is missing its counter parameter.");
+    if (invalid_field == NULL && counter != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (counter, &endptr, 10);
-        if (endptr != counter && *endptr == '\0' && v >= 0 &&
-            (guint64) v < OTP_HOTP_COUNTER_MAX) {
+        if (endptr == counter || *endptr != '\0' || v < 0 ||
+            (guint64) v >= OTP_HOTP_COUNTER_MAX)
+            invalid_field = _("Invalid counter parameter; expected a non-negative supported value.");
+        else
             otp->counter = (guint64) v;
-        }
+    }
+
+    if (invalid_field != NULL) {
+        otp_import_diagnostics_add (diagnostics, source_index, invalid_field);
+        free_parsed_otp (otp);
+        g_uri_unref (parsed);
+        return;
     }
 
     GError *validation_err = NULL;

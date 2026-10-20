@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #include <glib/gi18n.h>
 #include <adwaita.h>
 #include "otpclient-application.h"
@@ -32,6 +33,95 @@ static void refresh_otp_value_cells (OTPClientWindow *self);
 static void on_hide_otps_changed   (GObject *gobject, GParamSpec *pspec, gpointer user_data);
 static void copy_otp_to_clipboard_and_notify (OTPClientWindow *self, OTPEntry *entry);
 static void refresh_search_cache (OTPClientWindow *self);
+static void update_empty_state (OTPClientWindow *self);
+
+typedef struct {
+    GWeakRef window_ref;
+    DatabaseData *origin_db;
+    guint lock_generation;
+    json_t *token;
+    guint position;
+} UndoDeleteData;
+
+static void on_undo_delete (AdwToast *toast, gpointer user_data);
+
+static void
+undo_delete_token_clear (UndoDeleteData *data)
+{
+    if (data->token == NULL)
+        return;
+    json_t *secret = json_object_get (data->token, "secret");
+    if (json_is_string (secret)) {
+        const char *value = json_string_value (secret);
+        size_t len = json_string_length (secret);
+        if (value != NULL && len > 0)
+            explicit_bzero ((void *) value, len);
+    }
+    json_decref (data->token);
+    data->token = NULL;
+}
+
+static UndoDeleteData *
+undo_delete_data_new (OTPClientWindow *self,
+                      DatabaseData   *origin_db,
+                      json_t         *token,
+                      guint           position)
+{
+    UndoDeleteData *data = g_new0 (UndoDeleteData, 1);
+    g_weak_ref_init (&data->window_ref, self);
+    data->origin_db = origin_db;
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    data->lock_generation = app != NULL
+        ? otpclient_application_get_lock_generation (app) : 0;
+    data->token = json_deep_copy (token);
+    data->position = position;
+    if (data->token == NULL) {
+        g_weak_ref_clear (&data->window_ref);
+        g_free (data);
+        return NULL;
+    }
+    self->undo_actions = g_list_prepend (self->undo_actions, data);
+    return data;
+}
+
+static void
+undo_delete_data_free (gpointer user_data,
+                       GClosure *closure)
+{
+    (void) closure;
+    UndoDeleteData *data = user_data;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&data->window_ref);
+    if (self != NULL)
+        self->undo_actions = g_list_remove (self->undo_actions, data);
+    g_weak_ref_clear (&data->window_ref);
+    undo_delete_token_clear (data);
+    g_free (data);
+}
+
+static void
+show_undo_toast (OTPClientWindow *self,
+                 DatabaseData   *origin_db,
+                 json_t         *token,
+                 guint           position)
+{
+    UndoDeleteData *data = undo_delete_data_new (self, origin_db, token, position);
+    if (data == NULL)
+        return;
+    AdwToast *toast = adw_toast_new (_("Token deleted"));
+    adw_toast_set_button_label (toast, _("Undo"));
+    adw_toast_set_timeout (toast, 5);
+    g_signal_connect_data (toast, "button-clicked", G_CALLBACK (on_undo_delete),
+                           data, undo_delete_data_free, 0);
+    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), toast);
+}
+
+static void
+clear_undo_snapshots (OTPClientWindow *self)
+{
+    for (GList *l = self->undo_actions; l != NULL; l = l->next)
+        undo_delete_token_clear (l->data);
+}
 
 static inline gboolean
 window_is_locked (OTPClientWindow *self)
@@ -659,6 +749,14 @@ refresh_totp_entry (OTPClientWindow *self,
     if (period == 0)
         return;
 
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
+    gboolean owns_clipboard = clip_owner == entry;
+    if (app != NULL && otpclient_application_get_hide_otps (app) &&
+        !otp_entry_get_revealed (entry) && !owns_clipboard)
+        return;
+
     gint64 step = now / (gint64) period;
     /* The generation step is recorded by otp_entry_update_otp(), including on
      * explicit activation. Comparing against it (instead of against a value we
@@ -681,9 +779,6 @@ refresh_totp_entry (OTPClientWindow *self,
      * triggers this. */
     if (!rotated || !otp_entry_get_revealed (entry))
         return;
-
-    g_autoptr (OTPEntry) clip_owner = g_weak_ref_get (&self->clipboard_owner_entry);
-    gboolean owns_clipboard = (clip_owner == entry);
 
     if (show_next && owns_clipboard && !otp_entry_get_roll_consumed (entry))
     {
@@ -793,6 +888,7 @@ typedef struct {
     gchar *current_db_path;
     gint32 max_file_size;
     GWeakRef window_ref;
+    guint64 generation;
 } CrossDbTaskData;
 
 static void
@@ -911,7 +1007,19 @@ cross_db_load_done (GObject      *source,
     if (self == NULL)
         return;
 
+    if (td->generation != self->cross_db_generation || self->disposing) {
+        return;
+    }
     self->cross_db_loading = FALSE;
+
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *active_db = app != NULL
+        ? otpclient_application_get_db_data (app) : NULL;
+    if (active_db == NULL ||
+        g_strcmp0 (active_db->db_path, td->current_db_path) != 0 ||
+        !otpclient_application_get_use_secret_service (app))
+        return;
 
     GError *err = NULL;
     GListStore *store = g_task_propagate_pointer (G_TASK (result), &err);
@@ -923,12 +1031,6 @@ cross_db_load_done (GObject      *source,
     }
     if (store == NULL)
         return;
-
-    if (self->disposing)
-    {
-        g_object_unref (store);
-        return;
-    }
 
     g_clear_object (&self->cross_db_store);
     self->cross_db_store = store;
@@ -944,6 +1046,7 @@ cross_db_load_done (GObject      *source,
         cross_db_activate (self);
         refresh_search_cache (self);
         gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+        update_empty_state (self);
     }
 }
 
@@ -978,6 +1081,7 @@ cross_db_trigger_load (OTPClientWindow *self)
     td->db_list = db_list;
     td->current_db_path = g_strdup (db_data->db_path);
     td->max_file_size = db_data->max_file_size_from_memlock;
+    td->generation = self->cross_db_generation;
     g_weak_ref_init (&td->window_ref, self);
 
     GTask *task = g_task_new (NULL, self->cross_db_cancellable, cross_db_load_done, td);
@@ -990,9 +1094,58 @@ void
 otpclient_window_invalidate_cross_db (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    self->cross_db_generation++;
+    if (self->cross_db_cancellable != NULL)
+        g_cancellable_cancel (self->cross_db_cancellable);
+    g_clear_object (&self->cross_db_cancellable);
+    self->cross_db_loading = FALSE;
     self->cross_db_loaded = FALSE;
+    cross_db_deactivate (self);
+    g_clear_object (&self->flatten_model);
     if (self->cross_db_store != NULL)
         g_list_store_remove_all (self->cross_db_store);
+}
+
+void
+otpclient_window_clear_undo_actions (OTPClientWindow *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    clear_undo_snapshots (self);
+}
+
+/* Split a group-qualified query into its group and remaining text. Quoted names
+ * may contain spaces: group:"Work Projects" alice (or #"Work Projects"). */
+static gchar *
+parse_search_group (const gchar  *text,
+                    const gchar **remaining_text)
+{
+    const gchar *rest = NULL;
+    if (g_str_has_prefix (text, "group:"))
+        rest = text + 6;
+    else if (text[0] == '#' && text[1] != '\0')
+        rest = text + 1;
+
+    if (rest == NULL) {
+        *remaining_text = text;
+        return NULL;
+    }
+
+    if (*rest == '"') {
+        const gchar *end_quote = strchr (rest + 1, '"');
+        if (end_quote != NULL) {
+            gchar *group = g_strndup (rest + 1, end_quote - (rest + 1));
+            rest = end_quote + 1;
+            if (*rest == ' ')
+                rest++;
+            *remaining_text = *rest != '\0' ? rest : NULL;
+            return group;
+        }
+    }
+
+    const gchar *space = strchr (rest, ' ');
+    gchar *group = space != NULL ? g_strndup (rest, space - rest) : g_strdup (rest);
+    *remaining_text = space != NULL && space[1] != '\0' ? space + 1 : NULL;
+    return group;
 }
 
 /* Re-derive search_lower / search_group_lower from the live search entry text.
@@ -1008,39 +1161,8 @@ refresh_search_cache (OTPClientWindow *self)
     if (text == NULL || text[0] == '\0')
         return;
 
-    const gchar *remaining_text = text;
-    g_autofree gchar *search_group = NULL;
-
-    if (g_str_has_prefix (text, "group:"))
-    {
-        const gchar *rest = text + 6;
-        const gchar *space = strchr (rest, ' ');
-        if (space != NULL)
-        {
-            search_group = g_strndup (rest, space - rest);
-            remaining_text = space + 1;
-        }
-        else
-        {
-            search_group = g_strdup (rest);
-            remaining_text = NULL;
-        }
-    }
-    else if (text[0] == '#' && text[1] != '\0')
-    {
-        const gchar *rest = text + 1;
-        const gchar *space = strchr (rest, ' ');
-        if (space != NULL)
-        {
-            search_group = g_strndup (rest, space - rest);
-            remaining_text = space + 1;
-        }
-        else
-        {
-            search_group = g_strdup (rest);
-            remaining_text = NULL;
-        }
-    }
+    const gchar *remaining_text = NULL;
+    g_autofree gchar *search_group = parse_search_group (text, &remaining_text);
 
     if (search_group != NULL)
         self->search_group_lower = g_utf8_strdown (search_group, -1);
@@ -1170,9 +1292,14 @@ update_empty_state (OTPClientWindow *self)
         target_page = "no-db";
     else if (db_data->in_memory_json_data == NULL)
         target_page = "loading";
+    else if (self->filter_model == NULL ||
+             g_list_model_get_n_items (gtk_filter_list_model_get_model (self->filter_model)) == 0)
+        target_page = "empty";
+    else if (self->filter_model != NULL &&
+             g_list_model_get_n_items (G_LIST_MODEL (self->filter_model)) == 0)
+        target_page = "no-search-results";
     else
-        target_page = g_list_model_get_n_items (G_LIST_MODEL (self->otp_store)) > 0
-                          ? "list" : "empty";
+        target_page = "list";
 
     const gchar *current_page = gtk_stack_get_visible_child_name (GTK_STACK (self->content_stack));
     gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), target_page);
@@ -1189,6 +1316,8 @@ update_empty_state (OTPClientWindow *self)
             focus_target = self->otp_list;
         else if (g_strcmp0 (target_page, "empty") == 0)
             focus_target = self->empty_state_add_button;
+        else if (g_strcmp0 (target_page, "no-search-results") == 0)
+            focus_target = self->search_empty_clear_button;
         else if (g_strcmp0 (target_page, "no-db") == 0)
             focus_target = self->no_db_create_button;
         else if (g_strcmp0 (target_page, "locked") == 0)
@@ -1382,6 +1511,18 @@ search_func (OTPClientWindow *self,
 }
 
 static void
+action_clear_search (GtkWidget  *widget,
+                     const char *action_name,
+                     GVariant   *parameter)
+{
+    (void) action_name;
+    (void) parameter;
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    gtk_editable_set_text (GTK_EDITABLE (self->search_entry), "");
+    gtk_widget_grab_focus (self->search_entry);
+}
+
+static void
 search_text_changed (GtkEntry        *entry,
                      OTPClientWindow *win)
 {
@@ -1410,19 +1551,9 @@ search_text_changed (GtkEntry        *entry,
     /* Sync search group prefix -> dropdown */
     if (!win->syncing_group_filter && win->group_list_model != NULL)
     {
-        g_autofree gchar *search_group = NULL;
-        if (g_str_has_prefix (text, "group:"))
-        {
-            const gchar *rest = text + 6;
-            const gchar *space = strchr (rest, ' ');
-            search_group = space ? g_strndup (rest, space - rest) : g_strdup (rest);
-        }
-        else if (text[0] == '#' && text[1] != '\0')
-        {
-            const gchar *rest = text + 1;
-            const gchar *space = strchr (rest, ' ');
-            search_group = space ? g_strndup (rest, space - rest) : g_strdup (rest);
-        }
+        const gchar *remaining_text = NULL;
+        g_autofree gchar *search_group = parse_search_group (text, &remaining_text);
+        (void) remaining_text;
 
         if (search_group != NULL)
         {
@@ -1449,17 +1580,24 @@ search_text_changed (GtkEntry        *entry,
                 if (g_strstr_len (item_lower, -1, sg_lower) != NULL)
                 {
                     gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), i);
+                    g_clear_pointer (&win->active_group_filter, g_free);
+                    win->active_group_filter = g_strdup (item);
                     found = TRUE;
                     break;
                 }
             }
             if (!found)
+            {
                 gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 0);
+                g_clear_pointer (&win->active_group_filter, g_free);
+            }
             win->syncing_group_filter = FALSE;
         }
-        else if (!searching)
+        else if (win->active_group_filter != NULL ||
+                 gtk_drop_down_get_selected (GTK_DROP_DOWN (win->group_dropdown)) != 0)
         {
-            /* Search cleared: reset dropdown to "All" */
+            /* A plain text query replaces any previous dropdown group. Keep
+             * the dropdown and its filter state in sync with the query. */
             win->syncing_group_filter = TRUE;
             g_clear_pointer (&win->active_group_filter, g_free);
             gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 0);
@@ -1469,6 +1607,7 @@ search_text_changed (GtkEntry        *entry,
 
     refresh_search_cache (win);
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+    update_empty_state (win);
 
     /* Auto-select when search narrows to a single result */
     guint n = g_list_model_get_n_items (G_LIST_MODEL (win->filter_model));
@@ -1756,6 +1895,7 @@ otpclient_window_add_database (OTPClientWindow *self,
 
     if (!gui_misc_add_db_to_list (self->db_store, name, path))
         return;
+    otpclient_window_invalidate_cross_db (self);
 
     /* If no primary is set yet, this is the first DB the user has - make
      * it the default. Don't gate on store size: at startup the sidebar is
@@ -2502,6 +2642,7 @@ otpclient_window_dispose (GObject *object)
         return;
     }
     win->disposing = TRUE;
+    clear_undo_snapshots (win);
 
     if (win->cross_db_cancellable != NULL)
         g_cancellable_cancel (win->cross_db_cancellable);
@@ -2511,12 +2652,6 @@ otpclient_window_dispose (GObject *object)
         g_cancellable_cancel (win->clipboard_cancellable);
     if (win->file_dialog_cancellable != NULL)
         g_cancellable_cancel (win->file_dialog_cancellable);
-
-    if (win->deleted_token != NULL)
-    {
-        json_decref (win->deleted_token);
-        win->deleted_token = NULL;
-    }
 
     /* M2: actively clear the clipboard on dispose, not just stop the timer.
      * Without this, an OTP copied just before window close (or app lock) sits
@@ -2585,6 +2720,7 @@ void
 otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
 {
     g_return_if_fail (OTPCLIENT_IS_WINDOW (self));
+    clear_undo_snapshots (self);
 
     /* Snapshot the stack: closing dialogs changes the live model. Clear now,
      * even if an asynchronous file chooser still holds a dialog reference. */
@@ -2601,11 +2737,6 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
     otpclient_window_stop_otp_timer (self);
     otpclient_window_clear_clipboard_now (self);
     otpclient_window_clear_displayed_otps (self);
-
-    if (self->deleted_token != NULL) {
-        json_decref (self->deleted_token);
-        self->deleted_token = NULL;
-    }
 
     if (self->cross_db_cancellable != NULL)
         g_cancellable_cancel (self->cross_db_cancellable);
@@ -2802,6 +2933,7 @@ on_group_dropdown_changed (GtkDropDown     *dropdown,
 
     refresh_search_cache (self);
     gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+    update_empty_state (self);
 }
 
 static void
@@ -2995,7 +3127,7 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
     GError *err = NULL;
     OtpImportReport report = {0};
     db_import_otps (db_data, otps, &report, &err);
-    free_otps_gslist (otps, g_slist_length (otps));
+    free_otps_gslist (otps);
     if (err != NULL) {
         show_error_toast (self, _("Failed to add scanned token: %s"), err->message);
         g_clear_error (&err);
@@ -3562,9 +3694,11 @@ on_undo_delete (AdwToast *toast,
                 gpointer  user_data)
 {
     (void) toast;
-    OTPClientWindow *self = OTPCLIENT_WINDOW (user_data);
-
-    if (self->deleted_token == NULL)
+    UndoDeleteData *undo = user_data;
+    if (undo->token == NULL)
+        return;
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&undo->window_ref);
+    if (self == NULL)
         return;
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
@@ -3573,23 +3707,29 @@ on_undo_delete (AdwToast *toast,
         return;
 
     DatabaseData *db_data = otpclient_application_get_db_data (app);
-    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+    if (db_data == NULL || db_data != undo->origin_db ||
+        db_data->in_memory_json_data == NULL ||
+        otpclient_application_get_lock_generation (app) != undo->lock_generation)
         return;
 
     gsize arr_len = json_array_size (db_data->in_memory_json_data);
-    guint insert_pos = (self->deleted_token_pos <= arr_len) ? self->deleted_token_pos : (guint) arr_len;
-    json_array_insert (db_data->in_memory_json_data, insert_pos, self->deleted_token);
-
-    json_decref (self->deleted_token);
-    self->deleted_token = NULL;
+    guint insert_pos = (undo->position <= arr_len) ? undo->position : (guint) arr_len;
+    if (json_array_insert (db_data->in_memory_json_data, insert_pos, undo->token) != 0)
+        return;
 
     GError *err = NULL;
     update_db (db_data, &err);
     if (err != NULL) {
         show_error_toast (self, _("Failed to restore deleted token: %s"), err->message);
         g_clear_error (&err);
+        /* The original toast is dismissed after its action fires. Reissue it
+         * with a fresh owned snapshot so a transient write failure is retryable. */
+        show_undo_toast (self, undo->origin_db, undo->token, undo->position);
         return;
     }
+
+    json_decref (undo->token);
+    undo->token = NULL;
 
     on_db_modified (self);
 }
@@ -3618,11 +3758,13 @@ on_delete_response (AdwAlertDialog *dialog,
     if (db_data == NULL || db_data->in_memory_json_data == NULL)
         return;
 
-    /* Save a copy for undo */
-    if (self->deleted_token != NULL)
-        json_decref (self->deleted_token);
-    self->deleted_token = json_deep_copy (json_array_get (db_data->in_memory_json_data, pos));
-    self->deleted_token_pos = pos;
+    /* Each toast owns an independent snapshot tied to the database it came
+     * from. A later deletion or a database switch cannot redirect its Undo. */
+    json_t *deleted_token = json_array_get (db_data->in_memory_json_data, pos);
+    UndoDeleteData *undo = undo_delete_data_new (self, db_data,
+                                                 deleted_token, pos);
+    if (undo == NULL)
+        return;
 
     json_array_remove (db_data->in_memory_json_data, pos);
 
@@ -3631,19 +3773,16 @@ on_delete_response (AdwAlertDialog *dialog,
     if (err != NULL) {
         show_error_toast (self, _("Failed to delete token: %s"), err->message);
         g_clear_error (&err);
-        json_decref (self->deleted_token);
-        self->deleted_token = NULL;
+        undo_delete_data_free (undo, NULL);
         return;
     }
 
     on_db_modified (self);
 
-    /* Show undo toast */
-    AdwToast *undo_toast = adw_toast_new (_("Token deleted"));
-    adw_toast_set_button_label (undo_toast, _("Undo"));
-    adw_toast_set_timeout (undo_toast, 5);
-    g_signal_connect (undo_toast, "button-clicked", G_CALLBACK (on_undo_delete), self);
-    adw_toast_overlay_add_toast (ADW_TOAST_OVERLAY (self->toast_overlay), undo_toast);
+    show_undo_toast (self, undo->origin_db, undo->token, undo->position);
+    /* The first snapshot existed to make the delete transactional. The toast
+     * now has its own copy, so release the temporary action record. */
+    undo_delete_data_free (undo, NULL);
 }
 
 static void
@@ -4731,9 +4870,8 @@ on_open_db_password_received (const gchar  *current_password,
     {
         show_error_toast (self, _("Could not open database: %s"), err->message);
         g_clear_error (&err);
-        /* load_db's v1->v2 migration and legacy_kdf_migration paths can set
-         * in_memory_json_data / objects_hash before failing. The previous
-         * open-coded cleanup leaked both. database_data_free handles them. */
+        /* load_db's v1->v2 migration path can set in_memory_json_data before
+         * failing. database_data_free handles that partial state. */
         database_data_free (db_data);
         return TRUE;
     }
@@ -5097,6 +5235,7 @@ on_remove_dialog_response (AdwAlertDialog  *dialog,
                                       primary_path) == 0);
 
     gui_misc_remove_db_from_list (self->db_store, (guint)index);
+    otpclient_window_invalidate_cross_db (self);
 
     /* If it was primary, set the first remaining entry as primary */
     if (was_primary) {
@@ -5387,6 +5526,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_create_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, no_db_open_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, empty_state_add_button);
+    gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_empty_clear_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, otp_list);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, content_stack);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, loading_status_page);
@@ -5394,10 +5534,11 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, locked_unlock_button);
     gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, group_dropdown);
 
-    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "window.close", NULL);
+    gtk_widget_class_add_binding_action (widget_class, GDK_KEY_q, GDK_CONTROL_MASK, "app.quit", NULL);
 
     gtk_widget_class_install_action (widget_class, "window.search", NULL, (GtkWidgetActionActivateFunc)search_func);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_f, GDK_CONTROL_MASK, "window.search", NULL);
+    gtk_widget_class_install_action (widget_class, "win.clear-search", NULL, action_clear_search);
 
     gtk_widget_class_install_action (widget_class, "win.hide-and-unselect", NULL, action_hide_and_unselect);
     gtk_widget_class_add_binding_action (widget_class, GDK_KEY_h, GDK_ALT_MASK, "win.hide-and-unselect", NULL);
