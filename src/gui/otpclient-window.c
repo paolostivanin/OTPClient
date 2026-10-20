@@ -4945,6 +4945,125 @@ action_new_group (GtkWidget  *widget,
                              (GAsyncReadyCallback) on_new_group_response, ctx);
 }
 
+typedef struct {
+    GWeakRef window_ref;
+    DatabaseData *db_data;
+    guint lock_generation;
+    GPtrArray *groups;
+    GtkWidget *dropdown;
+    GtkWidget *name_entry;
+} GroupManagementContext;
+
+static void
+group_management_context_free (GroupManagementContext *ctx)
+{
+    g_weak_ref_clear (&ctx->window_ref);
+    database_data_unref (ctx->db_data);
+    g_ptr_array_unref (ctx->groups);
+    g_free (ctx);
+}
+
+static void
+on_manage_groups_response (AdwAlertDialog *dialog,
+                           GAsyncResult *result,
+                           GroupManagementContext *ctx)
+{
+    const gchar *response = adw_alert_dialog_choose_finish (dialog, result);
+    g_autoptr (OTPClientWindow) self = g_weak_ref_get (&ctx->window_ref);
+    OTPClientApplication *app = self != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self))) : NULL;
+    if (self == NULL || app == NULL || window_is_locked (self) ||
+        otpclient_application_get_db_data (app) != ctx->db_data ||
+        otpclient_application_get_lock_generation (app) != ctx->lock_generation ||
+        (g_strcmp0 (response, "rename") != 0 && g_strcmp0 (response, "remove") != 0)) {
+        group_management_context_free (ctx);
+        return;
+    }
+    guint selected = gtk_drop_down_get_selected (GTK_DROP_DOWN (ctx->dropdown));
+    if (selected >= ctx->groups->len) {
+        group_management_context_free (ctx);
+        return;
+    }
+    const gchar *old_name = g_ptr_array_index (ctx->groups, selected);
+    const gchar *new_name = gtk_editable_get_text (GTK_EDITABLE (ctx->name_entry));
+    if (g_strcmp0 (response, "rename") == 0 &&
+        (new_name == NULL || new_name[0] == '\0' || g_strcmp0 (old_name, new_name) == 0)) {
+        group_management_context_free (ctx);
+        return;
+    }
+    GError *err = NULL;
+    gboolean success = g_strcmp0 (response, "rename") == 0
+        ? db_rename_group (ctx->db_data, old_name, new_name, &err)
+        : db_remove_group (ctx->db_data, old_name, &err);
+    if (!success)
+        show_error_toast (self, _("Could not update group: %s"),
+                          err != NULL ? err->message : _("database write failed"));
+    else
+        on_db_modified (self);
+    g_clear_error (&err);
+    group_management_context_free (ctx);
+}
+
+static void
+action_manage_groups (GtkWidget *widget,
+                      const char *action_name G_GNUC_UNUSED,
+                      GVariant *parameter G_GNUC_UNUSED)
+{
+    OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
+    OTPClientApplication *app = OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (self)));
+    DatabaseData *db_data = app != NULL ? otpclient_application_get_db_data (app) : NULL;
+    if (db_data == NULL || db_data->in_memory_json_data == NULL)
+        return;
+
+    GHashTable *seen = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+    gsize i;
+    json_t *token;
+    json_array_foreach (db_data->in_memory_json_data, i, token) {
+        const gchar *group = json_string_value (json_object_get (token, "group"));
+        if (group != NULL && group[0] != '\0')
+            g_hash_table_add (seen, g_strdup (group));
+    }
+    GList *keys = g_list_sort (g_hash_table_get_keys (seen), (GCompareFunc) g_utf8_collate);
+    if (keys == NULL) {
+        g_hash_table_unref (seen);
+        show_error_toast (self, "%s", _("There are no groups to manage."));
+        return;
+    }
+
+    GroupManagementContext *ctx = g_new0 (GroupManagementContext, 1);
+    g_weak_ref_init (&ctx->window_ref, self);
+    ctx->db_data = database_data_ref (db_data);
+    ctx->lock_generation = otpclient_application_get_lock_generation (app);
+    ctx->groups = g_ptr_array_new_with_free_func (g_free);
+    GtkStringList *model = gtk_string_list_new (NULL);
+    for (GList *l = keys; l != NULL; l = l->next) {
+        const gchar *name = l->data;
+        g_ptr_array_add (ctx->groups, g_strdup (name));
+        gtk_string_list_append (model, name);
+    }
+    g_list_free (keys);
+    g_hash_table_unref (seen);
+
+    GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 10);
+    ctx->dropdown = gtk_drop_down_new (G_LIST_MODEL (model), NULL);
+    ctx->name_entry = gtk_entry_new ();
+    gtk_entry_set_placeholder_text (GTK_ENTRY (ctx->name_entry), _("New group name"));
+    gtk_box_append (GTK_BOX (box), ctx->dropdown);
+    gtk_box_append (GTK_BOX (box), ctx->name_entry);
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (adw_alert_dialog_new (
+        _("Manage Groups"), _("Rename a group across all its tokens, or remove the group from those tokens.")));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "remove", _("Remove Group"),
+                                    "rename", _("Rename Group"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "remove", ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_response_appearance (dialog, "rename", ADW_RESPONSE_SUGGESTED);
+    adw_alert_dialog_set_default_response (dialog, "rename");
+    adw_alert_dialog_set_extra_child (dialog, box);
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (self), NULL,
+                             (GAsyncReadyCallback) on_manage_groups_response, ctx);
+}
+
 static void
 on_token_right_click (GtkGestureClick *gesture,
                       gint             n_press,
@@ -6165,6 +6284,7 @@ gtk_widget_class_bind_template_child (widget_class, OTPClientWindow, search_bar)
     gtk_widget_class_install_action (widget_class, "win.move-token", NULL, action_move_token);
     gtk_widget_class_install_action (widget_class, "win.set-group", "s", action_set_group);
     gtk_widget_class_install_action (widget_class, "win.new-group", NULL, action_new_group);
+    gtk_widget_class_install_action (widget_class, "win.manage-groups", NULL, action_manage_groups);
     gtk_widget_class_install_action (widget_class, "win.remove-from-group", NULL, action_remove_from_group);
     gtk_widget_class_install_action (widget_class, "win.rename-db", NULL, action_rename_db);
     gtk_widget_class_install_action (widget_class, "win.set-primary-db", NULL, action_set_primary_db);

@@ -210,6 +210,36 @@ test_quarantine_review_repairs_and_validates_token (void)
 }
 
 static void
+test_manage_groups_renames_all_matching_tokens (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    json_object_set_new (json_array_get (fixture.db->in_memory_json_data, 0),
+                         "group", json_string ("Work"));
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+
+    g_assert_true (gtk_widget_activate_action (GTK_WIDGET (win), "win.manage-groups", NULL));
+    settle ();
+    AdwDialog *dialog = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (dialog);
+    GtkWidget *dropdown = find_widget (GTK_WIDGET (dialog), GTK_TYPE_DROP_DOWN, NULL);
+    GtkWidget *entry_widget = find_widget (GTK_WIDGET (dialog), GTK_TYPE_ENTRY, NULL);
+    GtkWidget *rename = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Rename Group");
+    g_assert_nonnull (dropdown);
+    g_assert_nonnull (entry_widget);
+    g_assert_nonnull (rename);
+    gtk_editable_set_text (GTK_EDITABLE (entry_widget), "Projects");
+    g_signal_emit_by_name (rename, "clicked");
+    settle ();
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "group")), ==, "Projects");
+    review_fixture_clear (&fixture);
+}
+
+static void
 test_dialog_lock_and_export_validation (void)
 {
     ReviewFixture fixture;
@@ -605,6 +635,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/hotp-and-clipboard", test_hotp_and_clipboard);
     g_test_add_func ("/gui-flows/quarantine-review-delete", test_quarantine_review_can_delete_preserved_token);
     g_test_add_func ("/gui-flows/quarantine-review-repair", test_quarantine_review_repairs_and_validates_token);
+    g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);

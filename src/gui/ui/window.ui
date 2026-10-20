@@ -353,6 +353,10 @@
         <attribute name="action">app.db-info</attribute>
       </item>
       <item>
+        <attribute name="label" translatable="yes">Manage Groups</attribute>
+        <attribute name="action">win.manage-groups</attribute>
+      </item>
+      <item>
         <attribute name="label" translatable="yes">KDF Parameters</attribute>
         <attribute name="action">app.kdf-settings</attribute>
       </item>

@@ -146,6 +146,13 @@ gboolean      db_repair_quarantined_token (DatabaseData *db_data,
                                             guint index,
                                             json_t *repaired_token,
                                             GError **err);
+gboolean      db_rename_group (DatabaseData *db_data,
+                                const gchar *old_name,
+                                const gchar *new_name,
+                                GError **err);
+gboolean      db_remove_group (DatabaseData *db_data,
+                                const gchar *name,
+                                GError **err);
 
 void    load_db            (DatabaseData   *db_data,
                             GError        **error);

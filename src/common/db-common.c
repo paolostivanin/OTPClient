@@ -1185,6 +1185,60 @@ db_import_otps (DatabaseData     *db_data,
     return db_transaction (db_data, import_otps_mutation, &ctx, err);
 }
 
+typedef struct {
+    const gchar *old_name;
+    const gchar *new_name;
+} GroupMutation;
+
+static gboolean
+change_group_mutation (json_t *candidate, gpointer user_data, GError **err)
+{
+    (void) err;
+    GroupMutation *mutation = user_data;
+    size_t i;
+    json_t *token;
+    json_array_foreach (candidate, i, token) {
+        const gchar *group = json_string_value (json_object_get (token, "group"));
+        if (g_strcmp0 (group, mutation->old_name) != 0)
+            continue;
+        if (mutation->new_name != NULL) {
+            if (json_object_set_new (token, "group", json_string (mutation->new_name)) != 0) {
+                g_set_error_literal (err, G_IO_ERROR, G_IO_ERROR_NO_SPACE,
+                                     "Could not stage the group change.");
+                return FALSE;
+            }
+        } else {
+            json_object_del (token, "group");
+        }
+    }
+    return TRUE;
+}
+
+static gboolean
+change_group (DatabaseData *db_data, const gchar *old_name,
+              const gchar *new_name, GError **err)
+{
+    g_return_val_if_fail (db_data != NULL, FALSE);
+    g_return_val_if_fail (old_name != NULL && old_name[0] != '\0', FALSE);
+    g_return_val_if_fail (err == NULL || *err == NULL, FALSE);
+    GroupMutation mutation = { old_name, new_name };
+    return db_transaction (db_data, change_group_mutation, &mutation, err);
+}
+
+gboolean
+db_rename_group (DatabaseData *db_data, const gchar *old_name,
+                 const gchar *new_name, GError **err)
+{
+    g_return_val_if_fail (new_name != NULL && new_name[0] != '\0', FALSE);
+    return change_group (db_data, old_name, new_name, err);
+}
+
+gboolean
+db_remove_group (DatabaseData *db_data, const gchar *name, GError **err)
+{
+    return change_group (db_data, name, NULL, err);
+}
+
 
 static void
 refresh_committed_snapshot (DatabaseData *db_data)

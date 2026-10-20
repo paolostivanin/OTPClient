@@ -156,6 +156,35 @@ test_quarantine_updates_are_transactional (void)
 }
 
 static void
+test_group_rename_and_remove_are_transactional (void)
+{
+    gchar *dir = NULL;
+    gchar *path = NULL;
+    DatabaseData *db_data = make_db_data (&dir, &path);
+    json_t *first = valid_totp ("first");
+    json_t *second = valid_totp ("second");
+    json_object_set_new (first, "group", json_string ("Work"));
+    json_object_set_new (second, "group", json_string ("Work"));
+    json_array_append_new (db_data->in_memory_json_data, first);
+    json_array_append_new (db_data->in_memory_json_data, second);
+    GError *err = NULL;
+    update_db (db_data, &err);
+    g_assert_no_error (err);
+
+    g_assert_true (db_rename_group (db_data, "Work", "Projects", &err));
+    g_assert_no_error (err);
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (db_data->in_memory_json_data, 1), "group")), ==, "Projects");
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (db_data->in_memory_json_data, 2), "group")), ==, "Projects");
+    g_assert_true (db_remove_group (db_data, "Projects", &err));
+    g_assert_no_error (err);
+    g_assert_null (json_object_get (json_array_get (db_data->in_memory_json_data, 1), "group"));
+    g_assert_null (json_object_get (json_array_get (db_data->in_memory_json_data, 2), "group"));
+    cleanup_db_data (db_data, dir, path);
+}
+
+static void
 test_encrypt_failure_preserves_add_edit_delete (void)
 {
     assert_transaction_failure_preserves_json (append_token_mutation, FALSE);
@@ -593,6 +622,7 @@ main (int argc, char **argv)
     g_test_add_func ("/db-transaction/lock-open-failure-everywhere", test_lock_open_failure_everywhere_warns_once);
     g_test_add_func ("/db-transaction/quarantine-append-failure", test_quarantine_append_failure_aborts_save);
     g_test_add_func ("/db-transaction/quarantine-updates-are-transactional", test_quarantine_updates_are_transactional);
+    g_test_add_func ("/db-transaction/group-rename-remove", test_group_rename_and_remove_are_transactional);
     g_test_add_func ("/db-transaction/committed-digest-baseline", test_committed_digest_baseline);
 
     int ret = g_test_run ();
