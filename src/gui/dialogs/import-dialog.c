@@ -117,7 +117,7 @@ otp_identity_key (const otp_t *otp)
 }
 
 static void
-clear_preview (ImportDialog *self)
+free_pending_preview (ImportDialog *self)
 {
     if (self->preview_checks != NULL) {
         g_ptr_array_unref (self->preview_checks);
@@ -130,6 +130,12 @@ clear_preview (ImportDialog *self)
     g_clear_pointer (&self->pending_details, g_free);
     self->pending_batch_size = self->pending_batch_index = 0;
     self->pending_parse_skipped_invalid = 0;
+}
+
+static void
+clear_preview (ImportDialog *self)
+{
+    free_pending_preview (self);
     if (self->preview_group != NULL) {
         GtkWidget *parent = gtk_widget_get_parent (self->preview_group);
         if (GTK_IS_BOX (parent))
@@ -495,7 +501,7 @@ static void
 import_dialog_finalize (GObject *object)
 {
     ImportDialog *self = IMPORT_DIALOG (object);
-    clear_preview (self);
+    free_pending_preview (self);
     g_free (self->selected_file);
     g_clear_pointer (&self->db_data, database_data_free);
     if (self->import_password != NULL) {
