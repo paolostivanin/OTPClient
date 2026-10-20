@@ -38,7 +38,48 @@ struct _ImportDialog
 
     gchar *selected_file;
     gchar *import_password;
+    gboolean import_running;
 };
+
+typedef struct {
+    gchar *path;
+    gchar *action_name;
+    gchar *password;
+    gint32 max_file_size;
+    guint lock_generation;
+} ImportParseData;
+
+typedef struct {
+    GSList *otps;
+    OtpImportDiagnostics *diagnostics;
+    GError *error;
+    guint qr_invalid;
+    guint qr_batch_size;
+    guint qr_batch_index;
+} ImportParseResult;
+
+static void
+import_parse_data_free (gpointer data)
+{
+    ImportParseData *pd = data;
+    g_free (pd->path);
+    g_free (pd->action_name);
+    if (pd->password != NULL) {
+        explicit_bzero (pd->password, strlen (pd->password));
+        gcry_free (pd->password);
+    }
+    g_free (pd);
+}
+
+static void
+import_parse_result_free (gpointer data)
+{
+    ImportParseResult *parsed = data;
+    free_otps_gslist (parsed->otps);
+    otp_import_diagnostics_free (parsed->diagnostics);
+    g_clear_error (&parsed->error);
+    g_free (parsed);
+}
 
 G_DEFINE_FINAL_TYPE (ImportDialog, import_dialog, ADW_TYPE_DIALOG)
 
@@ -316,12 +357,113 @@ commit_import_preview (ImportDialog *self)
 }
 
 static void
+import_parse_thread (GTask *task, gpointer source, gpointer task_data,
+                     GCancellable *cancellable)
+{
+    (void) source;
+    ImportParseData *pd = task_data;
+    ImportParseResult *parsed = g_new0 (ImportParseResult, 1);
+    parsed->diagnostics = otp_import_diagnostics_new ();
+    if (parsed->error == NULL &&
+        g_cancellable_set_error_if_cancelled (cancellable, &parsed->error)) {
+        g_task_return_pointer (task, parsed, import_parse_result_free);
+        return;
+    }
+
+    goffset file_size = get_file_size (pd->path);
+    if (file_size <= 0) {
+        g_set_error_literal (&parsed->error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                             _("Selected file is empty or no longer exists."));
+    } else if (g_strcmp0 (pd->action_name, GOOGLE_FILE_ACTION_NAME) == 0) {
+        gchar *uri = qrcode_parse_image_file (pd->path, &parsed->error);
+        if (uri != NULL) {
+            if (g_str_has_prefix (uri, "otpauth-migration://"))
+                parsed->otps = google_migration_decode_full (
+                    uri, &parsed->qr_invalid, &parsed->qr_batch_size,
+                    &parsed->qr_batch_index, parsed->diagnostics, &parsed->error);
+            else
+                set_otps_from_uris_full (uri, &parsed->otps, parsed->diagnostics);
+            sensitive_g_free (uri);
+        }
+    } else {
+        parsed->otps = get_data_from_provider_full (
+            pd->action_name, pd->path, pd->password, pd->max_file_size,
+            (gsize) file_size, parsed->diagnostics, &parsed->error);
+    }
+    if (parsed->error == NULL &&
+        g_cancellable_set_error_if_cancelled (cancellable, &parsed->error)) {
+        g_task_return_pointer (task, parsed, import_parse_result_free);
+        return;
+    }
+    if (parsed->otps == NULL && parsed->error == NULL)
+        g_set_error_literal (&parsed->error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                             _("No valid tokens found; nothing was imported."));
+    g_task_return_pointer (task, parsed, import_parse_result_free);
+}
+
+static void
+import_parse_done (GObject *source, GAsyncResult *result, gpointer user_data)
+{
+    (void) user_data;
+    ImportDialog *self = IMPORT_DIALOG (source);
+    self->import_running = FALSE;
+    gtk_widget_set_sensitive (self->format_combo, TRUE);
+    gtk_widget_set_sensitive (self->password_row, TRUE);
+    gtk_button_set_label (GTK_BUTTON (self->import_button), _("Import"));
+    gtk_widget_set_sensitive (self->import_button, TRUE);
+    if (sensitive_dialog_is_closed (ADW_DIALOG (self)))
+        return;
+
+    GError *task_error = NULL;
+    ImportParseResult *parsed = g_task_propagate_pointer (G_TASK (result), &task_error);
+    if (task_error != NULL) {
+        if (!g_error_matches (task_error, G_IO_ERROR, G_IO_ERROR_CANCELLED)) {
+            gtk_label_set_text (GTK_LABEL (self->error_label), task_error->message);
+            gtk_widget_set_visible (self->error_label, TRUE);
+        }
+        g_clear_error (&task_error);
+        return;
+    }
+
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app) : NULL;
+    ImportParseData *pd = g_task_get_task_data (G_TASK (result));
+    if (app == NULL || otpclient_application_get_app_locked (app) ||
+        otpclient_application_get_db_data (app) != self->db_data ||
+        otpclient_application_get_lock_generation (app) != pd->lock_generation) {
+        gtk_label_set_text (GTK_LABEL (self->error_label),
+                            _("The active database changed. Reopen this dialog before importing."));
+        gtk_widget_set_visible (self->error_label, TRUE);
+        import_parse_result_free (parsed);
+        return;
+    }
+
+    g_autofree gchar *details = otp_import_diagnostics_format (parsed->diagnostics);
+    if (parsed->error != NULL) {
+        g_autofree gchar *message = g_strconcat (
+            parsed->error->message, details[0] != '\0' ? "\n" : "", details, NULL);
+        gtk_label_set_text (GTK_LABEL (self->error_label), message);
+        gtk_widget_set_visible (self->error_label, TRUE);
+        import_parse_result_free (parsed);
+        return;
+    }
+    show_import_preview (self, parsed->otps, details, parsed->qr_batch_size,
+                         parsed->qr_batch_index,
+                         parsed->diagnostics->skipped_invalid + parsed->qr_invalid);
+    parsed->otps = NULL;
+    import_parse_result_free (parsed);
+}
+
+static void
 do_import (ImportDialog *self)
 {
     if (self->pending_otps != NULL) {
         commit_import_preview (self);
         return;
     }
+    if (self->import_running)
+        return;
     guint fmt_idx = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
     if (fmt_idx >= N_IMPORT_FORMATS)
         return;
@@ -346,75 +488,45 @@ do_import (ImportDialog *self)
         wipe_password_row (self->password_row);
     }
 
-    goffset file_size = get_file_size (self->selected_file);
-    if (file_size <= 0) {
-        gtk_label_set_text (GTK_LABEL (self->error_label),
-                            _("Selected file is empty or no longer exists."));
-        gtk_widget_set_visible (self->error_label, TRUE);
-        return;
-    }
-
-    GError *err = NULL;
-    g_autoptr (OtpImportDiagnostics) diagnostics = otp_import_diagnostics_new ();
-    GSList *otps = NULL;
-    guint qr_invalid = 0;
-    guint qr_batch_size = 0;
-    guint qr_batch_index = 0;
-    if (g_strcmp0 (import_formats[fmt_idx].action_name,
-                   GOOGLE_FILE_ACTION_NAME) == 0) {
-        gchar *uri = qrcode_parse_image_file (self->selected_file, &err);
-        if (uri != NULL) {
-            if (g_str_has_prefix (uri, "otpauth-migration://"))
-                otps = google_migration_decode_full (uri, &qr_invalid,
-                                                &qr_batch_size, &qr_batch_index,
-                                                diagnostics, &err);
-            else
-                set_otps_from_uris_full (uri, &otps, diagnostics);
-            sensitive_g_free (uri);
-            if (otps == NULL && err == NULL)
-                g_set_error (&err, generic_error_gquark (), GENERIC_ERRCODE,
-                             "QR code contains no valid OTP token.");
-        }
-    } else {
-        otps = get_data_from_provider_full (import_formats[fmt_idx].action_name,
-                                       self->selected_file,
-                                       self->import_password,
-                                       self->db_data->max_file_size_from_memlock,
-                                       (gsize) file_size,
-                                       diagnostics, &err);
-    }
-
-    g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
-    if (otps == NULL && err == NULL)
-        g_set_error_literal (&err, G_IO_ERROR, G_IO_ERROR_INVALID_DATA, _("No valid tokens found; nothing was imported."));
-    if (err != NULL)
-    {
-        g_autofree gchar *message = g_strconcat (err->message, details[0] != '\0' ? "\n" : "", details, NULL);
-        gtk_label_set_text (GTK_LABEL (self->error_label), message);
-        free_otps_gslist (otps);
-        gtk_widget_set_visible (self->error_label, TRUE);
-        g_clear_error (&err);
-        return;
-    }
-
-    if (otps != NULL)
-    {
-        GApplication *default_app = g_application_get_default ();
-        OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
-            ? OTPCLIENT_APPLICATION (default_app)
-            : NULL;
-        if (app == NULL || otpclient_application_get_app_locked (app) ||
-            otpclient_application_get_db_data (app) != self->db_data)
-        {
+    ImportParseData *pd = g_new0 (ImportParseData, 1);
+    pd->path = g_strdup (self->selected_file);
+    pd->action_name = g_strdup (import_formats[fmt_idx].action_name);
+    pd->max_file_size = self->db_data->max_file_size_from_memlock;
+    GApplication *default_app = g_application_get_default ();
+    OTPClientApplication *app = OTPCLIENT_IS_APPLICATION (default_app)
+        ? OTPCLIENT_APPLICATION (default_app) : NULL;
+    pd->lock_generation = app != NULL
+        ? otpclient_application_get_lock_generation (app) : 0;
+    if (self->import_password != NULL) {
+        gsize len = strlen (self->import_password);
+        pd->password = gcry_calloc_secure (len + 1, 1);
+        if (pd->password == NULL) {
+            import_parse_data_free (pd);
+            explicit_bzero (self->import_password, strlen (self->import_password));
+            gcry_free (self->import_password);
+            self->import_password = NULL;
             gtk_label_set_text (GTK_LABEL (self->error_label),
-                                _("The active database changed. Reopen this dialog before importing."));
+                                _("Secure memory is exhausted"));
             gtk_widget_set_visible (self->error_label, TRUE);
-            free_otps_gslist (otps);
             return;
         }
+        memcpy (pd->password, self->import_password, len);
+        explicit_bzero (self->import_password, strlen (self->import_password));
+        gcry_free (self->import_password);
+        self->import_password = NULL;
     }
-    show_import_preview (self, otps, details, qr_batch_size, qr_batch_index,
-                         diagnostics->skipped_invalid + qr_invalid);
+
+    self->import_running = TRUE;
+    gtk_widget_set_sensitive (self->format_combo, FALSE);
+    gtk_widget_set_sensitive (self->password_row, FALSE);
+    gtk_button_set_label (GTK_BUTTON (self->import_button), _("Importing…"));
+    gtk_widget_set_sensitive (self->import_button, FALSE);
+    gtk_widget_set_visible (self->error_label, FALSE);
+    GTask *task = g_task_new (self, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
+                              import_parse_done, NULL);
+    g_task_set_task_data (task, pd, import_parse_data_free);
+    g_task_run_in_thread (task, import_parse_thread);
+    g_object_unref (task);
 }
 
 static void
