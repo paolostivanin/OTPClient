@@ -3891,8 +3891,13 @@ add_token_from_otpauth_uri (OTPClientWindow *self,
     sensitive_g_free (otpauth_uri);
 
     if (otps == NULL) {
+        /* A well-formed URI the parser rejected (say, HOTP without a counter)
+         * left its reason in diagnostics; name it rather than calling the
+         * code "not an OTP URI". */
+        g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
         show_error_toast (self, "%s",
                           decode_error != NULL ? decode_error->message
+                          : details[0] != '\0' ? details
                                                : _("QR code is not an OTP URI"));
         g_clear_error (&decode_error);
         return;

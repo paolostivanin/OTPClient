@@ -61,9 +61,18 @@ try_apply_otpauth_uri (ManualAddDialog *self,
         return FALSE;
 
     GSList *otps = NULL;
-    set_otps_from_uris (text, &otps);
-    if (otps == NULL)
+    g_autoptr (OtpImportDiagnostics) diagnostics = otp_import_diagnostics_new ();
+    set_otps_from_uris_full (text, &otps, diagnostics);
+    if (otps == NULL) {
+        /* Say why the URI was rejected instead of leaving it in the secret
+         * field to fail Base32 validation later. */
+        g_autofree gchar *details = otp_import_diagnostics_format (diagnostics);
+        if (details[0] != '\0') {
+            gtk_label_set_text (GTK_LABEL (self->error_label), details);
+            gtk_widget_set_visible (self->error_label, TRUE);
+        }
         return FALSE;
+    }
 
     otp_t *otp = otps->data;
     if (otp == NULL || otp->secret == NULL || otp->type == NULL) {
@@ -125,13 +134,14 @@ on_secret_changed (GtkEditable     *editable,
         return;
     }
 
+    /* Hide any stale error first: a rejected URI reports its reason below. */
+    gtk_widget_set_visible (self->error_label, FALSE);
     const gchar *text = gtk_editable_get_text (editable);
     if (text != NULL && g_ascii_strncasecmp (text, "otpauth://", 10) == 0) {
         try_apply_otpauth_uri (self, text);
     }
 
     update_add_sensitivity (self);
-    gtk_widget_set_visible (self->error_label, FALSE);
 }
 
 static void

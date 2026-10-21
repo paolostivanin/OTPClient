@@ -310,7 +310,8 @@ parse_uri (const gchar   *uri,
     const gchar *secret = g_hash_table_lookup (params, "secret");
     otp->secret = secure_strdup (secret);
 
-    const gchar *invalid_field = NULL;
+    /* Bounds come from the macros so the message follows libcotp. */
+    g_autofree gchar *invalid_field = NULL;
     const gchar *algo = g_hash_table_lookup (params, "algorithm");
     if (algo != NULL) {
         if (g_ascii_strcasecmp (algo, "SHA1") == 0 ||
@@ -319,7 +320,7 @@ parse_uri (const gchar   *uri,
             g_free (otp->algo);
             otp->algo = g_ascii_strup (algo, -1);
         } else {
-            invalid_field = _("Unsupported algorithm parameter.");
+            invalid_field = g_strdup (_("Unsupported algorithm parameter."));
         }
     }
 
@@ -328,7 +329,8 @@ parse_uri (const gchar   *uri,
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (period, &endptr, 10);
         if (endptr == period || *endptr != '\0' || v < OTP_PERIOD_MIN || v > OTP_PERIOD_MAX)
-            invalid_field = _("Invalid period parameter; expected a value from 1 to 120.");
+            invalid_field = g_strdup_printf (_("Invalid period parameter; expected a value from %d to %d."),
+                                             (gint) OTP_PERIOD_MIN, (gint) OTP_PERIOD_MAX);
         else
             otp->period = (guint32) v;
     }
@@ -337,19 +339,20 @@ parse_uri (const gchar   *uri,
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (digits, &endptr, 10);
         if (endptr == digits || *endptr != '\0' || v < OTP_DIGITS_MIN || v > OTP_DIGITS_MAX)
-            invalid_field = _("Invalid digits parameter; expected a value from 4 to 10.");
+            invalid_field = g_strdup_printf (_("Invalid digits parameter; expected a value from %d to %d."),
+                                             (gint) OTP_DIGITS_MIN, (gint) OTP_DIGITS_MAX);
         else
             otp->digits = (guint32) v;
     }
     const gchar *counter = g_hash_table_lookup (params, "counter");
     if (invalid_field == NULL && g_str_equal (otp->type, "HOTP") && counter == NULL)
-        invalid_field = _("HOTP URI is missing its counter parameter.");
+        invalid_field = g_strdup (_("HOTP URI is missing its counter parameter."));
     if (invalid_field == NULL && counter != NULL) {
         gchar *endptr = NULL;
         gint64 v = g_ascii_strtoll (counter, &endptr, 10);
         if (endptr == counter || *endptr != '\0' || v < 0 ||
             (guint64) v >= OTP_HOTP_COUNTER_MAX)
-            invalid_field = _("Invalid counter parameter; expected a non-negative supported value.");
+            invalid_field = g_strdup (_("Invalid counter parameter; expected a non-negative supported value."));
         else
             otp->counter = (guint64) v;
     }

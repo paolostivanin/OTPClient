@@ -679,6 +679,46 @@ test_dialog_lock_and_export_validation (void)
     review_fixture_clear (&fixture);
 }
 
+static GtkWidget *
+find_label_containing (GtkWidget *parent, const gchar *needle)
+{
+    if (GTK_IS_LABEL (parent) &&
+        strstr (gtk_label_get_text (GTK_LABEL (parent)), needle) != NULL)
+        return parent;
+    for (GtkWidget *child = gtk_widget_get_first_child (parent); child != NULL;
+         child = gtk_widget_get_next_sibling (child)) {
+        GtkWidget *found = find_label_containing (child, needle);
+        if (found != NULL) return found;
+    }
+    return NULL;
+}
+
+static void
+test_manual_add_reports_rejected_uri (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    AdwDialog *dialog = ADW_DIALOG (manual_add_dialog_new (fixture.db, NULL, NULL));
+    adw_dialog_present (dialog, GTK_WIDGET (win));
+    settle ();
+    GtkWidget *secret = find_widget (GTK_WIDGET (dialog), ADW_TYPE_ENTRY_ROW, "Secret (Base32) or otpauth:// URI");
+    g_assert_nonnull (secret);
+
+    /* The URI is well formed but HOTP needs a counter: name that. */
+    gtk_editable_set_text (GTK_EDITABLE (secret), "otpauth://hotp/alice?secret=" REVIEW_SECRET);
+    GtkWidget *reason = find_label_containing (GTK_WIDGET (dialog), "missing its counter");
+    g_assert_nonnull (reason);
+    g_assert_true (gtk_widget_get_visible (reason));
+
+    gtk_editable_set_text (GTK_EDITABLE (secret), "otpauth://hotp/alice?counter=3&secret=" REVIEW_SECRET);
+    g_assert_false (gtk_widget_get_visible (reason));
+    g_assert_cmpstr (gtk_editable_get_text (GTK_EDITABLE (secret)), ==, REVIEW_SECRET);
+    adw_dialog_force_close (dialog);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
 static void
 test_cross_database_hotp_opens_database (void)
 {
@@ -1299,6 +1339,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/bulk-selection-mode", test_bulk_selection_mode_refreshes_rows);
     g_test_add_func ("/gui-flows/import-preview", test_import_preview_duplicates_and_conflicts);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
+    g_test_add_func ("/gui-flows/manual-add-rejected-uri", test_manual_add_reports_rejected_uri);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
