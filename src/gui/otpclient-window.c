@@ -1011,7 +1011,6 @@ cross_db_deactivate (OTPClientWindow *self)
 
 typedef struct {
     GPtrArray *db_list;    /* array of DbListEntry (owned) */
-    GPtrArray *loaded_db_paths;
     gchar *current_db_path;
     gint32 max_file_size;
     GWeakRef window_ref;
@@ -1041,8 +1040,6 @@ cross_db_task_data_free (gpointer data)
     g_free (td->current_db_path);
     if (td->db_list != NULL)
         g_ptr_array_unref (td->db_list);
-    if (td->loaded_db_paths != NULL)
-        g_ptr_array_unref (td->loaded_db_paths);
     g_free (td);
 }
 
@@ -1133,8 +1130,6 @@ cross_db_load_thread (GTask        *task,
             g_object_unref (entry);
         }
 
-        g_ptr_array_add (td->loaded_db_paths, g_strdup (dbe->path));
-
         database_data_free (db_data);
     }
 
@@ -1158,6 +1153,10 @@ cross_db_source_changed (GFileMonitor      *monitor,
         return;
 
     otpclient_window_invalidate_cross_db (self);
+    /* Invalidating swaps the model back to this database's rows; a search that
+     * only matched other databases would otherwise sit on the list page with
+     * no rows until the reload lands. */
+    update_empty_state (self);
     const gchar *query = gtk_editable_get_text (GTK_EDITABLE (self->search_entry));
     if (query != NULL && query[0] != '\0')
         cross_db_trigger_load (self);
@@ -1225,8 +1224,6 @@ cross_db_load_done (GObject      *source,
     g_clear_object (&self->cross_db_store);
     self->cross_db_store = store;
     self->cross_db_loaded = TRUE;
-    for (guint i = 0; i < td->loaded_db_paths->len; i++)
-        cross_db_watch_source (self, g_ptr_array_index (td->loaded_db_paths, i));
 
     /* Rebuild the flatten model with the new cross-db store */
     g_clear_object (&self->flatten_model);
@@ -1266,13 +1263,23 @@ cross_db_trigger_load (OTPClientWindow *self)
         return;
     }
 
+    /* Watch every other database before the worker reads any of them. Doing
+     * it after the load left a window in which a write (including Move token
+     * into one of them) went unseen and the cache stayed stale, and a database
+     * that failed to load was never watched at all. A source the worker has to
+     * migrate rewrites itself once, which costs one extra reload and no more. */
+    for (guint i = 0; i < db_list->len; i++) {
+        DbListEntry *dbe = g_ptr_array_index (db_list, i);
+        if (g_strcmp0 (dbe->path, db_data->db_path) != 0)
+            cross_db_watch_source (self, dbe->path);
+    }
+
     self->cross_db_loading = TRUE;
     g_clear_object (&self->cross_db_cancellable);
     self->cross_db_cancellable = g_cancellable_new ();
 
     CrossDbTaskData *td = g_new0 (CrossDbTaskData, 1);
     td->db_list = db_list;
-    td->loaded_db_paths = g_ptr_array_new_with_free_func (g_free);
     td->current_db_path = g_strdup (db_data->db_path);
     td->max_file_size = db_data->max_file_size_from_memlock;
     td->generation = self->cross_db_generation;
@@ -3022,8 +3029,6 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
     otpclient_window_clear_clipboard_now (self);
     otpclient_window_clear_displayed_otps (self);
 
-    if (self->cross_db_cancellable != NULL)
-        g_cancellable_cancel (self->cross_db_cancellable);
     if (self->webcam_cancellable != NULL)
         g_cancellable_cancel (self->webcam_cancellable);
     close_webcam_progress (self);
@@ -3031,19 +3036,14 @@ otpclient_window_secure_lock_cleanup (OTPClientWindow *self)
         g_cancellable_cancel (self->clipboard_cancellable);
     if (self->file_dialog_cancellable != NULL)
         g_cancellable_cancel (self->file_dialog_cancellable);
-    g_clear_object (&self->cross_db_cancellable);
     g_clear_object (&self->webcam_cancellable);
     g_clear_object (&self->clipboard_cancellable);
     g_clear_object (&self->file_dialog_cancellable);
 
-    self->cross_db_loading = FALSE;
-    self->cross_db_loaded = FALSE;
-    if (self->cross_db_monitors != NULL)
-        g_hash_table_remove_all (self->cross_db_monitors);
-    cross_db_deactivate (self);
-    g_clear_object (&self->flatten_model);
-    if (self->cross_db_store != NULL)
-        g_list_store_remove_all (self->cross_db_store);
+    /* Shared teardown, which also bumps the generation: a load that was in
+     * flight when the app locked must not pass cross_db_load_done's check and
+     * clear the loading flag of the load that follows the next unlock. */
+    otpclient_window_invalidate_cross_db (self);
     if (self->otp_store != NULL)
         g_list_store_remove_all (self->otp_store);
 

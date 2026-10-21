@@ -6,6 +6,7 @@
 #include "otpclient-window-private.h"
 #include "otp-entry.h"
 #include "otp-validation.h"
+#include "gsettings-common.h"
 #include "parse-uri.h"
 #include "lock-app.h"
 #include "dialogs/qr-display-dialog.h"
@@ -803,6 +804,50 @@ test_manual_add_reports_rejected_uri (void)
 }
 
 static void
+test_cross_database_sources_watched_before_load (void)
+{
+    ReviewFixture first, second;
+    g_autoptr (OTPEntry) entry = attach_fixture (&first);
+    (void) entry;
+    review_fixture_init (&second);
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
+    g_assert_nonnull (settings);
+    GVariantBuilder builder;
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(ss)"));
+    g_variant_builder_add (&builder, "(ss)", "First", first.path);
+    g_variant_builder_add (&builder, "(ss)", "Second", second.path);
+    g_settings_set_value (settings, "db-list", g_variant_builder_end (&builder));
+    otpclient_application_set_use_secret_service (app, TRUE);
+
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "alice");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+
+    /* The worker has not finished, yet the other database is already watched,
+     * so a write to it during the load cannot be missed. The active one never
+     * is: the app's own saves must not invalidate its own cache. */
+    g_assert_true (win->cross_db_loading);
+    g_assert_nonnull (win->cross_db_monitors);
+    g_assert_true (g_hash_table_contains (win->cross_db_monitors, second.path));
+    g_assert_false (g_hash_table_contains (win->cross_db_monitors, first.path));
+
+    /* Locking starts a new generation and drops every monitor, so a load that
+     * was in flight cannot be mistaken for the one after the next unlock. */
+    guint64 generation = win->cross_db_generation;
+    lock_app_lock (app);
+    settle ();
+    g_assert_cmpuint (win->cross_db_generation, >, generation);
+    g_assert_false (win->cross_db_loading);
+    g_assert_cmpuint (g_hash_table_size (win->cross_db_monitors), ==, 0);
+    AdwDialog *unlock = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    if (unlock != NULL) adw_dialog_force_close (unlock);
+
+    otpclient_application_set_use_secret_service (app, FALSE);
+    g_settings_reset (settings, "db-list");
+    review_fixture_clear (&second);
+    review_fixture_clear (&first);
+}
+
+static void
 test_cross_database_hotp_opens_database (void)
 {
     ReviewFixture first, second;
@@ -1425,6 +1470,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/import-preview", test_import_preview_duplicates_and_conflicts);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/manual-add-rejected-uri", test_manual_add_reports_rejected_uri);
+    g_test_add_func ("/gui-flows/cross-database-watch", test_cross_database_sources_watched_before_load);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
