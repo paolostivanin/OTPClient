@@ -116,6 +116,12 @@ test_get_algo_int_from_str_known (void)
     g_assert_cmpint (get_algo_int_from_str ("SHA1"),   ==, 0);
     g_assert_cmpint (get_algo_int_from_str ("SHA256"), ==, 1);
     g_assert_cmpint (get_algo_int_from_str ("SHA512"), ==, 2);
+
+    /* otp_validate_token_object accepts any case, so a lowercase algorithm
+     * must not fall back to SHA1 and generate wrong codes. */
+    g_assert_cmpint (get_algo_int_from_str ("sha1"),   ==, 0);
+    g_assert_cmpint (get_algo_int_from_str ("sha256"), ==, 1);
+    g_assert_cmpint (get_algo_int_from_str ("Sha512"), ==, 2);
 }
 
 static void

@@ -75,6 +75,27 @@ test_rendered_step_exact_boundary (void)
     g_object_unref (entry);
 }
 
+/* The validator accepts a lowercase algorithm, so generation must honor it
+ * instead of silently falling back to SHA1. */
+static void
+test_lowercase_algorithm_is_honored (void)
+{
+    const gchar *secret = "JBSWY3DPEHPK3PXP";
+    OTPEntry *entry = otp_entry_new ("alice", "Example", NULL, "TOTP", 30, 0,
+                                     "sha256", 6, secret);
+    cotp_error_t err;
+    otp_entry_test_update_otp_at (entry, 3000);
+    gchar *expected = get_totp_at (secret, 3000, 6, 30, COTP_SHA256, &err);
+    gchar *sha1 = get_totp_at (secret, 3000, 6, 30, COTP_SHA1, &err);
+    g_assert_nonnull (expected);
+    g_assert_nonnull (sha1);
+    g_assert_cmpstr (expected, !=, sha1);
+    g_assert_cmpstr (otp_entry_get_otp_value (entry), ==, expected);
+    sensitive_free (expected);
+    sensitive_free (sha1);
+    g_object_unref (entry);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -84,5 +105,6 @@ main (int argc, char **argv)
     g_test_add_func ("/otp-entry/steam", test_steam_generation);
     g_test_add_func ("/otp-entry/rendered-step", test_rendered_step_tracks_generation);
     g_test_add_func ("/otp-entry/rendered-step-boundary", test_rendered_step_exact_boundary);
+    g_test_add_func ("/otp-entry/lowercase-algorithm", test_lowercase_algorithm_is_honored);
     return g_test_run ();
 }

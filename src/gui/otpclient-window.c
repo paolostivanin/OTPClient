@@ -3392,9 +3392,13 @@ quarantine_build_repaired_token (QuarantineRepair *repair,
     const gchar *label = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_LABEL]));
     const gchar *issuer = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_ISSUER]));
     const gchar *group = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_GROUP]));
-    const gchar *type = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_TYPE]));
+    /* The validator accepts any case, so store the canonical spelling every
+     * other writer uses rather than whatever was typed. */
+    g_autofree gchar *type = g_ascii_strup (
+        gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_TYPE])), -1);
     const gchar *secret = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_SECRET]));
-    const gchar *algo = gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_ALGORITHM]));
+    g_autofree gchar *algo = g_ascii_strup (
+        gtk_editable_get_text (GTK_EDITABLE (repair->fields[REPAIR_ALGORITHM])), -1);
     if (!quarantine_set_string (token, "label", label, FALSE) ||
         !quarantine_set_string (token, "issuer", issuer, TRUE) ||
         !quarantine_set_string (token, "group", group, TRUE) ||
@@ -3444,6 +3448,19 @@ no_space:
 static void quarantine_repair_clicked (GtkButton *button, gpointer user_data);
 static void quarantine_delete_clicked (GtkButton *button, gpointer user_data);
 
+static gchar *
+quarantine_token_title (json_t *token,
+                        guint   index)
+{
+    const gchar *label = json_string_value (json_object_get (token, "label"));
+    const gchar *issuer = json_string_value (json_object_get (token, "issuer"));
+    if (label != NULL && label[0] != '\0')
+        return g_strdup (label);
+    if (issuer != NULL && issuer[0] != '\0')
+        return g_strdup (issuer);
+    return g_strdup_printf (_("Invalid token %u"), index + 1);
+}
+
 static void
 quarantine_rebuild_list (QuarantineReview *review)
 {
@@ -3454,15 +3471,7 @@ quarantine_rebuild_list (QuarantineReview *review)
     gsize count = json_is_array (tokens) ? json_array_size (tokens) : 0;
     for (guint i = 0; i < count; i++) {
         json_t *token = json_array_get (tokens, i);
-        const gchar *label = json_string_value (json_object_get (token, "label"));
-        const gchar *issuer = json_string_value (json_object_get (token, "issuer"));
-        g_autofree gchar *title = NULL;
-        if (label != NULL && label[0] != '\0')
-            title = g_strdup (label);
-        else if (issuer != NULL && issuer[0] != '\0')
-            title = g_strdup (issuer);
-        else
-            title = g_strdup_printf (_("Invalid token %u"), i + 1);
+        g_autofree gchar *title = quarantine_token_title (token, i);
 
         GError *validation_error = NULL;
         otp_validate_token_object (token, i, &validation_error);
@@ -3507,6 +3516,80 @@ quarantine_report_error (QuarantineReview *review,
         show_error_toast (window, "%s", message);
 }
 
+/* Captures which quarantined entry a confirmation or repair form was opened
+ * for, so its response can refuse to act on a database that moved on. */
+static QuarantineRepair *
+quarantine_pending_new (QuarantineReview *review,
+                        guint             index,
+                        json_t           *original)
+{
+    QuarantineRepair *pending = g_new0 (QuarantineRepair, 1);
+    g_weak_ref_init (&pending->review_ref, review->dialog);
+    pending->db_data = database_data_ref (review->db_data);
+    g_autoptr (OTPClientWindow) window = g_weak_ref_get (&review->window_ref);
+    OTPClientApplication *app = window != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (window))) : NULL;
+    pending->lock_generation = app != NULL
+        ? otpclient_application_get_lock_generation (app) : 0;
+    pending->index = index;
+    pending->original = json_deep_copy (original);
+    return pending;
+}
+
+static gboolean
+quarantine_pending_is_current (QuarantineRepair *pending,
+                               OTPClientWindow  *window)
+{
+    OTPClientApplication *app = window != NULL ? OTPCLIENT_APPLICATION (
+        gtk_window_get_application (GTK_WINDOW (window))) : NULL;
+    if (app == NULL || window_database_is_unavailable (window) ||
+        otpclient_application_get_db_data (app) != pending->db_data ||
+        otpclient_application_get_lock_generation (app) != pending->lock_generation ||
+        pending->index >= db_get_quarantined_count (pending->db_data))
+        return FALSE;
+    json_t *current = json_array_get (pending->db_data->quarantined_tokens, pending->index);
+    return current != NULL && json_equal (current, pending->original);
+}
+
+static void
+quarantine_delete_response (GObject      *source,
+                            GAsyncResult *result,
+                            gpointer      user_data)
+{
+    QuarantineRepair *pending = user_data;
+    const gchar *response = adw_alert_dialog_choose_finish (
+        ADW_ALERT_DIALOG (source), result);
+    g_autoptr (AdwDialog) review_dialog = g_weak_ref_get (&pending->review_ref);
+    QuarantineReview *review = review_dialog != NULL
+        ? g_object_get_data (G_OBJECT (review_dialog), "quarantine-review") : NULL;
+    g_autoptr (OTPClientWindow) window = review != NULL
+        ? g_weak_ref_get (&review->window_ref) : NULL;
+    if (g_strcmp0 (response, "delete") != 0 || review == NULL) {
+        quarantine_repair_free (pending);
+        return;
+    }
+    if (!quarantine_pending_is_current (pending, window)) {
+        if (window != NULL)
+            show_error_toast (window, "%s", _("The database changed. Reopen the review before deleting."));
+        quarantine_repair_free (pending);
+        return;
+    }
+
+    GError *err = NULL;
+    if (!db_delete_quarantined_token (pending->db_data, pending->index, &err)) {
+        quarantine_report_error (review, err ? err->message : _("Could not delete the quarantined token."));
+        g_clear_error (&err);
+        quarantine_rebuild_list (review);
+        quarantine_repair_free (pending);
+        return;
+    }
+    on_db_modified (window);
+    quarantine_rebuild_list (review);
+    if (db_get_quarantined_count (review->db_data) == 0)
+        adw_dialog_close (review_dialog);
+    quarantine_repair_free (pending);
+}
+
 static void
 quarantine_delete_clicked (GtkButton *button,
                            gpointer   user_data)
@@ -3516,19 +3599,26 @@ quarantine_delete_clicked (GtkButton *button,
     if (owner == NULL || window_database_is_unavailable (owner))
         return;
     guint index = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (button), "quarantine-index")) - 1;
-    GError *err = NULL;
-    if (!db_delete_quarantined_token (review->db_data, index, &err)) {
-        quarantine_report_error (review, err ? err->message : _("Could not delete the quarantined token."));
-        g_clear_error (&err);
-        quarantine_rebuild_list (review);
+    json_t *original = json_array_get (review->db_data->quarantined_tokens, index);
+    if (original == NULL)
         return;
-    }
-    g_autoptr (OTPClientWindow) window = g_weak_ref_get (&review->window_ref);
-    if (window != NULL)
-        on_db_modified (window);
-    quarantine_rebuild_list (review);
-    if (db_get_quarantined_count (review->db_data) == 0)
-        adw_dialog_close (ADW_DIALOG (review->dialog));
+
+    /* A quarantined entry may be the only copy of its secret, and unlike a
+     * token delete there is no Undo, so ask first. */
+    g_autofree gchar *title = quarantine_token_title (original, index);
+    g_autofree gchar *body = g_strdup_printf (
+        _("\"%s\" will be deleted permanently. This cannot be undone."), title);
+    AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
+        adw_alert_dialog_new (_("Delete Quarantined Token?"), body));
+    adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
+                                    "delete", _("Delete"), NULL);
+    adw_alert_dialog_set_response_appearance (dialog, "delete",
+                                               ADW_RESPONSE_DESTRUCTIVE);
+    adw_alert_dialog_set_default_response (dialog, "cancel");
+    adw_alert_dialog_set_close_response (dialog, "cancel");
+    adw_alert_dialog_choose (dialog, GTK_WIDGET (review->dialog), NULL,
+        (GAsyncReadyCallback) quarantine_delete_response,
+        quarantine_pending_new (review, index, original));
 }
 
 static void
@@ -3549,15 +3639,7 @@ quarantine_repair_response (GObject      *source,
         ? g_object_get_data (G_OBJECT (review_dialog), "quarantine-review") : NULL;
     g_autoptr (OTPClientWindow) window = review != NULL
         ? g_weak_ref_get (&review->window_ref) : NULL;
-    OTPClientApplication *app = window != NULL ? OTPCLIENT_APPLICATION (
-        gtk_window_get_application (GTK_WINDOW (window))) : NULL;
-    json_t *current = app != NULL && !window_database_is_unavailable (window) &&
-        repair->index < db_get_quarantined_count (repair->db_data)
-        ? json_array_get (repair->db_data->quarantined_tokens, repair->index) : NULL;
-    if (app == NULL || window_database_is_unavailable (window) ||
-        otpclient_application_get_db_data (app) != repair->db_data ||
-        otpclient_application_get_lock_generation (app) != repair->lock_generation ||
-        current == NULL || !json_equal (current, repair->original)) {
+    if (!quarantine_pending_is_current (repair, window)) {
         if (window != NULL)
             show_error_toast (window, "%s", _("The database changed. Reopen the repair form before saving."));
         quarantine_repair_free (repair);
@@ -3572,11 +3654,12 @@ quarantine_repair_response (GObject      *source,
         token = NULL;
     }
     if (token == NULL) {
-        g_autoptr (AdwAlertDialog) error_dialog = ADW_ALERT_DIALOG (
-            adw_alert_dialog_new (_("Repair failed"), err ? err->message : _("Invalid token fields.")));
-        adw_alert_dialog_add_response (error_dialog, "close", _("Close"));
-        if (review_dialog != NULL)
-            adw_dialog_present (ADW_DIALOG (error_dialog), GTK_WIDGET (review_dialog));
+        /* Floating: presenting it hands the only reference to the dialog host. */
+        AdwDialog *error_dialog = adw_alert_dialog_new (
+            _("Repair failed"), err ? err->message : _("Invalid token fields."));
+        adw_alert_dialog_add_response (ADW_ALERT_DIALOG (error_dialog), "close", _("Close"));
+        adw_dialog_present (error_dialog, review_dialog != NULL
+                            ? GTK_WIDGET (review_dialog) : GTK_WIDGET (window));
         g_clear_error (&err);
         quarantine_repair_free (repair);
         return;
@@ -3608,19 +3691,7 @@ quarantine_repair_clicked (GtkButton *button,
     if (original == NULL)
         return;
 
-    QuarantineRepair *repair = g_new0 (QuarantineRepair, 1);
-    g_weak_ref_init (&repair->review_ref, review->dialog);
-    repair->db_data = database_data_ref (review->db_data);
-    OTPClientWindow *window = g_weak_ref_get (&review->window_ref);
-    if (window != NULL) {
-        OTPClientApplication *app = OTPCLIENT_APPLICATION (
-            gtk_window_get_application (GTK_WINDOW (window)));
-        repair->lock_generation = app != NULL
-            ? otpclient_application_get_lock_generation (app) : 0;
-        g_object_unref (window);
-    }
-    repair->index = index;
-    repair->original = json_deep_copy (original);
+    QuarantineRepair *repair = quarantine_pending_new (review, index, original);
 
     static const gchar *keys[] = { "label", "issuer", "group", "type", "secret", "algo", "digits", "period", "counter" };
     static const gchar *titles[] = { N_("Label"), N_("Issuer"), N_("Group"), N_("Type"), N_("Base32 secret"), N_("Algorithm"), N_("Digits"), N_("Period"), N_("Counter") };
@@ -3632,6 +3703,9 @@ quarantine_repair_clicked (GtkButton *button,
         g_autofree gchar *text = quarantine_field_text (original, keys[i], defaults[i]);
         repair->fields[i] = quarantine_repair_add_field (GTK_GRID (grid), i,
             _(titles[i]), text, i == REPAIR_SECRET);
+        /* The password entry keeps its own secure copy; wipe this heap one. */
+        if (i == REPAIR_SECRET)
+            explicit_bzero (text, strlen (text));
     }
     GtkWidget *scrolled = gtk_scrolled_window_new ();
     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);

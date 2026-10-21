@@ -82,9 +82,11 @@ G_DEFINE_FINAL_TYPE (OTPEntry, otp_entry, G_TYPE_OBJECT)
 static gint
 get_algo_int (const gchar *algo)
 {
-    if (g_strcmp0 (algo, "SHA256") == 0)
+    /* Case-insensitive like otp_validate_token_object, so a token the validator
+     * accepted as "sha256" does not silently fall back to SHA1 here. */
+    if (algo != NULL && g_ascii_strcasecmp (algo, "SHA256") == 0)
         return COTP_SHA256;
-    if (g_strcmp0 (algo, "SHA512") == 0)
+    if (algo != NULL && g_ascii_strcasecmp (algo, "SHA512") == 0)
         return COTP_SHA512;
     return COTP_SHA1;
 }

@@ -215,7 +215,26 @@ test_quarantine_review_can_delete_preserved_token (void)
     g_assert_nonnull (review);
     GtkWidget *delete_button = find_widget (GTK_WIDGET (review), GTK_TYPE_BUTTON, "Delete");
     g_assert_nonnull (delete_button);
+
+    /* Deleting asks first; cancelling keeps the only copy of the secret. */
     g_signal_emit_by_name (delete_button, "clicked");
+    settle ();
+    AdwDialog *confirm = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_true (confirm != review);
+    GtkWidget *cancel = find_widget (GTK_WIDGET (confirm), GTK_TYPE_BUTTON, "Cancel");
+    g_assert_nonnull (cancel);
+    g_signal_emit_by_name (cancel, "clicked");
+    settle ();
+    g_assert_cmpuint (db_get_quarantined_count (fixture.db), ==, 1);
+    g_assert_true (adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win)) == review);
+
+    g_signal_emit_by_name (delete_button, "clicked");
+    settle ();
+    confirm = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_true (confirm != review);
+    GtkWidget *confirm_delete = find_widget (GTK_WIDGET (confirm), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (confirm_delete);
+    g_signal_emit_by_name (confirm_delete, "clicked");
     settle ();
     g_assert_cmpuint (db_get_quarantined_count (fixture.db), ==, 0);
     g_assert_false (adw_banner_get_revealed (ADW_BANNER (win->quarantine_banner)));
@@ -265,6 +284,95 @@ test_quarantine_review_repairs_and_validates_token (void)
     g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
     g_assert_true (otp_validate_database_root (fixture.db->in_memory_json_data, &err));
     g_assert_no_error (err);
+    review_fixture_clear (&fixture);
+}
+
+/* Opens the repair form for a quarantined TOTP whose digits are out of range and
+ * returns its text entries: label, issuer, group, type, algorithm, digits, period,
+ * counter (the secret is a password entry and is not collected). */
+static AdwDialog *
+open_quarantine_repair (ReviewFixture *fixture, GPtrArray *entries)
+{
+    fixture->db->quarantined_tokens = json_array ();
+    json_t *invalid = build_json_obj ("TOTP", "broken", "Example", REVIEW_SECRET,
+                                      6, "SHA1", 30, 0, NULL);
+    json_object_set_new (invalid, "digits", json_integer (99));
+    json_array_append_new (fixture->db->quarantined_tokens, invalid);
+    GError *err = NULL;
+    update_db (fixture->db, &err);
+    g_assert_no_error (err);
+
+    otpclient_window_database_modified (win);
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.review-quarantine", NULL);
+    settle ();
+    AdwDialog *review = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (review);
+    GtkWidget *repair_button = find_widget (GTK_WIDGET (review), GTK_TYPE_BUTTON, "Repair…");
+    g_assert_nonnull (repair_button);
+    g_signal_emit_by_name (repair_button, "clicked");
+    settle ();
+
+    AdwDialog *repair = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (repair);
+    g_assert_true (repair != review);
+    collect_entries (GTK_WIDGET (repair), entries);
+    g_assert_cmpuint (entries->len, ==, 8);
+    return repair;
+}
+
+static void
+test_quarantine_repair_reports_invalid_fields (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    g_autoptr (GPtrArray) entries = g_ptr_array_new ();
+    AdwDialog *repair = open_quarantine_repair (&fixture, entries);
+    gtk_editable_set_text (GTK_EDITABLE (g_ptr_array_index (entries, 5)), "3");
+    GtkWidget *save = find_widget (GTK_WIDGET (repair), GTK_TYPE_BUTTON, "Validate and Save");
+    g_assert_nonnull (save);
+    g_signal_emit_by_name (save, "clicked");
+    settle ();
+
+    AdwDialog *error = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_true (ADW_IS_ALERT_DIALOG (error));
+    g_assert_cmpstr (adw_alert_dialog_get_heading (ADW_ALERT_DIALOG (error)), ==, "Repair failed");
+    g_assert_cmpuint (db_get_quarantined_count (fixture.db), ==, 1);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+    GtkWidget *close = find_widget (GTK_WIDGET (error), GTK_TYPE_BUTTON, "Close");
+    g_assert_nonnull (close);
+    g_signal_emit_by_name (close, "clicked");
+    settle ();
+
+    AdwDialog *review = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    g_assert_true (ADW_IS_ALERT_DIALOG (review));
+    g_assert_cmpstr (adw_alert_dialog_get_heading (ADW_ALERT_DIALOG (review)), ==, "Tokens requiring repair");
+    adw_dialog_force_close (review);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_quarantine_repair_normalizes_case (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    g_autoptr (GPtrArray) entries = g_ptr_array_new ();
+    AdwDialog *repair = open_quarantine_repair (&fixture, entries);
+    gtk_editable_set_text (GTK_EDITABLE (g_ptr_array_index (entries, 3)), "totp");
+    gtk_editable_set_text (GTK_EDITABLE (g_ptr_array_index (entries, 4)), "sha256");
+    gtk_editable_set_text (GTK_EDITABLE (g_ptr_array_index (entries, 5)), "6");
+    GtkWidget *save = find_widget (GTK_WIDGET (repair), GTK_TYPE_BUTTON, "Validate and Save");
+    g_assert_nonnull (save);
+    g_signal_emit_by_name (save, "clicked");
+    settle ();
+
+    g_assert_cmpuint (db_get_quarantined_count (fixture.db), ==, 0);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
+    json_t *repaired = json_array_get (fixture.db->in_memory_json_data, 1);
+    g_assert_cmpstr (json_string_value (json_object_get (repaired, "type")), ==, "TOTP");
+    g_assert_cmpstr (json_string_value (json_object_get (repaired, "algo")), ==, "SHA256");
     review_fixture_clear (&fixture);
 }
 
@@ -1182,6 +1290,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/hotp-and-clipboard", test_hotp_and_clipboard);
     g_test_add_func ("/gui-flows/quarantine-review-delete", test_quarantine_review_can_delete_preserved_token);
     g_test_add_func ("/gui-flows/quarantine-review-repair", test_quarantine_review_repairs_and_validates_token);
+    g_test_add_func ("/gui-flows/quarantine-repair-invalid-fields", test_quarantine_repair_reports_invalid_fields);
+    g_test_add_func ("/gui-flows/quarantine-repair-normalizes-case", test_quarantine_repair_normalizes_case);
     g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
     g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
     g_test_add_func ("/gui-flows/single-delete-undo-write-failures", test_single_delete_and_undo_write_failures);

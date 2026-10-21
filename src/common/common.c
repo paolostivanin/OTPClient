@@ -150,11 +150,13 @@ init_libs (gint32 max_file_size)
 gint
 get_algo_int_from_str (const gchar *algo)
 {
-    if (g_strcmp0 (algo, "SHA1") == 0)
+    /* Case-insensitive like otp_validate_token_object: the validator accepts
+     * "sha256", so falling back to SHA1 for it would generate wrong codes. */
+    if (algo != NULL && g_ascii_strcasecmp (algo, "SHA1") == 0)
         return COTP_SHA1;
-    if (g_strcmp0 (algo, "SHA256") == 0)
+    if (algo != NULL && g_ascii_strcasecmp (algo, "SHA256") == 0)
         return COTP_SHA256;
-    if (g_strcmp0 (algo, "SHA512") == 0)
+    if (algo != NULL && g_ascii_strcasecmp (algo, "SHA512") == 0)
         return COTP_SHA512;
     g_warning ("Unknown OTP algorithm '%s'; defaulting to SHA1.",
                algo != NULL ? algo : "(null)");
