@@ -465,29 +465,30 @@ on_password_change_done (GObject *source, GAsyncResult *result, gpointer user_da
     gboolean success = g_task_propagate_boolean (task, &err);
     gboolean current_session = td->lock_generation == self->lock_generation &&
         self->db_data == td->db_data && !self->app_locked;
-    if (!current_session) {
-        g_clear_error (&err);
-        return;
-    }
     if (!success) {
-        g_warning ("Failed to update database with new password: %s",
-                   err != NULL ? err->message : "unknown error");
-        present_password_change_error (self,
-            err != NULL ? err->message : _("Could not change the database password."));
+        if (current_session) {
+            g_warning ("Failed to update database with new password: %s",
+                       err != NULL ? err->message : "unknown error");
+            present_password_change_error (self,
+                err != NULL ? err->message : _("Could not change the database password."));
+        }
         g_clear_error (&err);
         return;
     }
+    /* A lock invalidates UI work, but a committed password must still reach
+     * the keyring. Ending the operation may already have purged the live key;
+     * the task owns the password and database until this callback returns. */
     if (self->use_secret_service) {
         StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
         g_weak_ref_init (&ctx->app_ref, self);
         secret_password_store (OTPCLIENT_SCHEMA,
                                SECRET_COLLECTION_DEFAULT,
                                "OTPClient database password",
-                               self->db_data->key,
+                               td->password,
                                NULL,
                                on_password_stored_gui,
                                ctx,
-                               "string", self->db_data->db_path,
+                               "string", td->db_data->db_path,
                                NULL);
     }
 }

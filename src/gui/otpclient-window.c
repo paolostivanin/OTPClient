@@ -1710,6 +1710,8 @@ search_func (OTPClientWindow *self,
         gtk_widget_grab_focus (self->search_entry);
 }
 
+static void search_text_changed (GtkSearchEntry *entry, OTPClientWindow *win);
+
 static void
 action_clear_search (GtkWidget  *widget,
                      const char *action_name,
@@ -1719,11 +1721,14 @@ action_clear_search (GtkWidget  *widget,
     (void) parameter;
     OTPClientWindow *self = OTPCLIENT_WINDOW (widget);
     gtk_editable_set_text (GTK_EDITABLE (self->search_entry), "");
+    /* An already empty entry emits no change. Reset the group and models
+     * explicitly so Clear Filters also works for a group-only filter. */
+    search_text_changed (GTK_SEARCH_ENTRY (self->search_entry), self);
     gtk_widget_grab_focus (self->search_entry);
 }
 
 static void
-search_text_changed (GtkEntry        *entry,
+search_text_changed (GtkSearchEntry  *entry,
                      OTPClientWindow *win)
 {
     (void) entry;
@@ -1757,7 +1762,10 @@ search_text_changed (GtkEntry        *entry,
 
         if (search_group != NULL)
         {
-            /* Find matching group in dropdown and select it. The model reads
+            /* Select a group only when the query matches one dropdown item.
+             * The query remains the filter, including across databases; an
+             * exact dropdown filter would hide other substring matches.
+             * The model reads
              * ["All", <groups...>, "Ungrouped"], so both ends are sentinels and
              * only what lies between them is a real group name.
              *
@@ -1772,25 +1780,23 @@ search_text_changed (GtkEntry        *entry,
             guint n_items = g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model));
             g_autofree gchar *sg_lower = g_utf8_strdown (search_group, -1);
             win->syncing_group_filter = TRUE;
-            gboolean found = FALSE;
+            g_clear_pointer (&win->active_group_filter, g_free);
+            guint matching_group = 0;
             for (guint i = 1; i + 1 < n_items; i++)
             {
                 const gchar *item = gtk_string_list_get_string (win->group_list_model, i);
                 g_autofree gchar *item_lower = g_utf8_strdown (item, -1);
                 if (g_strstr_len (item_lower, -1, sg_lower) != NULL)
                 {
-                    gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), i);
-                    g_clear_pointer (&win->active_group_filter, g_free);
-                    win->active_group_filter = g_strdup (item);
-                    found = TRUE;
-                    break;
+                    if (matching_group != 0) {
+                        matching_group = 0;
+                        break;
+                    }
+                    matching_group = i;
                 }
             }
-            if (!found)
-            {
-                gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 0);
-                g_clear_pointer (&win->active_group_filter, g_free);
-            }
+            gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown),
+                                        matching_group);
             win->syncing_group_filter = FALSE;
         }
         else if (win->active_group_filter != NULL ||

@@ -1,4 +1,6 @@
 #include <string.h>
+#include <stdarg.h>
+#include <libsecret/secret.h>
 #include "review-fixture.h"
 #include "otpclient-application.h"
 #include "otpclient-window-private.h"
@@ -18,6 +20,46 @@
 
 static OTPClientApplication *app;
 static OTPClientWindow *win;
+
+static guint password_store_calls;
+static gchar *stored_password;
+static gchar *stored_password_path;
+
+/* Keep the worker, completion callback, and UI real; replace only the external
+ * keyring boundary. The isolated session deliberately has no Secret Service. */
+void
+__wrap_secret_password_store (const SecretSchema *schema,
+                              const gchar *collection,
+                              const gchar *label,
+                              const gchar *password,
+                              GCancellable *cancellable,
+                              GAsyncReadyCallback callback,
+                              gpointer user_data, ...)
+{
+    (void) schema;
+    (void) collection;
+    (void) label;
+    va_list args;
+    va_start (args, user_data);
+    g_assert_cmpstr (va_arg (args, const gchar *), ==, "string");
+    const gchar *path = va_arg (args, const gchar *);
+    g_assert_null (va_arg (args, const gchar *));
+    g_clear_pointer (&stored_password, sensitive_secure_free);
+    g_clear_pointer (&stored_password_path, g_free);
+    stored_password = secure_strdup (password);
+    stored_password_path = g_strdup (path);
+    va_end (args);
+    password_store_calls++;
+    GTask *task = g_task_new (NULL, cancellable, callback, user_data);
+    g_task_return_boolean (task, TRUE);
+    g_object_unref (task);
+}
+
+gboolean
+__wrap_secret_password_store_finish (GAsyncResult *result, GError **error)
+{
+    return g_task_propagate_boolean (G_TASK (result), error);
+}
 
 static void
 settle (void)
@@ -683,6 +725,82 @@ test_group_search_bounds (void)
     review_fixture_clear (&fixture);
 }
 
+static void
+test_group_search_preserves_all_matches (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    otpclient_application_set_use_secret_service (app, FALSE);
+    json_object_set_new (json_array_get (fixture.db->in_memory_json_data, 0),
+                         "group", json_string ("Work"));
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET,
+                        6, "SHA1", 30, 0, "Work Projects"));
+    otpclient_window_database_modified (win);
+
+    /* Replace an existing exact dropdown filter with a broader query. */
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), 1);
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->filter_model)), ==, 1);
+    const gchar *queries[] = {
+        "group:Work", "#work", "group:\"Work Projects\" bob", "group:missing"
+    };
+    const guint expected[] = { 2, 2, 1, 0 };
+    const guint dropdown[] = { 0, 0, 2, 0 };
+    for (guint i = 0; i < G_N_ELEMENTS (queries); i++) {
+        gtk_editable_set_text (GTK_EDITABLE (win->search_entry), queries[i]);
+        g_signal_emit_by_name (win->search_entry, "search-changed");
+        g_assert_cmpuint (g_list_model_get_n_items (
+            G_LIST_MODEL (win->filter_model)), ==, expected[i]);
+        g_assert_cmpuint (gtk_drop_down_get_selected (
+            GTK_DROP_DOWN (win->group_dropdown)), ==, dropdown[i]);
+        g_assert_null (win->active_group_filter);
+    }
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.clear-search", NULL);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_clear_filters_resets_group_only_filter (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    json_object_set_new (json_array_get (fixture.db->in_memory_json_data, 0),
+                         "group", json_string ("Work"));
+    otpclient_window_database_modified (win);
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.clear-search", NULL);
+
+    /* All tokens are grouped, so Ungrouped displays the recovery button. */
+    guint count = g_list_model_get_n_items (G_LIST_MODEL (win->group_list_model));
+    gtk_drop_down_set_selected (GTK_DROP_DOWN (win->group_dropdown), count - 1);
+    g_assert_cmpstr (gtk_editable_get_text (
+        GTK_EDITABLE (win->search_entry)), ==, "");
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->filter_model)), ==, 0);
+    g_assert_cmpstr (gtk_stack_get_visible_child_name (
+        GTK_STACK (win->content_stack)), ==, "no-search-results");
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.clear-search", NULL);
+    g_assert_null (win->active_group_filter);
+    g_assert_cmpuint (gtk_drop_down_get_selected (
+        GTK_DROP_DOWN (win->group_dropdown)), ==, 0);
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->filter_model)), ==, 1);
+    g_assert_cmpstr (gtk_stack_get_visible_child_name (
+        GTK_STACK (win->content_stack)), ==, "list");
+
+    /* Clearing nonempty search text must also update the results immediately. */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "no such account");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->filter_model)), ==, 0);
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.clear-search", NULL);
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->filter_model)), ==, 1);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
 static GtkDropTarget *
 find_drop_target (GtkWidget *widget)
 {
@@ -966,6 +1084,83 @@ test_encryption_operation_guards_database_lifetime (void)
     review_fixture_clear (&fixture);
 }
 
+static void
+test_password_change_keyring (gconstpointer data)
+{
+    guint flags = GPOINTER_TO_UINT (data);
+    gboolean lock = (flags & 1) != 0;
+    gboolean fail = (flags & 2) != 0;
+    gboolean disable_keyring = (flags & 4) != 0;
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    otpclient_application_set_use_secret_service (app, TRUE);
+    password_store_calls = 0;
+    g_clear_pointer (&stored_password, sensitive_secure_free);
+    g_clear_pointer (&stored_password_path, g_free);
+
+    g_action_group_activate_action (G_ACTION_GROUP (app), "change-password", NULL);
+    AdwDialog *dialog = adw_application_window_get_visible_dialog (
+        ADW_APPLICATION_WINDOW (win));
+    g_assert_nonnull (dialog);
+    const gchar *titles[] = {
+        "Current Password", "New Password", "Confirm Password"
+    };
+    const gchar *passwords[] = {
+        "test-password", "new-password", "new-password"
+    };
+    for (guint i = 0; i < G_N_ELEMENTS (titles); i++) {
+        GtkWidget *row = find_widget (GTK_WIDGET (dialog),
+                                      ADW_TYPE_PASSWORD_ENTRY_ROW, titles[i]);
+        g_assert_nonnull (row);
+        gtk_editable_set_text (GTK_EDITABLE (row), passwords[i]);
+    }
+    GtkWidget *button = find_widget (GTK_WIDGET (dialog),
+                                     GTK_TYPE_BUTTON, "Change Password");
+    g_assert_nonnull (button);
+    db_test_set_fail_atomic_write (fail);
+    g_signal_emit_by_name (button, "clicked");
+    g_assert_true (otpclient_application_is_database_operation_in_progress (app));
+    /* Lock before dispatching the worker completion, even on fast machines. */
+    if (lock)
+        lock_app_enter_locked_state (app);
+    if (disable_keyring)
+        otpclient_application_set_use_secret_service (app, FALSE);
+    gint64 deadline = g_get_monotonic_time () + 10 * G_USEC_PER_SEC;
+    while (otpclient_application_is_database_operation_in_progress (app) &&
+           g_get_monotonic_time () < deadline)
+        settle ();
+    g_assert_false (otpclient_application_is_database_operation_in_progress (app));
+    db_test_set_fail_atomic_write (FALSE);
+    settle ();
+
+    DatabaseData *reader = database_data_new (fixture.path, DEFAULT_MEMLOCK_VALUE);
+    reader->key = secure_strdup (fail ? "test-password" : "new-password");
+    GError *err = NULL;
+    load_db (reader, &err);
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (reader->in_memory_json_data), ==, 1);
+    database_data_free (reader);
+
+    guint expected_stores = !fail && !disable_keyring ? 1 : 0;
+    g_assert_cmpuint (password_store_calls, ==, expected_stores);
+    if (expected_stores != 0) {
+        g_assert_cmpstr (stored_password, ==, "new-password");
+        g_assert_cmpstr (stored_password_path, ==, fixture.path);
+    }
+    if (lock) {
+        g_assert_true (otpclient_application_get_app_locked (app));
+        g_assert_null (fixture.db->key);
+        g_assert_null (fixture.db->in_memory_json_data);
+        g_assert_false (gtk_widget_get_sensitive (win->otp_list));
+        g_assert_null (adw_application_window_get_visible_dialog (
+            ADW_APPLICATION_WINDOW (win)));
+    }
+    otpclient_application_set_use_secret_service (app, FALSE);
+    g_clear_pointer (&stored_password, sensitive_secure_free);
+    g_clear_pointer (&stored_password_path, g_free);
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -998,14 +1193,22 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
     g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
+    g_test_add_func ("/gui-flows/group-search-all-matches", test_group_search_preserves_all_matches);
+    g_test_add_func ("/gui-flows/clear-group-filter", test_clear_filters_resets_group_only_filter);
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
     g_test_add_func ("/gui-flows/db-replacement-generation", test_db_replacement_bumps_generation);
     g_test_add_func ("/gui-flows/encryption-operation-lifetime", test_encryption_operation_guards_database_lifetime);
     g_test_add_func ("/gui-flows/encryption-operation-token-actions", test_encryption_operation_blocks_token_actions);
     g_test_add_func ("/gui-flows/encryption-operation-pending-edit", test_encryption_operation_blocks_pending_edit);
+    g_test_add_data_func ("/gui-flows/password-change-keyring", GUINT_TO_POINTER (0), test_password_change_keyring);
+    g_test_add_data_func ("/gui-flows/password-change-keyring-locked", GUINT_TO_POINTER (1), test_password_change_keyring);
+    g_test_add_data_func ("/gui-flows/password-change-keyring-failed", GUINT_TO_POINTER (3), test_password_change_keyring);
+    g_test_add_data_func ("/gui-flows/password-change-keyring-disabled", GUINT_TO_POINTER (5), test_password_change_keyring);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);
+    g_clear_pointer (&stored_password, sensitive_secure_free);
+    g_clear_pointer (&stored_password_path, g_free);
     return result;
 }

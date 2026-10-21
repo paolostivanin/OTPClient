@@ -105,6 +105,10 @@ if(BUILD_GUI)
     add_executable(test_gui_flows test_gui_flows.c ${REVIEW_GUI_SOURCES})
     add_dependencies(test_gui_flows OTPClient)
     otpclient_apply_target_settings(test_gui_flows)
+    # Exercise real password-change workers without accessing a host keyring.
+    target_link_options(test_gui_flows PRIVATE
+            -Wl,--wrap=secret_password_store
+            -Wl,--wrap=secret_password_store_finish)
     target_compile_definitions(test_gui_flows PRIVATE OTPCLIENT_TESTING)
     if(BUILD_CLI)
         target_compile_definitions(test_gui_flows PRIVATE REVIEW_CLI_PATH="$<TARGET_FILE:OTPClient-cli>")
