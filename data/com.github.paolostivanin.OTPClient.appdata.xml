@@ -22,7 +22,8 @@
     <p>OTPClient is a secure and easy-to-use desktop client for TOTP and HOTP one-time passwords, built with GTK4 and libadwaita. Features:</p>
     <ul>
       <li>multiple databases with sidebar management and cross-database search</li>
-      <li>token grouping with quick filtering</li>
+      <li>token grouping with quick filtering, group-wide rename and removal, and multi-select actions</li>
+      <li>review and repair of tokens that failed validation, and a preview before every import</li>
       <li>desktop search provider for GNOME Shell and KDE KRunner (opt-in trigger keyword)</li>
       <li>command-line companion (otpclient-cli) with scriptable table/JSON/CSV output</li>
       <li>support for TOTP, HOTP, and Steam codes</li>
@@ -94,6 +95,30 @@
   </content_rating>
 
   <releases>
+    <release version="5.3.0" date="2026-10-21">
+      <description>
+        <p>Feature release. Tokens that fail validation used to be preserved in the database file with a single toast to say so and nothing to do about it; a banner now counts them and opens a review where each one can be repaired or deleted. Several tokens can be selected at once to move to a group, export or delete, a group can be renamed or removed across all its tokens, and an import shows what it will add and what it will skip before anything is written. Underneath, reading a backup, writing an export and changing the database password or key-derivation parameters now run off the main thread, a stored algorithm in lowercase no longer silently produces SHA1 codes, and otpauth links are checked field by field instead of being imported with guessed values. There is no on-disk format change; existing databases open unchanged.</p>
+        <ul>
+          <li>NEW: review and repair tokens the app had to set aside. A banner above the token list counts them and opens a review dialog. Each token can be repaired in a form that validates every field before saving, or deleted. A repair that fails validation changes nothing and says why, a repaired token is stored with its type and algorithm in their canonical upper-case spelling, and deleting asks first, because there is no Undo and the preserved token may be the only copy of its secret</li>
+          <li>NEW: select several tokens. The Select button in the header bar shows a checkbox on every row, and the checked tokens can be assigned to a group, exported, or deleted; a bulk delete can be undone from its toast. Only checked tokens that are still visible are acted on, so changing the search text or the group filter unchecks the ones it hides. Tokens from other databases that appear in search results are read-only</li>
+          <li>NEW: Manage Groups, in the main menu, renames a group across all its tokens or removes the group from them, as one transaction</li>
+          <li>NEW: import preview. Choosing a file lists what it contains before anything is written. Exact duplicates are unchecked, tokens that share an issuer and account but differ in secret are flagged, and only the checked tokens are imported. The file is parsed on a worker thread, so a large backup no longer freezes the window</li>
+          <li>NEW: the edit dialog for an HOTP token can raise the stored counter, to catch up with a provider that is ahead. It cannot be lowered, and a value outside the supported range is refused</li>
+          <li>NEW: a search or filter that matches nothing now shows a "No matching tokens" page with a Clear Filters button, which also clears a filter that is only a group</li>
+          <li>IMPROVED: writing an export, and changing the database password or the key-derivation parameters, no longer freeze the window during the Argon2id run. The token actions are disabled until the job finishes, the application stays open until it does, a password change reports how it ended, and one that finishes after the app locked still reaches the keyring</li>
+          <li>IMPROVED: the export dialog stays open and reports "Export completed successfully." instead of closing, and it suggests a file name that OTPClient's own import dialog accepts: .txt for FreeOTP+ and .bin for encrypted Authenticator Pro</li>
+          <li>IMPROVED: group-qualified searches (<code>group:name</code> or <code>#name</code>) match every group whose name contains the text. Before, the first matching group was selected and filtered on exactly, which hid the others</li>
+          <li>IMPROVED: the QR code shown for a token has the white quiet zone that scanners require around it</li>
+          <li>IMPROVED: cross-database search results are refreshed when another database file changes, including when a token is moved into it, instead of staying stale until a lock or a database switch</li>
+          <li>FIX: a token stored with its algorithm in lowercase, such as "sha256", was accepted on load but its codes were generated with SHA1, because the generators matched the name case-sensitively and fell back to SHA1. They now accept any case, as the validator always did</li>
+          <li>FIX: an Auto-Lock timeout that is not one of the presets, which an imported settings file can carry, was shown in Settings as the first preset although the stored value was different. It now appears as a Custom entry, and a zero or oversized stored value is replaced with five minutes instead of becoming a negative timeout</li>
+          <li>CHANGE: otpauth links are checked field by field. An HOTP link with no counter, an unsupported algorithm, or a digits, period or counter value out of range is refused with the reason, in the import dialog, the command line, a scanned QR code and a link pasted into Add Token, instead of being imported with a default. Before, a bad period or digits value was silently replaced by its default</li>
+          <li>CHANGE: importing settings validates what it reads. Colors must be hexadecimal (#rgb, #rgba, #rrggbb or #rrggbbaa) and the Auto-Lock timeout must be at least one second; anything else is skipped. The unused <code>search-column</code> key is no longer exported</li>
+          <li>CHANGE: <code>otpclient-cli --show</code> in table format prints an Account and Issuer line above each code, so several matches can be told apart</li>
+          <li>TEST: GUI flow tests now cover quarantine repair and delete, bulk selection and its filter, the import preview, group management, Undo while a database job runs, password-change completion with and without a lock, and the cross-database change monitors, alongside transaction tests for reordered duplicates and hash collisions</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.2.2" date="2026-09-24">
       <description>
         <p>Packaging release. The Flatpak's search provider now sends its notifications through the notification portal instead of talking to the desktop's notification service directly, so the sandbox no longer needs that permission. Native installs are unchanged.</p>

@@ -97,82 +97,72 @@ static const PageInfo welcome_pages[] = {
 
 static const PageInfo whats_new_pages[] = {
     {
-        "edit-copy-symbolic",
-        N_("Copying Is Now Explicit"),
-        N_("Selecting a token used to copy it. Clicking a row, or just "
-           "arrowing past one, put a code on the clipboard.\n\n"
-           "Selection now only selects. Every row has its own copy button in "
-           "the Action column, and the same action heads the row's right-click "
-           "menu. Double-clicking a row does the same, as do Enter and Ctrl+C "
-           "while the list has focus. Enter also works on a search result.\n\n"
-           "The validity countdown followed the selection for the same reason, "
-           "and no longer does either: every TOTP showing a code shows how long "
-           "it has left.")
+        "dialog-warning-symbolic",
+        N_("Tokens That Need Repair"),
+        N_("A token the app cannot accept, such as one with an out-of-range "
+           "digit count, is set aside so the rest of the database still "
+           "opens. It used to get a single toast and nothing more.\n\n"
+           "A banner now counts those tokens, and Review lets you repair or "
+           "delete each one. A repair is validated before it replaces the "
+           "preserved copy, and a failed repair changes nothing. Deleting "
+           "asks first and cannot be undone, because the preserved token "
+           "may be the only copy of its secret.")
     },
     {
-        "security-high-symbolic",
-        N_("HOTP Counters Reach Disk First"),
-        N_("HOTP rows have a Generate button rather than Copy, because "
-           "producing a code consumes a counter. That counter is now "
-           "written to the encrypted database as a single transaction "
-           "before the code is shown, so a crash can no longer hand out a "
-           "code the database does not know it issued.\n\n"
-           "The stored counter now means the next unused code in both the "
-           "app and the command line. Existing counters are left untouched, "
-           "so if an HOTP account rejects its first code after this update, "
-           "generate the next one or resynchronize it with the provider.")
+        "edit-select-all-symbolic",
+        N_("Select Several Tokens"),
+        N_("Choose Select in the header bar to show a checkbox on every "
+           "row. Checked tokens can be assigned to a group, exported, or "
+           "deleted, and a bulk delete can be undone from its toast.\n\n"
+           "Only checked tokens you can see are affected: changing the "
+           "search or the group filter unchecks the ones it hides. Tokens "
+           "from other databases that appear in search results are "
+           "read-only.")
     },
     {
-        "edit-paste-symbolic",
-        N_("The Clipboard Is Left Alone"),
-        N_("Locking or quitting used to wipe the clipboard even if you had "
-           "copied something else in the meantime, destroying unrelated "
-           "data.\n\n"
-           "OTPClient now clears the clipboard only while it still owns "
-           "what it put there. Copying anything else cancels the pending "
-           "wipe.")
-    },
-    {
-        "system-lock-screen-symbolic",
-        N_("Locking Clears More"),
-        N_("A displayed QR code, a typed secret, an export password, or an "
-           "unlock prompt used to survive a lock, still on screen and still "
-           "in memory.\n\n"
-           "Locking now closes those dialogs, wipes their fields and QR "
-           "codes, and cancels anything still in flight, even when a file "
-           "chooser is holding a dialog open.")
+        "folder-symbolic",
+        N_("Manage Groups"),
+        N_("Manage Groups, in the main menu, renames a group across all its "
+           "tokens at once, or removes the group from them. The tokens "
+           "themselves are kept.\n\n"
+           "Searching with the \u201cgroup:\u201d prefix now matches every "
+           "group whose name contains the text, so group:wo finds Work and "
+           "Workshop alike. When nothing matches, Clear Filters resets the "
+           "search and the group.")
     },
     {
         "folder-download-symbolic",
-        N_("Clearer Imports, Safer Exports"),
-        N_("A partial import used to quietly bring in fewer tokens than the "
-           "file contained. It now reports how many entries were skipped "
-           "and why, one by one, so you can check before deleting the "
-           "original.\n\n"
-           "New encrypted migration exports require a password. Exports you "
-           "already made without one still import.")
+        N_("Preview Before Importing"),
+        N_("Choosing a file now lists what it contains before anything is "
+           "added. Exact duplicates are unchecked and skipped. A token with "
+           "the same issuer and account but a different secret is flagged, "
+           "so you can decide whether it replaces the old one or is a "
+           "second account.\n\n"
+           "Uncheck anything you do not want, then choose Import Selected. "
+           "Entries the source file could not provide are listed with the "
+           "reason.")
     },
     {
-        "drive-harddisk-symbolic",
-        N_("Backup Reminders Per Database"),
-        N_("The backup reminder tracked a single timestamp that could not "
-           "say which database it referred to, and exporting for another "
-           "app counted as a backup, which suppressed real reminders.\n\n"
-           "History and snoozes are now kept per database, and exports no "
-           "longer count. The old timestamp could not be attributed to a "
-           "database, so every database starts at \u201cNo backup recorded\u201d "
-           "and any active snooze is reset.")
+        "system-run-symbolic",
+        N_("Work Stays in the Background"),
+        N_("Reading a backup, writing an export, and changing the database "
+           "password or key-derivation settings no longer freeze the window "
+           "while they run.\n\n"
+           "While a password or key-derivation change runs, the token "
+           "actions are disabled, and the app stays open until it finishes. "
+           "A password change reports how it ended, and one that finishes "
+           "after the app has locked still updates the system keyring.")
     },
     {
-        "preferences-system-symbolic",
-        N_("Tray, Startup, and Desktop Search"),
-        N_("The tray menu was an empty rectangle everywhere except KDE "
-           "Plasma. It works now, and OTPClient can start minimized to the "
-           "tray and start at login, from Settings -> Integration.\n\n"
-           "Search provider settings apply immediately instead of needing a "
-           "logout, and turning the provider off revokes its cached keys "
-           "right away. Webcam scanning, copying from search, and database "
-           "locking also work inside the Flatpak now.")
+        "dialog-information-symbolic",
+        N_("Stricter OTP Links"),
+        N_("An otpauth:// link is now checked field by field. An HOTP link "
+           "with no counter, an unsupported algorithm, or a digit count, "
+           "period or counter out of range is refused with the reason, "
+           "instead of being imported with a default value.\n\n"
+           "This applies to scanned QR codes, links pasted into Add Token, "
+           "and imports. A token that is refused can still be added by "
+           "hand from its secret.")
     },
 };
 

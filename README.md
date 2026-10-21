@@ -29,7 +29,13 @@ A highly secure GTK4/libadwaita application for managing TOTP and HOTP two-facto
 - Cross-database search (`group:<name>` / `#<name>` syntax for filtering)
 - Token grouping: assign tokens to groups (e.g. "Work", "Personal") via right-click,
   the edit dialog, or when adding a token; groups are preserved during Aegis,
-  AuthenticatorPro, and 2FAS import/export
+  AuthenticatorPro, and 2FAS import/export. *Manage Groups* renames a group
+  across all its tokens or removes it from them
+- Select several tokens (*Select* in the header bar) to assign a group, export
+  or delete them; a bulk delete can be undone, and only checked tokens that are
+  visible are acted on
+- Tokens that fail validation are kept aside rather than blocking the database;
+  a banner opens a review where each one can be repaired or deleted
 - Add tokens by scanning a QR code from an image file, the webcam, or the clipboard, or by entering the secret manually
 - QR code display for any token (re-pairing or sharing across devices)
 - Idle and screensaver auto-lock with configurable timeout
@@ -95,6 +101,10 @@ Migration to and from other authenticator apps:
 - [2FAS](https://github.com/twofas) (encrypted and plain)
 - [FreeOTPPlus](https://github.com/helloworld1/FreeOTPPlus) (plain, key URI format)
 - Google migration QR codes (import only)
+
+Choosing a file shows a preview first: exact duplicates are unchecked, tokens
+that share an issuer and account but differ in secret are flagged, and only
+checked tokens are imported.
 
 Encrypted exports require a nonempty password. Existing encrypted exports with
 empty passwords can still be imported. Partial imports report the number and

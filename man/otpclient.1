@@ -1,4 +1,4 @@
-.TH OTPCLIENT 1 "September 2026" "otpclient" "OTPClient Manual"
+.TH OTPCLIENT 1 "October 2026" "otpclient" "OTPClient Manual"
 .SH NAME
 otpclient \- GTK4 / libadwaita client for TOTP and HOTP one-time passwords
 .SH SYNOPSIS
@@ -31,11 +31,18 @@ Steam-style codes.
 .IP \(bu 3
 Manage multiple databases and switch between them.
 .IP \(bu 3
-Per-token grouping with filterable views.
+Per-token grouping with filterable views, and group-wide rename and removal.
+.IP \(bu 3
+Select several tokens to assign a group, export or delete them; a bulk delete
+can be undone.
+.IP \(bu 3
+Tokens that fail validation are kept aside and can be repaired or deleted from a
+review dialog.
 .IP \(bu 3
 Import and export Aegis (plain or encrypted), AuthPro (plain or encrypted),
 2FAS (plain or encrypted), FreeOTP+ (plain), and Google Authenticator QR
-codes (file or live capture).
+codes (file or live capture). An import lists its tokens first, with exact
+duplicates unchecked, so only the ones you keep are added.
 .IP \(bu 3
 Add new tokens manually, by scanning a QR code from a file, or via the
 device camera.
