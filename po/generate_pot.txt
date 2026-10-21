@@ -13,6 +13,7 @@ $ xgettext --from-code=UTF-8 --keyword=_ --keyword=N_ --keyword=ngettext:1,2 \
     ../src/gui/autostart-policy.c \
     ../src/gui/otpclient-application.c \
     ../src/gui/otpclient-window.c \
+    ../src/gui/otpclient-window-undo.c \
     ../src/gui/otp-entry.c \
     ../src/gui/otp-button-row.c \
     ../src/gui/database-sidebar.c \

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OTPClient\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-22 16:34+0200\n"
+"POT-Creation-Date: 2026-10-20 10:42+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -461,35 +461,40 @@ msgstr ""
 msgid "Failed to save HOTP counters"
 msgstr ""
 
-#: ../src/cli/get-data.c:100
+#: ../src/cli/get-data.c:104
+#, c-format
+msgid "Account: %s | Issuer: %s\n"
+msgstr ""
+
+#: ../src/cli/get-data.c:109
 #, c-format
 msgid "Current HOTP: %s\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:104
+#: ../src/cli/get-data.c:113
 #, c-format
 msgid "Current TOTP (valid for %d more second): %s\n"
 msgid_plural "Current TOTP (valid for %d more seconds): %s\n"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../src/cli/get-data.c:107
+#: ../src/cli/get-data.c:116
 #, c-format
 msgid "Next TOTP: %s\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:114
+#: ../src/cli/get-data.c:123
 msgid "No matching token found."
 msgstr ""
 
-#: ../src/cli/get-data.c:166
+#: ../src/cli/get-data.c:175
 msgid "Account | Issuer | Group\n"
 msgstr ""
 
-#: ../src/cli/get-data.c:200
+#: ../src/cli/get-data.c:209
 msgid "Invalid TOTP time or period."
 msgstr ""
 
-#: ../src/cli/get-data.c:211
+#: ../src/cli/get-data.c:220
 msgid "Failed to generate TOTP."
 msgstr ""
