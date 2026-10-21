@@ -81,7 +81,7 @@ on_unlock_dialog_quit_requested (PasswordDialog       *dlg,
                                  OTPClientApplication *app)
 {
     (void) dlg;
-    g_application_quit (G_APPLICATION (app));
+    otpclient_application_request_quit (app);
 }
 
 void

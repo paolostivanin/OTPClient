@@ -13,6 +13,9 @@ G_DECLARE_FINAL_TYPE (OTPClientApplication, otpclient_application, OTPCLIENT, AP
 
 OTPClientApplication *otpclient_application_new      (void);
 
+/* Finish database encryption jobs and their keyring writes before quitting. */
+void                  otpclient_application_request_quit (OTPClientApplication *self);
+
 /* The main window, or NULL once GTK has destroyed it. Backed by the weak
  * pointer set in startup(), so this doubles as a liveness check. Prefer it over
  * gtk_application_get_active_window(), which reports whatever is focused and so

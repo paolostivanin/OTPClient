@@ -98,6 +98,8 @@ gboolean use_secret_service;
     gboolean unlock_in_progress;
     gboolean database_operation_in_progress;
     gboolean purge_after_database_operation;
+    gboolean quit_requested;
+    guint pending_password_stores;
     guint lock_generation;
 };
 
@@ -229,6 +231,14 @@ otpclient_application_show_about (GSimpleAction *simple,
 }
 
 static gboolean otpclient_application_signal_quit (gpointer user_data);
+
+static void
+quit_if_ready (OTPClientApplication *self)
+{
+    if (self->quit_requested && !self->database_operation_in_progress &&
+        self->pending_password_stores == 0)
+        g_application_quit (G_APPLICATION (self));
+}
 
 static void
 otpclient_application_quit (GSimpleAction *simple,
@@ -412,8 +422,11 @@ on_password_stored_gui (GObject      *source         __attribute__((unused)),
 
     /* Matches the hold taken when a committed password change started this
      * store; the process may exit now if its window was closed meanwhile. */
-    if (release_app_hold && self != NULL)
+    if (release_app_hold && self != NULL) {
+        self->pending_password_stores--;
         g_application_release (G_APPLICATION (self));
+        quit_if_ready (self);
+    }
 }
 
 typedef struct {
@@ -469,9 +482,16 @@ on_password_change_done (GObject *source, GAsyncResult *result, gpointer user_da
     OTPClientApplication *self = OTPCLIENT_APPLICATION (source);
     GTask *task = G_TASK (result);
     PasswordChangeTaskData *td = g_task_get_task_data (task);
-    otpclient_application_end_database_operation (self, td->db_data);
     GError *err = NULL;
     gboolean success = g_task_propagate_boolean (task, &err);
+    gboolean store_password = success && self->use_secret_service;
+    /* Reserve the store before releasing the database operation: a pending
+     * Quit must not exit between the committed write and its keyring update. */
+    if (store_password) {
+        self->pending_password_stores++;
+        g_application_hold (G_APPLICATION (self));
+    }
+    otpclient_application_end_database_operation (self, td->db_data);
     gboolean current_session = td->lock_generation == self->lock_generation &&
         self->db_data == td->db_data && !self->app_locked;
     if (!success) {
@@ -495,12 +515,11 @@ on_password_change_done (GObject *source, GAsyncResult *result, gpointer user_da
     /* A lock invalidates UI work, but a committed password must still reach
      * the keyring. Ending the operation may already have purged the live key;
      * the task owns the password and database until this callback returns. */
-    if (self->use_secret_service) {
+    if (store_password) {
         StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
         g_weak_ref_init (&ctx->app_ref, self);
         /* Released in on_password_stored_gui: the keyring update must finish
          * even if the last window was closed during the change. */
-        g_application_hold (G_APPLICATION (self));
         ctx->release_app_hold = TRUE;
         secret_password_store (OTPCLIENT_SCHEMA,
                                SECRET_COLLECTION_DEFAULT,
@@ -1116,7 +1135,8 @@ otpclient_application_begin_database_operation (OTPClientApplication *self,
 {
     g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), FALSE);
     if (db_data == NULL || self->db_data != db_data || self->app_locked ||
-        self->unlock_in_progress || self->database_operation_in_progress)
+        self->unlock_in_progress || self->database_operation_in_progress ||
+        self->quit_requested)
         return FALSE;
     self->database_operation_in_progress = TRUE;
     self->purge_after_database_operation = FALSE;
@@ -1143,6 +1163,7 @@ otpclient_application_end_database_operation (OTPClientApplication *self,
     if (!self->app_locked && self->window != NULL)
         otpclient_window_set_db_actions_enabled (self->window, TRUE);
     g_application_release (G_APPLICATION (self));
+    quit_if_ready (self);
 }
 
 gboolean
@@ -1501,14 +1522,20 @@ otpclient_application_present_window (OTPClientApplication *self)
     }
 }
 
+void
+otpclient_application_request_quit (OTPClientApplication *self)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    if (self->window != NULL)
+        otpclient_window_clear_clipboard_now (self->window);
+    self->quit_requested = TRUE;
+    quit_if_ready (self);
+}
+
 static gboolean
 otpclient_application_signal_quit (gpointer user_data)
 {
-    GApplication *app = G_APPLICATION (user_data);
-    OTPClientApplication *self = OTPCLIENT_APPLICATION (app);
-    if (self->window != NULL)
-        otpclient_window_clear_clipboard_now (self->window);
-    g_application_quit (app);
+    otpclient_application_request_quit (OTPCLIENT_APPLICATION (user_data));
     return G_SOURCE_REMOVE;
 }
 

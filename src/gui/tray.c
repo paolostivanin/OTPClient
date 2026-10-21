@@ -345,7 +345,7 @@ menu_entries (gsize *n_items)
 static gboolean
 quit_in_idle (gpointer user_data)
 {
-    g_application_quit (G_APPLICATION (user_data));
+    otpclient_application_request_quit (OTPCLIENT_APPLICATION (user_data));
     return G_SOURCE_REMOVE;
 }
 

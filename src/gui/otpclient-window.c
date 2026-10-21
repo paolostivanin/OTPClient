@@ -1015,6 +1015,7 @@ typedef struct {
     gint32 max_file_size;
     GWeakRef window_ref;
     guint64 generation;
+    guint lock_generation;
 } CrossDbTaskData;
 
 typedef struct {
@@ -1205,7 +1206,8 @@ cross_db_load_done (GObject      *source,
         gtk_window_get_application (GTK_WINDOW (self)));
     DatabaseData *active_db = app != NULL
         ? otpclient_application_get_db_data (app) : NULL;
-    if (active_db == NULL ||
+    if (active_db == NULL || !otpclient_application_is_db_unlocked (app) ||
+        td->lock_generation != otpclient_application_get_lock_generation (app) ||
         g_strcmp0 (active_db->db_path, td->current_db_path) != 0 ||
         !otpclient_application_get_use_secret_service (app))
         return;
@@ -1248,7 +1250,8 @@ cross_db_trigger_load (OTPClientWindow *self)
 
     OTPClientApplication *app = OTPCLIENT_APPLICATION (
         gtk_window_get_application (GTK_WINDOW (self)));
-    if (app == NULL || !otpclient_application_get_use_secret_service (app))
+    if (app == NULL || !otpclient_application_is_db_unlocked (app) ||
+        !otpclient_application_get_use_secret_service (app))
         return;
 
     DatabaseData *db_data = otpclient_application_get_db_data (app);
@@ -1283,6 +1286,7 @@ cross_db_trigger_load (OTPClientWindow *self)
     td->current_db_path = g_strdup (db_data->db_path);
     td->max_file_size = db_data->max_file_size_from_memlock;
     td->generation = self->cross_db_generation;
+    td->lock_generation = otpclient_application_get_lock_generation (app);
     g_weak_ref_init (&td->window_ref, self);
 
     GTask *task = g_task_new (NULL, self->cross_db_cancellable, cross_db_load_done, td);

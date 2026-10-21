@@ -29,7 +29,7 @@ void lock_app_present_unlock_dialog_with_error (OTPClientApplication *app,
                                                 const gchar          *error_message);
 
 /* Wire dlg up as the unlock dialog for a locked database: adds the Quit
- * button (routes to g_application_quit) and a "closed" handler that drops the
+ * button (waits for database changes) and a "closed" handler that drops the
  * app to the locked page when the user dismisses the prompt without unlocking
  * (Escape, dialog X, parent window X). */
 void lock_app_install_unlock_dialog_quit (PasswordDialog       *dlg,

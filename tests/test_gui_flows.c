@@ -25,6 +25,24 @@ static OTPClientWindow *win;
 static guint password_store_calls;
 static gchar *stored_password;
 static gchar *stored_password_path;
+static gboolean delay_password_store;
+static gboolean fail_password_store;
+static GTask *pending_password_store;
+static guint password_store_completions;
+static gint password_lookup_calls;
+static gboolean provide_lookup_password;
+
+gchar *
+__wrap_secret_password_lookup_sync (const SecretSchema *schema,
+                                    GCancellable *cancellable,
+                                    GError **error, ...)
+{
+    (void) schema;
+    (void) cancellable;
+    (void) error;
+    g_atomic_int_inc (&password_lookup_calls);
+    return provide_lookup_password ? g_strdup ("test-password") : NULL;
+}
 
 /* Keep the worker, completion callback, and UI real; replace only the external
  * keyring boundary. The isolated session deliberately has no Secret Service. */
@@ -52,6 +70,11 @@ __wrap_secret_password_store (const SecretSchema *schema,
     va_end (args);
     password_store_calls++;
     GTask *task = g_task_new (NULL, cancellable, callback, user_data);
+    if (delay_password_store) {
+        g_assert_null (pending_password_store);
+        pending_password_store = task;
+        return;
+    }
     g_task_return_boolean (task, TRUE);
     g_object_unref (task);
 }
@@ -59,6 +82,7 @@ __wrap_secret_password_store (const SecretSchema *schema,
 gboolean
 __wrap_secret_password_store_finish (GAsyncResult *result, GError **error)
 {
+    password_store_completions++;
     return g_task_propagate_boolean (G_TASK (result), error);
 }
 
@@ -848,6 +872,83 @@ test_cross_database_sources_watched_before_load (void)
 }
 
 static void
+test_cross_database_search_requires_unlock (gconstpointer data)
+{
+    gboolean lock_during_load = GPOINTER_TO_UINT (data) != 0;
+    ReviewFixture first, second;
+    g_autoptr (OTPEntry) entry = attach_fixture (&first);
+    (void) entry;
+    review_fixture_init (&second);
+    json_array_clear (second.db->in_memory_json_data);
+    json_array_append_new (second.db->in_memory_json_data,
+        build_json_obj ("TOTP", "alice", "Example", REVIEW_SECRET,
+                        8, "SHA1", 30, 0, NULL));
+    GError *err = NULL;
+    update_db (second.db, &err);
+    g_assert_no_error (err);
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
+    GVariantBuilder builder;
+    g_variant_builder_init (&builder, G_VARIANT_TYPE ("a(ss)"));
+    g_variant_builder_add (&builder, "(ss)", "First", first.path);
+    g_variant_builder_add (&builder, "(ss)", "Second", second.path);
+    g_settings_set_value (settings, "db-list", g_variant_builder_end (&builder));
+    provide_lookup_password = TRUE;
+    otpclient_application_set_use_secret_service (app, TRUE);
+
+    /* First prove the fake keyring can load real encrypted token data. */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "alice");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    gint64 deadline = g_get_monotonic_time () + 5 * G_USEC_PER_SEC;
+    while (win->cross_db_loading && g_get_monotonic_time () < deadline)
+        settle ();
+    g_assert_true (win->cross_db_loaded);
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->cross_db_store)), ==, 1);
+    g_autoptr (OTPEntry) loaded = g_list_model_get_item (
+        G_LIST_MODEL (win->cross_db_store), 0);
+    otp_entry_test_update_otp_at (loaded, 59);
+    g_assert_cmpstr (otp_entry_get_otp_value (loaded), ==, "94287082");
+    g_clear_object (&loaded);
+    otpclient_window_invalidate_cross_db (win);
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+
+    if (!lock_during_load)
+        lock_app_enter_locked_state (app);
+    gint lookups_before = g_atomic_int_get (&password_lookup_calls);
+    gtk_widget_activate_action (GTK_WIDGET (win), "window.search", NULL);
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "alice");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    if (lock_during_load) {
+        g_assert_true (win->cross_db_loading);
+        /* Completion must check the state independently of the cleanup that
+         * normally cancels the task and invalidates its generation. */
+        otpclient_application_set_app_locked (app, TRUE);
+    } else {
+        g_assert_false (win->cross_db_loading);
+    }
+    deadline = g_get_monotonic_time () + 5 * G_USEC_PER_SEC;
+    do {
+        settle ();
+    } while (win->cross_db_loading && g_get_monotonic_time () < deadline);
+    g_assert_false (win->cross_db_loading);
+    g_assert_false (win->cross_db_loaded);
+    g_assert_cmpuint (g_list_model_get_n_items (
+        G_LIST_MODEL (win->cross_db_store)), ==, 0);
+    if (!lock_during_load) {
+        g_assert_cmpint (g_atomic_int_get (&password_lookup_calls), ==,
+                         lookups_before);
+        g_assert_cmpuint (g_hash_table_size (win->cross_db_monitors), ==, 0);
+    }
+    otpclient_window_secure_lock_cleanup (win);
+    otpclient_application_set_use_secret_service (app, FALSE);
+    provide_lookup_password = FALSE;
+    g_settings_reset (settings, "db-list");
+    review_fixture_clear (&second);
+    review_fixture_clear (&first);
+}
+
+static void
 test_cross_database_hotp_opens_database (void)
 {
     ReviewFixture first, second;
@@ -1394,19 +1495,8 @@ test_encryption_operation_guards_database_lifetime (void)
 }
 
 static void
-test_password_change_keyring (gconstpointer data)
+start_password_change (void)
 {
-    guint flags = GPOINTER_TO_UINT (data);
-    gboolean lock = (flags & 1) != 0;
-    gboolean fail = (flags & 2) != 0;
-    gboolean disable_keyring = (flags & 4) != 0;
-    ReviewFixture fixture;
-    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
-    otpclient_application_set_use_secret_service (app, TRUE);
-    password_store_calls = 0;
-    g_clear_pointer (&stored_password, sensitive_secure_free);
-    g_clear_pointer (&stored_password_path, g_free);
-
     g_action_group_activate_action (G_ACTION_GROUP (app), "change-password", NULL);
     AdwDialog *dialog = adw_application_window_get_visible_dialog (
         ADW_APPLICATION_WINDOW (win));
@@ -1426,9 +1516,25 @@ test_password_change_keyring (gconstpointer data)
     GtkWidget *button = find_widget (GTK_WIDGET (dialog),
                                      GTK_TYPE_BUTTON, "Change Password");
     g_assert_nonnull (button);
-    db_test_set_fail_atomic_write (fail);
     g_signal_emit_by_name (button, "clicked");
     g_assert_true (otpclient_application_is_database_operation_in_progress (app));
+}
+
+static void
+test_password_change_keyring (gconstpointer data)
+{
+    guint flags = GPOINTER_TO_UINT (data);
+    gboolean lock = (flags & 1) != 0;
+    gboolean fail = (flags & 2) != 0;
+    gboolean disable_keyring = (flags & 4) != 0;
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    otpclient_application_set_use_secret_service (app, TRUE);
+    password_store_calls = 0;
+    g_clear_pointer (&stored_password, sensitive_secure_free);
+    g_clear_pointer (&stored_password_path, g_free);
+    db_test_set_fail_atomic_write (fail);
+    start_password_change ();
     /* Lock before dispatching the worker completion, even on fast machines. */
     if (lock)
         lock_app_enter_locked_state (app);
@@ -1470,6 +1576,91 @@ test_password_change_keyring (gconstpointer data)
     review_fixture_clear (&fixture);
 }
 
+static gboolean
+start_password_change_and_quit (gpointer data)
+{
+    (void) data;
+    start_password_change ();
+    /* No main-context iteration can dispatch the worker's completion yet. */
+    g_action_group_activate_action (G_ACTION_GROUP (app), "quit", NULL);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean
+complete_delayed_password_store (gpointer data)
+{
+    (void) data;
+    if (fail_password_store)
+        g_task_return_new_error (pending_password_store, G_IO_ERROR,
+                                 G_IO_ERROR_FAILED, "Test keyring failure");
+    else
+        g_task_return_boolean (pending_password_store, TRUE);
+    g_clear_object (&pending_password_store);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean
+quit_during_password_store (gpointer data)
+{
+    (void) data;
+    if (pending_password_store == NULL)
+        return G_SOURCE_CONTINUE;
+    /* A second request must also wait once only the keyring write remains. */
+    g_assert_false (otpclient_application_is_database_operation_in_progress (app));
+    otpclient_application_request_quit (app);
+    g_idle_add (complete_delayed_password_store, NULL);
+    return G_SOURCE_REMOVE;
+}
+
+static void
+test_quit_waits_for_password_change (gconstpointer data)
+{
+    /* Quit ends GApplication's run loop permanently. Give each outcome its
+     * own process while keeping the database and application paths real. */
+    if (!g_test_subprocess ()) {
+        g_test_trap_subprocess (NULL, 15 * G_USEC_PER_SEC, 0);
+        g_test_trap_assert_passed ();
+        return;
+    }
+    guint flags = GPOINTER_TO_UINT (data);
+    gboolean write_fails = (flags & 1) != 0;
+    gboolean use_keyring = (flags & 4) == 0;
+    fail_password_store = (flags & 2) != 0;
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    otpclient_application_set_use_secret_service (app, use_keyring);
+    delay_password_store = TRUE;
+    password_store_calls = password_store_completions = 0;
+    db_test_set_fail_atomic_write (write_fails);
+    g_autoptr (GSettings) settings = gsettings_common_get_settings ();
+    g_settings_set_string (settings, "last-seen-version", PROJECT_VER);
+    g_idle_add (start_password_change_and_quit, NULL);
+    guint store_source = g_timeout_add (1, quit_during_password_store, NULL);
+    g_assert_cmpint (g_application_run (G_APPLICATION (app), 0, NULL), ==, 0);
+    if (write_fails || !use_keyring)
+        g_source_remove (store_source);
+    db_test_set_fail_atomic_write (FALSE);
+
+    g_assert_false (otpclient_application_is_database_operation_in_progress (app));
+    g_assert_null (pending_password_store);
+    guint expected_stores = !write_fails && use_keyring ? 1 : 0;
+    g_assert_cmpuint (password_store_calls, ==, expected_stores);
+    g_assert_cmpuint (password_store_completions, ==, expected_stores);
+    if (expected_stores != 0) {
+        g_assert_cmpstr (stored_password, ==, "new-password");
+        g_assert_cmpstr (stored_password_path, ==, fixture.path);
+    }
+    DatabaseData *reader = database_data_new (fixture.path, DEFAULT_MEMLOCK_VALUE);
+    reader->key = secure_strdup (write_fails ? "test-password" : "new-password");
+    GError *err = NULL;
+    load_db (reader, &err);
+    g_assert_no_error (err);
+    g_assert_cmpuint (json_array_size (reader->in_memory_json_data), ==, 1);
+    database_data_free (reader);
+    review_fixture_clear (&fixture);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1504,6 +1695,10 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/manual-add-rejected-uri", test_manual_add_reports_rejected_uri);
     g_test_add_func ("/gui-flows/cross-database-watch", test_cross_database_sources_watched_before_load);
+    g_test_add_data_func ("/gui-flows/cross-database-locked-search",
+        GUINT_TO_POINTER (0), test_cross_database_search_requires_unlock);
+    g_test_add_data_func ("/gui-flows/cross-database-lock-during-load",
+        GUINT_TO_POINTER (1), test_cross_database_search_requires_unlock);
     g_test_add_func ("/gui-flows/cross-database-hotp", test_cross_database_hotp_opens_database);
     g_test_add_func ("/gui-flows/double-click-activates-row", test_double_click_activates_row);
     g_test_add_func ("/gui-flows/validity-follows-the-code", test_validity_follows_the_code);
@@ -1521,6 +1716,14 @@ main (int argc, char **argv)
     g_test_add_data_func ("/gui-flows/password-change-keyring-locked", GUINT_TO_POINTER (1), test_password_change_keyring);
     g_test_add_data_func ("/gui-flows/password-change-keyring-failed", GUINT_TO_POINTER (3), test_password_change_keyring);
     g_test_add_data_func ("/gui-flows/password-change-keyring-disabled", GUINT_TO_POINTER (5), test_password_change_keyring);
+    g_test_add_data_func ("/gui-flows/quit-password-change",
+        GUINT_TO_POINTER (0), test_quit_waits_for_password_change);
+    g_test_add_data_func ("/gui-flows/quit-password-change-write-failure",
+        GUINT_TO_POINTER (1), test_quit_waits_for_password_change);
+    g_test_add_data_func ("/gui-flows/quit-password-change-keyring-failure",
+        GUINT_TO_POINTER (2), test_quit_waits_for_password_change);
+    g_test_add_data_func ("/gui-flows/quit-password-change-no-keyring",
+        GUINT_TO_POINTER (4), test_quit_waits_for_password_change);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);
