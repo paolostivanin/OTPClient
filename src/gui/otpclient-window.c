@@ -4438,6 +4438,14 @@ on_backup_tokens_save_complete (GObject      *source,
         window_async_context_free (ctx);
         return;
     }
+    /* An encryption job may be rewriting the file (and toggling the umask
+     * for its own .bak) on a worker right now. */
+    if (window_database_is_unavailable (self)) {
+        show_error_toast (self, "%s",
+                          _("Please wait for the current database operation to finish."));
+        window_async_context_free (ctx);
+        return;
+    }
 
     g_autofree gchar *error_msg = db_copy_to (db_data->db_path, path);
     if (error_msg != NULL) {

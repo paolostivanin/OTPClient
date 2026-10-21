@@ -633,6 +633,45 @@ test_import_preview_duplicates_and_conflicts (void)
 }
 
 static void
+test_undo_waits_for_database_operation (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    json_array_append_new (fixture.db->in_memory_json_data,
+        build_json_obj ("TOTP", "bob", "Example", REVIEW_SECRET, 6, "SHA1", 30, 0, NULL));
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.delete-token", NULL);
+    settle ();
+    AdwDialog *dialog = adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win));
+    GtkWidget *button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Delete");
+    g_assert_nonnull (button);
+    g_signal_emit_by_name (button, "clicked");
+    settle ();
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+
+    /* Undo during an encryption job cannot write, but must not be lost: the
+     * click dismisses its toast, so a fresh Undo has to be offered. */
+    g_assert_true (otpclient_application_begin_database_operation (app, fixture.db));
+    gpointer before = win->undo_actions->data;
+    otpclient_window_undo_latest_delete (win);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 1);
+    g_assert_true (win->undo_actions->data != before);
+    otpclient_application_end_database_operation (app, fixture.db);
+
+    otpclient_window_undo_latest_delete (win);
+    g_assert_cmpuint (json_array_size (fixture.db->in_memory_json_data), ==, 2);
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "label")), ==, "alice");
+    g_assert_cmpstr (json_string_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "secret")), ==, REVIEW_SECRET);
+    review_fixture_clear (&fixture);
+}
+
+static void
 test_bulk_group_assignment (void)
 {
     ReviewFixture fixture;
@@ -1379,6 +1418,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/manage-groups-rename", test_manage_groups_renames_all_matching_tokens);
     g_test_add_func ("/gui-flows/bulk-delete-undo", test_bulk_delete_restores_selected_tokens);
     g_test_add_func ("/gui-flows/single-delete-undo-write-failures", test_single_delete_and_undo_write_failures);
+    g_test_add_func ("/gui-flows/undo-waits-for-database-operation", test_undo_waits_for_database_operation);
     g_test_add_func ("/gui-flows/bulk-group-assignment", test_bulk_group_assignment);
     g_test_add_func ("/gui-flows/bulk-selection-mode", test_bulk_selection_mode_refreshes_rows);
     g_test_add_func ("/gui-flows/bulk-selection-follows-filter", test_bulk_selection_follows_filter);

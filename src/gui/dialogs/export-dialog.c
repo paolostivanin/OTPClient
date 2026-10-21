@@ -213,8 +213,11 @@ export_tokens_thread (GTask *task, gpointer source, gpointer task_data,
 static void
 export_tokens_done (GObject *source, GAsyncResult *result, gpointer user_data)
 {
-    (void) user_data;
-    ExportDialog *self = EXPORT_DIALOG (source);
+    (void) source;
+    /* The task holds no reference to the dialog, so its last unref on the
+     * worker cannot dispose GTK widgets there. This callback runs on the main
+     * thread and drops the reference it was given. */
+    g_autoptr (ExportDialog) self = user_data;
     self->export_running = FALSE;
     gtk_widget_set_sensitive (self->format_combo, TRUE);
     gtk_widget_set_sensitive (self->password_row, TRUE);
@@ -341,8 +344,8 @@ on_file_dialog_save_complete (GObject      *source,
     gtk_widget_set_sensitive (self->export_button, FALSE);
     gtk_widget_set_visible (self->error_label, FALSE);
     wipe_password_rows (self);
-    GTask *task = g_task_new (self, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
-                              export_tokens_done, NULL);
+    GTask *task = g_task_new (NULL, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
+                              export_tokens_done, g_object_ref (self));
     g_task_set_task_data (task, td, export_task_data_free);
     g_task_run_in_thread (task, export_tokens_thread);
     g_object_unref (task);

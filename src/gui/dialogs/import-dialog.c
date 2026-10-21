@@ -412,8 +412,11 @@ import_parse_thread (GTask *task, gpointer source, gpointer task_data,
 static void
 import_parse_done (GObject *source, GAsyncResult *result, gpointer user_data)
 {
-    (void) user_data;
-    ImportDialog *self = IMPORT_DIALOG (source);
+    (void) source;
+    /* The task holds no reference to the dialog, so its last unref on the
+     * worker cannot dispose GTK widgets there. This callback runs on the main
+     * thread and drops the reference it was given. */
+    g_autoptr (ImportDialog) self = user_data;
     self->import_running = FALSE;
     gtk_widget_set_sensitive (self->format_combo, TRUE);
     gtk_widget_set_sensitive (self->password_row, TRUE);
@@ -531,8 +534,8 @@ do_import (ImportDialog *self)
     gtk_button_set_label (GTK_BUTTON (self->import_button), _("Importing…"));
     gtk_widget_set_sensitive (self->import_button, FALSE);
     gtk_widget_set_visible (self->error_label, FALSE);
-    GTask *task = g_task_new (self, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
-                              import_parse_done, NULL);
+    GTask *task = g_task_new (NULL, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
+                              import_parse_done, g_object_ref (self));
     g_task_set_task_data (task, pd, import_parse_data_free);
     g_task_run_in_thread (task, import_parse_thread);
     g_object_unref (task);

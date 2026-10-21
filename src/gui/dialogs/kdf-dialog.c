@@ -2,6 +2,7 @@
 #include "kdf-dialog.h"
 #include "gquarks.h"
 #include "../otpclient-application.h"
+#include "../otpclient-window.h"
 
 struct _KdfDialog
 {
@@ -68,6 +69,17 @@ kdf_update_done (GObject *source, GAsyncResult *result, gpointer user_data)
     GError *err = NULL;
     gboolean success = g_task_propagate_boolean (task, &err);
     if (self == NULL) {
+        /* Closed while applying: a failure must still reach the user, who
+         * would otherwise assume the new parameters are in place. */
+        GtkWindow *window = otpclient_application_get_window (app);
+        if (!success && OTPCLIENT_IS_WINDOW (window) &&
+            td->lock_generation == otpclient_application_get_lock_generation (app) &&
+            !otpclient_application_get_app_locked (app)) {
+            g_autofree gchar *message = g_strdup_printf (
+                _("Could not update KDF parameters: %s"),
+                err != NULL ? err->message : _("unknown error"));
+            otpclient_window_show_error_toast (OTPCLIENT_WINDOW (window), message);
+        }
         g_clear_error (&err);
         return;
     }

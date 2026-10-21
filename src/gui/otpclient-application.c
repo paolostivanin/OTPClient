@@ -351,6 +351,9 @@ typedef struct {
      * by. Dropped once the password is safely under the new key, never before,
      * so a failed store cannot leave the only copy nowhere. */
     gchar   *clear_path_on_success;
+    /* Set when the store was started under a g_application_hold, so the
+     * process outlives a password change whose window was closed. */
+    gboolean release_app_hold;
 } StorePasswordContext;
 
 static gboolean
@@ -378,6 +381,7 @@ on_password_stored_gui (GObject      *source         __attribute__((unused)),
     StorePasswordContext *ctx = user_data;
     g_autoptr (OTPClientApplication) self = g_weak_ref_get (&ctx->app_ref);
     const gboolean clear_legacy = ctx->clear_legacy_on_success;
+    const gboolean release_app_hold = ctx->release_app_hold;
     g_autofree gchar *clear_path = g_steal_pointer (&ctx->clear_path_on_success);
     g_weak_ref_clear (&ctx->app_ref);
     g_free (ctx);
@@ -391,20 +395,25 @@ on_password_stored_gui (GObject      *source         __attribute__((unused)),
         if (self != NULL)
             application_disable_secret_service_runtime (self, err->message);
         g_error_free (err);
-        return;
+    } else {
+        if (clear_legacy)
+            otpclient_secret_clear_legacy_async ();
+
+        /* The keyring is keyed by absolute path, so a database that moved
+         * leaves its old entry behind: unreachable, and still holding the
+         * password. NULL user_data keeps a failure to a warning, as with the
+         * legacy clear. */
+        if (clear_path != NULL)
+            secret_password_clear (OTPCLIENT_SCHEMA, NULL,
+                                   on_password_cleared, NULL,
+                                   "string", clear_path,
+                                   NULL);
     }
 
-    if (clear_legacy)
-        otpclient_secret_clear_legacy_async ();
-
-    /* The keyring is keyed by absolute path, so a database that moved leaves
-     * its old entry behind: unreachable, and still holding the password. NULL
-     * user_data keeps a failure to a warning, as with the legacy clear. */
-    if (clear_path != NULL)
-        secret_password_clear (OTPCLIENT_SCHEMA, NULL,
-                               on_password_cleared, NULL,
-                               "string", clear_path,
-                               NULL);
+    /* Matches the hold taken when a committed password change started this
+     * store; the process may exit now if its window was closed meanwhile. */
+    if (release_app_hold && self != NULL)
+        g_application_release (G_APPLICATION (self));
 }
 
 typedef struct {
@@ -466,21 +475,33 @@ on_password_change_done (GObject *source, GAsyncResult *result, gpointer user_da
     gboolean current_session = td->lock_generation == self->lock_generation &&
         self->db_data == td->db_data && !self->app_locked;
     if (!success) {
+        g_warning ("Failed to update database with new password: %s",
+                   err != NULL ? err->message : "unknown error");
         if (current_session) {
-            g_warning ("Failed to update database with new password: %s",
-                       err != NULL ? err->message : "unknown error");
             present_password_change_error (self,
                 err != NULL ? err->message : _("Could not change the database password."));
+        } else {
+            /* The dialog closed when the job started and the app has locked
+             * since; without this the user would assume the new password. */
+            gui_misc_send_notification (G_APPLICATION (self),
+                _("Password change failed"),
+                _("The database still uses its previous password."));
         }
         g_clear_error (&err);
         return;
     }
+    if (current_session && self->window != NULL)
+        otpclient_window_show_error_toast (self->window, _("Database password changed"));
     /* A lock invalidates UI work, but a committed password must still reach
      * the keyring. Ending the operation may already have purged the live key;
      * the task owns the password and database until this callback returns. */
     if (self->use_secret_service) {
         StorePasswordContext *ctx = g_new0 (StorePasswordContext, 1);
         g_weak_ref_init (&ctx->app_ref, self);
+        /* Released in on_password_stored_gui: the keyring update must finish
+         * even if the last window was closed during the change. */
+        g_application_hold (G_APPLICATION (self));
+        ctx->release_app_hold = TRUE;
         secret_password_store (OTPCLIENT_SCHEMA,
                                SECRET_COLLECTION_DEFAULT,
                                "OTPClient database password",
@@ -1099,6 +1120,9 @@ otpclient_application_begin_database_operation (OTPClientApplication *self,
         return FALSE;
     self->database_operation_in_progress = TRUE;
     self->purge_after_database_operation = FALSE;
+    /* Closing the last window must not end the process mid-write: the job
+     * would die between the new password reaching disk and the keyring. */
+    g_application_hold (G_APPLICATION (self));
     if (self->window != NULL)
         otpclient_window_set_db_actions_enabled (self->window, FALSE);
     return TRUE;
@@ -1118,6 +1142,7 @@ otpclient_application_end_database_operation (OTPClientApplication *self,
     }
     if (!self->app_locked && self->window != NULL)
         otpclient_window_set_db_actions_enabled (self->window, TRUE);
+    g_application_release (G_APPLICATION (self));
 }
 
 gboolean
