@@ -746,6 +746,38 @@ update_bulk_selection_count (OTPClientWindow *self)
         gtk_widget_action_set_enabled (GTK_WIDGET (self), actions[i], enabled);
 }
 
+/* Bulk actions act on exactly what the user sees checked. Call after every
+ * filter change: a selected row hidden by the search or group filter would
+ * otherwise still be exported, regrouped or deleted. */
+static void
+prune_bulk_selection_to_visible (OTPClientWindow *self)
+{
+    if (self->bulk_selected_entries == NULL || self->filter_model == NULL ||
+        g_hash_table_size (self->bulk_selected_entries) == 0)
+        return;
+
+    g_autoptr (GHashTable) visible = g_hash_table_new (g_direct_hash, g_direct_equal);
+    guint n_items = g_list_model_get_n_items (G_LIST_MODEL (self->filter_model));
+    for (guint i = 0; i < n_items; i++) {
+        /* The model keeps the item alive; only its identity is needed. */
+        g_autoptr (GObject) item = g_list_model_get_item (G_LIST_MODEL (self->filter_model), i);
+        g_hash_table_add (visible, item);
+    }
+
+    gboolean removed = FALSE;
+    GHashTableIter iter;
+    gpointer entry;
+    g_hash_table_iter_init (&iter, self->bulk_selected_entries);
+    while (g_hash_table_iter_next (&iter, &entry, NULL)) {
+        if (!g_hash_table_contains (visible, entry)) {
+            g_hash_table_iter_remove (&iter);
+            removed = TRUE;
+        }
+    }
+    if (removed)
+        update_bulk_selection_count (self);
+}
+
 static void
 bulk_mode_toggled (GtkToggleButton *button, OTPClientWindow *self)
 {
@@ -1206,6 +1238,7 @@ cross_db_load_done (GObject      *source,
         cross_db_activate (self);
         refresh_search_cache (self);
         gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+        prune_bulk_selection_to_visible (self);
         update_empty_state (self);
     }
 }
@@ -1813,6 +1846,7 @@ search_text_changed (GtkSearchEntry  *entry,
 
     refresh_search_cache (win);
     gtk_filter_changed (GTK_FILTER (win->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+    prune_bulk_selection_to_visible (win);
     update_empty_state (win);
 
     /* Auto-select when search narrows to a single result */
@@ -3131,8 +3165,10 @@ rebuild_group_list (OTPClientWindow *self)
             gtk_string_list_get_string (self->group_list_model, restore_pos));
     self->syncing_group_filter = FALSE;
 
-    if (g_strcmp0 (prev_filter, self->active_group_filter) != 0)
+    if (g_strcmp0 (prev_filter, self->active_group_filter) != 0) {
         gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+        prune_bulk_selection_to_visible (self);
+    }
 
     g_list_free (group_names);
     g_hash_table_destroy (groups);
@@ -3191,6 +3227,7 @@ on_group_dropdown_changed (GtkDropDown     *dropdown,
 
     refresh_search_cache (self);
     gtk_filter_changed (GTK_FILTER (self->search_filter), GTK_FILTER_CHANGE_DIFFERENT);
+    prune_bulk_selection_to_visible (self);
     update_empty_state (self);
 }
 

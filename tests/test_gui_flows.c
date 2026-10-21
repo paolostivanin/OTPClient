@@ -533,6 +533,50 @@ test_bulk_selection_mode_refreshes_rows (void)
 }
 
 static void
+test_bulk_selection_follows_filter (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    json_array_append_new (fixture.db->in_memory_json_data,
+                           build_json_obj ("TOTP", "bob", "Other", REVIEW_SECRET,
+                                           6, "SHA1", 30, 0, NULL));
+    GError *err = NULL;
+    update_db (fixture.db, &err);
+    g_assert_no_error (err);
+    g_autoptr (OTPEntry) bob = otp_entry_new ("bob", "Other", NULL, "TOTP", 30, 0,
+                                              "SHA1", 6, REVIEW_SECRET);
+    g_list_store_append (win->otp_store, bob);
+
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (win->bulk_mode_button), TRUE);
+    settle ();
+    g_autoptr (GPtrArray) checks = g_ptr_array_new ();
+    collect_check_buttons (win->otp_list, checks);
+    g_assert_cmpuint (checks->len, ==, 2);
+    for (guint i = 0; i < checks->len; i++)
+        gtk_check_button_set_active (g_ptr_array_index (checks, i), TRUE);
+    g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 2);
+
+    /* Hiding bob drops him from the selection, so an action cannot touch a
+     * token the user no longer sees checked. */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "alice");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+    g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 1);
+    g_autoptr (GArray) indices = otpclient_window_get_bulk_selected_indices (win, NULL);
+    g_assert_cmpuint (indices->len, ==, 1);
+    g_assert_cmpuint (g_array_index (indices, guint, 0), ==, 0);
+
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+    g_assert_cmpuint (g_hash_table_size (win->bulk_selected_entries), ==, 1);
+    gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (win->bulk_mode_button), FALSE);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
+static void
 capture_import_summary (const ImportSummary *summary, gpointer user_data)
 {
     ImportSummary *captured = user_data;
@@ -1337,6 +1381,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/single-delete-undo-write-failures", test_single_delete_and_undo_write_failures);
     g_test_add_func ("/gui-flows/bulk-group-assignment", test_bulk_group_assignment);
     g_test_add_func ("/gui-flows/bulk-selection-mode", test_bulk_selection_mode_refreshes_rows);
+    g_test_add_func ("/gui-flows/bulk-selection-follows-filter", test_bulk_selection_follows_filter);
     g_test_add_func ("/gui-flows/import-preview", test_import_preview_duplicates_and_conflicts);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
     g_test_add_func ("/gui-flows/manual-add-rejected-uri", test_manual_add_reports_rejected_uri);
