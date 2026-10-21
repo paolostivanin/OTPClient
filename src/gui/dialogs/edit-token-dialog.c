@@ -103,7 +103,7 @@ on_save_clicked (GtkButton       *button,
         guint64 original_counter = (guint64) json_integer_value (
             json_object_get (self->original_token, "counter"));
         if (!digits_only || end == counter_text || *end != '\0' || errno == ERANGE ||
-            counter > OTP_HOTP_COUNTER_MAX || counter < original_counter) {
+            counter >= OTP_HOTP_COUNTER_MAX || counter < original_counter) {
             gtk_label_set_text (GTK_LABEL (self->error_label),
                                 _("Enter a counter at or above the current value, within the supported range."));
             gtk_widget_set_visible (self->error_label, TRUE);

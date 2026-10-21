@@ -277,8 +277,11 @@ show_import_preview (ImportDialog *self, GSList *otps, const gchar *details,
         GtkWidget *check = gtk_check_button_new_with_label (label);
         g_object_set_data (G_OBJECT (check), "exact-duplicate", GUINT_TO_POINTER (duplicate));
         gtk_check_button_set_active (GTK_CHECK_BUTTON (check), !duplicate);
+        /* db_import_otps always drops an exact duplicate, so ticking it would
+         * promise an import that cannot happen. */
+        gtk_widget_set_sensitive (check, !duplicate);
         gtk_widget_set_tooltip_text (check, duplicate
-            ? _("This token already exists and will be skipped by default.")
+            ? _("This token already exists and will be skipped.")
             : conflict ? _("An existing token has the same issuer and account but a different secret. Review before importing.")
                        : _("This token will be added if selected."));
         adw_preferences_group_add (ADW_PREFERENCES_GROUP (self->preview_group), check);
@@ -360,8 +363,9 @@ commit_import_preview (ImportDialog *self)
     g_slist_free (selected);
     if (self->callback != NULL)
         self->callback (&summary, self->callback_data);
+    /* The closed handler clears the preview; touching self after the close
+     * would only be safe if the dialog were disposed synchronously. */
     adw_dialog_close (ADW_DIALOG (self));
-    clear_preview (self);
 }
 
 static void

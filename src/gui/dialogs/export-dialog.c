@@ -364,11 +364,11 @@ on_export_clicked (GtkButton    *button,
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Export tokens"));
     static const char * const export_names[] = {
-        "otpclient-freeotp.json",
+        "otpclient-freeotp.txt",
         "otpclient-aegis.json",
         "otpclient-aegis.json",
         "otpclient-authpro.json",
-        "otpclient-authpro.json",
+        "otpclient-authpro.bin",
         "otpclient-2fas.json",
         "otpclient-2fas.json"
     };

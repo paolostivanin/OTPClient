@@ -550,7 +550,18 @@ json_object_get_hash (json_t *obj)
     // and inflates the collision rate of the 32-bit jenkins hash. The hash is
     // still only used as a fast first-pass filter - db_import_otps breaks ties
     // with json_equal so a colliding-but-distinct entry isn't silently dropped.
-    GString *tmp_string = g_string_new (NULL);
+    static const gchar * const string_fields[] = {
+        "type", "label", "issuer", "algo", "secret"
+    };
+    /* Size the buffer for everything it will hold. A GString that outgrows its
+     * allocation frees the old block without wiping it, and that block holds
+     * the secret. The three integer fields add at most 20 characters each. */
+    gsize needed = 64;
+    for (guint i = 0; i < G_N_ELEMENTS (string_fields); i++) {
+        const gchar *value = json_string_value (json_object_get (obj, string_fields[i]));
+        needed += value != NULL ? strlen (value) : 0;
+    }
+    GString *tmp_string = g_string_sized_new (needed);
     /* JSON object equality ignores insertion order. Hash token fields in a
      * fixed order so equal tokens always reach the same equality bucket.
      * Group and extension fields may collide; callers resolve those with

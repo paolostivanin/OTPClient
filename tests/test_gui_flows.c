@@ -1174,6 +1174,39 @@ test_encryption_operation_blocks_pending_edit (void)
     review_fixture_clear (&fixture);
 }
 
+static void
+test_edit_dialog_counter_bound_is_exclusive (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    (void) entry;
+    EditTokenDialog *edit = edit_token_dialog_new (
+        json_array_get (fixture.db->in_memory_json_data, 0), 0, fixture.db, NULL, NULL);
+    g_object_ref_sink (edit);
+    adw_dialog_present (ADW_DIALOG (edit), GTK_WIDGET (win));
+    GtkWidget *counter = find_widget (GTK_WIDGET (edit), ADW_TYPE_ENTRY_ROW, "Next unused counter");
+    GtkWidget *save = find_widget (GTK_WIDGET (edit), GTK_TYPE_BUTTON, "Save");
+    g_assert_nonnull (counter);
+    g_assert_nonnull (save);
+
+    /* OTP_HOTP_COUNTER_MAX is exclusive: 2^48 must be refused by the dialog
+     * itself, not by the generic validation error after the write attempt. */
+    gtk_editable_set_text (GTK_EDITABLE (counter), "281474976710656");
+    g_signal_emit_by_name (save, "clicked");
+    settle ();
+    g_assert_cmpint (json_integer_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "counter")), ==, 0);
+    g_assert_nonnull (find_label_containing (GTK_WIDGET (edit), "supported range"));
+
+    gtk_editable_set_text (GTK_EDITABLE (counter), "281474976710655");
+    g_signal_emit_by_name (save, "clicked");
+    settle ();
+    g_assert_cmpint (json_integer_value (json_object_get (
+        json_array_get (fixture.db->in_memory_json_data, 0), "counter")), ==, 281474976710655LL);
+    g_object_unref (edit);
+    review_fixture_clear (&fixture);
+}
+
 /* Row order in the store has to keep matching index order in the JSON, because
  * that is how every position-addressed action resolves its token. A failed save
  * after a drag-reorder used to break exactly that: update_db's failure path
@@ -1477,6 +1510,7 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
     g_test_add_func ("/gui-flows/group-search-all-matches", test_group_search_preserves_all_matches);
     g_test_add_func ("/gui-flows/clear-group-filter", test_clear_filters_resets_group_only_filter);
+    g_test_add_func ("/gui-flows/edit-counter-bound", test_edit_dialog_counter_bound_is_exclusive);
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
     g_test_add_func ("/gui-flows/db-replacement-generation", test_db_replacement_bumps_generation);

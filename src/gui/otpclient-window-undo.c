@@ -296,7 +296,7 @@ otpclient_window_actions_delete (OTPClientWindow *self)
         return;
     AdwAlertDialog *dialog = ADW_ALERT_DIALOG (
         adw_alert_dialog_new (_("Delete Token?"),
-                              _("This action cannot be undone.")));
+                              _("You can undo this action.")));
     adw_alert_dialog_add_responses (dialog, "cancel", _("Cancel"),
                                     "delete", _("Delete"), NULL);
     adw_alert_dialog_set_response_appearance (dialog, "delete",
