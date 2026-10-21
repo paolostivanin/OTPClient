@@ -4110,6 +4110,16 @@ on_webcam_cancel_clicked (GtkButton *button G_GNUC_UNUSED,
     close_webcam_progress (self);
 }
 
+/* Closing the progress window from the title bar must stop the camera too,
+ * not just hide the window while the scan keeps importing what it sees. */
+static gboolean
+on_webcam_close_request (GtkWindow       *dialog G_GNUC_UNUSED,
+                         OTPClientWindow *self)
+{
+    on_webcam_cancel_clicked (NULL, self);
+    return TRUE;
+}
+
 static void
 on_webcam_scan_done (GObject      *source G_GNUC_UNUSED,
                      GAsyncResult *result,
@@ -4176,6 +4186,7 @@ action_add_qr_webcam (GtkWidget  *widget,
     gtk_window_set_transient_for (dialog, GTK_WINDOW (self));
     gtk_window_set_modal (dialog, TRUE);
     gtk_window_set_resizable (dialog, FALSE);
+    g_signal_connect (dialog, "close-request", G_CALLBACK (on_webcam_close_request), self);
 
     GtkWidget *box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
     gtk_widget_set_margin_top (box, 24);
