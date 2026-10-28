@@ -36,6 +36,20 @@ typedef enum
     N_EXPORT_FORMATS
 } ExportFormat;
 
+static const struct {
+    const gchar *name;
+    const gchar *filter_label;
+    const gchar *suffix;
+} export_formats[N_EXPORT_FORMATS] = {
+    { "otpclient-freeotp.txt",  N_("Plain text (*.txt)"),   "txt" },
+    { "otpclient-aegis.json",   N_("JSON (*.json)"),        "json" },
+    { "otpclient-aegis.json",   N_("JSON (*.json)"),        "json" },
+    { "otpclient-authpro.json", N_("JSON (*.json)"),        "json" },
+    { "otpclient-authpro.bin",  N_("Encrypted backup (*.bin)"), "bin" },
+    { "otpclient-2fas.2fas",    N_("2FAS backup (*.2fas)"), "2fas" },
+    { "otpclient-2fas.2fas",    N_("2FAS backup (*.2fas)"), "2fas" },
+};
+
 typedef struct {
     gchar *path;
     guint format;
@@ -301,7 +315,26 @@ on_file_dialog_save_complete (GObject      *source,
         return;
     }
 
-    guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
+    guint fmt = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (dialog), "export-format"));
+    g_autofree gchar *basename = g_path_get_basename (path);
+    /* Preserve explicit extensions, including custom ones. Inspect only the
+     * basename, ignoring a leading dot used for hidden files. */
+    if (strchr (basename + (basename[0] == '.'), '.') == NULL) {
+        gchar *extended_path = g_strconcat (path, ".", export_formats[fmt].suffix, NULL);
+        g_free (path);
+        path = extended_path;
+        g_autoptr (GFile) destination = g_file_new_for_path (path);
+        if (g_file_query_exists (destination, NULL)) {
+            /* The chooser confirmed the original name, not this destination.
+             * Let it confirm replacement of the actual file before writing. */
+            gtk_file_dialog_set_initial_file (dialog, destination);
+            GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
+            gtk_file_dialog_save (dialog, win,
+                                  sensitive_dialog_get_cancellable (ADW_DIALOG (self)),
+                                  on_file_dialog_save_complete, g_object_ref (self));
+            return;
+        }
+    }
     const gchar *password = NULL;
     if (gtk_widget_get_visible (self->password_row))
     {
@@ -363,18 +396,21 @@ on_export_clicked (GtkButton    *button,
 
     GtkFileDialog *dialog = gtk_file_dialog_new ();
     gtk_file_dialog_set_title (dialog, _("Export tokens"));
-    static const char * const export_names[] = {
-        "otpclient-freeotp.txt",
-        "otpclient-aegis.json",
-        "otpclient-aegis.json",
-        "otpclient-authpro.json",
-        "otpclient-authpro.bin",
-        "otpclient-2fas.json",
-        "otpclient-2fas.json"
-    };
-    guint fmt = adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo));
-    gtk_file_dialog_set_initial_name (dialog,
-                                     export_names[MIN (fmt, N_EXPORT_FORMATS - 1)]);
+    guint fmt = MIN (adw_combo_row_get_selected (ADW_COMBO_ROW (self->format_combo)),
+                     N_EXPORT_FORMATS - 1);
+    g_object_set_data (G_OBJECT (dialog), "export-format", GUINT_TO_POINTER (fmt));
+    gtk_file_dialog_set_initial_name (dialog, export_formats[fmt].name);
+    g_autoptr (GtkFileFilter) filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (filter, _(export_formats[fmt].filter_label));
+    gtk_file_filter_add_suffix (filter, export_formats[fmt].suffix);
+    g_autoptr (GtkFileFilter) all_filter = gtk_file_filter_new ();
+    gtk_file_filter_set_name (all_filter, _("All files"));
+    gtk_file_filter_add_pattern (all_filter, "*");
+    g_autoptr (GListStore) filters = g_list_store_new (GTK_TYPE_FILE_FILTER);
+    g_list_store_append (filters, filter);
+    g_list_store_append (filters, all_filter);
+    gtk_file_dialog_set_filters (dialog, G_LIST_MODEL (filters));
+    gtk_file_dialog_set_default_filter (dialog, filter);
 
     GtkWindow *win = GTK_WINDOW (gtk_widget_get_root (self->parent_widget));
     gtk_file_dialog_save (dialog, win, sensitive_dialog_get_cancellable (ADW_DIALOG (self)),

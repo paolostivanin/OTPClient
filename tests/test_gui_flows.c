@@ -32,6 +32,48 @@ static guint password_store_completions;
 static gint password_lookup_calls;
 static gboolean provide_lookup_password;
 
+static gboolean intercept_file_save;
+static GTask *pending_file_save;
+
+void __real_gtk_file_dialog_save (GtkFileDialog *, GtkWindow *, GCancellable *,
+                                  GAsyncReadyCallback, gpointer);
+GFile *__real_gtk_file_dialog_save_finish (GtkFileDialog *, GAsyncResult *, GError **);
+
+/* Replace the desktop chooser boundary; keep export callbacks and workers real. */
+void
+__wrap_gtk_file_dialog_save (GtkFileDialog *dialog, GtkWindow *parent,
+                              GCancellable *cancellable, GAsyncReadyCallback callback,
+                              gpointer user_data)
+{
+    if (!intercept_file_save) {
+        __real_gtk_file_dialog_save (dialog, parent, cancellable, callback, user_data);
+        return;
+    }
+    g_assert_null (pending_file_save);
+    pending_file_save = g_task_new (dialog, cancellable, callback, user_data);
+}
+
+GFile *
+__wrap_gtk_file_dialog_save_finish (GtkFileDialog *dialog, GAsyncResult *result,
+                                     GError **error)
+{
+    if (!intercept_file_save)
+        return __real_gtk_file_dialog_save_finish (dialog, result, error);
+    return g_task_propagate_pointer (G_TASK (result), error);
+}
+
+static void
+complete_file_save (const gchar *path)
+{
+    g_autoptr (GTask) task = g_steal_pointer (&pending_file_save);
+    g_assert_nonnull (task);
+    if (path != NULL)
+        g_task_return_pointer (task, g_file_new_for_path (path), g_object_unref);
+    else
+        g_task_return_new_error (task, GTK_DIALOG_ERROR, GTK_DIALOG_ERROR_DISMISSED,
+                                 "Cancelled by test");
+}
+
 gchar *
 __wrap_secret_password_lookup_sync (const SecretSchema *schema,
                                     GCancellable *cancellable,
@@ -104,7 +146,8 @@ find_widget (GtkWidget *parent, GType type, const gchar *title)
          * label, so fall back to the icon name for those. */
         const gchar *label = GTK_IS_BUTTON (parent)
             ? (gtk_button_get_label (GTK_BUTTON (parent)) ?: gtk_button_get_icon_name (GTK_BUTTON (parent)))
-            : ADW_IS_PREFERENCES_ROW (parent) ? adw_preferences_row_get_title (ADW_PREFERENCES_ROW (parent)) : NULL;
+            : ADW_IS_PREFERENCES_ROW (parent) ? adw_preferences_row_get_title (ADW_PREFERENCES_ROW (parent))
+            : GTK_IS_LABEL (parent) ? gtk_label_get_text (GTK_LABEL (parent)) : NULL;
         if (title == NULL || g_strcmp0 (title, label) == 0)
             return parent;
     }
@@ -784,6 +827,133 @@ test_dialog_lock_and_export_validation (void)
     settle ();
     g_assert_null (adw_application_window_get_visible_dialog (ADW_APPLICATION_WINDOW (win)));
     g_assert_true (otpclient_application_get_app_locked (app));
+    review_fixture_clear (&fixture);
+}
+
+static ExportDialog *
+present_export (ReviewFixture *fixture, guint format)
+{
+    ExportDialog *dialog = g_object_ref_sink (export_dialog_new (fixture->db, GTK_WIDGET (win)));
+    adw_dialog_present (ADW_DIALOG (dialog), GTK_WIDGET (win));
+    GtkWidget *combo = find_widget (GTK_WIDGET (dialog), ADW_TYPE_COMBO_ROW, "Format");
+    adw_combo_row_set_selected (ADW_COMBO_ROW (combo), format);
+    GtkWidget *password = find_widget (GTK_WIDGET (dialog), ADW_TYPE_PASSWORD_ENTRY_ROW, "Encryption Password");
+    GtkWidget *confirm = find_widget (GTK_WIDGET (dialog), ADW_TYPE_PASSWORD_ENTRY_ROW, "Confirm Password");
+    gtk_editable_set_text (GTK_EDITABLE (password), "export-password");
+    gtk_editable_set_text (GTK_EDITABLE (confirm), "export-password");
+    GtkWidget *button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Export");
+    g_signal_emit_by_name (button, "clicked");
+    return dialog;
+}
+
+static void
+wait_for_export (ExportDialog *dialog)
+{
+    GtkWidget *button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Exporting…");
+    if (button == NULL)
+        button = find_widget (GTK_WIDGET (dialog), GTK_TYPE_BUTTON, "Export");
+    gint64 deadline = g_get_monotonic_time () + 10 * G_USEC_PER_SEC;
+    while (button != NULL && !gtk_widget_get_sensitive (button) &&
+           g_get_monotonic_time () < deadline)
+        settle ();
+    g_assert_nonnull (button);
+    g_assert_true (gtk_widget_get_sensitive (button));
+    GtkWidget *success = find_widget (GTK_WIDGET (dialog), GTK_TYPE_LABEL, "Export completed successfully.");
+    g_assert_nonnull (success);
+    g_assert_true (gtk_widget_get_visible (success));
+    GtkWidget *password = find_widget (GTK_WIDGET (dialog), ADW_TYPE_PASSWORD_ENTRY_ROW, "Encryption Password");
+    g_assert_cmpstr (gtk_editable_get_text (GTK_EDITABLE (password)), ==, "");
+}
+
+static void
+test_export_file_types (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    const gchar *suffixes[] = {"txt", "json", "json", "json", "bin", "2fas", "2fas"};
+    const gchar *names[] = {"backup", ".backup", "backup.JSON", "backup.custom"};
+    /* Dots in parent folders must not count as a filename extension. */
+    g_autofree gchar *dir = g_build_filename (fixture.dir, "backups.v1", NULL);
+    g_assert_cmpint (g_mkdir (dir, 0700), ==, 0);
+    intercept_file_save = TRUE;
+    for (guint fmt = 0; fmt < G_N_ELEMENTS (suffixes); fmt++) {
+        for (guint n = 0; n < G_N_ELEMENTS (names); n++) {
+            g_autoptr (ExportDialog) dialog = present_export (&fixture, fmt);
+            GtkFileDialog *chooser = g_task_get_source_object (pending_file_save);
+            GtkFileFilter *filter = gtk_file_dialog_get_default_filter (chooser);
+            g_assert_nonnull (filter);
+            GListModel *filters = gtk_file_dialog_get_filters (chooser);
+            g_assert_cmpuint (g_list_model_get_n_items (filters), ==, 2);
+            g_autoptr (GtkFileFilter) first = g_list_model_get_item (filters, 0);
+            g_assert_true (filter == first);
+            g_autofree gchar *extension = g_strconcat (".", suffixes[fmt], NULL);
+            g_assert_true (g_str_has_suffix (gtk_file_dialog_get_initial_name (chooser), extension));
+            g_autoptr (GFileInfo) info = g_file_info_new ();
+            g_autofree gchar *filter_name = g_strconcat ("backup", extension, NULL);
+            g_file_info_set_display_name (info, filter_name);
+            g_assert_true (gtk_filter_match (GTK_FILTER (filter), info));
+            g_file_info_set_display_name (info, "backup.wrong");
+            g_assert_false (gtk_filter_match (GTK_FILTER (filter), info));
+
+            g_autofree gchar *path = g_build_filename (dir, names[n], NULL);
+            g_autofree gchar *expected = n < 2 ? g_strconcat (path, extension, NULL) : g_strdup (path);
+            complete_file_save (path);
+            settle ();
+            wait_for_export (dialog);
+            g_assert_true (g_file_test (expected, G_FILE_TEST_IS_REGULAR));
+            if (n < 2)
+                g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
+            g_assert_cmpint (g_remove (expected), ==, 0);
+            adw_dialog_force_close (ADW_DIALOG (dialog));
+            settle ();
+        }
+    }
+    intercept_file_save = FALSE;
+    g_assert_cmpint (g_rmdir (dir), ==, 0);
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_export_extension_overwrite (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    g_autofree gchar *path = g_build_filename (fixture.dir, "backup", NULL);
+    g_autofree gchar *destination = g_strconcat (path, ".json", NULL);
+    intercept_file_save = TRUE;
+    for (guint cancel = 0; cancel < 2; cancel++) {
+        g_assert_true (g_file_set_contents (destination, "existing backup", -1, NULL));
+        g_autoptr (ExportDialog) dialog = present_export (&fixture, 2);
+        complete_file_save (path);
+        settle ();
+        g_assert_nonnull (pending_file_save);
+        GtkFileDialog *chooser = g_task_get_source_object (pending_file_save);
+        g_autofree gchar *initial_folder = g_file_get_path (gtk_file_dialog_get_initial_folder (chooser));
+        g_assert_cmpstr (initial_folder, ==, fixture.dir);
+        g_assert_cmpstr (gtk_file_dialog_get_initial_name (chooser), ==, "backup.json");
+        g_autofree gchar *contents = NULL;
+        g_assert_true (g_file_get_contents (destination, &contents, NULL, NULL));
+        g_assert_cmpstr (contents, ==, "existing backup");
+        complete_file_save (cancel ? NULL : destination);
+        settle ();
+        if (cancel) {
+            g_clear_pointer (&contents, g_free);
+            g_assert_true (g_file_get_contents (destination, &contents, NULL, NULL));
+            g_assert_cmpstr (contents, ==, "existing backup");
+            GtkWidget *password = find_widget (GTK_WIDGET (dialog), ADW_TYPE_PASSWORD_ENTRY_ROW, "Encryption Password");
+            g_assert_cmpstr (gtk_editable_get_text (GTK_EDITABLE (password)), ==, "export-password");
+        } else {
+            wait_for_export (dialog);
+            json_t *backup = json_load_file (destination, 0, NULL);
+            g_assert_nonnull (backup);
+            g_assert_true (json_is_string (json_object_get (backup, "db")));
+            json_decref (backup);
+        }
+        g_assert_false (g_file_test (path, G_FILE_TEST_EXISTS));
+        adw_dialog_force_close (ADW_DIALOG (dialog));
+        settle ();
+    }
+    intercept_file_save = FALSE;
     review_fixture_clear (&fixture);
 }
 
@@ -1693,6 +1863,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/bulk-selection-follows-filter", test_bulk_selection_follows_filter);
     g_test_add_func ("/gui-flows/import-preview", test_import_preview_duplicates_and_conflicts);
     g_test_add_func ("/gui-flows/dialog-lock-and-export-validation", test_dialog_lock_and_export_validation);
+    g_test_add_func ("/gui-flows/export-file-types", test_export_file_types);
+    g_test_add_func ("/gui-flows/export-extension-overwrite", test_export_extension_overwrite);
     g_test_add_func ("/gui-flows/manual-add-rejected-uri", test_manual_add_reports_rejected_uri);
     g_test_add_func ("/gui-flows/cross-database-watch", test_cross_database_sources_watched_before_load);
     g_test_add_data_func ("/gui-flows/cross-database-locked-search",
