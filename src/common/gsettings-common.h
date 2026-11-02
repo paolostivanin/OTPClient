@@ -20,10 +20,18 @@ typedef struct {
     gchar *path;
 } DbListEntry;
 
+/* Every key this build reads or writes, NULL-terminated. Static, do not free. */
+const gchar *const *gsettings_common_get_schema_keys     (void);
+
+/* The keys from gsettings_common_get_schema_keys() that the schema lacks.
+ * Empty, never NULL, when the schema is complete. Free with g_strfreev. */
+GStrv       gsettings_common_get_missing_keys            (GSettingsSchema *schema);
+
 /* Caller owns the returned GSettings (free with g_object_unref), the
  * returned gchar pointers (free with g_free), and the returned GPtrArray
  * (free with g_ptr_array_unref). NULL is returned when the GSettings schema
- * is unavailable; the *_string getters also return NULL when no value is
+ * is unavailable, or installed but older than this build (a warning names the
+ * missing keys); the *_string getters also return NULL when no value is
  * configured anywhere (settings + key file). */
 GSettings  *gsettings_common_get_settings                (void);
 

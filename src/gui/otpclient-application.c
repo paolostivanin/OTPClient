@@ -9,6 +9,7 @@
 #include "otp-entry.h"
 #include "database-sidebar.h"
 #include "gui-misc.h"
+#include "gsettings-common.h"
 #include "dialogs/password-dialog.h"
 #include "lock-app.h"
 #include "dialogs/db-info-dialog.h"
@@ -1624,16 +1625,10 @@ otpclient_application_startup (GApplication *application)
     set_accel_for_action (self, "app.lock", "<Control>l");
     set_accel_for_action (self, "app.shortcuts", "<Control>question");
 
-    /* Load settings from GSettings if schema is available */
+    /* Load settings from GSettings if a schema this build can use is installed */
     self->app_locked = FALSE;
-GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
-    g_autoptr (GSettingsSchema) schema = NULL;
-    if (schema_source != NULL)
-        schema = g_settings_schema_source_lookup (schema_source,
-                    "com.github.paolostivanin.OTPClient", TRUE);
-
-    if (schema != NULL) {
-        self->settings = g_settings_new ("com.github.paolostivanin.OTPClient");
+    self->settings = gsettings_common_get_settings ();
+    if (self->settings != NULL) {
         self->show_next_otp = g_settings_get_boolean (self->settings, "show-next-otp");
         self->disable_notifications = !g_settings_get_boolean (self->settings, "notification-enabled");
         self->auto_lock = g_settings_get_boolean (self->settings, "auto-lock");
@@ -1652,7 +1647,6 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
         self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
     } else {
-        self->settings = NULL;
         self->show_next_otp = FALSE;
         self->disable_notifications = FALSE;
         self->auto_lock = FALSE;

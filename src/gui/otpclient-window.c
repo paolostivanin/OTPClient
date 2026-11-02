@@ -6357,8 +6357,6 @@ watch_hide_otps_setting (OTPClientWindow      *self,
 static void
 otpclient_window_init (OTPClientWindow *self)
 {
-    GSettingsSchemaSource *schema_source = NULL;
-    g_autoptr (GSettingsSchema) schema = NULL;
 
     gtk_widget_init_template (GTK_WIDGET(self));
 
@@ -6386,13 +6384,9 @@ otpclient_window_init (OTPClientWindow *self)
     gtk_widget_set_size_request (spinner, 48, 48);
     adw_status_page_set_child (ADW_STATUS_PAGE (self->loading_status_page), spinner);
 
-    schema_source = g_settings_schema_source_get_default ();
-    if (schema_source != NULL)
-        schema = g_settings_schema_source_lookup (schema_source, "com.github.paolostivanin.OTPClient", TRUE);
-
-    if (schema != NULL)
+    self->settings = gsettings_common_get_settings ();
+    if (self->settings != NULL)
     {
-        self->settings = g_settings_new ("com.github.paolostivanin.OTPClient");
 
         /* Restore saved window size */
         gint width = g_settings_get_int (self->settings, "window-width");
@@ -6415,7 +6409,8 @@ otpclient_window_init (OTPClientWindow *self)
     }
     else
     {
-        g_warning ("Settings schema 'com.github.paolostivanin.OTPClient' is not installed.");
+        g_warning ("Settings schema 'com.github.paolostivanin.OTPClient' is not available, "
+                   "settings will not be saved.");
     }
 
     setup_otp_view (self);

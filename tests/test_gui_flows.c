@@ -7,6 +7,7 @@
 #include "otp-entry.h"
 #include "otp-validation.h"
 #include "gsettings-common.h"
+#include "stale-schema.h"
 #include "parse-uri.h"
 #include "lock-app.h"
 #include "dialogs/qr-display-dialog.h"
@@ -1831,6 +1832,34 @@ test_quit_waits_for_password_change (gconstpointer data)
     review_fixture_clear (&fixture);
 }
 
+/* #475: with a compiled 5.3.0 schema found ahead of the current one, the app
+ * aborted at startup on the first read of tray-icon-style. In the child, main()
+ * starts the app and builds the window against such a schema, so reaching the
+ * test body is most of the test. */
+static void
+test_stale_schema_startup (void)
+{
+#ifndef GLIB_COMPILE_SCHEMAS_PATH
+    g_test_skip ("glib-compile-schemas was not found at configure time");
+#else
+    if (g_test_subprocess ()) {
+        g_assert_nonnull (win);
+        g_assert_null (gsettings_common_get_settings ());
+        g_assert_cmpstr (otpclient_application_get_tray_icon_style (app), ==, "color");
+        /* A preference change stays in memory instead of aborting on the write. */
+        otpclient_application_set_tray_icon_style (app, "dark");
+        g_assert_cmpstr (otpclient_application_get_tray_icon_style (app), ==, "dark");
+        return;
+    }
+
+    gchar *dir = stale_schema_dir_new ("tray-icon-style");
+    stale_schema_trap_subprocess (dir, 30 * G_USEC_PER_SEC);
+    stale_schema_dir_free (dir);
+    g_test_trap_assert_passed ();
+    g_test_trap_assert_stderr ("*is older than this build*lacks: tray-icon-style.*");
+#endif
+}
+
 int
 main (int argc, char **argv)
 {
@@ -1896,6 +1925,7 @@ main (int argc, char **argv)
         GUINT_TO_POINTER (2), test_quit_waits_for_password_change);
     g_test_add_data_func ("/gui-flows/quit-password-change-no-keyring",
         GUINT_TO_POINTER (4), test_quit_waits_for_password_change);
+    g_test_add_func ("/gui-flows/stale-schema-startup", test_stale_schema_startup);
     int result = g_test_run ();
     gtk_window_destroy (GTK_WINDOW (win));
     g_object_unref (app);

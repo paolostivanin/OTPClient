@@ -43,6 +43,17 @@ function(otpclient_depend_on_test_schema target_name)
     endif()
 endfunction()
 
+# Tests that compile a stale copy of this checkout's schema, see stale-schema.h.
+# Without the compiler they skip.
+function(otpclient_use_stale_schema target_name)
+    target_compile_definitions(${target_name} PRIVATE
+            OTPCLIENT_SCHEMA_XML="${PROJECT_SOURCE_DIR}/data/com.github.paolostivanin.OTPClient.gschema.xml")
+    if(GLIB_COMPILE_SCHEMAS)
+        target_compile_definitions(${target_name} PRIVATE
+                GLIB_COMPILE_SCHEMAS_PATH="${GLIB_COMPILE_SCHEMAS}")
+    endif()
+endfunction()
+
 # The integration tests below drive the real binaries under a private session bus
 # and, for the GUI, a virtual display. None of that is needed to build or run
 # OTPClient itself, so a missing tool has to skip the test rather than fail the
@@ -121,6 +132,7 @@ if(BUILD_GUI)
     target_link_libraries(test_gui_flows PkgConfig::GTK4 PkgConfig::ADWAITA PkgConfig::GDKPIXBUF
             PkgConfig::ZBAR PkgConfig::PROTOC PkgConfig::LIBQRENCODE ${COMMON_LIBS})
     otpclient_depend_on_test_schema(test_gui_flows)
+    otpclient_use_stale_schema(test_gui_flows)
     if(ENABLE_MINIMIZE_TO_TRAY)
         add_executable(test_tray_session test_tray_session.c ${REVIEW_GUI_SOURCES})
         add_dependencies(test_tray_session OTPClient)
@@ -369,6 +381,7 @@ target_link_libraries(test_settings_import
         PkgConfig::JANSSON
         ${COMMON_LIBS}
 )
+otpclient_use_stale_schema(test_settings_import)
 add_test(NAME settings_import COMMAND test_settings_import)
 otpclient_use_test_schema(settings_import)
 

@@ -21,6 +21,7 @@
 #include <string.h>
 #include "settings-import-export.h"
 #include "gsettings-common.h"
+#include "stale-schema.h"
 
 #define PENDING_KEY "startup-reconcile-pending"
 
@@ -356,6 +357,89 @@ test_every_preference_is_backed_up (void)
     json_decref (root);
 }
 
+/* gsettings-common keeps its own copy of the schema's key list so it can turn
+ * down a stale schema before GSettings aborts on one. A key added to the schema
+ * and not to the list would get past that check. */
+static void
+test_schema_key_list_matches_schema (void)
+{
+    g_autoptr (GSettingsSchema) schema = NULL;
+    GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
+    if (source != NULL)
+        schema = g_settings_schema_source_lookup (source, "com.github.paolostivanin.OTPClient", TRUE);
+    if (schema == NULL) {
+        g_test_skip ("the GSettings schema is not available");
+        return;
+    }
+
+    const gchar *const *known = gsettings_common_get_schema_keys ();
+    g_auto (GStrv) keys = g_settings_schema_list_keys (schema);
+    for (gsize i = 0; keys[i] != NULL; i++) {
+        if (!g_strv_contains (known, keys[i]))
+            g_error ("schema key '%s' is missing from schema_keys in gsettings-common.c", keys[i]);
+    }
+    for (gsize i = 0; known[i] != NULL; i++) {
+        if (!g_settings_schema_has_key (schema, known[i]))
+            g_error ("schema_keys in gsettings-common.c lists '%s', which the schema does not have",
+                     known[i]);
+    }
+    g_assert_cmpuint (g_strv_length ((gchar **) known), ==, g_strv_length (keys));
+
+    g_auto (GStrv) missing = gsettings_common_get_missing_keys (schema);
+    g_assert_nonnull (missing);
+    g_assert_null (missing[0]);
+}
+
+/* #475: a compiled 5.3.0 schema that GLib found ahead of the 5.3.1 one lacked
+ * tray-icon-style, and GSettings aborts on the first read of a key the schema
+ * does not have. A stale schema has to read as no schema at all, with one
+ * warning that says what is wrong and where. */
+static void
+test_stale_schema_is_not_fatal (void)
+{
+#ifndef GLIB_COMPILE_SCHEMAS_PATH
+    g_test_skip ("glib-compile-schemas was not found at configure time");
+#else
+    if (g_test_subprocess ()) {
+        /* The child's GSETTINGS_SCHEMA_DIR is the stale directory, so the
+         * warning has to name it. */
+        g_autofree gchar *pattern = g_strdup_printf (
+            "*schema com.github.paolostivanin.OTPClient in %s is older than this build*"
+            "lacks: tray-icon-style.*", g_getenv ("GSETTINGS_SCHEMA_DIR"));
+        g_test_expect_message (NULL, G_LOG_LEVEL_WARNING, pattern);
+        g_assert_null (gsettings_common_get_settings ());
+        g_test_assert_expected_messages ();
+
+        /* Asked again, the answer holds and the warning, fatal under the test
+         * harness, is not repeated. */
+        g_assert_null (gsettings_common_get_settings ());
+
+        /* Callers that used to read the keys now take their no-schema path. */
+        g_autoptr (GError) err = NULL;
+        g_assert_null (export_settings_to_json (&err));
+        g_assert_error (err, G_IO_ERROR, G_IO_ERROR_FAILED);
+        return;
+    }
+
+    gchar *dir = stale_schema_dir_new ("tray-icon-style");
+
+    g_autoptr (GError) err = NULL;
+    g_autoptr (GSettingsSchemaSource) source =
+        g_settings_schema_source_new_from_directory (dir, NULL, FALSE, &err);
+    g_assert_no_error (err);
+    g_autoptr (GSettingsSchema) schema =
+        g_settings_schema_source_lookup (source, "com.github.paolostivanin.OTPClient", FALSE);
+    g_assert_nonnull (schema);
+    g_auto (GStrv) missing = gsettings_common_get_missing_keys (schema);
+    g_assert_cmpuint (g_strv_length (missing), ==, 1);
+    g_assert_cmpstr (missing[0], ==, "tray-icon-style");
+
+    stale_schema_trap_subprocess (dir, 0);
+    stale_schema_dir_free (dir);
+    g_test_trap_assert_passed ();
+#endif
+}
+
 /* The out parameter is optional; the durable note is not. */
 static void
 test_null_out_parameter_still_persists (void)
@@ -404,6 +488,10 @@ main (int argc, char *argv[])
                      test_every_preference_is_backed_up);
     g_test_add_func ("/settings-import/null-out-parameter-still-persists",
                      test_null_out_parameter_still_persists);
+    g_test_add_func ("/settings-import/schema-key-list-matches-schema",
+                     test_schema_key_list_matches_schema);
+    g_test_add_func ("/settings-import/stale-schema-is-not-fatal",
+                     test_stale_schema_is_not_fatal);
 
     return g_test_run ();
 }
