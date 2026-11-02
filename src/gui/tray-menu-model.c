@@ -371,3 +371,16 @@ tray_menu_model_event_group (const TrayMenuEntry *items,
 
     return g_variant_new ("(ai)", &errors);
 }
+
+const gchar *
+tray_menu_model_icon_name_for_style (const gchar *style)
+{
+    /* Installed next to the application icon by the top-level CMakeLists.txt.
+     * The host resolves these against the shared icon theme, so a name added
+     * here without its file being installed shows up as a blank tray slot. */
+    if (g_strcmp0 (style, "dark") == 0)
+        return "com.github.paolostivanin.OTPClient-tray-dark";
+    if (g_strcmp0 (style, "light") == 0)
+        return "com.github.paolostivanin.OTPClient-tray-light";
+    return "com.github.paolostivanin.OTPClient";
+}

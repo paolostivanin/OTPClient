@@ -5,5 +5,9 @@
     <file preprocess="xml-stripblanks">ui/context-menus.ui</file>
     <file preprocess="xml-stripblanks">ui/shortcuts-window.ui</file>
     <file>ui/otp-button-row.css</file>
+    <!-- Bundled fallback for an Adwaita-only icon name, so themes such as
+         Breeze that lack it do not show the missing-image placeholder.
+         GtkApplication adds <resource-base-path>/icons to the icon theme. -->
+    <file preprocess="xml-stripblanks">icons/scalable/actions/selection-mode-symbolic.svg</file>
   </gresource>
 </gresources>

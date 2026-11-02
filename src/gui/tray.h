@@ -21,6 +21,10 @@ void otpclient_tray_begin_hidden (OTPClientApplication *app);
  * clicking the icon is about to ask for a password. No-op when not published. */
 void otpclient_tray_notify_locked_changed (OTPClientApplication *app);
 
+/* The tray-icon-style preference changed: have the host re-read IconName so the
+ * new icon shows up without a restart. No-op when not published. */
+void otpclient_tray_notify_icon_changed (OTPClientApplication *app);
+
 /* Pause automatic recovery while the desktop is locked; restart it on unlock. */
 void otpclient_tray_notify_session_locked_changed (OTPClientApplication *app);
 

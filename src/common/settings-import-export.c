@@ -38,6 +38,7 @@ static const SettingDef exportable_settings[] = {
     { "clipboard-clear-timeout",SETTING_UINT,   FALSE },
     { "minimize-to-tray",       SETTING_BOOL,   TRUE  },
     { "start-minimized",        SETTING_BOOL,   TRUE  },
+    { "tray-icon-style",        SETTING_STRING, FALSE },
     { "autostart",              SETTING_BOOL,   TRUE  },
     { "hide-otps",              SETTING_BOOL,   FALSE },
     { NULL, 0, FALSE }
@@ -56,6 +57,24 @@ is_valid_hex_color (const gchar *color)
         if (!g_ascii_isxdigit (*p))
             return FALSE;
     return TRUE;
+}
+
+/* Whether the schema accepts this string for the key. Keys with <choices> (or
+ * any other range) make g_settings_set_string emit a critical on an outside
+ * value instead of failing quietly, so an import has to ask first. */
+static gboolean
+string_in_schema_range (GSettings   *settings,
+                        const gchar *key,
+                        const gchar *value)
+{
+    g_autoptr (GSettingsSchema) schema = NULL;
+    g_object_get (settings, "settings-schema", &schema, NULL);
+    if (schema == NULL || !g_settings_schema_has_key (schema, key))
+        return FALSE;
+
+    g_autoptr (GSettingsSchemaKey) schema_key = g_settings_schema_get_key (schema, key);
+    g_autoptr (GVariant) variant = g_variant_ref_sink (g_variant_new_string (value));
+    return g_settings_schema_key_range_check (schema_key, variant);
 }
 
 
@@ -243,13 +262,17 @@ import_settings_from_json (const gchar *json_str,
                     const gchar *value = json_string_value (val);
                     gboolean valid = TRUE;
                     if (g_str_equal (def->key, "validity-color") ||
-                        g_str_equal (def->key, "validity-warning-color"))
+                        g_str_equal (def->key, "validity-warning-color")) {
                         valid = is_valid_hex_color (value);
+                        if (!valid)
+                            g_warning ("Skipping invalid color setting '%s'.", def->key);
+                    } else if (!string_in_schema_range (settings, def->key, value)) {
+                        valid = FALSE;
+                        g_warning ("Skipping out-of-range string setting '%s'.", def->key);
+                    }
                     if (valid) {
                         g_settings_set_string (settings, def->key, value);
                         applied = TRUE;
-                    } else {
-                        g_warning ("Skipping invalid color setting '%s'.", def->key);
                     }
                 }
                 break;

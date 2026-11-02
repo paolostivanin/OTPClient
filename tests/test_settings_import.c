@@ -216,6 +216,34 @@ test_invalid_imported_colors_preserve_existing_values (void)
     g_assert_cmpstr (warning, ==, "#abcdef");
 }
 
+/* tray-icon-style is a <choices> key, and GSettings answers an outside value
+ * with a critical rather than a quiet refusal, which aborts under the test
+ * harness and logs an assertion failure in the app. A backup is user-editable,
+ * so the import has to check the value against the schema first. */
+static void
+test_tray_icon_style_import_is_range_checked (void)
+{
+    g_autoptr (GSettings) settings = fixture_settings ();
+    if (settings == NULL)
+        return;
+
+    g_settings_set_string (settings, "tray-icon-style", "color");
+
+    gboolean touched = TRUE;
+    g_assert_true (import ("{\"tray-icon-style\": \"light\"}", &touched));
+    g_autofree gchar *light = g_settings_get_string (settings, "tray-icon-style");
+    g_assert_cmpstr (light, ==, "light");
+    /* A cosmetic preference: nothing for the desktop to be told about. */
+    g_assert_false (touched);
+
+    g_test_expect_message (NULL, G_LOG_LEVEL_WARNING,
+                           "*Skipping out-of-range string setting 'tray-icon-style'.");
+    g_assert_true (import ("{\"tray-icon-style\": \"purple\"}", NULL));
+    g_test_assert_expected_messages ();
+    g_autofree gchar *kept = g_settings_get_string (settings, "tray-icon-style");
+    g_assert_cmpstr (kept, ==, "light");
+}
+
 /* One good startup key alongside a malformed one still has to be reported: the
  * good one was written and the desktop has not been told. */
 static void
@@ -366,6 +394,8 @@ main (int argc, char *argv[])
                      test_invalid_auto_lock_timeout_preserves_existing_value);
     g_test_add_func ("/settings-import/invalid-colors-preserve-values",
                      test_invalid_imported_colors_preserve_existing_values);
+    g_test_add_func ("/settings-import/tray-icon-style-is-range-checked",
+                     test_tray_icon_style_import_is_range_checked);
     g_test_add_func ("/settings-import/startup/one-good-key-is-enough",
                      test_one_good_startup_key_is_enough);
     g_test_add_func ("/settings-import/pending-flag-is-not-exportable",

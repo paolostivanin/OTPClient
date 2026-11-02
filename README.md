@@ -198,6 +198,8 @@ Configure these optional features in **Settings → Integration**:
 - **Start minimized:** also available as `otpclient --start-minimized`. Requires
   minimize-to-tray and an available tray; otherwise the window is shown. The
   database starts locked and asks for its password when you show the window.
+- **Tray icon:** color, dark (for light panels) or light (for dark panels).
+  Requires minimize-to-tray.
 - **Start at login:** native builds write
   `~/.config/autostart/com.github.paolostivanin.OTPClient.desktop`. Flatpak uses
   the Background portal; the setting is unavailable when the desktop does not

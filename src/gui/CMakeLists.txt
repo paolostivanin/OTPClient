@@ -13,6 +13,7 @@ add_custom_command(
         ${PROJECT_SOURCE_DIR}/src/gui/ui/context-menus.ui
         ${PROJECT_SOURCE_DIR}/src/gui/ui/shortcuts-window.ui
         ${PROJECT_SOURCE_DIR}/src/gui/ui/otp-button-row.css
+        ${PROJECT_SOURCE_DIR}/src/gui/icons/scalable/actions/selection-mode-symbolic.svg
 )
 
 file(GLOB GUI_HEADER_FILES CONFIGURE_DEPENDS

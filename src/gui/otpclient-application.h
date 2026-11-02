@@ -144,6 +144,12 @@ gboolean              otpclient_application_get_start_minimized (OTPClientApplic
 void                  otpclient_application_set_start_minimized (OTPClientApplication *self,
                                                                  gboolean              minimized);
 
+/* One of the tray-icon-style choices: "color", "dark" or "light". The setter
+ * expects a valid choice; GSettings rejects anything else with a critical. */
+const gchar          *otpclient_application_get_tray_icon_style (OTPClientApplication *self);
+void                  otpclient_application_set_tray_icon_style (OTPClientApplication *self,
+                                                                 const gchar          *style);
+
 gboolean              otpclient_application_get_autostart (OTPClientApplication *self);
 void                  otpclient_application_set_autostart (OTPClientApplication *self,
                                                            gboolean              autostart);

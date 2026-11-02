@@ -380,6 +380,8 @@ otpclient_apply_target_settings(test_tray_menu_model)
 target_include_directories(test_tray_menu_model PRIVATE
         ${PROJECT_SOURCE_DIR}/src/gui
 )
+target_compile_definitions(test_tray_menu_model PRIVATE
+        TRAY_TEST_ICON_DIR="${PROJECT_SOURCE_DIR}/data/icons")
 target_link_libraries(test_tray_menu_model ${COMMON_LIBS})
 add_test(NAME tray_menu_model COMMAND test_tray_menu_model)
 

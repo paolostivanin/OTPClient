@@ -102,4 +102,9 @@ GVariant       *tray_menu_model_event_group         (const TrayMenuEntry *items,
                                                      GVariant            *events,
                                                      GArray              *out_actions);
 
+/* The StatusNotifierItem IconName for a tray-icon-style value. Anything that is
+ * not a known style, NULL included, gets the color icon: a name the host cannot
+ * resolve blanks the icon, which is worse than the wrong style. */
+const gchar    *tray_menu_model_icon_name_for_style (const gchar         *style);
+
 G_END_DECLS

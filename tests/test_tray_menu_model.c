@@ -531,6 +531,36 @@ test_revision_is_nonzero (void)
     g_assert_cmpuint (tray_menu_model_revision (), >, 0);
 }
 
+/* The host resolves IconName against the shared icon theme, out of process, so
+ * a name without an installed file is a blank tray slot rather than an error
+ * anyone sees. Pin each style to an icon that exists in data/icons, the
+ * directory CMake installs into hicolor. */
+static void
+test_icon_name_for_style (void)
+{
+    static const gchar *const styles[] = { "color", "dark", "light" };
+    const gchar *seen[G_N_ELEMENTS (styles)];
+
+    for (gsize i = 0; i < G_N_ELEMENTS (styles); i++)
+    {
+        const gchar *name = tray_menu_model_icon_name_for_style (styles[i]);
+        g_assert_nonnull (name);
+        for (gsize j = 0; j < i; j++)
+            g_assert_cmpstr (name, !=, seen[j]);
+        seen[i] = name;
+
+        g_autofree gchar *file = g_strdup_printf ("%s.svg", name);
+        g_autofree gchar *path = g_build_filename (TRAY_TEST_ICON_DIR, file, NULL);
+        if (!g_file_test (path, G_FILE_TEST_IS_REGULAR))
+            g_error ("style '%s' maps to icon '%s', but %s does not exist",
+                     styles[i], name, path);
+    }
+
+    /* Anything else falls back to the color icon rather than to nothing. */
+    g_assert_cmpstr (tray_menu_model_icon_name_for_style (NULL), ==, seen[0]);
+    g_assert_cmpstr (tray_menu_model_icon_name_for_style ("purple"), ==, seen[0]);
+}
+
 int
 main (int argc, char **argv)
 {
@@ -560,6 +590,7 @@ main (int argc, char **argv)
     g_test_add_func ("/tray-menu-model/action", test_action_lookup);
     g_test_add_func ("/tray-menu-model/has-id", test_has_id);
     g_test_add_func ("/tray-menu-model/revision", test_revision_is_nonzero);
+    g_test_add_func ("/tray-menu-model/icon-name-for-style", test_icon_name_for_style);
 
     return g_test_run ();
 }

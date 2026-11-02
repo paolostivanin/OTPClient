@@ -95,6 +95,16 @@
   </content_rating>
 
   <releases>
+    <release version="5.3.1" date="2026-11-02">
+      <description>
+        <p>Small release. The tray icon can now be shown in color or as a dark or light monochrome glyph, and the Select button no longer shows a missing-icon placeholder with icon themes other than Adwaita. There is no on-disk format change; existing databases open unchanged.</p>
+        <ul>
+          <li>NEW: choose the tray icon style in Settings under Integration: the full-color application icon, a dark glyph that suits a light panel, or a light glyph that suits a dark one. The icon already in the tray changes without a restart, and the choice is included in settings export and import, where a value other than the three styles is skipped with a warning</li>
+          <li>FIX: the Select button in the header bar showed a missing-image placeholder with icon themes that lack the Adwaita-only selection-mode icon, such as Breeze on KDE Plasma. The icon is now bundled with the application and used only when the theme does not provide one</li>
+          <li>TEST: each tray icon style is checked against an installed icon file, and settings import checks the style against its allowed values</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.3.0" date="2026-10-21">
       <description>
         <p>Feature release. Tokens that fail validation used to be preserved in the database file with a single toast to say so and nothing to do about it; a banner now counts them and opens a review where each one can be repaired or deleted. Several tokens can be selected at once to move to a group, export or delete, a group can be renamed or removed across all its tokens, and an import shows what it will add and what it will skip before anything is written. Underneath, reading a backup, writing an export and changing the database password or key-derivation parameters now run off the main thread, a stored algorithm in lowercase no longer silently produces SHA1 codes, and otpauth links are checked field by field instead of being imported with guessed values. There is no on-disk format change; existing databases open unchanged.</p>

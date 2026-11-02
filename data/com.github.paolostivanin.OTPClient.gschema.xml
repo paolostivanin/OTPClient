@@ -106,6 +106,16 @@
       <summary>Start minimized to tray</summary>
       <description>Start with the window hidden in the system tray instead of shown. Requires Minimize to Tray. If no tray accepts the icon, the window is shown normally.</description>
     </key>
+    <key name="tray-icon-style" type="s">
+      <choices>
+        <choice value="color"/>
+        <choice value="dark"/>
+        <choice value="light"/>
+      </choices>
+      <default>"color"</default>
+      <summary>Tray icon style</summary>
+      <description>Which icon the system tray shows: the full-color application icon, a dark monochrome glyph that suits light panels, or a light monochrome glyph that suits dark panels.</description>
+    </key>
     <key name="autostart" type="b">
       <default>false</default>
       <summary>Start at login</summary>

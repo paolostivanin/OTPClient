@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(OTPClient VERSION "5.3.0" LANGUAGES "C")
+project(OTPClient VERSION "5.3.1" LANGUAGES "C")
 include(GNUInstallDirs)
 include(CTest)
 
@@ -161,6 +161,10 @@ if(BUILD_GUI)
     set(GUI_ICON_FILES
             data/icons/com.github.paolostivanin.OTPClient.svg
             data/icons/com.github.paolostivanin.OTPClient-symbolic.svg
+            # Tray icon styles. Looked up by name by the tray host, which runs
+            # outside the app, so they have to be in the shared theme.
+            data/icons/com.github.paolostivanin.OTPClient-tray-dark.svg
+            data/icons/com.github.paolostivanin.OTPClient-tray-light.svg
     )
     install(FILES ${GUI_ICON_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 endif ()

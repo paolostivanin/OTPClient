@@ -40,6 +40,7 @@ struct _SettingsDialog
 #ifdef ENABLE_MINIMIZE_TO_TRAY
     GtkWidget *minimize_to_tray_switch;
     GtkWidget *start_minimized_switch;
+    GtkWidget *tray_icon_combo;
     /* Same idea for the tray rows, which the application can move on its own
      * when a background grant is refused after the fact. */
     gboolean   tray_updating;
@@ -257,9 +258,11 @@ on_clipboard_clear_changed (AdwComboRow    *combo,
 /* Start-minimized only makes sense with somewhere to be minimized to: without a
  * tray icon the window would never come back. Same policy as the row above,
  * disable rather than clear, so one session on a tray-less desktop does not
- * discard the preference. */
+ * discard the preference. The icon style follows along, since without an icon
+ * there is nothing for it to style; it keeps its own hint as a subtitle, the
+ * start-minimized row already says why both are greyed out. */
 static void
-sync_start_minimized_sensitivity (SettingsDialog *self)
+sync_tray_rows_sensitivity (SettingsDialog *self)
 {
     gboolean tray_available = otpclient_tray_is_available ();
     gboolean minimize = adw_switch_row_get_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch));
@@ -268,6 +271,33 @@ sync_start_minimized_sensitivity (SettingsDialog *self)
     adw_action_row_set_subtitle (ADW_ACTION_ROW (self->start_minimized_switch),
                                  !tray_available ? _("No system tray was detected on this desktop")
                                                  : (!minimize ? _("Requires Minimize to Tray") : ""));
+
+    if (self->tray_icon_combo != NULL)
+        gtk_widget_set_sensitive (self->tray_icon_combo, minimize && tray_available);
+}
+
+/* Index order of the combo row's model. */
+static const gchar *const tray_icon_styles[] = { "color", "dark", "light" };
+
+static guint
+tray_icon_style_index (const gchar *style)
+{
+    for (guint i = 0; i < G_N_ELEMENTS (tray_icon_styles); i++)
+        if (g_strcmp0 (style, tray_icon_styles[i]) == 0)
+            return i;
+    return 0;
+}
+
+static void
+on_tray_icon_style_changed (GObject        *obj,
+                            GParamSpec     *pspec,
+                            SettingsDialog *self)
+{
+    (void) pspec;
+
+    guint selected = adw_combo_row_get_selected (ADW_COMBO_ROW (obj));
+    if (selected < G_N_ELEMENTS (tray_icon_styles))
+        otpclient_application_set_tray_icon_style (self->app, tray_icon_styles[selected]);
 }
 
 static void
@@ -291,7 +321,7 @@ on_minimize_to_tray_toggled (GObject        *obj,
      * that here so the row does not keep showing a preference that is gone. */
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
                                otpclient_application_get_start_minimized (self->app));
-    sync_start_minimized_sensitivity (self);
+    sync_tray_rows_sensitivity (self);
 }
 
 /* Under Flatpak the switch runs ahead of the answer: turning it on asks the
@@ -314,9 +344,9 @@ on_minimize_to_tray_key_changed (GSettings      *settings,
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->minimize_to_tray_switch), minimize);
     self->tray_updating = FALSE;
 
-    sync_start_minimized_sensitivity (self);
+    sync_tray_rows_sensitivity (self);
 
-    /* sync_start_minimized_sensitivity owns the start-minimized subtitle, so
+    /* sync_tray_rows_sensitivity owns the start-minimized subtitle, so
      * only the row that was actually refused says why. Cleared again on the way
      * back up, for the import that turns the key on after a refusal. */
     adw_action_row_set_subtitle (ADW_ACTION_ROW (self->minimize_to_tray_switch),
@@ -938,15 +968,35 @@ settings_dialog_new (OTPClientApplication *app)
                                     _("Start Minimized"));
     adw_switch_row_set_active (ADW_SWITCH_ROW (self->start_minimized_switch),
                                otpclient_application_get_start_minimized (app));
-    sync_start_minimized_sensitivity (self);
     adw_preferences_group_add (integration_group, self->start_minimized_switch);
 
-    /* Both handlers connected only now: sync_start_minimized_sensitivity reads
-     * the minimize row, so neither switch may fire before both rows exist. */
+    /* Labels in the same order as tray_icon_styles. */
+    GtkStringList *tray_icon_model = gtk_string_list_new (NULL);
+    gtk_string_list_append (tray_icon_model, _("Color"));
+    gtk_string_list_append (tray_icon_model, _("Dark"));
+    gtk_string_list_append (tray_icon_model, _("Light"));
+    self->tray_icon_combo = adw_combo_row_new ();
+    adw_preferences_row_set_title (ADW_PREFERENCES_ROW (self->tray_icon_combo),
+                                    _("Tray Icon"));
+    adw_action_row_set_subtitle (ADW_ACTION_ROW (self->tray_icon_combo),
+                                  _("Dark suits a light panel, Light suits a dark one"));
+    adw_combo_row_set_model (ADW_COMBO_ROW (self->tray_icon_combo), G_LIST_MODEL (tray_icon_model));
+    g_object_unref (tray_icon_model);
+    adw_combo_row_set_selected (ADW_COMBO_ROW (self->tray_icon_combo),
+                                tray_icon_style_index (otpclient_application_get_tray_icon_style (app)));
+    adw_preferences_group_add (integration_group, self->tray_icon_combo);
+
+    sync_tray_rows_sensitivity (self);
+
+    /* All handlers connected only now: sync_tray_rows_sensitivity reads the
+     * minimize row and writes the other two, so nothing may fire before every
+     * row exists, and selecting the current style must not count as a change. */
     g_signal_connect (self->minimize_to_tray_switch, "notify::active",
                       G_CALLBACK (on_minimize_to_tray_toggled), self);
     g_signal_connect (self->start_minimized_switch, "notify::active",
                       G_CALLBACK (on_start_minimized_toggled), self);
+    g_signal_connect (self->tray_icon_combo, "notify::selected",
+                      G_CALLBACK (on_tray_icon_style_changed), self);
 
     /* Owned by the dialog and connected to it, so both go away together. */
     g_autoptr (GSettings) tray_settings = gsettings_common_get_settings ();

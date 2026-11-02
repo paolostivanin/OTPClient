@@ -297,7 +297,8 @@ sni_get_property (GDBusConnection  *connection,
     if (g_strcmp0 (property_name, "Status") == 0)
         return g_variant_new_string (td->desired ? "Active" : "Passive");
     if (g_strcmp0 (property_name, "IconName") == 0)
-        return g_variant_new_string ("com.github.paolostivanin.OTPClient");
+        return g_variant_new_string (tray_menu_model_icon_name_for_style (
+            otpclient_application_get_tray_icon_style (td->app)));
     if (g_strcmp0 (property_name, "IconThemePath") == 0)
         return g_variant_new_string ("");   /* our icon comes from the theme */
     /* Never "/": xapp treats that as a valid menu, builds a dead one, and the
@@ -1164,6 +1165,24 @@ otpclient_tray_notify_locked_changed (OTPClientApplication *app)
                                    SNI_OBJECT_PATH,
                                    "org.kde.StatusNotifierItem",
                                    "NewTitle",
+                                   NULL,
+                                   NULL);
+}
+
+void
+otpclient_tray_notify_icon_changed (OTPClientApplication *app)
+{
+    (void) app;
+
+    if (tray_data == NULL || !tray_data->published || tray_data->connection == NULL)
+        return;
+
+    /* Same as NewTitle: no payload, the host re-reads IconName. */
+    g_dbus_connection_emit_signal (tray_data->connection,
+                                   NULL,
+                                   SNI_OBJECT_PATH,
+                                   "org.kde.StatusNotifierItem",
+                                   "NewIcon",
                                    NULL,
                                    NULL);
 }

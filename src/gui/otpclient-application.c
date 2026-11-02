@@ -53,6 +53,7 @@ gboolean use_secret_service;
     gchar *validity_warning_color;
     gboolean minimize_to_tray;
     gboolean start_minimized;
+    gchar *tray_icon_style;
     gboolean autostart;
     guint clipboard_clear_timeout;
     gboolean hide_otps;
@@ -1646,6 +1647,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
         self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
         self->start_minimized = g_settings_get_boolean (self->settings, "start-minimized");
+        self->tray_icon_style = g_settings_get_string (self->settings, "tray-icon-style");
         self->autostart = g_settings_get_boolean (self->settings, "autostart");
         self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
         self->hide_otps = g_settings_get_boolean (self->settings, "hide-otps");
@@ -1664,6 +1666,7 @@ GSettingsSchemaSource *schema_source = g_settings_schema_source_get_default ();
         self->validity_warning_color = g_strdup ("#ffa500");
         self->minimize_to_tray = FALSE;
         self->start_minimized = FALSE;
+        self->tray_icon_style = g_strdup ("color");
         self->autostart = FALSE;
         self->clipboard_clear_timeout = 30;
         self->hide_otps = TRUE;
@@ -1787,6 +1790,7 @@ otpclient_application_dispose (GObject *object)
     g_clear_pointer (&self->search_provider_keyword, g_free);
     g_clear_pointer (&self->validity_color, g_free);
     g_clear_pointer (&self->validity_warning_color, g_free);
+    g_clear_pointer (&self->tray_icon_style, g_free);
     g_clear_pointer (&self->pending_db_missing_name, g_free);
     g_clear_pointer (&self->pending_db_missing_path, g_free);
 
@@ -1864,6 +1868,7 @@ otpclient_application_init (OTPClientApplication *self)
     self->search_provider_keyword = NULL;
     self->validity_color = NULL;
     self->validity_warning_color = NULL;
+    self->tray_icon_style = NULL;
     self->lock_generation = 0;
 
     /* No short option: otpclient-cli shares this application id and has its own
@@ -2249,6 +2254,30 @@ void otpclient_application_set_validity_warning_color (OTPClientApplication *sel
         g_settings_set_string (self->settings, "validity-warning-color", color);
 }
 
+const gchar *otpclient_application_get_tray_icon_style (OTPClientApplication *self)
+{
+    g_return_val_if_fail (OTPCLIENT_IS_APPLICATION (self), "color");
+    return self->tray_icon_style;
+}
+
+void otpclient_application_set_tray_icon_style (OTPClientApplication *self, const gchar *style)
+{
+    g_return_if_fail (OTPCLIENT_IS_APPLICATION (self));
+    g_return_if_fail (style != NULL);
+
+    if (g_strcmp0 (self->tray_icon_style, style) == 0)
+        return;
+
+    g_free (self->tray_icon_style);
+    self->tray_icon_style = g_strdup (style);
+    if (self->settings != NULL)
+        g_settings_set_string (self->settings, "tray-icon-style", style);
+
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+    otpclient_tray_notify_icon_changed (self);
+#endif
+}
+
 void
 otpclient_application_report_startup_change (OTPClientApplication *self,
                                              const gchar          *message)
@@ -2400,6 +2429,17 @@ void otpclient_application_reload_settings (OTPClientApplication *self)
     self->validity_warning_color = g_settings_get_string (self->settings, "validity-warning-color");
     self->minimize_to_tray = g_settings_get_boolean (self->settings, "minimize-to-tray");
     self->start_minimized = g_settings_get_boolean (self->settings, "start-minimized");
+    {
+        /* Unlike the startup keys this one has no side effect worth deferring
+         * to the reconciliation: telling the host to re-read the icon is all
+         * there is to it, so do it here. */
+        g_autofree gchar *old_style = g_steal_pointer (&self->tray_icon_style);
+        self->tray_icon_style = g_settings_get_string (self->settings, "tray-icon-style");
+#ifdef ENABLE_MINIMIZE_TO_TRAY
+        if (g_strcmp0 (old_style, self->tray_icon_style) != 0)
+            otpclient_tray_notify_icon_changed (self);
+#endif
+    }
     self->autostart = g_settings_get_boolean (self->settings, "autostart");
     self->clipboard_clear_timeout = g_settings_get_uint (self->settings, "clipboard-clear-timeout");
     gboolean old_hide_otps = self->hide_otps;
