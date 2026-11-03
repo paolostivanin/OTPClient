@@ -95,6 +95,16 @@
   </content_rating>
 
   <releases>
+    <release version="5.3.2" date="2026-11-03">
+      <description>
+        <p>Bug fix release. OTPClient no longer aborts at startup when GLib finds a settings schema left over from an older release, and staged package installs no longer generate system caches. There is no on-disk format change; existing databases open unchanged.</p>
+        <ul>
+          <li>FIX: an outdated compiled settings schema found ahead of the current one, for example under ~/.local/share or /usr/local/share, made the application abort at startup. It now starts with default settings and logs a warning that names the missing keys and the directory holding the outdated schema</li>
+          <li>FIX: installing into a staging directory with DESTDIR no longer writes a compiled schema and an icon cache that cover only OTPClient's files and clash with the ones owned by GLib and the icon theme. A direct install still refreshes both, and the new POST_INSTALL_CACHES build option turns the step off</li>
+          <li>TEST: the application and the settings helper are started against a schema that lacks the newest key and must not abort</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.3.1" date="2026-11-02">
       <description>
         <p>Small release. The tray icon can now be shown in color or as a dark or light monochrome glyph, and the Select button no longer shows a missing-icon placeholder with icon themes other than Adwaita. There is no on-disk format change; existing databases open unchanged.</p>
