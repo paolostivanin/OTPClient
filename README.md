@@ -291,8 +291,11 @@ sudo cmake --install build
 ```
 
 These commands build the default branch. To build a published release, check out
-its tag before configuring. Installation also invokes `glib-compile-schemas`
-and `gtk4-update-icon-cache`; install the corresponding GLib and GTK tools.
+its tag before configuring. A direct install also runs `glib-compile-schemas`
+and, for the GUI, `gtk4-update-icon-cache`, so install the corresponding GLib and
+GTK tools. Staged installs (`DESTDIR` set) skip both, because the system's caches
+belong to GLib and the icon theme. Packages should run the tools from their
+post-install hooks. Pass `-DPOST_INSTALL_CACHES=OFF` to skip them in every case.
 
 For automated checks and their runtime dependencies, see [Tests](tests/README.md).
 
@@ -308,6 +311,7 @@ The GUI, CLI, search provider, and tests are enabled by default. Pass
 | `BUILD_SEARCH_PROVIDER`    | `ON`    | Build the GNOME Shell / KRunner D-Bus daemon                         |
 | `BUILD_TESTING`            | `ON`    | Build tests and register available CTest checks                    |
 | `IS_FLATPAK`               | `OFF`   | Use the flatpak app's config folder for the database                 |
+| `POST_INSTALL_CACHES`      | `ON`    | Refresh schema/icon caches on direct installs (skipped with DESTDIR) |
 | `ENABLE_MINIMIZE_TO_TRAY`  | `ON`    | Offer minimize-to-tray in the GUI (needs a StatusNotifierWatcher)    |
 | `SANITIZE`                 | `OFF`   | Build with AddressSanitizer + UndefinedBehaviorSanitizer             |
 

@@ -16,6 +16,7 @@ option(ENABLE_MINIMIZE_TO_TRAY "Enable minimize to tray feature" ON)
 option(BUILD_GUI "Build the GUI" ON)
 option(BUILD_CLI "Build the CLI" ON)
 option(BUILD_SEARCH_PROVIDER "Build the D-Bus search provider" ON)
+option(POST_INSTALL_CACHES "Refresh the GSettings schema and icon caches on install (skipped when DESTDIR is set)" ON)
 
 set(COMMON_C_OPTIONS
         -Wall -Wextra "$<$<CONFIG:Release>:-O3>" "$<$<CONFIG:Debug>:-Og>" -Wformat=2 -Wmissing-format-attribute -fstack-protector-strong
@@ -253,5 +254,30 @@ endif()
 install(FILES data/com.github.paolostivanin.OTPClient.appdata.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 install(FILES data/com.github.paolostivanin.OTPClient.gschema.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)
 
-install(CODE "execute_process(COMMAND glib-compile-schemas \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/glib-2.0/schemas)")
-install(CODE "execute_process(COMMAND gtk4-update-icon-cache -t -f \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_DATADIR}/icons/hicolor)")
+if(POST_INSTALL_CACHES)
+    # Refresh the system caches only on a direct install. Under DESTDIR they
+    # would cover only OTPClient's files and clash with the copies owned by
+    # glib and hicolor-icon-theme, so packages run these tools from their own
+    # post-install hooks instead (the same rule as Meson's gnome.post_install).
+    # ${CMAKE_INSTALL_PREFIX} stays literal so `cmake --install --prefix` works.
+    string(CONFIGURE [=[
+        if(NOT "$ENV{DESTDIR}" STREQUAL "")
+            message(STATUS "DESTDIR is set, not refreshing the GSettings schema and icon caches; the package's post-install step should do it")
+        else()
+            set(_otpclient_datadir "${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_DATADIR@")
+            execute_process(COMMAND glib-compile-schemas "${_otpclient_datadir}/glib-2.0/schemas"
+                    RESULT_VARIABLE _otpclient_rc)
+            if(NOT _otpclient_rc EQUAL 0)
+                message(WARNING "glib-compile-schemas failed (${_otpclient_rc}), run it by hand: glib-compile-schemas ${_otpclient_datadir}/glib-2.0/schemas")
+            endif()
+            if(@BUILD_GUI@)
+                execute_process(COMMAND gtk4-update-icon-cache -t -f "${_otpclient_datadir}/icons/hicolor"
+                        RESULT_VARIABLE _otpclient_rc)
+                if(NOT _otpclient_rc EQUAL 0)
+                    message(WARNING "gtk4-update-icon-cache failed (${_otpclient_rc}), run it by hand: gtk4-update-icon-cache -t -f ${_otpclient_datadir}/icons/hicolor")
+                endif()
+            endif()
+        endif()
+    ]=] _otpclient_post_install_code @ONLY)
+    install(CODE "${_otpclient_post_install_code}")
+endif()
