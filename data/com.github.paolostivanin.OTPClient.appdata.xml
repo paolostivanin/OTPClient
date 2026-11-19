@@ -95,6 +95,17 @@
   </content_rating>
 
   <releases>
+    <release version="5.3.3" date="2026-11-19">
+      <description>
+        <p>Bug fix release. Keyboard focus lands on the token list again after unlocking, so Up, Down and Enter work right away, and searching no longer moves focus out of the search bar. There is no on-disk format change; existing databases open unchanged.</p>
+        <ul>
+          <li>FIX: after unlocking a database, or switching to another one from the sidebar, keyboard focus stayed on the toolbar instead of the token list, a regression from 5.3.0 (#445)</li>
+          <li>FIX: a search that matched nothing moved focus from the search bar to the Clear Filters button, so Backspace did nothing and Space cleared the search</li>
+          <li>FIX: while the token list was being filled, the first token made the window pick the "no results" page instead of the list</li>
+          <li>TEST: the unlock sequence and a search that stops matching are replayed against the real window</li>
+        </ul>
+      </description>
+    </release>
     <release version="5.3.2" date="2026-11-03">
       <description>
         <p>Bug fix release. OTPClient no longer aborts at startup when GLib finds a settings schema left over from an older release, and staged package installs no longer generate system caches. There is no on-disk format change; existing databases open unchanged.</p>
