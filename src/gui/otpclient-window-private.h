@@ -86,6 +86,10 @@ struct _OTPClientWindow
     gchar *active_group_filter;  /* NULL = "All", "" = "Ungrouped", non-empty = group name */
     gboolean syncing_group_filter;
 
+    /* The content stack changed page and its primary widget has not taken
+     * focus yet, see focus_visible_page(). */
+    gboolean page_focus_pending;
+
     /* Search filter cache: lowered forms of the search box contents, refreshed
      * whenever the filter is invalidated (search text changed / group changed /
      * cross-db load completed). search_filter_func runs once per visible row,

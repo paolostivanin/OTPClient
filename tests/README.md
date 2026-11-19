@@ -111,8 +111,10 @@ history; and actual CLI JSON/CSV output and import exit statuses.
 `test_gui_flows` exercises the real GTK application: selecting a row consumes no
 HOTP, explicit generation persists before copying, switching to the CLI produces
 the next code, external clipboard changes cancel OTPClient's ownership, locking
-clears sensitive dialogs even when references remain, and cross-database HOTP
-activation opens the owning database.
+clears sensitive dialogs even when references remain, cross-database HOTP
+activation opens the owning database, a page change lands keyboard focus on the
+page's primary widget even when the token list is enabled only after it appears
+(#445), and searching never moves focus out of the search bar.
 
 `test_tray_session` covers desktop locking and tray recovery (#473) using fake
 screensaver and StatusNotifierWatcher services. CTest runs each scenario in its

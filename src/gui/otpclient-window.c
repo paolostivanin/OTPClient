@@ -1501,6 +1501,60 @@ update_quarantine_banner (OTPClientWindow *self)
     gtk_widget_action_set_enabled (GTK_WIDGET (self), "win.review-quarantine", reveal);
 }
 
+/* The widget that should hold keyboard focus when a content page first becomes
+ * visible, so the obvious next action (consume a token, add the first token,
+ * create the first DB) is one keystroke away rather than buried past the
+ * toolbar (issue #445). "loading" is transient, so it has none and focus is
+ * left alone instead of flickering. */
+static GtkWidget *
+page_primary_widget (OTPClientWindow *self,
+                     const gchar     *page)
+{
+    if (g_strcmp0 (page, "list") == 0)
+        return self->otp_list;
+    if (g_strcmp0 (page, "empty") == 0)
+        return self->empty_state_add_button;
+    if (g_strcmp0 (page, "no-search-results") == 0)
+        return self->search_empty_clear_button;
+    if (g_strcmp0 (page, "no-db") == 0)
+        return self->no_db_create_button;
+    if (g_strcmp0 (page, "locked") == 0)
+        return self->locked_unlock_button;
+    return NULL;
+}
+
+/* Land focus on the visible page's primary widget, once per page change.
+ *
+ * The request stays pending until the grab succeeds, because a page can show
+ * up before its widget is usable: populate appends the first token, which
+ * flips the stack to "list", but the list stays insensitive until populate
+ * re-enables it at the very end, and GTK refuses to focus an insensitive
+ * widget. Granting focus right then and never retrying is how #445 came back
+ * in 5.3.0. otpclient_window_set_db_actions_enabled() retries.
+ *
+ * A page change caused by typing in the search bar (a query that stops
+ * matching, or matches again) never moves focus out of it: the user is
+ * still typing. */
+static void
+focus_visible_page (OTPClientWindow *self)
+{
+    if (!self->page_focus_pending || self->content_stack == NULL)
+        return;
+
+    GtkWidget *focus = gtk_root_get_focus (GTK_ROOT (self));
+    if (focus != NULL && self->search_bar != NULL &&
+        gtk_widget_is_ancestor (focus, self->search_bar))
+    {
+        self->page_focus_pending = FALSE;
+        return;
+    }
+
+    GtkWidget *target = page_primary_widget (
+        self, gtk_stack_get_visible_child_name (GTK_STACK (self->content_stack)));
+    if (target == NULL || gtk_widget_grab_focus (target))
+        self->page_focus_pending = FALSE;
+}
+
 static void
 update_empty_state (OTPClientWindow *self)
 {
@@ -1538,28 +1592,9 @@ update_empty_state (OTPClientWindow *self)
     const gchar *current_page = gtk_stack_get_visible_child_name (GTK_STACK (self->content_stack));
     gtk_stack_set_visible_child_name (GTK_STACK (self->content_stack), target_page);
 
-    /* Move focus onto the page's primary widget when it first becomes
-     * visible, so the obvious next action (consume a token, add the first
-     * token, create the first DB) is one keystroke away rather than buried
-     * past the toolbar (issue #445). "loading" is transient - leave focus
-     * alone so it doesn't flicker. */
     if (g_strcmp0 (target_page, current_page) != 0)
-    {
-        GtkWidget *focus_target = NULL;
-        if (g_strcmp0 (target_page, "list") == 0)
-            focus_target = self->otp_list;
-        else if (g_strcmp0 (target_page, "empty") == 0)
-            focus_target = self->empty_state_add_button;
-        else if (g_strcmp0 (target_page, "no-search-results") == 0)
-            focus_target = self->search_empty_clear_button;
-        else if (g_strcmp0 (target_page, "no-db") == 0)
-            focus_target = self->no_db_create_button;
-        else if (g_strcmp0 (target_page, "locked") == 0)
-            focus_target = self->locked_unlock_button;
-
-        if (focus_target != NULL)
-            gtk_widget_grab_focus (focus_target);
-    }
+        self->page_focus_pending = TRUE;
+    focus_visible_page (self);
 
     if (g_strcmp0 (target_page, "list") != 0 && g_strcmp0 (target_page, "empty") != 0)
         return;
@@ -1660,6 +1695,9 @@ otpclient_window_set_db_actions_enabled (OTPClientWindow *self,
     for (gsize i = 0; i < G_N_ELEMENTS (db_actions); i++)
         gtk_widget_action_set_enabled (GTK_WIDGET (self), db_actions[i], enabled);
     gtk_widget_set_sensitive (self->otp_list, enabled);
+    /* A page shown while its widget was still disabled gets focus now. */
+    if (enabled)
+        focus_visible_page (self);
     update_bulk_selection_count (self);
     update_quarantine_banner (self);
 }
@@ -1703,8 +1741,12 @@ static void
 setup_otp_view (OTPClientWindow *self)
 {
     self->otp_store = G_LIST_STORE (g_object_ref_sink (g_list_store_new (OTP_TYPE_ENTRY)));
-    g_signal_connect (self->otp_store, "items-changed",
-                      G_CALLBACK (on_otp_store_items_changed), self);
+    /* After, not before: the filter model below listens to the same signal,
+     * and update_empty_state reads its count. Connected first and run first,
+     * it saw the row just appended in the store but not yet in the filter, so
+     * the first token of a database picked "no-search-results". */
+    g_signal_connect_after (self->otp_store, "items-changed",
+                            G_CALLBACK (on_otp_store_items_changed), self);
 
     self->search_filter = gtk_custom_filter_new (search_filter_func, self, NULL);
     self->filter_model = gtk_filter_list_model_new (G_LIST_MODEL (self->otp_store),

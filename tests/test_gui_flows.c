@@ -1349,6 +1349,98 @@ test_clear_filters_resets_group_only_filter (void)
     review_fixture_clear (&fixture);
 }
 
+static gboolean
+focus_is_within (GtkWidget *widget)
+{
+    GtkWidget *focus = gtk_root_get_focus (GTK_ROOT (win));
+    return focus != NULL && (focus == widget || gtk_widget_is_ancestor (focus, widget));
+}
+
+static void
+test_unlock_focuses_token_list (void)
+{
+    ReviewFixture fixture;
+    review_fixture_init (&fixture);
+    otpclient_application_set_db_data (app, database_data_ref (fixture.db));
+    otpclient_application_set_app_locked (app, FALSE);
+    otpclient_window_set_db_actions_enabled (win, TRUE);
+    g_list_store_remove_all (win->otp_store);
+    gtk_window_present (GTK_WINDOW (win));
+    settle ();
+
+    /* What on_unlock_done does (#445): the list is disabled while the worker
+     * runs behind the loading page, then populate appends the rows, the first
+     * of which flips the page to "list", and only afterwards re-enables the
+     * list. Focus starts on the toolbar, where the window leaves it. */
+    otpclient_window_set_db_actions_enabled (win, FALSE);
+    otpclient_window_show_loading (win);
+    g_assert_true (gtk_widget_grab_focus (win->settings_button));
+    settle ();
+    const gchar *accounts[] = { "alice", "bob" };
+    for (gsize i = 0; i < G_N_ELEMENTS (accounts); i++) {
+        OTPEntry *entry = otp_entry_new (accounts[i], "Example", NULL, "TOTP", 30, 0,
+                                        "SHA1", 6, REVIEW_SECRET);
+        otp_entry_update_otp (entry);
+        g_list_store_append (win->otp_store, entry);
+        g_object_unref (entry);
+        g_assert_cmpstr (gtk_stack_get_visible_child_name (
+            GTK_STACK (win->content_stack)), ==, "list");
+    }
+    /* Re-enabling is the last step of the database-open paths that do not
+     * pass through hide_loading, so focus must land right here. */
+    otpclient_window_set_db_actions_enabled (win, TRUE);
+    g_assert_true (focus_is_within (win->otp_list));
+    otpclient_window_hide_loading (win);
+    settle ();
+    g_assert_true (focus_is_within (win->otp_list));
+
+    /* Steady state: an encryption job disabling and re-enabling the list
+     * changes no page, so it must not pull focus back to the list. */
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), TRUE);
+    settle ();
+    g_assert_true (gtk_widget_grab_focus (win->search_entry));
+    otpclient_window_set_db_actions_enabled (win, FALSE);
+    otpclient_window_set_db_actions_enabled (win, TRUE);
+    settle ();
+    g_assert_true (focus_is_within (win->search_bar));
+
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), FALSE);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
+static void
+test_search_keeps_focus (void)
+{
+    ReviewFixture fixture;
+    g_autoptr (OTPEntry) entry = attach_fixture (&fixture);
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), TRUE);
+    settle ();
+    g_assert_true (gtk_widget_grab_focus (win->search_entry));
+
+    /* A query that stops matching swaps in the no-results page, but the user
+     * is still typing: focus must not jump to its Clear button. */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "zzz");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+    g_assert_cmpstr (gtk_stack_get_visible_child_name (
+        GTK_STACK (win->content_stack)), ==, "no-search-results");
+    g_assert_true (focus_is_within (win->search_bar));
+
+    /* Fixing the query brings the list back, still without taking focus. */
+    gtk_editable_set_text (GTK_EDITABLE (win->search_entry), "ali");
+    g_signal_emit_by_name (win->search_entry, "search-changed");
+    settle ();
+    g_assert_cmpstr (gtk_stack_get_visible_child_name (
+        GTK_STACK (win->content_stack)), ==, "list");
+    g_assert_true (focus_is_within (win->search_bar));
+
+    gtk_widget_activate_action (GTK_WIDGET (win), "win.clear-search", NULL);
+    gtk_search_bar_set_search_mode (GTK_SEARCH_BAR (win->search_bar), FALSE);
+    settle ();
+    review_fixture_clear (&fixture);
+}
+
 static GtkDropTarget *
 find_drop_target (GtkWidget *widget)
 {
@@ -1906,6 +1998,8 @@ main (int argc, char **argv)
     g_test_add_func ("/gui-flows/group-search-bounds", test_group_search_bounds);
     g_test_add_func ("/gui-flows/group-search-all-matches", test_group_search_preserves_all_matches);
     g_test_add_func ("/gui-flows/clear-group-filter", test_clear_filters_resets_group_only_filter);
+    g_test_add_func ("/gui-flows/unlock-focuses-token-list", test_unlock_focuses_token_list);
+    g_test_add_func ("/gui-flows/search-keeps-focus", test_search_keeps_focus);
     g_test_add_func ("/gui-flows/edit-counter-bound", test_edit_dialog_counter_bound_is_exclusive);
     g_test_add_func ("/gui-flows/failed-reorder-restores-row-order", test_failed_reorder_restores_row_order);
     g_test_add_func ("/gui-flows/autostart-adoption", test_autostart_adoption);
